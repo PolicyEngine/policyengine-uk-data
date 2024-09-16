@@ -15,8 +15,6 @@ requires-python = ">=3.6"
 dependencies = [
     "policyengine_core",
     "tables",
-    "survey_enhance",
-    "torch",
     "requests",
     "tqdm",
     "tabulate",
@@ -28,6 +26,8 @@ dev = [
     "black",
     "pytest",
     "policyengine_uk>=1.8.0",
+    "survey_enhance",
+    "torch",
     "streamlit",
 ]
 

@@ -9,6 +9,9 @@ test:
 install:
 	pip install -e ".[dev]"
 
+install-lite:
+	pip install -e .
+
 download:
 	python policyengine_uk_data/storage/download_private_prerequisites.py
 
