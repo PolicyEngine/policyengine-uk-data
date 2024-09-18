@@ -4,10 +4,14 @@ from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk_data.datasets.frs.extended_frs import ExtendedFRS_2022_23
 from policyengine_uk_data.datasets.frs.frs import FRS_2022_23
 from policyengine_uk_data.utils.loss import create_target_matrix
-import torch
+
 from policyengine_uk_data.utils.imputations.capital_gains import (
     impute_cg_to_dataset,
 )
+try:
+    import torch
+except ImportError:
+    torch = None
 
 
 class EnhancedFRS(Dataset):

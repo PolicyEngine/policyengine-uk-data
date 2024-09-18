@@ -28,3 +28,8 @@
     fixed:
     - Bug causing the Extended FRS to not generate.
   date: 2024-09-18 12:57:28
+- bump: patch
+  changes:
+    removed:
+    - Torch as a dependency.
+  date: 2024-09-18 13:26:36
