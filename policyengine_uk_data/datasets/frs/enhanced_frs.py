@@ -8,6 +8,7 @@ from policyengine_uk_data.utils.loss import create_target_matrix
 from policyengine_uk_data.utils.imputations.capital_gains import (
     impute_cg_to_dataset,
 )
+
 try:
     import torch
 except ImportError:

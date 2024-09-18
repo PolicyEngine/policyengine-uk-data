@@ -2,13 +2,14 @@ import pandas as pd
 import numpy as np
 
 # Fit a spline to each income band's percentiles
-try:    
+try:
     from scipy.interpolate import UnivariateSpline
 except ImportError:
     pass
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from tqdm import tqdm
 import copy
+
 try:
     import torch
     from torch.optim import Adam
