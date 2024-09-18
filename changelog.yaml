@@ -23,3 +23,8 @@
     removed:
     - Survey Enhance is no longer used as a top-level import.
   date: 2024-09-18 11:38:21
+- bump: patch
+  changes:
+    fixed:
+    - Bug causing the Extended FRS to not generate.
+  date: 2024-09-18 12:57:28

@@ -68,6 +68,8 @@ class ExtendedFRS(Dataset):
             ["age", "gender", "region"]
         )
         create_income_model()
+        from survey_enhance import Imputation
+
         income = Imputation.load(STORAGE_FOLDER / "income.pkl")
         full_imputations = income.predict(income_inputs)
         for variable in full_imputations.columns:
