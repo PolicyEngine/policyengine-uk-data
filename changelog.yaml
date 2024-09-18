@@ -33,3 +33,9 @@
     removed:
     - Torch as a dependency.
   date: 2024-09-18 13:26:36
+- bump: patch
+  changes:
+    fixed:
+    - GH actions naming.
+    - Bug causing the Extended FRS to error.
+  date: 2024-09-18 13:57:40

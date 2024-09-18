@@ -11,6 +11,7 @@ class ExtendedFRS(Dataset):
 
     def generate(self):
         from policyengine_uk import Microsimulation
+        from survey_enhance import Imputation
 
         create_consumption_model()
         create_vat_model()
@@ -68,7 +69,6 @@ class ExtendedFRS(Dataset):
             ["age", "gender", "region"]
         )
         create_income_model()
-        from survey_enhance import Imputation
 
         income = Imputation.load(STORAGE_FOLDER / "income.pkl")
         full_imputations = income.predict(income_inputs)

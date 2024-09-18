@@ -95,7 +95,7 @@ jobs:
         run: make documentation
 
   docker:
-    name: Docker
+    name: Publish docker image
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
@@ -113,7 +113,7 @@ jobs:
         run: docker push ghcr.io/policyengine/policyengine-uk-data:latest
 
   upload:
-    name: Upload Data 
+    name: Upload data 
     runs-on: ubuntu-latest
     needs: [lint, test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
