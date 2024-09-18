@@ -1,7 +1,4 @@
 import pandas as pd
-from pathlib import Path
-import numpy as np
-import yaml
 from policyengine_uk_data.storage import STORAGE_FOLDER
 
 WAS_TAB_FOLDER = STORAGE_FOLDER / "was_2006_20"
