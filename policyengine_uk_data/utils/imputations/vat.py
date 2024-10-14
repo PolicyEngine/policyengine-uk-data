@@ -29,9 +29,9 @@ def generate_etb_table(etb: pd.DataFrame):
 
 
 def save_imputation_models():
-    from survey_enhance.impute import Imputation
+    from policyengine_uk_data.utils.qrf import QRF
 
-    vat = Imputation()
+    vat = QRF()
     etb = pd.read_csv(
         ETB_TAB_FOLDER / "householdv2_1977-2021.tab",
         delimiter="\t",
@@ -39,7 +39,7 @@ def save_imputation_models():
     )
     etb = generate_etb_table(etb)
     etb = etb[PREDICTORS + IMPUTATIONS]
-    vat.train(etb[PREDICTORS], etb[IMPUTATIONS])
+    vat.fit(etb[PREDICTORS], etb[IMPUTATIONS])
     vat.save(STORAGE_FOLDER / "vat.pkl")
 
 

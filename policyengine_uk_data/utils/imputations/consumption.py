@@ -132,9 +132,9 @@ def uprate_lcfs_table(
 
 
 def save_imputation_models():
-    from survey_enhance.impute import Imputation
+    from policyengine_uk_data.utils.qrf import QRF
 
-    consumption = Imputation()
+    consumption = QRF()
     lcfs_household = pd.read_csv(
         LCFS_TAB_FOLDER / "lcfs_2021_dvhh_ukanon.tab",
         delimiter="\t",
@@ -145,7 +145,7 @@ def save_imputation_models():
     )
     household = generate_lcfs_table(lcfs_person, lcfs_household)
     household = uprate_lcfs_table(household, "2024")
-    consumption.train(
+    consumption.fit(
         household[PREDICTOR_VARIABLES],
         household[IMPUTATIONS],
     )

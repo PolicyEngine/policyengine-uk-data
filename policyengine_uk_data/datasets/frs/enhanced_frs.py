@@ -18,21 +18,24 @@ except ImportError:
 class EnhancedFRS(Dataset):
     def generate(self):
         data = self.input_frs(require=True).load_dataset()
+        self.save_dataset(data)
+
+        # Capital gains imputation
+
+        impute_cg_to_dataset(self)
+
+        # Reweighting
+
+        data = self.load_dataset()
         original_weights = data["household_weight"][str(self.time_period)] + 10
         for year in range(self.time_period, self.end_year + 1):
-            loss_matrix, targets_array = create_target_matrix(
-                self.input_frs, year
-            )
+            loss_matrix, targets_array = create_target_matrix(self, year)
             new_weights = reweight(
                 original_weights, loss_matrix, targets_array
             )
             data["household_weight"][str(year)] = new_weights
 
         self.save_dataset(data)
-
-        # Capital gains imputation
-
-        impute_cg_to_dataset(self)
 
 
 class ReweightedFRS_2022_23(EnhancedFRS):
@@ -61,7 +64,9 @@ def reweight(
     original_weights,
     loss_matrix,
     targets_array,
+    dropout_rate=0.05,
 ):
+    target_names = np.array(loss_matrix.columns)
     loss_matrix = torch.tensor(loss_matrix.values, dtype=torch.float32)
     targets_array = torch.tensor(targets_array, dtype=torch.float32)
     weights = torch.tensor(
@@ -85,14 +90,26 @@ def reweight(
             raise ValueError("Relative error contains NaNs")
         return rel_error.mean()
 
+    def dropout_weights(weights, p):
+        if p == 0:
+            return weights
+        # Replace p% of the weights with the mean value of the rest of them
+        mask = torch.rand_like(weights) < p
+        mean = weights[~mask].mean()
+        masked_weights = weights.clone()
+        masked_weights[mask] = mean
+        return masked_weights
+
     optimizer = torch.optim.Adam([weights], lr=1e-1)
     from tqdm import trange
 
-    iterator = trange(1_000)
     start_loss = None
+
+    iterator = trange(5_000)
     for i in iterator:
         optimizer.zero_grad()
-        l = loss(torch.exp(weights))
+        weights_ = dropout_weights(weights, dropout_rate)
+        l = loss(torch.exp(weights_))
         if start_loss is None:
             start_loss = l.item()
         loss_rel_change = (l.item() - start_loss) / start_loss

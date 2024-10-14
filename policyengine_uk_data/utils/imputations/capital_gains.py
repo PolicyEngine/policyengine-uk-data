@@ -93,7 +93,7 @@ def impute_capital_gains(dataset, time_period: int):
         return loss
 
     optimiser = Adam([blend_factor], lr=1e-1)
-    progress = range(1000)
+    progress = range(100)
     for i in progress:
         optimiser.zero_grad()
         loss_value = loss(blend_factor)
@@ -183,8 +183,4 @@ def impute_cg_to_dataset(dataset):
 
     data["capital_gains"] = {2022: pred_cg}
     data["household_weight"][2022] = household_weights_22
-
-    for year in range(2023, 2028):
-        _, data["household_weight"][year] = impute_capital_gains(dataset, year)
-
     dataset.save_dataset(data)

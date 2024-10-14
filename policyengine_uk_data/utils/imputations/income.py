@@ -50,7 +50,7 @@ def generate_spi_table(spi: pd.DataFrame):
         12: "NORTHERN_IRELAND",
     }
 
-    spi["region"] = np.array([REGIONS.get(x, "UNKNOWN") for x in spi.GORCODE])
+    spi["region"] = np.array([REGIONS.get(x, "LONDON") for x in spi.GORCODE])
 
     spi["gender"] = np.where(spi.SEX == 1, "MALE", "FEMALE")
 
@@ -84,13 +84,13 @@ IMPUTATIONS = [
 
 
 def save_imputation_models():
-    from survey_enhance.impute import Imputation
+    from policyengine_uk_data.utils import QRF
 
-    income = Imputation()
+    income = QRF()
     spi = pd.read_csv(SPI_TAB_FOLDER / "put2021uk.tab", delimiter="\t")
     spi = generate_spi_table(spi)
     spi = spi[PREDICTORS + IMPUTATIONS]
-    income.train(spi[PREDICTORS], spi[IMPUTATIONS])
+    income.fit(spi[PREDICTORS], spi[IMPUTATIONS])
     income.save(STORAGE_FOLDER / "income.pkl")
 
 

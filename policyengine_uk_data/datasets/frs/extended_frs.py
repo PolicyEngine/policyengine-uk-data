@@ -11,22 +11,22 @@ class ExtendedFRS(Dataset):
 
     def generate(self):
         from policyengine_uk import Microsimulation
-        from survey_enhance import Imputation
+        from policyengine_uk_data.utils.qrf import QRF
 
         create_consumption_model()
         create_vat_model()
         create_wealth_model()
 
-        consumption = Imputation.load(STORAGE_FOLDER / "consumption.pkl")
-        vat = Imputation.load(STORAGE_FOLDER / "vat.pkl")
-        wealth = Imputation.load(STORAGE_FOLDER / "wealth.pkl")
+        consumption = QRF(file_path=STORAGE_FOLDER / "consumption.pkl")
+        vat = QRF(file_path=STORAGE_FOLDER / "vat.pkl")
+        wealth = QRF(file_path=STORAGE_FOLDER / "wealth.pkl")
 
         data = self.input_frs().load_dataset()
         simulation = Microsimulation(dataset=self.input_frs)
         for imputation_model in tqdm(
             [consumption, vat, wealth], desc="Imputing data"
         ):
-            predictors = imputation_model.X_columns
+            predictors = imputation_model.input_columns
 
             X_input = simulation.calculate_dataframe(
                 predictors, map_to="household"
@@ -36,10 +36,11 @@ class ExtendedFRS(Dataset):
                 X_input.loc[
                     X_input["region"] == "NORTHERN_IRELAND", "region"
                 ] = "WALES"
-            Y_output = imputation_model.predict(X_input, verbose=True)
+            Y_output = imputation_model.predict(X_input)
 
             for output_variable in Y_output.columns:
                 values = Y_output[output_variable].values
+                values[values < 0] = 0
                 data[output_variable] = {self.time_period: values}
 
         # Clone the dataset for income imputation
@@ -70,7 +71,7 @@ class ExtendedFRS(Dataset):
         )
         create_income_model()
 
-        income = Imputation.load(STORAGE_FOLDER / "income.pkl")
+        income = QRF(file_path=STORAGE_FOLDER / "income.pkl")
         full_imputations = income.predict(income_inputs)
         for variable in full_imputations.columns:
             # Assign over the second half of the dataset
