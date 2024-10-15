@@ -56,7 +56,7 @@ class EnhancedFRS_2022_23(EnhancedFRS):
     input_frs = ExtendedFRS_2022_23
     time_period = 2022
     end_year = 2028
-    url = "release://PolicyEngine/ukda/1.3.0/enhanced_frs_2022_23.h5"
+    url = "release://PolicyEngine/ukda/1.4.0/enhanced_frs_2022_23.h5"
 
 
 def reweight(
