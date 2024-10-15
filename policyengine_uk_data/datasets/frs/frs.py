@@ -745,7 +745,7 @@ def add_expenses(
         * 52
     )
 
-    frs["private_pension_contributions"] = max_(
+    frs["personal_pension_contributions"] = max_(
         0,
         sum_to_entity(
             pen_prov.PENAMT[pen_prov.STEMPPEN.isin((5, 6))],
@@ -754,10 +754,13 @@ def add_expenses(
         ).clip(0, pen_prov.PENAMT.quantile(0.95))
         * 52,
     )
-    frs["occupational_pension_contributions"] = max_(
+    frs["employee_pension_contributions"] = max_(
         0,
         sum_to_entity(job.DEDUC1.fillna(0), job.person_id, person.index) * 52,
     )
+    frs["employer_pension_contributions"] = (
+        frs["employee_pension_contributions"] * 2.5
+    )  # Rough estimate based on aggregates.
 
     frs["housing_service_charges"] = (
         pd.DataFrame(
