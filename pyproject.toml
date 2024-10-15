@@ -17,14 +17,12 @@ dependencies = [
     "requests",
     "tqdm",
     "tabulate",
-    "build",
 ]
 
 [project.optional-dependencies]
 dev = [
     "black",
     "pytest",
-    "policyengine_uk>=1.8.0",
     "torch",
     "tables",
     "furo",
@@ -32,6 +30,7 @@ dev = [
     "yaml-changelog>=0.1.7",
     "itables",
     "quantile-forest",
+    "build",
 ]
 
 [tool.setuptools]

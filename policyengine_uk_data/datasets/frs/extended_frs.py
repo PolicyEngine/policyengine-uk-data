@@ -97,7 +97,6 @@ class ExtendedFRS_2022_23(ExtendedFRS):
     data_format = Dataset.TIME_PERIOD_ARRAYS
     input_frs = FRS_2022_23
     time_period = 2022
-    url = "release://PolicyEngine/ukda/release/extended_frs_2022_23.h5"
 
 
 if __name__ == "__main__":

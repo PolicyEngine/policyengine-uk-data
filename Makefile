@@ -7,6 +7,7 @@ test:
 	pytest
 
 install:
+	pip install policyengine-uk==2.1.1
 	pip install -e ".[dev]"
 
 download:
