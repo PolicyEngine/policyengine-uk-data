@@ -105,7 +105,7 @@ def reweight(
 
     start_loss = None
 
-    iterator = trange(5_000)
+    iterator = trange(1_000)
     for i in iterator:
         optimizer.zero_grad()
         weights_ = dropout_weights(weights, dropout_rate)

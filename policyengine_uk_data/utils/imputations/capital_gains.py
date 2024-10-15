@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from policyengine_core.data import Dataset
 
 # Fit a spline to each income band's percentiles
 try:
@@ -165,7 +166,7 @@ def stack_datasets(data_1, data_2):
     return joined_data
 
 
-def impute_cg_to_dataset(dataset):
+def impute_cg_to_dataset(dataset: Dataset):
     data = dataset.load_dataset()
     zero_weight_copy_1 = copy.deepcopy(data)
     zero_weight_copy_2 = copy.deepcopy(data)
