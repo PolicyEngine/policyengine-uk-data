@@ -19,7 +19,6 @@ SPI_RENAMES = dict(
     charitable_investment_gifts="GIFTINV",
     employment_expenses="EPB",
     other_deductions="MOTHDED",
-    pension_contributions="PENSRLF",
     person_weight="FACT",
     benunit_weight="FACT",
     household_weight="FACT",
@@ -79,7 +78,6 @@ IMPUTATIONS = [
     "employment_expenses",
     "property_income",
     "gift_aid",
-    "pension_contributions",
 ]
 
 
