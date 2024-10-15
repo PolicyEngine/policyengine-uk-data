@@ -1,5 +1,4 @@
 - bump: minor
   changes:
     added:
-    - 5% dropout in calibration.
-    - Code quality improvements.
+    - Add employer pension contributions.
