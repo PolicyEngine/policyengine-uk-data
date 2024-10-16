@@ -39,3 +39,18 @@
     - GH actions naming.
     - Bug causing the Extended FRS to error.
   date: 2024-09-18 13:57:40
+- bump: minor
+  changes:
+    added:
+    - Re-run calibration with more epochs.
+  date: 2024-10-16 17:02:56
+- bump: minor
+  changes:
+    added:
+    - Missing changelog entry.
+  date: 2024-10-16 17:05:39
+- bump: minor
+  changes:
+    added:
+    - Moved epoch count to 10k per year.
+  date: 2024-10-16 17:05:58

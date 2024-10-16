@@ -759,7 +759,7 @@ def add_expenses(
         sum_to_entity(job.DEDUC1.fillna(0), job.person_id, person.index) * 52,
     )
     frs["employer_pension_contributions"] = (
-        frs["employee_pension_contributions"] * 2.5
+        frs["employee_pension_contributions"] * 3
     )  # Rough estimate based on aggregates.
 
     frs["housing_service_charges"] = (
