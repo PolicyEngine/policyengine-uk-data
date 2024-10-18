@@ -64,8 +64,29 @@ class SPI(Dataset):
         data["savings_starter_rate_income"] = np.zeros(len(df))
         data["capital_allowances"] = df.CAPALL
         data["loss_relief"] = df.LOSSBF
-        data["is_SP_age"] = df.SPA == 1
-        data["state_pension"] = df.SRP
+
+        AGE_RANGES = {
+            -1: (16, 70),
+            1: (16, 25),
+            2: (25, 35),
+            3: (35, 45),
+            4: (45, 55),
+            5: (55, 65),
+            6: (65, 74),
+            7: (74, 90),
+        }
+        age_range = df.AGERANGE
+
+        # Randomly assign ages in age ranges
+
+        percent_along_age_range = np.random.rand(len(df))
+        min_age = np.array([AGE_RANGES[age][0] for age in age_range])
+        max_age = np.array([AGE_RANGES[age][1] for age in age_range])
+        data["age"] = (
+            min_age + (max_age - min_age) * percent_along_age_range
+        ).astype(int)
+
+        data["state_pension_reported"] = df.SRP
         data["other_tax_credits"] = df.TAX_CRED
         data["miscellaneous_income"] = (
             df.MOTHINC

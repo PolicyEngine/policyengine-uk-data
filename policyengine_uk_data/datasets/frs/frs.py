@@ -92,6 +92,29 @@ class FRS(Dataset):
 
         self.save_dataset(frs)
 
+        self.add_random_variables(frs)
+
+    def add_random_variables(self, frs: dict):
+        from policyengine_uk import Microsimulation
+
+        simulation = Microsimulation(dataset=self)
+        RANDOM_VARIABLES = [
+            "attends_private_school",
+            "would_evade_tv_licence_fee",
+            "would_claim_pc",
+            "would_claim_uc",
+            "would_claim_child_benefit",
+            "main_residential_property_purchased_is_first_home",
+            "household_owns_tv",
+            "is_higher_earner",
+        ]
+        INPUT_PERIODS = list(range(self.time_period, self.time_period + 10))
+        for variable in RANDOM_VARIABLES:
+            value = simulation.calculate(variable, self.time_period).values
+            frs[variable] = {period: value for period in INPUT_PERIODS}
+
+        self.save_dataset(frs)
+
 
 class FRS_2020_21(FRS):
     dwp_frs = DWP_FRS_2020_21

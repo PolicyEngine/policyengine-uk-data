@@ -196,15 +196,8 @@ def create_target_matrix(
 
     income_df = sim.calculate_dataframe(["total_income"] + INCOME_VARIABLES)
 
-    incomes = pd.read_csv(STORAGE_FOLDER / "incomes.csv")
-    for variable in INCOME_VARIABLES:
-        incomes[variable + "_count"] = uprate_values(
-            incomes[variable + "_count"], "household_weight", 2021, time_period
-        )
-        incomes[variable + "_amount"] = uprate_values(
-            incomes[variable + "_amount"], variable, 2021, time_period
-        )
-
+    incomes = pd.read_csv(STORAGE_FOLDER / "incomes_projection.csv")
+    incomes = incomes[incomes.year == time_period]
     for i, row in incomes.iterrows():
         lower = row.total_income_lower_bound
         upper = row.total_income_upper_bound

@@ -54,3 +54,9 @@
     added:
     - Moved epoch count to 10k per year.
   date: 2024-10-16 17:05:58
+- bump: minor
+  changes:
+    added:
+    - Future year income targeting.
+    - Random takeup variable values.
+  date: 2024-10-18 16:05:10
