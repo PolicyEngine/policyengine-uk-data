@@ -60,3 +60,8 @@
     - Future year income targeting.
     - Random takeup variable values.
   date: 2024-10-18 16:05:10
+- bump: minor
+  changes:
+    added:
+    - Calibration for private school students.
+  date: 2024-10-21 17:03:50
