@@ -99,7 +99,6 @@ class FRS(Dataset):
 
         simulation = Microsimulation(dataset=self)
         RANDOM_VARIABLES = [
-            "attends_private_school",
             "would_evade_tv_licence_fee",
             "would_claim_pc",
             "would_claim_uc",
@@ -107,6 +106,7 @@ class FRS(Dataset):
             "main_residential_property_purchased_is_first_home",
             "household_owns_tv",
             "is_higher_earner",
+            "attends_private_school",
         ]
         INPUT_PERIODS = list(range(self.time_period, self.time_period + 10))
         for variable in RANDOM_VARIABLES:
@@ -138,7 +138,7 @@ class FRS_2022_23(FRS):
     label = "FRS (2022-23)"
     file_path = STORAGE_FOLDER / "frs_2022_23.h5"
     time_period = 2022
-    url = "release://PolicyEngine/ukda/1.5.0/frs_2022_23.h5"
+    url = "release://PolicyEngine/ukda/1.6.0/frs_2022_23.h5"
 
 
 def add_id_variables(frs: h5py.File, person: DataFrame, household: DataFrame):

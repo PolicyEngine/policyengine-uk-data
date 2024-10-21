@@ -21,6 +21,7 @@ docker:
 
 documentation:
 	jb clean docs && jb build docs
+	python docs/add_plotly_to_book.py docs/book
 
 data:
 	python policyengine_uk_data/datasets/frs/dwp_frs.py

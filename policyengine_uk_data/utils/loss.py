@@ -128,6 +128,9 @@ def create_target_matrix(
     df["obr/vat"] = pe("vat")
     df["obr/winter_fuel_allowance"] = pe("winter_fuel_allowance")
 
+    # Not strictly from the OBR but from the 2024 Independent Schools Council census. OBR will be using that.
+    df["obr/private_school_students"] = pe("attends_private_school")
+
     # Population statistics from the ONS.
 
     region = sim.calculate("region", map_to="person")
@@ -239,15 +242,20 @@ def create_target_matrix(
     return df, combined_targets.value
 
 
-def get_loss_results(dataset, time_period, reform=None):
+def get_loss_results(
+    dataset, time_period, reform=None, household_weights=None
+):
     matrix, targets = create_target_matrix(dataset, time_period, reform)
     from policyengine_uk import Microsimulation
 
-    weights = (
-        Microsimulation(dataset=dataset, reform=reform)
-        .calculate("household_weight", time_period)
-        .values
-    )
+    if household_weights is None:
+        weights = (
+            Microsimulation(dataset=dataset, reform=reform)
+            .calculate("household_weight", time_period)
+            .values
+        )
+    else:
+        weights = household_weights
     estimates = weights @ matrix
     df = pd.DataFrame(
         {
