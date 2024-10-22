@@ -65,3 +65,8 @@
     added:
     - Calibration for private school students.
   date: 2024-10-21 17:03:50
+- bump: minor
+  changes:
+    changed:
+    - Data URLs updated.
+  date: 2024-10-22 08:30:52
