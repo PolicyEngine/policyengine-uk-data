@@ -70,3 +70,8 @@
     changed:
     - Data URLs updated.
   date: 2024-10-22 08:30:52
+- bump: minor
+  changes:
+    fixed:
+    - Bug removing capital gains.
+  date: 2024-10-22 11:18:48
