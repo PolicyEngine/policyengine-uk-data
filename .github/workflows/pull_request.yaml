@@ -49,9 +49,5 @@ jobs:
         run: make data
       - name: Run tests
         run: pytest
-      - name: Upload data (testing)
-        run: make upload
-        env:
-          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
       - name: Test documentation builds
         run: make documentation
