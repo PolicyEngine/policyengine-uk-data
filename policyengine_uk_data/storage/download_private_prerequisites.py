@@ -19,15 +19,13 @@ FILES = [
     "spi_2020_21.zip",
 ]
 
-FILES = [Path(file) for file in FILES]
+FILES = [FOLDER / file for file in FILES]
 
 for file in FILES:
-    if file.exists():
-        continue
     download(
         repo="policyengine/policyengine-uk-data",
         repo_filename=file.name,
         local_folder=file.parent,
     )
-    extract_zipped_folder(FOLDER / file)
-    (FOLDER / file).unlink()
+    extract_zipped_folder(file)
+    file.unlink()
