@@ -44,12 +44,14 @@ jobs:
       - name: Download data inputs
         run: make download
         env:
-          POLICYENGINE_UK_DATA_GITHUB_TOKEN: ${{ secrets.POLICYENGINE_UK_DATA_GITHUB_TOKEN }}
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
       - name: Build datasets
         run: make data
-        env:
-          LITE_MODE: true
       - name: Run tests
         run: pytest
+      - name: Upload data (testing)
+        run: make upload
+        env:
+          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
       - name: Test documentation builds
         run: make documentation

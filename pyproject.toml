@@ -17,6 +17,7 @@ dependencies = [
     "requests",
     "tqdm",
     "tabulate",
+    "huggingface_hub",
 ]
 
 [project.optional-dependencies]
