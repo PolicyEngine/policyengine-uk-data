@@ -1,21 +1,8 @@
-from policyengine_uk_data.utils.github import upload
-from pathlib import Path
-from tqdm import tqdm
+from policyengine_uk_data.datasets import EnhancedFRS_2022_23, FRS_2022_23
 
-FOLDER = Path(__file__).parent
+datasets = [EnhancedFRS_2022_23, FRS_2022_23]
 
-FILES = [
-    "frs_2022_23.h5",
-    "enhanced_frs_2022_23.h5",
-    "extended_frs_2022_23.h5",
-    "reweighted_frs_2022_23.h5",
-]
-
-for file in tqdm(FILES):
-    upload(
-        "PolicyEngine",
-        "ukda",
-        "release",
-        file,
-        FOLDER / file,
-    )
+for dataset in datasets:
+    ds = dataset()
+    print(f"Uploading {ds.name} with url {ds.url}")
+    ds.upload()
