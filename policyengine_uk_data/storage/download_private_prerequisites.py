@@ -6,7 +6,7 @@ import zipfile
 def extract_zipped_folder(folder):
     folder = Path(folder)
     with zipfile.ZipFile(folder, "r") as zip_ref:
-        zip_ref.extractall(folder.parent)
+        zip_ref.extractall(folder.parent / folder.stem)
 
 
 FOLDER = Path(__file__).parent
