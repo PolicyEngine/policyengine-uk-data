@@ -2,7 +2,10 @@ from huggingface_hub import hf_hub_download, login, HfApi
 import os
 import pkg_resources
 
-def download(repo: str, repo_filename: str, local_folder: str, version: str = None):
+
+def download(
+    repo: str, repo_filename: str, local_folder: str, version: str = None
+):
     token = os.environ.get(
         "HUGGING_FACE_TOKEN",
     )
@@ -16,6 +19,7 @@ def download(repo: str, repo_filename: str, local_folder: str, version: str = No
         revision=version,
     )
 
+
 def upload(local_file_path: str, repo: str, repo_file_path: str):
     token = os.environ.get(
         "HUGGING_FACE_TOKEN",
@@ -28,4 +32,3 @@ def upload(local_file_path: str, repo: str, repo_file_path: str):
         repo_id=repo,
         repo_type="model",
     )
-
