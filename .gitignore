@@ -12,4 +12,5 @@
 !tax_benefit.csv
 !demographics.csv
 !incomes_projection.csv
+!policyengine_uk_data/datasets/frs/local_areas/**/*.csv
 **/_build
