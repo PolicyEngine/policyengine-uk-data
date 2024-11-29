@@ -4,7 +4,9 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 import h5py
-from policyengine_uk_data.datasets.frs.local_areas.constituencies.transform_constituencies import transform_2010_to_2024
+from policyengine_uk_data.datasets.frs.local_areas.constituencies.transform_constituencies import (
+    transform_2010_to_2024,
+)
 
 # Fill in missing constituencies with average column values
 import pandas as pd
@@ -72,9 +74,11 @@ def calibrate():
             )
             final_weights = update_weights(final_weights, mapping_matrix)
 
-            with h5py.File(STORAGE_FOLDER / "parliamentary_constituency_weights.h5", "w") as f:
+            with h5py.File(
+                STORAGE_FOLDER / "parliamentary_constituency_weights.h5", "w"
+            ) as f:
                 f.create_dataset("2025", data=final_weights)
-            
+
             print(f"Loss: {l.item()}, Epoch: {epoch}")
 
 

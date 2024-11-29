@@ -28,6 +28,7 @@ data:
 	python policyengine_uk_data/datasets/frs/frs.py
 	python policyengine_uk_data/datasets/frs/extended_frs.py
 	python policyengine_uk_data/datasets/frs/enhanced_frs.py
+	python policyengine_uk_data/datasets/frs/local_areas/constituencies/calibrate.py
 
 build:
 	python -m build
