@@ -1,4 +1,5 @@
 from policyengine_uk_data.datasets import EnhancedFRS_2022_23, FRS_2022_23
+from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk_data.utils.huggingface import upload
 
 def upload_datasets():
@@ -12,4 +13,12 @@ def upload_datasets():
             "policyengine/policyengine-uk-data",
             dataset.file_path.name,
         )
+    
+    # Constituency weights:
+
+    upload(
+        STORAGE_FOLDER / "parliamentary_constituency_weights.h5",
+        "policyengine/policyengine-uk-data",
+        "parliamentary_constituency_weights.h5",
+    )
 
