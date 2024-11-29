@@ -44,11 +44,10 @@ def reweight(
         return masked_weights
 
     optimizer = torch.optim.Adam([weights], lr=1e-1)
-    from tqdm import trange
 
     start_loss = None
 
-    iterator = trange(epochs)
+    iterator = range(epochs)
     for i in iterator:
         optimizer.zero_grad()
         weights_ = dropout_weights(weights, dropout_rate)
@@ -57,9 +56,7 @@ def reweight(
             start_loss = l.item()
         loss_rel_change = (l.item() - start_loss) / start_loss
         l.backward()
-        iterator.set_postfix(
-            {"loss": l.item(), "loss_rel_change": loss_rel_change}
-        )
+        print(f"Calibrating weights: {i}/{epochs}, loss_rel_change: {loss_rel_change:.1%}")
         optimizer.step()
 
     return torch.exp(weights).detach().numpy()
