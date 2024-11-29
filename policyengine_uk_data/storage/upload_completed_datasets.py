@@ -24,3 +24,7 @@ def upload_datasets():
         "policyengine/policyengine-uk-data",
         "parliamentary_constituency_weights.h5",
     )
+
+
+if __name__ == "__main__":
+    upload_datasets()
