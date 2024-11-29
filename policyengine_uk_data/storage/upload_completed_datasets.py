@@ -1,8 +1,15 @@
 from policyengine_uk_data.datasets import EnhancedFRS_2022_23, FRS_2022_23
+from policyengine_uk_data.utils.huggingface import upload
 
-datasets = [EnhancedFRS_2022_23, FRS_2022_23]
+def upload_datasets():
+    for dataset in [FRS_2022_23, EnhancedFRS_2022_23]:
+        dataset = dataset()
+        if not dataset.exists:
+            raise ValueError(f"Dataset {dataset.name} does not exist at {dataset.file_path}.")
+    
+        upload(
+            dataset.file_path,
+            "policyengine/policyengine-uk-data",
+            dataset.file_path.name,
+        )
 
-for dataset in datasets:
-    ds = dataset()
-    print(f"Uploading {ds.name} with url {ds.url}")
-    ds.upload()
