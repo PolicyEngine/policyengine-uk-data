@@ -59,27 +59,26 @@ def calibrate():
 
     optimizer = torch.optim.Adam([weights], lr=0.1)
 
-    desc = range(101)
+    desc = range(512)
 
     for epoch in desc:
         optimizer.zero_grad()
         l = loss(torch.exp(weights))
         l.backward()
         optimizer.step()
-
-        if epoch % 100 == 0:
-            final_weights = torch.exp(weights).detach().numpy()
-            mapping_matrix = pd.read_csv(
-                FOLDER / "mapping_2010_to_2024" / "mapping_matrix.csv"
-            )
-            final_weights = update_weights(final_weights, mapping_matrix)
-
-            with h5py.File(
-                STORAGE_FOLDER / "parliamentary_constituency_weights.h5", "w"
-            ) as f:
-                f.create_dataset("2025", data=final_weights)
-
+        if epoch % 50 == 0:
             print(f"Loss: {l.item()}, Epoch: {epoch}")
+
+    final_weights = torch.exp(weights).detach().numpy()
+    mapping_matrix = pd.read_csv(
+        FOLDER / "mapping_2010_to_2024" / "mapping_matrix.csv"
+    )
+    final_weights = update_weights(final_weights, mapping_matrix)
+
+    with h5py.File(
+        STORAGE_FOLDER / "parliamentary_constituency_weights.h5", "w"
+    ) as f:
+        f.create_dataset("2025", data=final_weights)
 
 
 def update_weights(weights, mapping_matrix):
