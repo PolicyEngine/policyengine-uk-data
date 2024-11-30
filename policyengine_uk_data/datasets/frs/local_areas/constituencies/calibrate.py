@@ -84,7 +84,8 @@ def calibrate():
 def update_weights(weights, mapping_matrix):
     mapping_matrix = mapping_matrix.set_index(mapping_matrix.columns[0])
     mapping_matrix = mapping_matrix.div(mapping_matrix.sum(), axis=1)
-    return mapping_matrix.T.dot(weights)
+    mapped_weights = mapping_matrix.T.dot(weights)
+    return mapped_weights[mapping_matrix.columns.argsort(), :]
 
 
 if __name__ == "__main__":
