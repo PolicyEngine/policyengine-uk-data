@@ -80,3 +80,8 @@
     added:
     - Automatic calibration.
   date: 2024-11-27 19:28:29
+- bump: patch
+  changes:
+    fixed:
+    - Constituency weights are in A-Z order.
+  date: 2024-11-30 13:23:17
