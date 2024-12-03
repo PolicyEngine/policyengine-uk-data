@@ -12,6 +12,7 @@ def extract_zipped_folder(folder):
 FOLDER = Path(__file__).parent
 
 FILES = [
+    "frs_2020_21.zip",
     "frs_2022_23.zip",
     "lcfs_2021_22.zip",
     "was_2006_20.zip",
