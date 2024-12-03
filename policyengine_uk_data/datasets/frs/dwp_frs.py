@@ -109,4 +109,5 @@ class DWP_FRS_2022_23(DWP_FRS):
 
 
 if __name__ == "__main__":
+    DWP_FRS_2020_21().generate()
     DWP_FRS_2022_23().generate()
