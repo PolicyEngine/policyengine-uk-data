@@ -16,7 +16,10 @@ FOLDER = Path(__file__).parent
 
 
 def create_constituency_target_matrix(
-    dataset: str = "enhanced_frs_2022_23", time_period: int = 2025, reform=None
+    dataset: str = "enhanced_frs_2022_23",
+    time_period: int = 2025,
+    reform=None,
+    uprate: bool = True,
 ):
     ages = pd.read_csv(FOLDER / "targets" / "age.csv")
     incomes = pd.read_csv(FOLDER / "targets" / "total_income.csv")
@@ -90,4 +93,67 @@ def create_constituency_target_matrix(
             & (employment_incomes.employment_income_upper_bound == upper_bound)
         ].employment_income_amount.values
 
+    if uprate:
+        y = uprate_targets(y, time_period)
+
     return matrix, y
+
+
+def uprate_targets(y: pd.DataFrame, target_year: int = 2025) -> pd.DataFrame:
+    # Uprate age targets from 2020, taxable income targets from 2021, employment income targets from 2023.
+    # Use PolicyEngine uprating factors.
+    sim = Microsimulation(dataset="frs_2020_21")
+    matrix_20, y_20 = create_constituency_target_matrix(
+        "frs_2020_21", 2020, uprate=False
+    )
+    matrix_21, y_21 = create_constituency_target_matrix(
+        "frs_2020_21", 2021, uprate=False
+    )
+    matrix_23, y_23 = create_constituency_target_matrix(
+        "frs_2020_21", 2023, uprate=False
+    )
+    matrix_final, y_final = create_constituency_target_matrix(
+        "frs_2020_21", target_year, uprate=False
+    )
+    weights_20 = sim.calculate("household_weight", 2020)
+    weights_21 = sim.calculate("household_weight", 2021)
+    weights_23 = sim.calculate("household_weight", 2023)
+    weights_final = sim.calculate("household_weight", target_year)
+
+    rel_change_20_final = (weights_final @ matrix_final) / (
+        weights_20 @ matrix_20
+    ) - 1
+    is_uprated_from_2020 = [
+        col.startswith("age/") for col in matrix_20.columns
+    ]
+    uprating_from_2020 = np.zeros_like(matrix_20.columns, dtype=float)
+    uprating_from_2020[is_uprated_from_2020] = rel_change_20_final[
+        is_uprated_from_2020
+    ]
+
+    rel_change_21_final = (weights_final @ matrix_final) / (
+        weights_21 @ matrix_21
+    ) - 1
+    is_uprated_from_2021 = [
+        col.startswith("hmrc/") for col in matrix_21.columns
+    ]
+    uprating_from_2021 = np.zeros_like(matrix_21.columns, dtype=float)
+    uprating_from_2021[is_uprated_from_2021] = rel_change_21_final[
+        is_uprated_from_2021
+    ]
+
+    rel_change_23_final = (weights_final @ matrix_final) / (
+        weights_23 @ matrix_23
+    ) - 1
+    is_uprated_from_2023 = [
+        col.startswith("hmrc/") for col in matrix_23.columns
+    ]
+    uprating_from_2023 = np.zeros_like(matrix_23.columns, dtype=float)
+    uprating_from_2023[is_uprated_from_2023] = rel_change_23_final[
+        is_uprated_from_2023
+    ]
+
+    uprating = uprating_from_2020 + uprating_from_2021 + uprating_from_2023
+    y = y * (1 + uprating)
+
+    return y

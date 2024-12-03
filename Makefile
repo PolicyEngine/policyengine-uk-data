@@ -7,8 +7,7 @@ test:
 	pytest
 
 install:
-	pip install policyengine-uk==2.1.1
-	pip install -e ".[dev]"
+	pip install -e ".[dev]" --config-settings editable_mode=compat
 
 download:
 	python policyengine_uk_data/storage/download_private_prerequisites.py
