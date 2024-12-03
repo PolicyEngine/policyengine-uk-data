@@ -90,3 +90,8 @@
     added:
     - Target uprating for constituencies.
   date: 2024-12-03 11:21:54
+- bump: patch
+  changes:
+    added:
+    - Dropout in constituency calibration.
+  date: 2024-12-03 17:25:35

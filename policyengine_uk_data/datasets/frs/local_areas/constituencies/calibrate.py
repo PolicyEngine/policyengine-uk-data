@@ -57,13 +57,24 @@ def calibrate():
 
         return mse_c + mse_n
 
+    def dropout_weights(weights, p):
+        if p == 0:
+            return weights
+        # Replace p% of the weights with the mean value of the rest of them
+        mask = torch.rand_like(weights) < p
+        mean = weights[~mask].mean()
+        masked_weights = weights.clone()
+        masked_weights[mask] = mean
+        return masked_weights
+
     optimizer = torch.optim.Adam([weights], lr=0.1)
 
     desc = range(512)
 
     for epoch in desc:
         optimizer.zero_grad()
-        l = loss(torch.exp(weights))
+        weights_ = dropout_weights(weights, 0.05)
+        l = loss(torch.exp(weights_))
         l.backward()
         optimizer.step()
         if epoch % 50 == 0:
