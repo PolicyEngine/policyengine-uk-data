@@ -85,3 +85,8 @@
     fixed:
     - Constituency weights are in A-Z order.
   date: 2024-11-30 13:23:17
+- bump: minor
+  changes:
+    added:
+    - Target uprating for constituencies.
+  date: 2024-12-03 11:21:54
