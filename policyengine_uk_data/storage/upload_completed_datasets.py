@@ -25,6 +25,14 @@ def upload_datasets():
         "parliamentary_constituency_weights.h5",
     )
 
+    # Local authority weights:
+
+    upload(
+        STORAGE_FOLDER / "local_authority_weights.h5",
+        "policyengine/policyengine-uk-data",
+        "local_authority_weights.h5",
+    )
+
 
 if __name__ == "__main__":
     upload_datasets()

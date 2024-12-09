@@ -8,6 +8,7 @@ test:
 
 install:
 	pip install policyengine-uk
+	pip install policyengine
 	pip install -e ".[dev]" --config-settings editable_mode=compat
 
 download:
@@ -29,6 +30,7 @@ data:
 	python policyengine_uk_data/datasets/frs/extended_frs.py
 	python policyengine_uk_data/datasets/frs/enhanced_frs.py
 	python policyengine_uk_data/datasets/frs/local_areas/constituencies/calibrate.py
+	python policyengine_uk_data/datasets/frs/local_areas/local_authorities/calibrate.py
 
 build:
 	python -m build

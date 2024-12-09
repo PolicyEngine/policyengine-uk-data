@@ -4,6 +4,8 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 import h5py
+from policyengine_uk_data.storage import STORAGE_FOLDER
+
 
 from loss import (
     create_local_authority_target_matrix,
@@ -60,7 +62,7 @@ def calibrate():
 
     optimizer = torch.optim.Adam([weights], lr=0.1)
 
-    desc = tqdm(range(512))
+    desc = range(512)
 
     for epoch in desc:
         optimizer.zero_grad()
@@ -74,8 +76,10 @@ def calibrate():
         if epoch % 100 == 0:
             final_weights = torch.exp(weights).detach().numpy()
 
-            with h5py.File("weights.h5", "w") as f:
-                f.create_dataset("weight", data=final_weights)
+            with h5py.File(
+                STORAGE_FOLDER / "local_authority_weights.h5", "w"
+            ) as f:
+                f.create_dataset("2025", data=final_weights)
 
 
 if __name__ == "__main__":
