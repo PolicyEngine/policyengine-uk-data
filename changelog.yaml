@@ -95,3 +95,8 @@
     added:
     - Dropout in constituency calibration.
   date: 2024-12-03 17:25:35
+- bump: minor
+  changes:
+    added:
+    - Local authority weights.
+  date: 2024-12-09 11:51:05
