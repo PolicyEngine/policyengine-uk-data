@@ -1,0 +1,25 @@
+Metadata-Version: 2.1
+Name: policyengine_uk_data
+Version: 1.10.1
+Summary: A package to create representative microdata for the UK.
+Author-email: PolicyEngine <hello@policyengine.org>
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+Requires-Dist: policyengine_core
+Requires-Dist: requests
+Requires-Dist: tqdm
+Requires-Dist: tabulate
+Requires-Dist: huggingface_hub
+Provides-Extra: dev
+Requires-Dist: black; extra == "dev"
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: torch; extra == "dev"
+Requires-Dist: tables; extra == "dev"
+Requires-Dist: furo; extra == "dev"
+Requires-Dist: jupyter-book; extra == "dev"
+Requires-Dist: yaml-changelog>=0.1.7; extra == "dev"
+Requires-Dist: itables; extra == "dev"
+Requires-Dist: quantile-forest; extra == "dev"
+Requires-Dist: build; extra == "dev"
+
+# PolicyEngine UK Data

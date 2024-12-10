@@ -1,0 +1,17 @@
+policyengine_core
+requests
+tqdm
+tabulate
+huggingface_hub
+
+[dev]
+black
+pytest
+torch
+tables
+furo
+jupyter-book
+yaml-changelog>=0.1.7
+itables
+quantile-forest
+build
