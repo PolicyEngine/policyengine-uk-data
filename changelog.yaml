@@ -100,3 +100,8 @@
     added:
     - Local authority weights.
   date: 2024-12-09 11:51:05
+- bump: patch
+  changes:
+    fixed:
+    - Documentation errors.
+  date: 2024-12-10 10:46:07
