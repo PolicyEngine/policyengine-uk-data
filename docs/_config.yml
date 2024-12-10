@@ -5,6 +5,8 @@ logo: logo.png
 
 execute:
   execute_notebooks: force
+  allow_errors: false
+  timeout: 600
 
 repository:
   url: https://github.com/policyengine/policyengine-uk-data
