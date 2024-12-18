@@ -8,3 +8,4 @@ chapters:
   - file: validation/constituencies.ipynb
   - file: validation/local_authorities.ipynb
 - file: pension_contributions.ipynb
+- file: constituency_methodology.ipynb
