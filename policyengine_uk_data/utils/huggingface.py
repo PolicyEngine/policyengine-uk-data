@@ -9,7 +9,6 @@ def download(
     token = os.environ.get(
         "HUGGING_FACE_TOKEN",
     )
-    login(token=token)
 
     hf_hub_download(
         repo_id=repo,
@@ -17,6 +16,7 @@ def download(
         filename=repo_filename,
         local_dir=local_folder,
         revision=version,
+        token=token,
     )
 
 
