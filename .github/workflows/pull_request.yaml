@@ -30,6 +30,8 @@ jobs:
   test:
     name: Build and test
     runs-on: ubuntu-latest
+    env:
+      HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
