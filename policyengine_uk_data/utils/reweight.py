@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import os
 
 
 def reweight(
@@ -47,7 +48,7 @@ def reweight(
 
     start_loss = None
 
-    iterator = range(1_000)
+    iterator = range(128) if os.environ.get("DATA_LITE") else range(2048)
     for i in iterator:
         optimizer.zero_grad()
         weights_ = dropout_weights(weights, dropout_rate)

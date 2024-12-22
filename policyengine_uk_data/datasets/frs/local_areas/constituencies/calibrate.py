@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 import h5py
+import os
 from policyengine_uk_data.datasets.frs.local_areas.constituencies.transform_constituencies import (
     transform_2010_to_2024,
 )
@@ -69,7 +70,7 @@ def calibrate():
 
     optimizer = torch.optim.Adam([weights], lr=0.05)
 
-    desc = range(2048)
+    desc = range(128) if os.environ.get("DATA_LITE") else range(2048)
 
     for epoch in desc:
         optimizer.zero_grad()
@@ -78,7 +79,7 @@ def calibrate():
         l.backward()
         optimizer.step()
         if epoch % 50 == 0:
-            print(f"Loss: {l.item()}, Epoch: {epoch}")
+            print(f"Loss: {l.item()}, Epoch: {epoch}", flush=True)
 
     final_weights = torch.exp(weights).detach().numpy()
     mapping_matrix = pd.read_csv(
