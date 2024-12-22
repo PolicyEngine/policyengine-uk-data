@@ -67,9 +67,9 @@ def calibrate():
         masked_weights[mask] = mean
         return masked_weights
 
-    optimizer = torch.optim.Adam([weights], lr=0.1)
+    optimizer = torch.optim.Adam([weights], lr=0.05)
 
-    desc = range(512)
+    desc = range(2048)
 
     for epoch in desc:
         optimizer.zero_grad()
