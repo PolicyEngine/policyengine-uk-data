@@ -8,7 +8,7 @@ test:
 
 install:
 	pip install policyengine-uk
-	pip install policyengine
+	pip install policyengine>=2.4
 	pip install -e ".[dev]" --config-settings editable_mode=compat
 
 download:
