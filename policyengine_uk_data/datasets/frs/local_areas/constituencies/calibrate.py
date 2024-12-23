@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 import h5py
+import os
 from policyengine_uk_data.datasets.frs.local_areas.constituencies.transform_constituencies import (
     transform_2010_to_2024,
 )
@@ -57,6 +58,18 @@ def calibrate():
 
         return mse_c + mse_n
 
+    def pct_close(w, t=0.1):
+        # Return the percentage of metrics that are within t% of the target
+        pred_c = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
+        e_c = torch.sum(torch.abs((pred_c / (1 + y) - 1)) < t)
+        c_c = pred_c.shape[0] * pred_c.shape[1]
+
+        pred_n = (w.sum(axis=0) * matrix_national.T).sum(axis=1)
+        e_n = torch.sum(torch.abs((pred_n / (1 + y_national) - 1)) < t)
+        c_n = pred_n.shape[0]
+
+        return (e_c + e_n) / (c_c + c_n)
+
     def dropout_weights(weights, p):
         if p == 0:
             return weights
@@ -69,7 +82,7 @@ def calibrate():
 
     optimizer = torch.optim.Adam([weights], lr=0.1)
 
-    desc = range(512)
+    desc = range(32) if os.environ.get("DATA_LITE") else range(256)
 
     for epoch in desc:
         optimizer.zero_grad()
@@ -77,8 +90,9 @@ def calibrate():
         l = loss(torch.exp(weights_))
         l.backward()
         optimizer.step()
-        if epoch % 50 == 0:
-            print(f"Loss: {l.item()}, Epoch: {epoch}")
+        close = pct_close(torch.exp(weights_))
+        if epoch % 10 == 0:
+            print(f"Loss: {l.item()}, Epoch: {epoch}, Within 10%: {close:.2%}")
 
     final_weights = torch.exp(weights).detach().numpy()
     mapping_matrix = pd.read_csv(

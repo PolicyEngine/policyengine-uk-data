@@ -28,6 +28,5 @@ for file in FILES:
         repo_filename=file.name,
         local_folder=file.parent,
     )
-    print(f"Extracting {file}")
     extract_zipped_folder(file)
     file.unlink()
