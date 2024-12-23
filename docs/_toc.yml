@@ -8,5 +8,9 @@ chapters:
   - file: validation/constituencies.ipynb
   - file: validation/local_authorities.ipynb
 - file: pension_contributions.ipynb
+<<<<<<< HEAD
 - file: constituency_methodology.ipynb
 - file: LA_methodology.ipynb
+=======
+- file: constituency_methodology.ipynb
+>>>>>>> 6296653 (Add constituency methodology documentation (#57))
