@@ -33,18 +33,16 @@ jobs:
     env:
       HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v2
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-
-      - name: Set up Python
-        uses: actions/setup-python@v2
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
-          python-version: '3.10'
-            
+          fetch-depth: 0 # Fetch all history for all tags and branches
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
       - name: Install package
-        run: uv pip install .[dev] --system
+        run: make install
       - name: Download data inputs
         run: make download
         env:
