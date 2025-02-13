@@ -12,11 +12,18 @@ df = df[~df.code.str.contains("N9200000")]
 df = df.sort_values("code")
 
 for col in df.columns[2:]:
-    df[col] = df[col].astype(str).str.replace(",", "").str.replace("£", "").str.replace("-", "0").astype(float)
+    df[col] = (
+        df[col]
+        .astype(str)
+        .str.replace(",", "")
+        .str.replace("£", "")
+        .str.replace("-", "0")
+        .astype(float)
+    )
 
     if "_count" in col:
         df[col] = df[col] * 1_000
-    
+
     elif "_mean" in col:
         income = col.split("_mean")[0]
         df[income + "_amount"] = df[col] * df[income + "_count"]

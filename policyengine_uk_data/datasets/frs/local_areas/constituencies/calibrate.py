@@ -109,13 +109,13 @@ def calibrate(
     # Override national weights in 2025 with the sum of the constituency weights
 
     with h5py.File(
-        STORAGE_FOLDER / "enhanced_frs_2022_23.h5", "r+",
+        STORAGE_FOLDER / "enhanced_frs_2022_23.h5",
+        "r+",
     ) as f:
         national_weights = final_weights.sum(axis=0)
         f.create_dataset("household_weight/2025", data=national_weights)
 
     return final_weights
-
 
 
 if __name__ == "__main__":

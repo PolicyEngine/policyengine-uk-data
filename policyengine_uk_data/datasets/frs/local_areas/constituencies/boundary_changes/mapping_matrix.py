@@ -15,7 +15,9 @@ new_index = {code: idx for idx, code in enumerate(new_codes)}
 
 # 4. Calculate proportion of old constituency's population in each new constituency
 #    First, compute total population of each old constituency using groupby and transform
-total_old_pop = df.groupby("code_2010")["old_population_present"].transform("sum")
+total_old_pop = df.groupby("code_2010")["old_population_present"].transform(
+    "sum"
+)
 #    Then compute the proportion for each row
 df["proportion"] = df["old_population_present"] / total_old_pop
 
