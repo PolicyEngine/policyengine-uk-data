@@ -14,7 +14,7 @@ from policyengine_uk_data.datasets.frs.local_areas.constituencies.loss import (
     create_constituency_target_matrix,
     create_national_target_matrix,
 )
-from policyengine_uk.data.datasets.frs.local_areas.constituencies.boundary_changes.mapping_matrix import (
+from policyengine_uk_data.datasets.frs.local_areas.constituencies.boundary_changes.mapping_matrix import (
     mapping_matrix,
 )
 from pathlib import Path
