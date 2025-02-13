@@ -14,6 +14,9 @@ from policyengine_uk_data.datasets.frs.local_areas.constituencies.loss import (
     create_constituency_target_matrix,
     create_national_target_matrix,
 )
+from policyengine_uk.data.datasets.frs.local_areas.constituencies.boundary_changes.mapping_matrix import (
+    mapping_matrix,
+)
 from pathlib import Path
 from policyengine_uk_data.storage import STORAGE_FOLDER
 
@@ -97,8 +100,6 @@ def calibrate(
     final_weights = torch.exp(weights).detach().numpy()
 
     if map_to_2024_boundaries:
-        from .boundary_changes.mapping_matrix import mapping_matrix
-
         final_weights = mapping_matrix @ final_weights
 
     with h5py.File(
