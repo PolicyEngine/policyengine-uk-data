@@ -11,6 +11,11 @@ install:
 	pip install policyengine>=2.4
 	pip install -e ".[dev]" --config-settings editable_mode=compat
 
+install-uv:
+	uv pip install policyengine-uk
+	uv pip install policyengine>=2.4
+	uvpip install -e ".[dev]" --config-settings editable_mode=compat
+
 download:
 	python policyengine_uk_data/storage/download_private_prerequisites.py
 
