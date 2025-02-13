@@ -114,7 +114,7 @@ def calibrate(
         "r+",
     ) as f:
         national_weights = final_weights.sum(axis=0)
-        f.create_dataset("household_weight/2025", data=national_weights)
+        f["household_weight/2025"] = national_weights
 
     return final_weights
 
