@@ -22,7 +22,7 @@ def create_constituency_target_matrix(
     uprate: bool = True,
 ):
     ages = pd.read_csv(FOLDER / "targets" / "age.csv")
-    incomes = pd.read_csv(FOLDER / "targets" / "total_income.csv")
+    incomes = pd.read_csv(FOLDER / "targets" / "spi_by_constituency.csv")
     employment_incomes = pd.read_csv(
         FOLDER / "targets" / "employment_income.csv"
     )
@@ -33,16 +33,26 @@ def create_constituency_target_matrix(
     matrix = pd.DataFrame()
     y = pd.DataFrame()
 
-    total_income = sim.calculate("total_income").values
-    matrix["hmrc/total_income/amount"] = sim.map_result(
-        total_income, "person", "household"
-    )
-    y["hmrc/total_income/amount"] = incomes["total_income_amount"]
+    INCOME_VARIABLES = [
+        "total_income",
+        "self_employment_income",
+        "employment_income",
+    ]
 
-    matrix["hmrc/total_income/count"] = sim.map_result(
-        total_income != 0, "person", "household"
-    )
-    y["hmrc/total_income/count"] = incomes["total_income_count"]
+    for income_variable in INCOME_VARIABLES:
+        income_values = sim.calculate(income_variable).values
+        matrix[f"hmrc/{income_variable}/amount"] = sim.map_result(
+            income_values, "person", "household"
+        )
+        y[f"hmrc/{income_variable}/amount"] = incomes[
+            f"{income_variable}_amount"
+        ]
+        matrix[f"hmrc/{income_variable}/count"] = sim.map_result(
+            income_values != 0, "person", "household"
+        )
+        y[f"hmrc/{income_variable}/count"] = incomes[
+            f"{income_variable}_count"
+        ]
 
     age = sim.calculate("age").values
     for lower_age in range(0, 80, 10):

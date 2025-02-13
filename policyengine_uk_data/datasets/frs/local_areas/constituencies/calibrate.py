@@ -5,9 +5,6 @@ import numpy as np
 from tqdm import tqdm
 import h5py
 import os
-from policyengine_uk_data.datasets.frs.local_areas.constituencies.transform_constituencies import (
-    transform_2010_to_2024,
-)
 
 # Fill in missing constituencies with average column values
 import pandas as pd
@@ -23,7 +20,10 @@ from policyengine_uk_data.storage import STORAGE_FOLDER
 FOLDER = Path(__file__).parent
 
 
-def calibrate():
+def calibrate(
+    map_to_2024_boundaries: bool = True,
+    epochs: int = 256,
+):
     matrix, y = create_constituency_target_matrix("enhanced_frs_2022_23", 2025)
 
     m_national, y_national = create_national_target_matrix(
@@ -82,35 +82,40 @@ def calibrate():
 
     optimizer = torch.optim.Adam([weights], lr=0.1)
 
-    desc = range(32) if os.environ.get("DATA_LITE") else range(256)
+    desc = range(32) if os.environ.get("DATA_LITE") else range(epochs)
 
     for epoch in desc:
         optimizer.zero_grad()
-        weights_ = dropout_weights(weights, 0.05)
-        l = loss(torch.exp(weights_))
+        weights_ = torch.exp(dropout_weights(weights, 0.05))
+        l = loss(weights_)
         l.backward()
         optimizer.step()
-        close = pct_close(torch.exp(weights_))
+        close = pct_close(weights_)
         if epoch % 10 == 0:
             print(f"Loss: {l.item()}, Epoch: {epoch}, Within 10%: {close:.2%}")
 
     final_weights = torch.exp(weights).detach().numpy()
-    mapping_matrix = pd.read_csv(
-        FOLDER / "mapping_2010_to_2024" / "mapping_matrix.csv"
-    )
-    final_weights = update_weights(final_weights, mapping_matrix)
+
+    if map_to_2024_boundaries:
+        from .boundary_changes.mapping_matrix import mapping_matrix
+
+        final_weights = mapping_matrix @ final_weights
 
     with h5py.File(
         STORAGE_FOLDER / "parliamentary_constituency_weights.h5", "w"
     ) as f:
         f.create_dataset("2025", data=final_weights)
 
+    # Override national weights in 2025 with the sum of the constituency weights
 
-def update_weights(weights, mapping_matrix):
-    mapping_matrix = mapping_matrix.set_index(mapping_matrix.columns[0])
-    mapping_matrix = mapping_matrix.div(mapping_matrix.sum(), axis=1)
-    mapped_weights = mapping_matrix.T.dot(weights).values
-    return mapped_weights[mapping_matrix.columns.argsort(), :]
+    with h5py.File(
+        STORAGE_FOLDER / "enhanced_frs_2022_23.h5", "r+",
+    ) as f:
+        national_weights = final_weights.sum(axis=0)
+        f.create_dataset("household_weight/2025", data=national_weights)
+
+    return final_weights
+
 
 
 if __name__ == "__main__":

@@ -54,7 +54,7 @@ def reweight(
 
     start_loss = None
 
-    iterator = range(128) if os.environ.get("DATA_LITE") else range(2048)
+    iterator = range(256) if os.environ.get("DATA_LITE") else range(2048)
     for i in iterator:
         optimizer.zero_grad()
         weights_ = dropout_weights(weights, dropout_rate)

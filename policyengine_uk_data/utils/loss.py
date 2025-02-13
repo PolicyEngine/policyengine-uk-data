@@ -23,11 +23,15 @@ for time_period in range(MIN_YEAR, MAX_YEAR + 1):
 statistics = pd.concat(dfs)
 statistics = statistics[statistics.value.notnull()]
 
+OBR_BASELINE = { # Policy baseline that targets are based on.
+    "gov.dwp.winter_fuel_payment.eligibility.require_benefits": False,
+}
+
 
 def create_target_matrix(
     dataset: str,
     time_period: str,
-    reform=None,
+    reform=OBR_BASELINE,
 ) -> np.ndarray:
     """
     Create a target matrix A, s.t. for household weights w, the target vector b and a perfectly calibrated PolicyEngine UK:
