@@ -109,9 +109,7 @@ def uprate_lcfs_table(
 ) -> pd.DataFrame:
     from policyengine_uk.system import system
 
-    fuel_duty_revenue = (
-        system.parameters.calibration.programs.fuel_duty.revenue
-    )
+    fuel_duty_revenue = 24e9
     fuel_duty_rate = system.parameters.gov.hmrc.fuel_duty.petrol_and_diesel
     start_period = 2021
     start_index = fuel_duty_revenue(start_period) / fuel_duty_rate(
@@ -122,7 +120,7 @@ def uprate_lcfs_table(
     household["petrol_spending"] *= fuel_uprating
     household["diesel_spending"] *= fuel_uprating
 
-    cpi = system.parameters.calibration.uprating.CPI
+    cpi = system.parameters.gov.obr.consumer_price_index
     cpi_uprating = cpi(time_period) / cpi(start_period)
 
     for variable in IMPUTATIONS:
