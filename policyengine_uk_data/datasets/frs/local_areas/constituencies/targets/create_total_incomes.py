@@ -1,7 +1,4 @@
 import pandas as pd
-from policyengine_uk_data.datasets.frs.local_areas.constituencies.boundary_changes.mapping_matrix import (
-    mapping_matrix,
-)
 
 df = pd.read_csv("spi_constituency_raw.csv", encoding="utf-8")
 
