@@ -131,10 +131,6 @@ def impute_capital_gains(dataset, time_period: int):
         pred_capital_gains = spline(quantiles)
         new_cg[in_target_range] = pred_capital_gains
 
-    aggregate_cg = system.parameters.calibration.programs.capital_gains.total
-    uprating = aggregate_cg(time_period) / aggregate_cg("2017-01-01")
-    new_cg *= uprating
-
     return new_cg, new_household_weight
 
 

@@ -36,3 +36,5 @@ mapping_matrix[old_idx_array, new_idx_array] = proportions
 row_sums = mapping_matrix.sum(axis=1)
 if not np.allclose(row_sums, 1.0):
     print("Warning: Not all rows sum to 1. Check data for consistency.")
+
+mapping_matrix = mapping_matrix.T

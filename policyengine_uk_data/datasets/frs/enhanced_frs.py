@@ -29,16 +29,7 @@ class EnhancedFRS(Dataset):
 
         self.add_random_variables(data)
 
-        # Reweighting
-
         data = self.load_dataset()
-        original_weights = data["household_weight"][str(self.time_period)] + 10
-        for year in range(self.time_period, self.end_year + 1):
-            loss_matrix, targets_array = create_target_matrix(self, year)
-            new_weights = reweight(
-                original_weights, loss_matrix, targets_array
-            )
-            data["household_weight"][str(year)] = new_weights
 
         self.save_dataset(data)
 

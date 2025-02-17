@@ -11,6 +11,10 @@ from pathlib import Path
 from policyengine_uk_data.utils.loss import (
     create_target_matrix as create_national_target_matrix,
 )
+from policyengine_uk_data.storage import STORAGE_FOLDER
+from policyengine_uk_data.datasets.frs.local_areas.constituencies.boundary_changes.mapping_matrix import (
+    mapping_matrix,
+)
 
 FOLDER = Path(__file__).parent
 
@@ -39,20 +43,21 @@ def create_constituency_target_matrix(
         "employment_income",
     ]
 
-    for income_variable in INCOME_VARIABLES:
+    for income_variable in INCOME_VARIABLES[:1]:
         income_values = sim.calculate(income_variable).values
+        in_spi_frame = sim.calculate("income_tax").values > 0
         matrix[f"hmrc/{income_variable}/amount"] = sim.map_result(
-            income_values, "person", "household"
+            income_values * in_spi_frame, "person", "household"
         )
         y[f"hmrc/{income_variable}/amount"] = incomes[
             f"{income_variable}_amount"
-        ]
+        ].values
         matrix[f"hmrc/{income_variable}/count"] = sim.map_result(
-            income_values != 0, "person", "household"
+            (income_values != 0) * in_spi_frame, "person", "household"
         )
         y[f"hmrc/{income_variable}/count"] = incomes[
             f"{income_variable}_count"
-        ]
+        ].values
 
     age = sim.calculate("age").values
     for lower_age in range(0, 80, 10):
@@ -78,7 +83,7 @@ def create_constituency_target_matrix(
     ) + [np.inf]
 
     for lower_bound, upper_bound in zip(bounds[:-1], bounds[1:]):
-        if lower_bound >= 70_000 or lower_bound < 12_570:
+        if lower_bound < 12_570 or upper_bound > 70_000:
             continue
         in_bound = (
             (employment_income >= lower_bound)
@@ -106,25 +111,44 @@ def create_constituency_target_matrix(
     if uprate:
         y = uprate_targets(y, time_period)
 
+    const_2024 = pd.read_csv(STORAGE_FOLDER / "constituencies_2024.csv")
+    const_2010 = pd.read_csv(STORAGE_FOLDER / "constituencies_2010.csv")
+
+    y_2010 = y.copy()
+    y_2010["name"] = const_2010["name"].values
+    y_2010.to_csv("y_2010")
+
+    y_columns = list(y.columns)
+    y_values = mapping_matrix @ y.values  # Transform to 2024 constituencies
+
+    y = pd.DataFrame(y_values, columns=y_columns)
+
+    y_2024 = y.copy()
+    y_2024["name"] = const_2024["name"].values
+    y_2024.to_csv("y_2024")
+
     return matrix, y
 
 
 def uprate_targets(y: pd.DataFrame, target_year: int = 2025) -> pd.DataFrame:
     # Uprate age targets from 2020, taxable income targets from 2021, employment income targets from 2023.
     # Use PolicyEngine uprating factors.
-    sim = Microsimulation(dataset="frs_2020_21")
+    from policyengine_uk_data.datasets.frs.frs import FRS_2020_21
+
+    sim = Microsimulation(dataset=FRS_2020_21)
     matrix_20, y_20 = create_constituency_target_matrix(
-        "frs_2020_21", 2020, uprate=False
+        FRS_2020_21, 2020, uprate=False
     )
     matrix_21, y_21 = create_constituency_target_matrix(
-        "frs_2020_21", 2021, uprate=False
+        FRS_2020_21, 2021, uprate=False
     )
     matrix_23, y_23 = create_constituency_target_matrix(
-        "frs_2020_21", 2023, uprate=False
+        FRS_2020_21, 2023, uprate=False
     )
     matrix_final, y_final = create_constituency_target_matrix(
-        "frs_2020_21", target_year, uprate=False
+        FRS_2020_21, target_year, uprate=False
     )
+
     weights_20 = sim.calculate("household_weight", 2020)
     weights_21 = sim.calculate("household_weight", 2021)
     weights_23 = sim.calculate("household_weight", 2023)

@@ -24,8 +24,7 @@ FOLDER = Path(__file__).parent
 
 
 def calibrate(
-    map_to_2024_boundaries: bool = True,
-    epochs: int = 256,
+    epochs: int = 512,
 ):
     matrix, y = create_constituency_target_matrix("enhanced_frs_2022_23", 2025)
 
@@ -94,27 +93,18 @@ def calibrate(
         l.backward()
         optimizer.step()
         close = pct_close(weights_)
+        ok = pct_close(weights_, t=1)
+        if epoch % 1 == 0:
+            print(
+                f"Loss: {l.item()}, Epoch: {epoch}, Within 10%: {close:.1%}, Within 100%: {ok:.1%}"
+            )
         if epoch % 10 == 0:
-            print(f"Loss: {l.item()}, Epoch: {epoch}, Within 10%: {close:.2%}")
+            final_weights = torch.exp(weights).detach().numpy()
 
-    final_weights = torch.exp(weights).detach().numpy()
-
-    if map_to_2024_boundaries:
-        final_weights = mapping_matrix @ final_weights
-
-    with h5py.File(
-        STORAGE_FOLDER / "parliamentary_constituency_weights.h5", "w"
-    ) as f:
-        f.create_dataset("2025", data=final_weights)
-
-    # Override national weights in 2025 with the sum of the constituency weights
-
-    with h5py.File(
-        STORAGE_FOLDER / "enhanced_frs_2022_23.h5",
-        "r+",
-    ) as f:
-        national_weights = final_weights.sum(axis=0)
-        f["household_weight/2025"][...] = national_weights
+            with h5py.File(
+                STORAGE_FOLDER / "parliamentary_constituency_weights.h5", "w"
+            ) as f:
+                f.create_dataset("2025", data=final_weights)
 
     return final_weights
 
