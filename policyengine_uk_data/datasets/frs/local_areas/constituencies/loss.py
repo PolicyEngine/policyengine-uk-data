@@ -116,7 +116,6 @@ def create_constituency_target_matrix(
 
     y_2010 = y.copy()
     y_2010["name"] = const_2010["name"].values
-    y_2010.to_csv("y_2010")
 
     y_columns = list(y.columns)
     y_values = mapping_matrix @ y.values  # Transform to 2024 constituencies
@@ -125,7 +124,6 @@ def create_constituency_target_matrix(
 
     y_2024 = y.copy()
     y_2024["name"] = const_2024["name"].values
-    y_2024.to_csv("y_2024")
 
     return matrix, y
 
