@@ -26,7 +26,9 @@ FOLDER = Path(__file__).parent
 def calibrate(
     epochs: int = 512,
 ):
-    matrix, y = create_constituency_target_matrix("enhanced_frs_2022_23", 2025)
+    matrix, y, country_mask = create_constituency_target_matrix(
+        "enhanced_frs_2022_23", 2025
+    )
 
     m_national, y_national = create_national_target_matrix(
         "enhanced_frs_2022_23", 2025
@@ -50,6 +52,7 @@ def calibrate(
     y = torch.tensor(y.values, dtype=torch.float32)
     matrix_national = torch.tensor(m_national.values, dtype=torch.float32)
     y_national = torch.tensor(y_national.values, dtype=torch.float32)
+    r = torch.tensor(country_mask, dtype=torch.float32)
 
     def loss(w):
         pred_c = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
@@ -98,7 +101,7 @@ def calibrate(
 
     for epoch in desc:
         optimizer.zero_grad()
-        weights_ = torch.exp(dropout_weights(weights, 0.05))
+        weights_ = torch.exp(dropout_weights(weights, 0.05)) * r
         l = loss(weights_)
         l.backward()
         optimizer.step()

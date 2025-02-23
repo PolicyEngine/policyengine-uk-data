@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Local area weights respect the household observation's country code.

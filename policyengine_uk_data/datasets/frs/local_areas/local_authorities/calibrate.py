@@ -15,7 +15,7 @@ from policyengine_uk_data.datasets.frs.local_areas.local_authorities.loss import
 
 
 def calibrate():
-    matrix, y = create_local_authority_target_matrix(
+    matrix, y, r = create_local_authority_target_matrix(
         "enhanced_frs_2022_23", 2025
     )
 
@@ -41,6 +41,7 @@ def calibrate():
     y = torch.tensor(y.values, dtype=torch.float32)
     matrix_national = torch.tensor(m_national.values, dtype=torch.float32)
     y_national = torch.tensor(y_national.values, dtype=torch.float32)
+    r = torch.tensor(r, dtype=torch.float32)
 
     def loss(w):
         pred_c = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
@@ -73,13 +74,13 @@ def calibrate():
         masked_weights[mask] = mean
         return masked_weights
 
-    optimizer = torch.optim.Adam([weights], lr=0.1)
+    optimizer = torch.optim.Adam([weights], lr=0.15)
 
-    desc = range(32) if os.environ.get("DATA_LITE") else range(256)
+    desc = range(32) if os.environ.get("DATA_LITE") else range(512)
 
     for epoch in desc:
         optimizer.zero_grad()
-        weights_ = dropout_weights(weights, 0.05)
+        weights_ = dropout_weights(weights, 0.05) * r
         l = loss(torch.exp(weights_))
         l.backward()
         optimizer.step()
