@@ -7,6 +7,7 @@ from pathlib import Path
 from policyengine_uk_data.utils.loss import (
     create_target_matrix as create_national_target_matrix,
 )
+from policyengine_uk_data.storage import STORAGE_FOLDER
 
 FOLDER = Path(__file__).parent
 
@@ -22,6 +23,7 @@ def create_local_authority_target_matrix(
     employment_incomes = pd.read_csv(
         FOLDER / "targets" / "employment_income.csv"
     )
+    la_codes = pd.read_csv(STORAGE_FOLDER / "local_authorities_2021.csv")
 
     sim = Microsimulation(dataset=dataset, reform=reform)
     sim.default_calculation_period = time_period
@@ -92,23 +94,51 @@ def create_local_authority_target_matrix(
     if uprate:
         y = uprate_targets(y, time_period)
 
-    return matrix, y
+    country_mask = create_country_mask(
+        household_countries=sim.calculate("country").values,
+        codes=la_codes.code,
+    )
+
+    return matrix, y, country_mask
+
+
+def create_country_mask(
+    household_countries: np.ndarray, codes: pd.Series
+) -> np.ndarray:
+    # Create a matrix R to accompany the loss matrix M s.t. (W x M) x R = Y_
+    # where Y_ is the target matrix for the country where no target is constructed from weights from a different country.
+
+    constituency_countries = codes.apply(lambda code: code[0]).map(
+        {
+            "E": "ENGLAND",
+            "W": "WALES",
+            "S": "SCOTLAND",
+            "N": "NORTHERN IRELAND",
+        }
+    )
+
+    r = np.zeros((len(codes), len(household_countries)))
+
+    for i in range(len(codes)):
+        r[i] = household_countries == constituency_countries[i]
+
+    return r
 
 
 def uprate_targets(y: pd.DataFrame, target_year: int = 2025) -> pd.DataFrame:
     # Uprate age targets from 2020, taxable income targets from 2021, employment income targets from 2023.
     # Use PolicyEngine uprating factors.
     sim = Microsimulation(dataset="frs_2020_21")
-    matrix_20, y_20 = create_local_authority_target_matrix(
+    matrix_20, y_20, _ = create_local_authority_target_matrix(
         "frs_2020_21", 2020, uprate=False
     )
-    matrix_21, y_21 = create_local_authority_target_matrix(
+    matrix_21, y_21, _ = create_local_authority_target_matrix(
         "frs_2020_21", 2021, uprate=False
     )
-    matrix_23, y_23 = create_local_authority_target_matrix(
+    matrix_23, y_23, _ = create_local_authority_target_matrix(
         "frs_2020_21", 2023, uprate=False
     )
-    matrix_final, y_final = create_local_authority_target_matrix(
+    matrix_final, y_final, _ = create_local_authority_target_matrix(
         "frs_2020_21", target_year, uprate=False
     )
     weights_20 = sim.calculate("household_weight", 2020)
