@@ -89,7 +89,7 @@ def calibrate():
             print(f"Loss: {l.item()}, Epoch: {epoch}, Within 10%: {close:.2%}")
 
         if epoch % 100 == 0:
-            final_weights = torch.exp(weights).detach().numpy()
+            final_weights = (torch.exp(weights) * r).detach().numpy()
 
             with h5py.File(
                 STORAGE_FOLDER / "local_authority_weights.h5", "w"

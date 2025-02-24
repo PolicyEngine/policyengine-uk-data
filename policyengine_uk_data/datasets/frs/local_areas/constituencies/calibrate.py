@@ -112,7 +112,7 @@ def calibrate(
                 f"Loss: {l.item()}, Epoch: {epoch}, Constituency<10%: {c_close:.1%}, National<10%: {n_close:.1%}"
             )
         if epoch % 10 == 0:
-            final_weights = torch.exp(weights).detach().numpy()
+            final_weights = (torch.exp(weights) * r).detach().numpy()
 
             with h5py.File(
                 STORAGE_FOLDER / "parliamentary_constituency_weights.h5", "w"
