@@ -144,7 +144,7 @@ def create_country_mask(
             "E": "ENGLAND",
             "W": "WALES",
             "S": "SCOTLAND",
-            "N": "NORTHERN IRELAND",
+            "N": "NORTHERN_IRELAND",
         }
     )
 
