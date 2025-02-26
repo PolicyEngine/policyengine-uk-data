@@ -35,7 +35,6 @@ def create_local_authority_target_matrix(
         "total_income",
         "self_employment_income",
         "pension_income",
-        "employment_income",
     ]
 
     for income_variable in INCOME_VARIABLES:
