@@ -31,16 +31,28 @@ def create_local_authority_target_matrix(
     matrix = pd.DataFrame()
     y = pd.DataFrame()
 
-    total_income = sim.calculate("total_income").values
-    matrix["hmrc/total_income/amount"] = sim.map_result(
-        total_income, "person", "household"
-    )
-    y["hmrc/total_income/amount"] = incomes["total_income_amount"]
+    INCOME_VARIABLES = [
+        "total_income",
+        "self_employment_income",
+        "pension_income",
+        "employment_income",
+    ]
 
-    matrix["hmrc/total_income/count"] = sim.map_result(
-        total_income != 0, "person", "household"
-    )
-    y["hmrc/total_income/count"] = incomes["total_income_count"]
+    for income_variable in INCOME_VARIABLES:
+        income_values = sim.calculate(income_variable).values
+        in_spi_frame = sim.calculate("income_tax").values > 0
+        matrix[f"hmrc/{income_variable}/amount"] = sim.map_result(
+            income_values * in_spi_frame, "person", "household"
+        )
+        y[f"hmrc/{income_variable}/amount"] = incomes[
+            f"{income_variable}_amount"
+        ].values
+        matrix[f"hmrc/{income_variable}/count"] = sim.map_result(
+            (income_values != 0) * in_spi_frame, "person", "household"
+        )
+        y[f"hmrc/{income_variable}/count"] = incomes[
+            f"{income_variable}_count"
+        ].values
 
     age = sim.calculate("age").values
     for lower_age in range(0, 80, 10):

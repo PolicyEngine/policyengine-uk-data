@@ -40,10 +40,11 @@ def create_constituency_target_matrix(
     INCOME_VARIABLES = [
         "total_income",
         "self_employment_income",
+        "pension_income",
         "employment_income",
     ]
 
-    for income_variable in INCOME_VARIABLES[:1]:
+    for income_variable in INCOME_VARIABLES:
         income_values = sim.calculate(income_variable).values
         in_spi_frame = sim.calculate("income_tax").values > 0
         matrix[f"hmrc/{income_variable}/amount"] = sim.map_result(
