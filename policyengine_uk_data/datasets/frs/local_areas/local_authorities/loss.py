@@ -19,7 +19,7 @@ def create_local_authority_target_matrix(
     uprate: bool = True,
 ):
     ages = pd.read_csv(FOLDER / "targets" / "age.csv")
-    incomes = pd.read_csv(FOLDER / "targets" / "spi_by_constituency.csv")
+    incomes = pd.read_csv(FOLDER / "targets" / "spi_by_la.csv")
     employment_incomes = pd.read_csv(
         FOLDER / "targets" / "employment_income.csv"
     )
