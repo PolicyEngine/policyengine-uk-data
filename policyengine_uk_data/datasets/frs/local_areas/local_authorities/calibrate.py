@@ -13,6 +13,8 @@ from policyengine_uk_data.datasets.frs.local_areas.local_authorities.loss import
     create_national_target_matrix,
 )
 
+DEVICE = "cpu"
+
 
 def calibrate():
     matrix, y, r = create_local_authority_target_matrix(
@@ -29,19 +31,25 @@ def calibrate():
 
     # Weights - 360 x 100180
     original_weights = np.log(
-        sim.calculate("household_weight", 2025).values / count_local_authority
+        (sim.calculate("household_weight", 2025).values + 1e-3)
+        / count_local_authority
     )
     weights = torch.tensor(
         np.ones((count_local_authority, len(original_weights)))
         * original_weights,
         dtype=torch.float32,
+        device=DEVICE,
         requires_grad=True,
     )
-    metrics = torch.tensor(matrix.values, dtype=torch.float32)
-    y = torch.tensor(y.values, dtype=torch.float32)
-    matrix_national = torch.tensor(m_national.values, dtype=torch.float32)
-    y_national = torch.tensor(y_national.values, dtype=torch.float32)
-    r = torch.tensor(r, dtype=torch.float32)
+    metrics = torch.tensor(matrix.values, dtype=torch.float32, device=DEVICE)
+    y = torch.tensor(y.values, dtype=torch.float32, device=DEVICE)
+    matrix_national = torch.tensor(
+        m_national.values, dtype=torch.float32, device=DEVICE
+    )
+    y_national = torch.tensor(
+        y_national.values, dtype=torch.float32, device=DEVICE
+    )
+    r = torch.tensor(r, dtype=torch.float32, device=DEVICE)
 
     def loss(w):
         pred_c = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
@@ -52,17 +60,27 @@ def calibrate():
 
         return mse_c + mse_n
 
-    def pct_close(w, t=0.1):
+    def pct_close(w, t=0.1, la=True, national=True):
         # Return the percentage of metrics that are within t% of the target
-        pred_c = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
-        e_c = torch.sum(torch.abs((pred_c / (1 + y) - 1)) < t)
-        c_c = pred_c.shape[0] * pred_c.shape[1]
+        numerator = 0
+        denominator = 0
+        pred_la = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
+        e_la = torch.sum(torch.abs((pred_la / (1 + y) - 1)) < t).item()
+        c_la = pred_la.shape[0] * pred_la.shape[1]
+
+        if la:
+            numerator += e_la
+            denominator += c_la
 
         pred_n = (w.sum(axis=0) * matrix_national.T).sum(axis=1)
-        e_n = torch.sum(torch.abs((pred_n / (1 + y_national) - 1)) < t)
+        e_n = torch.sum(torch.abs((pred_n / (1 + y_national) - 1)) < t).item()
         c_n = pred_n.shape[0]
 
-        return (e_c + e_n) / (c_c + c_n)
+        if national:
+            numerator += e_n
+            denominator += c_n
+
+        return numerator / denominator
 
     def dropout_weights(weights, p):
         if p == 0:
@@ -80,16 +98,18 @@ def calibrate():
 
     for epoch in desc:
         optimizer.zero_grad()
-        weights_ = dropout_weights(weights, 0.05) * r
-        l = loss(torch.exp(weights_))
+        weights_ = torch.exp(dropout_weights(weights, 0.05)) * r
+        l = loss(weights_)
         l.backward()
         optimizer.step()
-        close = pct_close(torch.exp(weights_))
+        c_close = pct_close(weights_, la=True, national=False)
+        n_close = pct_close(weights_, la=False, national=True)
+        if epoch % 1 == 0:
+            print(
+                f"Loss: {l.item()}, Epoch: {epoch}, Local Authority<10%: {c_close:.1%}, National<10%: {n_close:.1%}"
+            )
         if epoch % 10 == 0:
-            print(f"Loss: {l.item()}, Epoch: {epoch}, Within 10%: {close:.2%}")
-
-        if epoch % 100 == 0:
-            final_weights = (torch.exp(weights) * r).detach().numpy()
+            final_weights = (torch.exp(weights) * r).detach().cpu().numpy()
 
             with h5py.File(
                 STORAGE_FOLDER / "local_authority_weights.h5", "w"

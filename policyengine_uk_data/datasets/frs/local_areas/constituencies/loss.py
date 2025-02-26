@@ -40,7 +40,6 @@ def create_constituency_target_matrix(
     INCOME_VARIABLES = [
         "total_income",
         "self_employment_income",
-        "pension_income",
     ]
 
     for income_variable in INCOME_VARIABLES:
