@@ -16,21 +16,26 @@ class ExtendedFRS(Dataset):
         create_consumption_model()
         create_vat_model()
         create_wealth_model()
+        create_public_services_model()
 
         consumption = QRF(file_path=STORAGE_FOLDER / "consumption.pkl")
         vat = QRF(file_path=STORAGE_FOLDER / "vat.pkl")
         wealth = QRF(file_path=STORAGE_FOLDER / "wealth.pkl")
+        public_services = QRF(file_path=STORAGE_FOLDER / "public_services.pkl")
 
         data = self.input_frs().load_dataset()
         simulation = Microsimulation(dataset=self.input_frs)
         for imputation_model in tqdm(
-            [consumption, vat, wealth], desc="Imputing data"
+            [consumption, vat, wealth, public_services], desc="Imputing data"
         ):
             predictors = imputation_model.input_columns
 
-            X_input = simulation.calculate_dataframe(
-                predictors, map_to="household"
-            )
+            if imputation_model == public_services:
+                X_input = create_inference_df(simulation)
+            else:
+                X_input = simulation.calculate_dataframe(
+                    predictors, map_to="household"
+                )
             if imputation_model == wealth:
                 # WAS doesn't sample NI -> put NI households in Wales (closest aggregate)
                 X_input.loc[
