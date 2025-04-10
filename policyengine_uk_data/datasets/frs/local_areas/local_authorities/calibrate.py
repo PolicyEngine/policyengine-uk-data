@@ -6,6 +6,7 @@ from tqdm import tqdm
 import h5py
 import os
 from policyengine_uk_data.storage import STORAGE_FOLDER
+from typing import List
 
 
 from policyengine_uk_data.datasets.frs.local_areas.local_authorities.loss import (
@@ -16,7 +17,9 @@ from policyengine_uk_data.datasets.frs.local_areas.local_authorities.loss import
 DEVICE = "cpu"
 
 
-def calibrate():
+def calibrate(
+    exclude_targets: List[str] | None = None
+):
     matrix, y, r = create_local_authority_target_matrix(
         "enhanced_frs_2022_23", 2025
     )
@@ -24,6 +27,12 @@ def calibrate():
     m_national, y_national = create_national_target_matrix(
         "enhanced_frs_2022_23", 2025
     )
+
+    if exclude_targets is not None:
+        matrix = matrix.drop(columns=exclude_targets)
+        m_national = m_national.drop(columns=exclude_targets)
+        y = y.drop(columns=exclude_targets)
+        y_national = y_national.drop(columns=exclude_targets)
 
     sim = Microsimulation(dataset="enhanced_frs_2022_23")
 
@@ -94,7 +103,7 @@ def calibrate():
 
     optimizer = torch.optim.Adam([weights], lr=0.15)
 
-    desc = range(32) if os.environ.get("DATA_LITE") else range(512)
+    desc = range(32) if os.environ.get("DATA_LITE") else range(256)
 
     for epoch in desc:
         optimizer.zero_grad()
@@ -115,6 +124,8 @@ def calibrate():
                 STORAGE_FOLDER / "local_authority_weights.h5", "w"
             ) as f:
                 f.create_dataset("2025", data=final_weights)
+
+    return final_weights
 
 
 if __name__ == "__main__":

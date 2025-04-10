@@ -19,12 +19,17 @@ from policyengine_uk_data.datasets.frs.local_areas.constituencies.boundary_chang
 )
 from pathlib import Path
 from policyengine_uk_data.storage import STORAGE_FOLDER
+from typing import List
 
 FOLDER = Path(__file__).parent
 
+DEVICE = "cpu"
+
 
 def calibrate(
-    epochs: int = 512,
+    exclude_targets: List[str] | None = None,
+    epochs: int = 256,
+    analytics = None,
 ):
     matrix, y, country_mask = create_constituency_target_matrix(
         "enhanced_frs_2022_23", 2025
@@ -33,6 +38,10 @@ def calibrate(
     m_national, y_national = create_national_target_matrix(
         "enhanced_frs_2022_23", 2025
     )
+
+    if exclude_targets is not None:
+        matrix = matrix.drop(columns=exclude_targets)
+        y = y.drop(columns=exclude_targets)
 
     sim = Microsimulation(dataset="enhanced_frs_2022_23")
 
@@ -47,12 +56,13 @@ def calibrate(
         * original_weights,
         dtype=torch.float32,
         requires_grad=True,
+        device=DEVICE,
     )
-    metrics = torch.tensor(matrix.values, dtype=torch.float32)
-    y = torch.tensor(y.values, dtype=torch.float32)
-    matrix_national = torch.tensor(m_national.values, dtype=torch.float32)
-    y_national = torch.tensor(y_national.values, dtype=torch.float32)
-    r = torch.tensor(country_mask, dtype=torch.float32)
+    metrics = torch.tensor(matrix.values, dtype=torch.float32, device=DEVICE)
+    y = torch.tensor(y.values, dtype=torch.float32, device=DEVICE)
+    matrix_national = torch.tensor(m_national.values, dtype=torch.float32, device=DEVICE)
+    y_national = torch.tensor(y_national.values, dtype=torch.float32, device=DEVICE)
+    r = torch.tensor(country_mask, dtype=torch.float32, device=DEVICE)
 
     def loss(w):
         pred_c = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
@@ -99,6 +109,8 @@ def calibrate(
 
     desc = range(32) if os.environ.get("DATA_LITE") else range(epochs)
 
+    analytics_values = []
+
     for epoch in desc:
         optimizer.zero_grad()
         weights_ = torch.exp(dropout_weights(weights, 0.05)) * r
@@ -112,7 +124,14 @@ def calibrate(
                 f"Loss: {l.item()}, Epoch: {epoch}, Constituency<10%: {c_close:.1%}, National<10%: {n_close:.1%}"
             )
         if epoch % 10 == 0:
-            final_weights = (torch.exp(weights) * r).detach().numpy()
+            if analytics is not None:
+                analytics_values.append(
+                    analytics(
+                        weights_.detach().cpu().numpy(),
+                    )
+                )
+                print(analytics_values[-1])
+            final_weights = (torch.exp(weights) * r).detach().cpu().numpy()
 
             with h5py.File(
                 STORAGE_FOLDER / "parliamentary_constituency_weights.h5", "w"
@@ -128,7 +147,7 @@ def calibrate(
                     "household_weight/2025", data=final_weights.sum(axis=0)
                 )
 
-    return final_weights
+    return final_weights, analytics_values
 
 
 if __name__ == "__main__":
