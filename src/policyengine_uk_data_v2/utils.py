@@ -22,6 +22,9 @@ def save_dataframes_to_h5(
 
     with h5py.File(output_path, "w") as f:
         for column, values in data.items():
+            # if values is object, convert to "S"
+            if values.dtype == "object":
+                values = values.astype("S")
             f.create_dataset(f"{column}/{year}", data=values)
 
 
