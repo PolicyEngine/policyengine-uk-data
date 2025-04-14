@@ -1,7 +1,9 @@
 from pathlib import Path
+from typing import Tuple, Union, Optional, Dict, Any
 
 import numpy as np
 import pandas as pd
+from policyengine_core.parameters import ParameterNode
 from policyengine_uk.system import parameters as policy_parameters
 
 from policyengine_uk_data_v2.utils import (
@@ -23,11 +25,17 @@ class PolicyEngineFRSDataset:
     benunit: pd.DataFrame
     household: pd.DataFrame
     state: pd.DataFrame
+    year: int
+    count_adults: int
+    count_children: int
+    count_people: int
+    zero_for_children: np.ndarray
+    false_for_children: np.ndarray
 
     def save_to_h5(
         self,
-        file_path: str | Path,
-    ):
+        file_path: Union[str, Path],
+    ) -> None:
         save_dataframes_to_h5(
             person=self.person,
             benunit=self.benunit,
@@ -39,9 +47,9 @@ class PolicyEngineFRSDataset:
 
     def load_from_h5(
         self,
-        file_path: str | Path,
+        file_path: Union[str, Path],
         year: int,
-    ):
+    ) -> None:
         """
         Load the dataframes from the given file path.
         """
@@ -60,8 +68,8 @@ class PolicyEngineFRSDataset:
 
     def save_to_dataframes(
         self,
-        folder: str | Path,
-    ):
+        folder: Union[str, Path],
+    ) -> None:
         """
         Save the dataframes to the given folder.
         """
@@ -73,9 +81,9 @@ class PolicyEngineFRSDataset:
 
     def load_from_dataframes(
         self,
-        folder: str | Path,
+        folder: Union[str, Path],
         year: int,
-    ):
+    ) -> None:
         """
         Load the dataframes from the given folder.
         """
@@ -86,7 +94,11 @@ class PolicyEngineFRSDataset:
         self.state = pd.read_csv(folder / "state.csv")
         self.year = year
 
-    def build(self, year: int, tab_folder: str | Path = None):
+    def build(
+        self, 
+        year: int, 
+        tab_folder: Optional[Union[str, Path]] = None
+    ) -> None:
         self.year = year
         frs = load_frs_tables(
             tab_folder,
@@ -158,7 +170,7 @@ class PolicyEngineFRSDataset:
         )
 
         person, benunit, household = add_benefits(
-            person, benunit, _frs_person, frs, policy_parameters(year)
+            person, benunit, household, _frs_person, frs, policy_parameters(year)
         )
 
         self.person = person

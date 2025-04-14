@@ -1,9 +1,19 @@
 import numpy as np
+import pandas as pd
+from typing import Tuple
 
 from policyengine_uk_data_v2.impute import QRF
+from .ukda import FRS
 
 
-def add_housing(person, benunit, household, state, frs, year):
+def add_housing(
+    person: pd.DataFrame,
+    benunit: pd.DataFrame,
+    household: pd.DataFrame,
+    state: pd.DataFrame,
+    frs: FRS,
+    year: int
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     household["region"] = frs.househol.GVTREGNO.map(
         {
             1: "NORTH_EAST",

@@ -1,6 +1,7 @@
 
+from typing import Any
 
-def test_frs_builds():
+def test_frs_builds() -> None:
     from policyengine_uk_data_v2.datasets.frs.main import PolicyEngineFRSDataset
 
     dataset = PolicyEngineFRSDataset()
@@ -9,7 +10,7 @@ def test_frs_builds():
     dataset.save_to_h5("frs_2022.h5")
 
 
-def test_frs_no_nan():
+def test_frs_no_nan() -> None:
     from policyengine_uk_data_v2.datasets.frs.main import PolicyEngineFRSDataset
 
     dataset = PolicyEngineFRSDataset()
@@ -21,7 +22,7 @@ def test_frs_no_nan():
     assert dataset.state.isna().sum().sum() == 0
 
 
-def test_frs_runs():
+def test_frs_runs() -> None:
     from policyengine_core.data import Dataset
     from policyengine_uk import Microsimulation
 

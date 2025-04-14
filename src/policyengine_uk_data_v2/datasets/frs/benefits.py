@@ -1,12 +1,21 @@
 import numpy as np
 import pandas as pd
+from typing import Tuple, Union
 
+from policyengine_core.parameters import ParameterNode
 from policyengine_uk_data_v2.utils import sum_to_entity
 
 from .ukda import FRS
 
 
-def add_benefits(person, benunit, household, _frs_person, frs: FRS, policy_parameters):
+def add_benefits(
+    person: pd.DataFrame,
+    benunit: pd.DataFrame,
+    household: pd.DataFrame,
+    _frs_person: pd.DataFrame,
+    frs: FRS,
+    policy_parameters: ParameterNode
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     sp_age = np.zeros_like(person.birth_year)
     for i in range(len(person)):
         sp_age[i] = calculate_state_pension_age(
@@ -160,7 +169,11 @@ def add_benefits(person, benunit, household, _frs_person, frs: FRS, policy_param
     return person, benunit, household
 
 
-def sum_person_to_benunit(values, person, benunit):
+def sum_person_to_benunit(
+    values: pd.Series,
+    person: pd.DataFrame,
+    benunit: pd.DataFrame
+) -> np.ndarray:
     return (
         values.groupby(person.person_id.values)
         .sum()
@@ -170,7 +183,11 @@ def sum_person_to_benunit(values, person, benunit):
     )
 
 
-def get_benefit_with_code(code: int, person: pd.DataFrame, benefits: pd.DataFrame):
+def get_benefit_with_code(
+    code: int,
+    person: pd.DataFrame, 
+    benefits: pd.DataFrame
+) -> pd.Series:
     return pd.Series(
         sum_to_entity(
             benefits.BENAMT * (code == benefits.BENEFIT),
@@ -180,7 +197,10 @@ def get_benefit_with_code(code: int, person: pd.DataFrame, benefits: pd.DataFram
     )
 
 
-def calculate_state_pension_age(birth_year, gender):
+def calculate_state_pension_age(
+    birth_year: Union[int, float],
+    gender: str
+) -> int:
     """
     Calculate the state pension age based on year of birth and gender.
 

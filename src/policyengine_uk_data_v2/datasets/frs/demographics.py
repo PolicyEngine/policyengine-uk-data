@@ -1,9 +1,18 @@
 import numpy as np
+import pandas as pd
+from typing import Tuple
 
 from policyengine_uk_data_v2.utils import concat
+from .ukda import FRS
 
 
-def add_demographics(person, household, frs, _frs_person, year):
+def add_demographics(
+    person: pd.DataFrame,
+    household: pd.DataFrame,
+    frs: FRS,
+    _frs_person: pd.DataFrame,
+    year: int
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     # Add grossing weights
     household["household_weight"] = frs.househol.GROSS4
 

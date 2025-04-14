@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from typing import Tuple, List
 
 from policyengine_uk_data_v2.utils import (
     max_,
@@ -8,8 +9,17 @@ from policyengine_uk_data_v2.utils import (
     sum_to_entity,
 )
 
+from .ukda import FRS
 
-def add_incomes(person, benunit, household, state, frs, _frs_person):
+
+def add_incomes(
+    person: pd.DataFrame,
+    benunit: pd.DataFrame,
+    household: pd.DataFrame,
+    state: pd.DataFrame,
+    frs: FRS,
+    _frs_person: pd.DataFrame
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     person["employment_income"] = _frs_person.INEARNS * 52
 
     pension = frs.pension
@@ -37,7 +47,7 @@ def add_incomes(person, benunit, household, state, frs, _frs_person):
 
     person["self_employment_income"] = _frs_person.SEINCAM2
 
-    INVERTED_BASIC_RATE = 1.25
+    INVERTED_BASIC_RATE: float = 1.25
     account = frs.accounts
     person["tax_free_savings_income"] = (
         sum_to_entity(
@@ -90,7 +100,7 @@ def add_incomes(person, benunit, household, state, frs, _frs_person):
         person.person_id,
     ).values
 
-    MISC_INCOME_FIELDS = [
+    MISC_INCOME_FIELDS: List[str] = [
         "ALLPAY2",
         "ROYYR2",
         "ROYYR3",
@@ -104,7 +114,7 @@ def add_incomes(person, benunit, household, state, frs, _frs_person):
         + sum_from_positive_fields(_frs_person, MISC_INCOME_FIELDS).values
     ) * 52
 
-    PRIVATE_TRANSFER_INCOME_FIELDS = [
+    PRIVATE_TRANSFER_INCOME_FIELDS: List[str] = [
         "APAMT",
         "APDAMT",
         "PAREAMT",

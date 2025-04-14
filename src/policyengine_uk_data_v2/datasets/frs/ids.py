@@ -1,7 +1,18 @@
 import numpy as np
+import pandas as pd
+from typing import Tuple
+
+from .ukda import FRS
 
 
-def add_ids(person, benunit, household, state, frs, _frs_person):
+def add_ids(
+    person: pd.DataFrame,
+    benunit: pd.DataFrame,
+    household: pd.DataFrame,
+    state: pd.DataFrame,
+    frs: FRS,
+    _frs_person: pd.DataFrame
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     person["person_id"] = _frs_person.person_id
     person["person_benunit_id"] = _frs_person.benunit_id
     person["person_household_id"] = _frs_person.household_id

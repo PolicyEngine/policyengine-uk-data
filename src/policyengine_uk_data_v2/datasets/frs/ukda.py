@@ -1,9 +1,10 @@
 from pathlib import Path
+from typing import Dict, Tuple, Union
 
 import pandas as pd
 from pydantic import BaseModel
 
-FRS_TABLE_NAMES = (
+FRS_TABLE_NAMES: Tuple[str, ...] = (
     "adult",
     "child",
     "accounts",
@@ -39,9 +40,9 @@ class FRS(BaseModel):
 
 
 def load_frs_tables(
-    ukda_tab_folder: str | Path,
-):
-    tables = {}
+    ukda_tab_folder: Union[str, Path],
+) -> FRS:
+    tables: Dict[str, pd.DataFrame] = {}
 
     for table_name in FRS_TABLE_NAMES:
         tables[table_name] = pd.read_csv(
