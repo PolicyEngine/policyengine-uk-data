@@ -63,23 +63,11 @@ def add_incomes(person, benunit, household, state, frs, _frs_person):
         )
         * 52
     )
-    is_head = _frs_person.HRPID == 1
-    household_property_income = (
-        frs.househol.TENTYP2.isin((5, 6)) * frs.househol.SUBRENT
-    )  # Owned and subletting
-    persons_household_property_income = (
-        pd.Series(
-            household_property_income, index=frs.househol.household_id.values
-        )
-        .loc[person.person_household_id]
-        .values
-    )
     person["property_income"] = (
         max_(
             0,
-            is_head * persons_household_property_income
-            + concat(frs.adult.CVPAY, np.zeros_like(frs.child.CVPAY))
-            + concat(frs.adult.ROYYR1, np.zeros_like(frs.child.ROYYR1)),
+            _frs_person.CVPAY
+            + _frs_person.ROYYR1
         )
         * 52
     )

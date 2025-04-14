@@ -107,4 +107,4 @@ def sum_to_entity(
     Returns:
         pd.Series: A value for each person.
     """
-    return values.groupby(foreign_key).sum().reindex(primary_key).fillna(0)
+    return pd.Series(values.groupby(foreign_key).sum().reindex(primary_key).fillna(0).values)

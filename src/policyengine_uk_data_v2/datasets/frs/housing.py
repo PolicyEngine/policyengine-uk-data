@@ -88,4 +88,7 @@ def add_housing(person, benunit, household, state, frs, year):
         * 52
     )
 
+    household["main_residential_property_purchased_is_first_home"] = np.random.random() < 0.2
+    household["household_owns_tv"] = np.random.random() < 0.96
+
     return person, benunit, household, state

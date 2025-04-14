@@ -13,6 +13,7 @@ from policyengine_uk.system import parameters as policy_parameters
 
 from .ids import add_ids
 from .housing import add_housing
+from .income import add_incomes
 from .demographics import add_demographics
 from .benefits import add_benefits
 from .ukda import FRS, load_frs_tables, FRS_TABLE_NAMES
@@ -144,6 +145,15 @@ class PolicyEngineFRSDataset:
             year,
         )
 
+        person, benunit, household, state = add_incomes(
+            person,
+            benunit,
+            household,
+            state,
+            frs,
+            _frs_person,
+        )
+
         person, benunit, household, state = add_housing(
             person,
             benunit,
@@ -153,7 +163,7 @@ class PolicyEngineFRSDataset:
             year,
         )
 
-        person = add_benefits(person, frs, policy_parameters)
+        person, benunit, household = add_benefits(person, benunit, _frs_person, frs, policy_parameters(year))
 
         self.person = person
         self.benunit = benunit
