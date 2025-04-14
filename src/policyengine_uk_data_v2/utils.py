@@ -1,8 +1,19 @@
 from pathlib import Path
+import numpy as np
 
 import h5py
 import pandas as pd
+import yaml
+from pydantic import BaseModel
+from typing import Any, Dict
+from policyengine_core.parameters import ParameterNode
 
+def load_parameters() -> ParameterNode:
+    return ParameterNode(
+        "",
+        directory_path=Path(__file__).parent / "parameters"
+    )
+    
 
 def save_dataframes_to_h5(
     person: pd.DataFrame,
@@ -46,8 +57,54 @@ def load_dataframes_from_h5(input_path: str | Path) -> tuple[pd.DataFrame]:
                 continue
             entity = system.variables.get(variable).entity.key
             for time_period in f[variable]:
-                dataframes[entity][time_period] = pd.DataFrame(
+                dataframes[entity][variable] = pd.DataFrame(
                     f[variable][time_period][:]
                 )
 
     return dataframes
+
+
+max_ = np.maximum
+
+def sum_positive_variables(
+    variables: list[pd.Series],
+) -> pd.Series:
+    """
+    Sums the given variables, replacing negative values with 0.
+    """
+    return sum([max_(0, variable) for variable in variables])
+
+
+def sum_from_positive_fields(
+    table: pd.DataFrame,
+    fields: list[str],
+) -> pd.Series:
+    """
+    Sums the given fields, replacing negative values with 0.
+    """
+    return sum_positive_variables([table[field] for field in fields])
+
+
+
+def concat(*args):
+    """
+    Concatenate the given arrays along the first axis.
+    """
+    return np.concatenate(args, axis=0)
+
+def sum_to_entity(
+    values: pd.Series,
+    foreign_key: pd.Series,
+    primary_key: pd.Series,
+) -> pd.Series:
+    """Sums values by joining foreign and primary keys.
+
+    Args:
+        values (pd.Series): The values in the non-entity table.
+        foreign_key (pd.Series): E.g. pension.person_id.
+        primary_key ([type]): E.g. person.index.
+
+    Returns:
+        pd.Series: A value for each person.
+    """
+    return values.groupby(foreign_key).sum().reindex(primary_key).fillna(0)
