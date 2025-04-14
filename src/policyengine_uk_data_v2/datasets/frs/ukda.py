@@ -1,8 +1,7 @@
+from pathlib import Path
+
 import pandas as pd
 from pydantic import BaseModel
-from pathlib import Path
-from typing import Dict, Any
-
 
 FRS_TABLE_NAMES = (
     "adult",
@@ -36,9 +35,7 @@ class FRS(BaseModel):
     mortgage: pd.DataFrame
     penprov: pd.DataFrame
 
-    model_config = {
-        "arbitrary_types_allowed": True
-    }
+    model_config = {"arbitrary_types_allowed": True}
 
 
 def load_frs_tables(
@@ -69,5 +66,3 @@ def load_frs_tables(
         mortgage=tables["mortgage"],
         penprov=tables["penprov"],
     )
-
-

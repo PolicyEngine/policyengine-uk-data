@@ -1,5 +1,13 @@
 import numpy as np
-from policyengine_uk_data_v2.utils import *
+import pandas as pd
+
+from policyengine_uk_data_v2.utils import (
+    max_,
+    sum_from_positive_fields,
+    sum_positive_variables,
+    sum_to_entity,
+)
+
 
 def add_incomes(person, benunit, household, state, frs, _frs_person):
     person["employment_income"] = _frs_person.INEARNS * 52
@@ -27,7 +35,7 @@ def add_incomes(person, benunit, household, state, frs, _frs_person):
         pension_payment + pension_tax_paid + pension_deductions_removed
     ) * 52
 
-    person["self_employment_income"] =  _frs_person.SEINCAM2
+    person["self_employment_income"] = _frs_person.SEINCAM2
 
     INVERTED_BASIC_RATE = 1.25
     account = frs.accounts
@@ -63,21 +71,11 @@ def add_incomes(person, benunit, household, state, frs, _frs_person):
         )
         * 52
     )
-    person["property_income"] = (
-        max_(
-            0,
-            _frs_person.CVPAY
-            + _frs_person.ROYYR1
-        )
-        * 52
-    )
+    person["property_income"] = max_(0, _frs_person.CVPAY + _frs_person.ROYYR1) * 52
 
-    
     maintenance_to_self = max_(
         pd.Series(
-            np.where(
-                _frs_person.MNTUS1 == 2, _frs_person.MNTUSAM1, _frs_person.MNTAMT1
-            )
+            np.where(_frs_person.MNTUS1 == 2, _frs_person.MNTUSAM1, _frs_person.MNTAMT1)
         ).fillna(0),
         0,
     )
@@ -121,5 +119,5 @@ def add_incomes(person, benunit, household, state, frs, _frs_person):
     )
 
     person["lump_sum_income"] = _frs_person.REDAMT.values
-    
+
     return person, benunit, household, state

@@ -1,19 +1,14 @@
 from pathlib import Path
-import numpy as np
 
 import h5py
+import numpy as np
 import pandas as pd
-import yaml
-from pydantic import BaseModel
-from typing import Any, Dict
 from policyengine_core.parameters import ParameterNode
 
+
 def load_parameters() -> ParameterNode:
-    return ParameterNode(
-        "",
-        directory_path=Path(__file__).parent / "parameters"
-    )
-    
+    return ParameterNode("", directory_path=Path(__file__).parent / "parameters")
+
 
 def save_dataframes_to_h5(
     person: pd.DataFrame,
@@ -57,14 +52,13 @@ def load_dataframes_from_h5(input_path: str | Path) -> tuple[pd.DataFrame]:
                 continue
             entity = system.variables.get(variable).entity.key
             for time_period in f[variable]:
-                dataframes[entity][variable] = pd.DataFrame(
-                    f[variable][time_period][:]
-                )
+                dataframes[entity][variable] = pd.DataFrame(f[variable][time_period][:])
 
     return dataframes
 
 
 max_ = np.maximum
+
 
 def sum_positive_variables(
     variables: list[pd.Series],
@@ -85,12 +79,12 @@ def sum_from_positive_fields(
     return sum_positive_variables([table[field] for field in fields])
 
 
-
 def concat(*args):
     """
     Concatenate the given arrays along the first axis.
     """
     return np.concatenate(args, axis=0)
+
 
 def sum_to_entity(
     values: pd.Series,
@@ -107,4 +101,6 @@ def sum_to_entity(
     Returns:
         pd.Series: A value for each person.
     """
-    return pd.Series(values.groupby(foreign_key).sum().reindex(primary_key).fillna(0).values)
+    return pd.Series(
+        values.groupby(foreign_key).sum().reindex(primary_key).fillna(0).values
+    )

@@ -1,5 +1,7 @@
 import numpy as np
-from policyengine_uk_data_v2.utils import *
+
+from policyengine_uk_data_v2.utils import concat
+
 
 def add_demographics(person, household, frs, _frs_person, year):
     # Add grossing weights
@@ -7,17 +9,11 @@ def add_demographics(person, household, frs, _frs_person, year):
 
     # Add basic personal variables
     person["age"] = _frs_person.AGE80 + _frs_person.AGE
-    person["birth_year"] = np.ones_like(person.age) * (
-        year - person.age
-    )
+    person["birth_year"] = np.ones_like(person.age) * (year - person.age)
     # Age fields are AGE80 (top-coded) and AGE in the adult and
     # child tables, respectively.
-    person["gender"] = np.where(
-        _frs_person.SEX == 1, "MALE", "FEMALE"
-    )
-    person["hours_worked"] = (
-            _frs_person.TOTHOURS.fillna(0).clip(lower=0) * 52
-    )
+    person["gender"] = np.where(_frs_person.SEX == 1, "MALE", "FEMALE")
+    person["hours_worked"] = _frs_person.TOTHOURS.fillna(0).clip(lower=0) * 52
     person["is_household_head"] = concat(
         frs.adult.HRPID == 1, np.zeros_like(frs.child.index, dtype=bool)
     )
@@ -25,22 +21,23 @@ def add_demographics(person, household, frs, _frs_person, year):
         frs.adult.UPERSON == 1,
         np.zeros_like(frs.child.index, dtype=bool),
     )
-    person["marital_status"] =  _frs_person.MARITAL.fillna(2).map(
-        {
-            1: "MARRIED",
-            2: "SINGLE",
-            3: "SINGLE",
-            4: "WIDOWED",
-            5: "SEPARATED",
-            6: "DIVORCED",
-        },
-    ).fillna("SINGLE")
+    person["marital_status"] = (
+        _frs_person.MARITAL.fillna(2)
+        .map(
+            {
+                1: "MARRIED",
+                2: "SINGLE",
+                3: "SINGLE",
+                4: "WIDOWED",
+                5: "SEPARATED",
+                6: "DIVORCED",
+            },
+        )
+        .fillna("SINGLE")
+    )
 
-    if "FTED" in frs.adult.columns:
-        fted =  _frs_person.FTED
-    else: 
-        fted =  _frs_person.EDUCFT
-    typeed2 =  _frs_person.TYPEED2
+    fted = _frs_person.FTED if "FTED" in _frs_person.columns else _frs_person.EDUCFT
+    typeed2 = _frs_person.TYPEED2
     age = person.age
     person["current_education"] = np.select(
         [
@@ -87,7 +84,7 @@ def add_demographics(person, household, frs, _frs_person, year):
     )
 
     # Add employment status
-    person["employment_status"] =  _frs_person.EMPSTATI.map(
+    person["employment_status"] = _frs_person.EMPSTATI.map(
         {
             0: "CHILD",
             1: "FT_EMPLOYED",

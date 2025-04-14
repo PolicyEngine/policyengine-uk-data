@@ -2,21 +2,20 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from pydantic import BaseModel
-
-from policyengine_uk_data_v2.impute import QRF
-from policyengine_uk_data_v2.utils import save_dataframes_to_h5, load_dataframes_from_h5, load_parameters
-
-import yaml
-import logging
 from policyengine_uk.system import parameters as policy_parameters
 
-from .ids import add_ids
-from .housing import add_housing
-from .income import add_incomes
-from .demographics import add_demographics
+from policyengine_uk_data_v2.utils import (
+    load_dataframes_from_h5,
+    save_dataframes_to_h5,
+)
+
 from .benefits import add_benefits
-from .ukda import FRS, load_frs_tables, FRS_TABLE_NAMES
+from .demographics import add_demographics
+from .housing import add_housing
+from .ids import add_ids
+from .income import add_incomes
+from .ukda import FRS, FRS_TABLE_NAMES, load_frs_tables
+
 
 class PolicyEngineFRSDataset:
     frs: FRS
@@ -100,15 +99,12 @@ class PolicyEngineFRSDataset:
             pd.DataFrame(),
         )
 
-
         self.count_adults = len(frs.adult)
         self.count_children = len(frs.child)
         self.count_people = self.count_adults + self.count_children
 
         self.zero_for_children = np.zeros(self.count_children)
         self.false_for_children = np.zeros(self.count_children, dtype=bool)
-
-        data_parameters = load_parameters()
         # Add ID variables to original frs tables for convenience
         for table_name in FRS_TABLE_NAMES:
             table = getattr(frs, table_name)
@@ -124,9 +120,7 @@ class PolicyEngineFRSDataset:
 
             if "SERNUM" in table.columns:
                 table["household_id"] = (table["SERNUM"] * 1e2).astype(int)
-        _frs_person = (
-            pd.concat([frs.adult, frs.child], axis=0).fillna(0).reset_index()
-        )
+        _frs_person = pd.concat([frs.adult, frs.child], axis=0).fillna(0).reset_index()
         # Add primary and foreign keys
         person, benunit, household, state = add_ids(
             person,
@@ -163,11 +157,11 @@ class PolicyEngineFRSDataset:
             year,
         )
 
-        person, benunit, household = add_benefits(person, benunit, _frs_person, frs, policy_parameters(year))
+        person, benunit, household = add_benefits(
+            person, benunit, _frs_person, frs, policy_parameters(year)
+        )
 
         self.person = person
         self.benunit = benunit
         self.household = household
         self.state = state
-
-
