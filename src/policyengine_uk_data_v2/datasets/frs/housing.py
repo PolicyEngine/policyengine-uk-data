@@ -14,6 +14,19 @@ def add_housing(
     frs: FRS,
     year: int
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Add housing-related variables to the household dataframe.
+    
+    Args:
+        person (pd.DataFrame): Person-level dataframe.
+        benunit (pd.DataFrame): Benefit unit-level dataframe.
+        household (pd.DataFrame): Household-level dataframe.
+        state (pd.DataFrame): State-level dataframe.
+        frs (FRS): The FRS data object.
+        year (int): The year of the data.
+        
+    Returns:
+        Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]: Updated dataframes.
+    """
     household["region"] = frs.househol.GVTREGNO.map(
         {
             1: "NORTH_EAST",

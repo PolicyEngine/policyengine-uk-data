@@ -15,6 +15,11 @@ class Dataframes(TypedDict):
 
 
 def load_parameters() -> ParameterNode:
+    """Load policy parameters from the package's parameters directory.
+    
+    Returns:
+        ParameterNode: The loaded parameter tree.
+    """
     return ParameterNode("", directory_path=Path(__file__).parent / "parameters")
 
 
@@ -26,6 +31,16 @@ def save_dataframes_to_h5(
     output_path: Union[str, Path],
     year: int,
 ) -> None:
+    """Save the four primary dataframes to an HDF5 file.
+    
+    Args:
+        person (pd.DataFrame): Person-level data.
+        benunit (pd.DataFrame): Benefit unit-level data.
+        household (pd.DataFrame): Household-level data.
+        state (pd.DataFrame): State-level data.
+        output_path (Union[str, Path]): Path to save the HDF5 file.
+        year (int): The year to associate with the data.
+    """
     data: Dict[str, np.ndarray] = {}
     for df in (person, benunit, household, state):
         for column in df.columns:
@@ -43,6 +58,14 @@ def save_dataframes_to_h5(
 
 
 def load_dataframes_from_h5(input_path: Union[str, Path]) -> Dataframes:
+    """Load dataframes from an HDF5 file.
+    
+    Args:
+        input_path (Union[str, Path]): Path to the HDF5 file.
+        
+    Returns:
+        Dataframes: Dictionary of the four primary dataframes (person, benunit, household, state).
+    """
     from policyengine_uk.system import system
 
     dataframes: Dataframes = {
@@ -88,8 +111,13 @@ def sum_from_positive_fields(
 
 
 def concat(*args: np.ndarray) -> np.ndarray:
-    """
-    Concatenate the given arrays along the first axis.
+    """Concatenate the given arrays along the first axis.
+    
+    Args:
+        *args: NumPy arrays to concatenate.
+        
+    Returns:
+        np.ndarray: The concatenated array.
     """
     return np.concatenate(args, axis=0)
 

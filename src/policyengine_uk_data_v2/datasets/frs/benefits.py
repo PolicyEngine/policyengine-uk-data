@@ -16,6 +16,19 @@ def add_benefits(
     frs: FRS,
     policy_parameters: ParameterNode
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Add benefit-related variables to the person, benunit and household dataframes.
+    
+    Args:
+        person (pd.DataFrame): Person-level dataframe.
+        benunit (pd.DataFrame): Benefit unit-level dataframe.
+        household (pd.DataFrame): Household-level dataframe.
+        _frs_person (pd.DataFrame): Combined adult and child dataframe.
+        frs (FRS): The FRS data object.
+        policy_parameters (ParameterNode): Policy parameters for the given year.
+        
+    Returns:
+        Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]: Updated person, benunit and household dataframes.
+    """
     sp_age = np.zeros_like(person.birth_year)
     for i in range(len(person)):
         sp_age[i] = calculate_state_pension_age(
@@ -174,6 +187,16 @@ def sum_person_to_benunit(
     person: pd.DataFrame,
     benunit: pd.DataFrame
 ) -> np.ndarray:
+    """Aggregate values from person level to benunit level.
+    
+    Args:
+        values (pd.Series): The values to aggregate.
+        person (pd.DataFrame): Person-level dataframe.
+        benunit (pd.DataFrame): Benefit unit-level dataframe.
+        
+    Returns:
+        np.ndarray: The aggregated values at benunit level.
+    """
     return (
         values.groupby(person.person_id.values)
         .sum()
@@ -188,6 +211,16 @@ def get_benefit_with_code(
     person: pd.DataFrame, 
     benefits: pd.DataFrame
 ) -> pd.Series:
+    """Get benefit amounts for a specific benefit code.
+    
+    Args:
+        code (int): The benefit code to extract.
+        person (pd.DataFrame): Person-level dataframe.
+        benefits (pd.DataFrame): Benefits dataframe.
+        
+    Returns:
+        pd.Series: The benefit amounts for the given code at person level.
+    """
     return pd.Series(
         sum_to_entity(
             benefits.BENAMT * (code == benefits.BENEFIT),

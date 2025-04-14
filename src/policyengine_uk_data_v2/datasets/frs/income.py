@@ -20,6 +20,19 @@ def add_incomes(
     frs: FRS,
     _frs_person: pd.DataFrame
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Add income-related variables to the person dataframe.
+    
+    Args:
+        person (pd.DataFrame): Person-level dataframe.
+        benunit (pd.DataFrame): Benefit unit-level dataframe.
+        household (pd.DataFrame): Household-level dataframe.
+        state (pd.DataFrame): State-level dataframe.
+        frs (FRS): The FRS data object.
+        _frs_person (pd.DataFrame): Combined adult and child dataframe.
+        
+    Returns:
+        Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]: Updated dataframes.
+    """
     person["employment_income"] = _frs_person.INEARNS * 52
 
     pension = frs.pension

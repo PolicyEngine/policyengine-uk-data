@@ -13,6 +13,18 @@ def add_demographics(
     _frs_person: pd.DataFrame,
     year: int
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Add demographic information to person and household dataframes.
+    
+    Args:
+        person (pd.DataFrame): Person-level dataframe.
+        household (pd.DataFrame): Household-level dataframe.
+        frs (FRS): The FRS data object.
+        _frs_person (pd.DataFrame): Combined adult and child dataframe.
+        year (int): The year of the data.
+        
+    Returns:
+        Tuple[pd.DataFrame, pd.DataFrame]: Updated person and household dataframes.
+    """
     # Add grossing weights
     household["household_weight"] = frs.househol.GROSS4
 

@@ -36,6 +36,11 @@ class PolicyEngineFRSDataset:
         self,
         file_path: Union[str, Path],
     ) -> None:
+        """Save the dataset to an HDF5 file.
+        
+        Args:
+            file_path (Union[str, Path]): Path to save the HDF5 file.
+        """
         save_dataframes_to_h5(
             person=self.person,
             benunit=self.benunit,
@@ -50,8 +55,11 @@ class PolicyEngineFRSDataset:
         file_path: Union[str, Path],
         year: int,
     ) -> None:
-        """
-        Load the dataframes from the given file path.
+        """Load the dataset from an HDF5 file.
+        
+        Args:
+            file_path (Union[str, Path]): Path to the HDF5 file.
+            year (int): The year associated with the dataset.
         """
 
         # Load the dataframes from the given file path
@@ -70,8 +78,10 @@ class PolicyEngineFRSDataset:
         self,
         folder: Union[str, Path],
     ) -> None:
-        """
-        Save the dataframes to the given folder.
+        """Save the dataframes to CSV files in the specified folder.
+        
+        Args:
+            folder (Union[str, Path]): The folder to save the CSV files to.
         """
         folder = Path(folder)
         self.person.to_csv(folder / "person.csv", index=False)
@@ -84,8 +94,11 @@ class PolicyEngineFRSDataset:
         folder: Union[str, Path],
         year: int,
     ) -> None:
-        """
-        Load the dataframes from the given folder.
+        """Load the dataset from CSV files in the specified folder.
+        
+        Args:
+            folder (Union[str, Path]): The folder containing the CSV files.
+            year (int): The year associated with the dataset.
         """
         folder = Path(folder)
         self.person = pd.read_csv(folder / "person.csv")
@@ -99,6 +112,12 @@ class PolicyEngineFRSDataset:
         year: int, 
         tab_folder: Optional[Union[str, Path]] = None
     ) -> None:
+        """Build the FRS dataset for the specified year.
+        
+        Args:
+            year (int): The year to build the dataset for.
+            tab_folder (Optional[Union[str, Path]], optional): Folder containing the tab-delimited FRS files. Defaults to None.
+        """
         self.year = year
         frs = load_frs_tables(
             tab_folder,

@@ -42,6 +42,14 @@ class FRS(BaseModel):
 def load_frs_tables(
     ukda_tab_folder: Union[str, Path],
 ) -> FRS:
+    """Load Family Resources Survey tables from tab-delimited files.
+    
+    Args:
+        ukda_tab_folder (Union[str, Path]): Folder containing the tab-delimited FRS files.
+        
+    Returns:
+        FRS: An object containing all loaded FRS tables.
+    """
     tables: Dict[str, pd.DataFrame] = {}
 
     for table_name in FRS_TABLE_NAMES:
