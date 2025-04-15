@@ -2,6 +2,10 @@ import pandas as pd
 from pathlib import Path
 import numpy as np
 from policyengine_uk_data import data_folder
+from policyengine_uk_data.impute import QRF
+from policyengine_uk_data import data_folder
+from policyengine_uk import Microsimulation
+from policyengine_core.data import Dataset
 
 SPI_TAB_FOLDER = data_folder / "ukda" / "spi_2020_21"
 SPI_RENAMES = dict(
@@ -97,6 +101,18 @@ def create_income_model(overwrite_existing: bool = False):
         return
     save_imputation_models()
 
+
+def add_income_imputations(dataset):
+    copy = dataset.copy()
+    copy.household.household_weight *= 0
+    income_model_inputs = copy.person[["age", "gender"]]
+    income_model_inputs["region"] = copy.household.set_index("household_id").loc[copy.person.person_household_id].region.values
+    income_model = QRF(file_path=data_folder / "models/income.pkl")
+    pred_income = income_model.predict(income_model_inputs)
+    for col in pred_income.columns:
+        copy.person[col] = pred_income[col]
+
+    dataset.stack(copy)
 
 if __name__ == "__main__":
     create_income_model()
