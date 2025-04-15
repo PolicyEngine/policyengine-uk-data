@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from typing import Tuple, List
 
-from policyengine_uk_data_v2.utils import (
+from policyengine_uk_data_v2.utils.datasets import (
     max_,
     sum_from_positive_fields,
     sum_positive_variables,
@@ -95,6 +95,7 @@ def add_incomes(
         * 52
     )
     person["property_income"] = max_(0, _frs_person.CVPAY + _frs_person.ROYYR1) * 52
+    person["property_income"] = person.property_income.fillna(0)
 
     maintenance_to_self = max_(
         pd.Series(

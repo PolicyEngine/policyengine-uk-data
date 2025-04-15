@@ -2,3 +2,5 @@
 **/*.h5
 **/*.tab
 *.ipynb
+**/*.pkl
+**/.DS_Store

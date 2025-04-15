@@ -6,7 +6,7 @@ import pandas as pd
 from policyengine_core.parameters import ParameterNode
 from policyengine_uk.system import parameters as policy_parameters
 
-from policyengine_uk_data_v2.utils import (
+from policyengine_uk_data_v2.utils.datasets import (
     load_dataframes_from_h5,
     save_dataframes_to_h5,
 )
