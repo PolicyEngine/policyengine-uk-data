@@ -1,4 +1,4 @@
-from policyengine_uk_data_v2.utils.huggingface import download, upload
+from policyengine_uk_data.utils.huggingface import download, upload
 from pathlib import Path
 import zipfile
 

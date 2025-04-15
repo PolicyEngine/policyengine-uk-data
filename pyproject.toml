@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.scripts]
-policyengine-uk-data-v2 = "policyengine_uk_data_v2:main"
+policyengine-uk-data-v2 = "policyengine_uk_data:main"
 
 [build-system]
 requires = ["hatchling"]

@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from typing import Tuple
 
-from policyengine_uk_data_v2.utils.datasets import concat
+from policyengine_uk_data.utils.datasets import concat
 from .ukda import FRS
 
 

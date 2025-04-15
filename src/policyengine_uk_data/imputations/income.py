@@ -1,7 +1,7 @@
 import pandas as pd
 from pathlib import Path
 import numpy as np
-from policyengine_uk_data_v2 import data_folder
+from policyengine_uk_data import data_folder
 
 SPI_TAB_FOLDER = data_folder / "ukda" / "spi_2020_21"
 SPI_RENAMES = dict(

@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from typing import Tuple, List
 
-from policyengine_uk_data_v2.utils.datasets import (
+from policyengine_uk_data.utils.datasets import (
     max_,
     sum_from_positive_fields,
     sum_positive_variables,

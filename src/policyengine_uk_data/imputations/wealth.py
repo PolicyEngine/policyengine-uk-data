@@ -1,5 +1,5 @@
 import pandas as pd
-from policyengine_uk_data_v2 import data_folder
+from policyengine_uk_data import data_folder
 
 WAS_TAB_FOLDER = data_folder / "ukda" / "was_2006_20"
 

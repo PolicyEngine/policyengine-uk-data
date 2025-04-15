@@ -3,7 +3,7 @@ from typing import Any
 
 def test_frs_builds() -> None:
     """Test that the FRS dataset can be built and saved to an HDF5 file."""
-    from policyengine_uk_data_v2.datasets.frs.main import PolicyEngineFRSDataset
+    from policyengine_uk_data.datasets.frs.main import PolicyEngineFRSDataset
 
     dataset = PolicyEngineFRSDataset()
 
@@ -13,7 +13,7 @@ def test_frs_builds() -> None:
 
 def test_frs_no_nan() -> None:
     """Test that the FRS dataset loaded from an HDF5 file contains no missing values."""
-    from policyengine_uk_data_v2.datasets.frs.main import PolicyEngineFRSDataset
+    from policyengine_uk_data.datasets.frs.main import PolicyEngineFRSDataset
 
     dataset = PolicyEngineFRSDataset()
     dataset.load_from_h5("frs_2022.h5", year=2022)

@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from typing import Tuple
 
-from policyengine_uk_data_v2.impute import QRF
+from policyengine_uk_data.impute import QRF
 from .ukda import FRS
 
 

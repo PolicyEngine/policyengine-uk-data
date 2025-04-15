@@ -3,7 +3,7 @@ import pandas as pd
 from typing import Tuple, Union
 
 from policyengine_core.parameters import ParameterNode
-from policyengine_uk_data_v2.utils.datasets import sum_to_entity
+from policyengine_uk_data.utils.datasets import sum_to_entity
 
 from .ukda import FRS
 
