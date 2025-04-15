@@ -815,7 +815,7 @@ wheels = [
 ]
 
 [[package]]
-name = "policyengine-uk-data-v2"
+name = "policyengine-uk-data"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
