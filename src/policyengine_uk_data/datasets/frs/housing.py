@@ -3,7 +3,7 @@ import pandas as pd
 from typing import Tuple
 
 from policyengine_uk_data.impute import QRF
-from .ukda import FRS
+from .ukda import UKDA_FRS
 
 
 def add_housing(
@@ -11,7 +11,7 @@ def add_housing(
     benunit: pd.DataFrame,
     household: pd.DataFrame,
     state: pd.DataFrame,
-    frs: FRS,
+    frs: UKDA_FRS,
     year: int
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Add housing-related variables to the household dataframe.

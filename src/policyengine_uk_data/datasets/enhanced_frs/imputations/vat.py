@@ -29,7 +29,7 @@ def generate_etb_table(etb: pd.DataFrame):
 
 
 def save_imputation_models():
-    from policyengine_uk_data.utils.qrf import QRF
+    from policyengine_uk_data.impute import QRF
 
     vat = QRF()
     etb = pd.read_csv(

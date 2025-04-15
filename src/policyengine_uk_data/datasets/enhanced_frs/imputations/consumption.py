@@ -124,7 +124,7 @@ def uprate_lcfs_table(
 
 
 def save_imputation_models():
-    from policyengine_uk_data.utils.qrf import QRF
+    from policyengine_uk_data.impute import QRF
 
     consumption = QRF()
     lcfs_household = pd.read_csv(

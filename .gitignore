@@ -4,3 +4,4 @@
 *.ipynb
 **/*.pkl
 **/.DS_Store
+**/*.csv.gz

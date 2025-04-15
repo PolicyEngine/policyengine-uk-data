@@ -5,7 +5,7 @@ from typing import Tuple, Union
 from policyengine_core.parameters import ParameterNode
 from policyengine_uk_data.utils.datasets import sum_to_entity
 
-from .ukda import FRS
+from .ukda import UKDA_FRS
 
 
 def add_benefits(
@@ -13,7 +13,7 @@ def add_benefits(
     benunit: pd.DataFrame,
     household: pd.DataFrame,
     _frs_person: pd.DataFrame,
-    frs: FRS,
+    frs: UKDA_FRS,
     policy_parameters: ParameterNode
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Add benefit-related variables to the person, benunit and household dataframes.

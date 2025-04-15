@@ -9,7 +9,7 @@ from policyengine_uk_data.utils.datasets import (
     sum_to_entity,
 )
 
-from .ukda import FRS
+from .ukda import UKDA_FRS
 
 
 def add_incomes(
@@ -17,7 +17,7 @@ def add_incomes(
     benunit: pd.DataFrame,
     household: pd.DataFrame,
     state: pd.DataFrame,
-    frs: FRS,
+    frs: UKDA_FRS,
     _frs_person: pd.DataFrame
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Add income-related variables to the person dataframe.

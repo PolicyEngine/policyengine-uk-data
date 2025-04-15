@@ -10,17 +10,17 @@ from policyengine_uk_data.utils.datasets import (
     load_dataframes_from_h5,
     save_dataframes_to_h5,
 )
-
+from policyengine_uk_data import data_folder
 from .benefits import add_benefits
 from .demographics import add_demographics
 from .housing import add_housing
 from .ids import add_ids
 from .income import add_incomes
-from .ukda import FRS, FRS_TABLE_NAMES, load_frs_tables
+from .ukda import UKDA_FRS, FRS_TABLE_NAMES, load_frs_tables
 
 
-class PolicyEngineFRSDataset:
-    frs: FRS
+class FRS:
+    frs: UKDA_FRS
     person: pd.DataFrame
     benunit: pd.DataFrame
     household: pd.DataFrame
@@ -107,10 +107,9 @@ class PolicyEngineFRSDataset:
         self.state = pd.read_csv(folder / "state.csv")
         self.year = year
 
-    def build(
+    def generate(
         self, 
         year: int, 
-        tab_folder: Optional[Union[str, Path]] = None
     ) -> None:
         """Build the FRS dataset for the specified year.
         
@@ -119,6 +118,7 @@ class PolicyEngineFRSDataset:
             tab_folder (Optional[Union[str, Path]], optional): Folder containing the tab-delimited FRS files. Defaults to None.
         """
         self.year = year
+        tab_folder = Path(data_folder / "ukda" / f"frs_{year}_{str(year + 1)[-2:]}")
         frs = load_frs_tables(
             tab_folder,
         )
@@ -129,13 +129,6 @@ class PolicyEngineFRSDataset:
             pd.DataFrame(),
             pd.DataFrame(),
         )
-
-        self.count_adults = len(frs.adult)
-        self.count_children = len(frs.child)
-        self.count_people = self.count_adults + self.count_children
-
-        self.zero_for_children = np.zeros(self.count_children)
-        self.false_for_children = np.zeros(self.count_children, dtype=bool)
         # Add ID variables to original frs tables for convenience
         for table_name in FRS_TABLE_NAMES:
             table = getattr(frs, table_name)
@@ -196,3 +189,45 @@ class PolicyEngineFRSDataset:
         self.benunit = benunit
         self.household = household
         self.state = state
+
+    def copy(
+        self,
+    ) -> "FRS":
+        """Create a deep copy of the FRS object.
+        
+        Returns:
+            FRS: A new FRS object with copied dataframes.
+        """
+        new_frs = FRS()
+        new_frs.person = self.person.copy()
+        new_frs.benunit = self.benunit.copy()
+        new_frs.household = self.household.copy()
+        new_frs.state = self.state.copy()
+        new_frs.year = self.year
+        return new_frs
+
+    def stack(
+        self,
+        other: "FRS",
+        weight_multiplier: float = 1
+    ):
+        self.person = _stack_tables(self.person, other.person)
+        self.benunit = _stack_tables(self.benunit, other.benunit)
+        self.household = _stack_tables(self.household, other.household)
+        self.state = _stack_tables(self.state, other.state, adjust_ids=False) # Everyone should still be in the same State entity
+        
+        self.household.household_weight *= weight_multiplier
+
+def _stack_tables(
+    x: pd.DataFrame,
+    y: pd.DataFrame,
+    adjust_ids: bool = True,
+) -> pd.DataFrame:
+    # First, copy y
+    y = y.copy()
+    for column in y.columns:
+        if "_id" in column and adjust_ids:
+            y[column] = y[column] + x[column].max() + 1
+    
+    return pd.concat([x, y], axis=0).reset_index(drop=True)
+    

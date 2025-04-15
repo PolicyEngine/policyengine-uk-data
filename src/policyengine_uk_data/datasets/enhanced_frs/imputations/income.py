@@ -58,6 +58,8 @@ def generate_spi_table(spi: pd.DataFrame):
 
     spi["employment_income"] = spi[["PAY", "EPB", "TAXTERM"]].sum(axis=1)
 
+    spi = spi.sample(n=100_000)
+
     return spi
 
 
@@ -80,7 +82,7 @@ IMPUTATIONS = [
 
 
 def save_imputation_models():
-    from policyengine_uk_data.utils import QRF
+    from policyengine_uk_data.impute import QRF
 
     income = QRF()
     spi = pd.read_csv(SPI_TAB_FOLDER / "put2021uk.tab", delimiter="\t")

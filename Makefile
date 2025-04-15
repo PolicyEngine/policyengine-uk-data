@@ -7,9 +7,8 @@ test:
 data/ukda:
 	python data/download_private_prerequisites.py
 
-data/models:
-	python src/policyengine_uk_data/imputations/income.py
-	python src/policyengine_uk_data/imputations/consumption.py
-	python src/policyengine_uk_data/imputations/wealth.py
-	python src/policyengine_uk_data/imputations/vat.py
-
+imputations:
+	python src/policyengine_uk_data/datasets/enhanced_frs/imputations/income.py
+	python src/policyengine_uk_data/datasets/enhanced_frs/imputations/consumption.py
+	python src/policyengine_uk_data/datasets/enhanced_frs/imputations/wealth.py
+	python src/policyengine_uk_data/datasets/enhanced_frs/imputations/vat.py

@@ -3,19 +3,19 @@ from typing import Any
 
 def test_frs_builds() -> None:
     """Test that the FRS dataset can be built and saved to an HDF5 file."""
-    from policyengine_uk_data.datasets.frs.main import PolicyEngineFRSDataset
+    from policyengine_uk_data.datasets.frs import FRS
 
-    dataset = PolicyEngineFRSDataset()
+    dataset = FRS()
 
-    dataset.build(year=2022, tab_folder="data/ukda/frs_2022_23")
+    dataset.generate(year=2022)
     dataset.save_to_h5("frs_2022.h5")
 
 
 def test_frs_no_nan() -> None:
     """Test that the FRS dataset loaded from an HDF5 file contains no missing values."""
-    from policyengine_uk_data.datasets.frs.main import PolicyEngineFRSDataset
+    from policyengine_uk_data.datasets.frs.main import FRS
 
-    dataset = PolicyEngineFRSDataset()
+    dataset = FRS()
     dataset.load_from_h5("frs_2022.h5", year=2022)
 
     assert dataset.person.isna().sum().sum() == 0

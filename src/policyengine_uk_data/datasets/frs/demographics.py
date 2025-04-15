@@ -3,13 +3,13 @@ import pandas as pd
 from typing import Tuple
 
 from policyengine_uk_data.utils.datasets import concat
-from .ukda import FRS
+from .ukda import UKDA_FRS
 
 
 def add_demographics(
     person: pd.DataFrame,
     household: pd.DataFrame,
-    frs: FRS,
+    frs: UKDA_FRS,
     _frs_person: pd.DataFrame,
     year: int
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:

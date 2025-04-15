@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from typing import Tuple
 
-from .ukda import FRS
+from .ukda import UKDA_FRS
 
 
 def add_ids(
@@ -10,7 +10,7 @@ def add_ids(
     benunit: pd.DataFrame,
     household: pd.DataFrame,
     state: pd.DataFrame,
-    frs: FRS,
+    frs: UKDA_FRS,
     _frs_person: pd.DataFrame
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Add ID columns to all dataframes and establish entity relationships.

@@ -60,6 +60,7 @@ class QRF:
             pd.DataFrame: Predictions dataframe with the same columns as the training targets.
         """
         X = pd.get_dummies(X, columns=self.categorical_columns, drop_first=True)
+        X.to_csv("out.csv")
         X = X[self.encoded_columns]
         pred = self.qrf.predict(X, quantiles=list(np.linspace(0, 1, count_samples)))
         random_generator = np.random.default_rng(self.seed)

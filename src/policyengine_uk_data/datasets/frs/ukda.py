@@ -21,7 +21,7 @@ FRS_TABLE_NAMES: Tuple[str, ...] = (
 )
 
 
-class FRS(BaseModel):
+class UKDA_FRS(BaseModel):
     adult: pd.DataFrame
     child: pd.DataFrame
     accounts: pd.DataFrame
@@ -41,7 +41,7 @@ class FRS(BaseModel):
 
 def load_frs_tables(
     ukda_tab_folder: Union[str, Path],
-) -> FRS:
+) -> UKDA_FRS:
     """Load Family Resources Survey tables from tab-delimited files.
     
     Args:
@@ -60,7 +60,7 @@ def load_frs_tables(
         ).apply(pd.to_numeric, errors="coerce")
         tables[table_name].columns = tables[table_name].columns.str.upper()
 
-    return FRS(
+    return UKDA_FRS(
         adult=tables["adult"],
         child=tables["child"],
         accounts=tables["accounts"],

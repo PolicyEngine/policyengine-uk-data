@@ -83,7 +83,11 @@ def load_dataframes_from_h5(input_path: Union[str, Path]) -> Dataframes:
                 continue
             entity = system.variables.get(variable).entity.key
             for time_period in f[variable]:
-                dataframes[entity][variable] = pd.DataFrame(f[variable][time_period][:])
+                dataframes[entity][variable] = f[variable][time_period][:]
+                if "S" in str(dataframes[entity][variable].dtype):
+                    dataframes[entity][variable] = dataframes[entity][variable].astype(
+                        str
+                    )
 
     return dataframes
 

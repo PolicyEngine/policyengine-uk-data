@@ -3,7 +3,7 @@ import numpy as np
 
 # Fit a spline to each income band's percentiles
 from scipy.interpolate import UnivariateSpline
-from policyengine_uk_data.storage import STORAGE_FOLDER
+from policyengine_uk_data import data_folder
 from tqdm import tqdm
 import copy
 
@@ -12,7 +12,7 @@ from torch.optim import Adam
 from tqdm import tqdm
 
 capital_gains = pd.read_csv(
-    STORAGE_FOLDER / "capital_gains_distribution_advani_summers.csv.gz"
+    data_folder / "capital_gains_distribution_advani_summers.csv.gz"
 )
 capital_gains["maximum_total_income"] = (
     capital_gains.minimum_total_income.shift(-1).fillna(np.inf)
@@ -20,10 +20,9 @@ capital_gains["maximum_total_income"] = (
 
 
 def impute_capital_gains(dataset, time_period: int):
-    """Assumes that the capital gains distribution is the same for all years."""
-
+    """Assumes that the capital gains distribution is the same for all years.
+    """
     from policyengine_uk import Microsimulation
-    from policyengine_uk.system import system
 
     sim = Microsimulation(dataset=dataset)
     ti = sim.calculate("total_income", time_period)
@@ -125,52 +124,3 @@ def impute_capital_gains(dataset, time_period: int):
         new_cg[in_target_range] = pred_capital_gains
 
     return new_cg, new_household_weight
-
-
-def stack_datasets(data_1, data_2):
-    assert isinstance(
-        data_1[list(data_1.keys())[0]], dict
-    ), "Data must be in variable-time-period format."
-    joined_data = {}
-
-    for variable in data_1:
-        joined_data[variable] = {}
-        for time_period in data_1[variable]:
-            if "_id" in variable:
-                joined_data[variable][time_period] = np.concatenate(
-                    [
-                        data_1[variable][time_period],
-                        data_2[variable][time_period]
-                        + data_1[variable][time_period].max(),
-                    ]
-                )
-            else:
-                joined_data[variable][time_period] = np.concatenate(
-                    [
-                        data_1[variable][time_period],
-                        data_2[variable][time_period],
-                    ]
-                )
-
-    return joined_data
-
-
-def impute_cg_to_dataset(dataset: Dataset):
-    data = dataset.load_dataset()
-    zero_weight_copy_1 = copy.deepcopy(data)
-    zero_weight_copy_2 = copy.deepcopy(data)
-
-    for time_period in zero_weight_copy_2["household_weight"]:
-        zero_weight_copy_2["household_weight"][time_period] = np.zeros_like(
-            zero_weight_copy_1["household_weight"][time_period]
-        )
-
-    data = stack_datasets(data, zero_weight_copy_2)
-
-    dataset.save_dataset(data)
-
-    pred_cg, household_weights_22 = impute_capital_gains(dataset, 2022)
-
-    data["capital_gains"] = {2022: pred_cg}
-    data["household_weight"][2022] = household_weights_22
-    dataset.save_dataset(data)
