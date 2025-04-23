@@ -147,6 +147,7 @@ def create_target_matrix(
         "EAST_OF_ENGLAND": "east",
         "LONDON": "london",
         "SOUTH_WEST": "south_west",
+        "NORTH_WEST": "north_west",
         "WALES": "wales",
         "SCOTLAND": "scotland",
         "NORTHERN_IRELAND": "northern_ireland",

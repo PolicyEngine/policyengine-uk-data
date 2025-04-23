@@ -3,42 +3,64 @@ import pandas as pd
 import numpy as np
 from policyengine_uk_data.utils.qrf import QRF
 
-sim = Microsimulation(dataset="hf://policyengine/policyengine-uk-data/enhanced_frs_2022_23.h5")
+sim = Microsimulation(
+    dataset="hf://policyengine/policyengine-uk-data/enhanced_frs_2022_23.h5"
+)
 
-df = sim.calculate_dataframe([
-    "household_weight", "household_id", "is_adult", "is_child", "is_SP_age", "dla", "pip", "hbai_household_net_income"
-], period=2025)
+df = sim.calculate_dataframe(
+    [
+        "household_weight",
+        "household_id",
+        "is_adult",
+        "is_child",
+        "is_SP_age",
+        "dla",
+        "pip",
+        "hbai_household_net_income",
+    ],
+    period=2025,
+)
 
 education = sim.calculate("current_education", period=2025)
-df["count_primary_education"] = sim.map_result(education == "PRIMARY", "person", "household")
-df["count_secondary_education"] = sim.map_result(education == "LOWER_SECONDARY", "person", "household")
-df["count_further_education"] = sim.map_result(education.isin(["UPPER_SECONDARY", "TERTIARY"]), "person", "household")
+df["count_primary_education"] = sim.map_result(
+    education == "PRIMARY", "person", "household"
+)
+df["count_secondary_education"] = sim.map_result(
+    education == "LOWER_SECONDARY", "person", "household"
+)
+df["count_further_education"] = sim.map_result(
+    education.isin(["UPPER_SECONDARY", "TERTIARY"]), "person", "household"
+)
 
 
-etb = pd.read_csv("~/Downloads/UKDA-8856-tab 2/tab/householdv2_1977-2021.tab", delimiter="\t")
+etb = pd.read_csv(
+    "~/Downloads/UKDA-8856-tab 2/tab/householdv2_1977-2021.tab", delimiter="\t"
+)
 etb = etb[etb.year == etb.year.max()]
 etb = etb.replace(" ", np.nan)
 
-etb = etb[[
-    "adults",
-    "childs",
-    "disinc",
-    "benk",
-    "educ",
-    "totnhs",
-    "rail",
-    "bussub",
-    "hsub",
-    "hhold_adj_weight",
-    "noretd",
-    "primed",
-    "secoed",
-    "wagern",
-    "welf",
-    "furted",
-    "disliv",
-    "pips"
-]]
+etb = etb[
+    [
+        "adults",
+        "childs",
+        "disinc",
+        "benk",
+        "educ",
+        "totnhs",
+        "rail",
+        "bussub",
+        "hsub",
+        "hhold_adj_weight",
+        "noretd",
+        "primed",
+        "secoed",
+        "wagern",
+        "welf",
+        "furted",
+        "disliv",
+        "pips",
+    ]
+]
 etb = etb.dropna().astype(float)
 model = QRF()
 

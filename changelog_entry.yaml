@@ -1,4 +1,4 @@
 - bump: patch
   changes:
-    added:
-    - Inferred disability benefits.
+    fixed:
+    - Re-added North West calibration.
