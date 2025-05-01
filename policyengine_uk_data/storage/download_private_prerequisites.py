@@ -1,4 +1,4 @@
-from policyengine_uk_data.utils.huggingface import download, upload
+from policyengine_uk_data.utils.huggingface import download_from_hf, upload
 from pathlib import Path
 import zipfile
 
@@ -23,7 +23,7 @@ FILES = [
 FILES = [FOLDER / file for file in FILES]
 
 for file in FILES:
-    download(
+    download_from_hf(
         repo="policyengine/policyengine-uk-data",
         repo_filename=file.name,
         local_folder=file.parent,
