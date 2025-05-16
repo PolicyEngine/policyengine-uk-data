@@ -1,0 +1,1 @@
+This script calibrates UK childcare policy in PolicyEngine using scipy.optimize to match target spending and caseloads by adjusting take-up rates and entitlement hours. Run it to estimate optimal behavioural parameters for 2025 based on a microsimulation model.
