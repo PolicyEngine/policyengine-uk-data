@@ -1,4 +1,5 @@
 - bump: patch
   changes:
     fixed:
-    - Re-added North West calibration.
+    - GCP uploads to buckets happen alongside HF uploads.
+  
