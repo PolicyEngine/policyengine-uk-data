@@ -3,6 +3,9 @@ from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk_data.utils.huggingface import upload
 from google.cloud import storage
 import google.auth
+import os
+from importlib import metadata
+import json
 
 
 def upload_datasets():
@@ -11,6 +14,14 @@ def upload_datasets():
         credentials=credentials, project=project_id
     )
     bucket = storage_client.bucket("policyengine-uk-data-private")
+
+    # Upload versions
+
+    with open(STORAGE_FOLDER / "version.json", "w") as f:
+        f.write(
+            json.dumps({"version": metadata.version("policyengine-uk-data")})
+        )
+
     for dataset in [FRS_2022_23, EnhancedFRS_2022_23]:
         dataset = dataset()
         if not dataset.exists:
@@ -61,6 +72,17 @@ def upload_datasets():
     print(
         f"Uploaded local_authority_weights.h5 to GCS bucket policyengine-uk-data-private."
     )
+
+    upload(
+        STORAGE_FOLDER / "version.json",
+        "policyengine/policyengine-uk-data",
+        "version.json",
+    )
+
+    blob = "version.json"
+    blob = bucket.blob(blob)
+    blob.upload_from_filename(STORAGE_FOLDER / "version.json")
+    print(f"Uploaded version.json to GCS bucket policyengine-uk-data-private.")
 
 
 if __name__ == "__main__":
