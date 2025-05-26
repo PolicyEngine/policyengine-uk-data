@@ -18,6 +18,29 @@ def upload_data_files(
     if version is None:
         version = metadata.version("policyengine-uk-data")
 
+    upload_files_to_hf(
+        files=files,
+        version=version,
+        hf_repo_name=hf_repo_name,
+        hf_repo_type=hf_repo_type,
+    )
+
+    upload_files_to_gcs(
+        files=files,
+        version=version,
+        gcs_bucket_name=gcs_bucket_name,
+    )
+
+
+def upload_files_to_hf(
+    files: List[str],
+    version: str,
+    hf_repo_name: str = "policyengine/policyengine-uk-data",
+    hf_repo_type: str = "model",
+):
+    """
+    Upload files to Hugging Face repository and tag the commit with the version.
+    """
     api = HfApi()
     hf_operations = []
 
@@ -38,9 +61,8 @@ def upload_data_files(
         commit_message=f"Upload data files for version {version}",
     )
     logging.info(f"Uploaded files to Hugging Face repository {hf_repo_name}.")
-    # Tag commit with version
 
-    # Create the new tag
+    # Tag commit with version
     api.create_tag(
         repo_id=hf_repo_name,
         tag=version,
@@ -51,12 +73,21 @@ def upload_data_files(
         f"Tagged commit with {version} in Hugging Face repository {hf_repo_name}."
     )
 
-    # Upload to GCS
+
+def upload_files_to_gcs(
+    files: List[str],
+    version: str,
+    gcs_bucket_name: str = "policyengine-uk-data-private",
+):
+    """
+    Upload files to Google Cloud Storage and set metadata with the version.
+    """
     credentials, project_id = google.auth.default()
     storage_client = storage.Client(
         credentials=credentials, project=project_id
     )
     bucket = storage_client.bucket(gcs_bucket_name)
+
     for file_path in files:
         file_path = Path(file_path)
         blob = bucket.blob(file_path.name)
