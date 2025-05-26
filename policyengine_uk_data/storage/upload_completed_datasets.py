@@ -19,7 +19,7 @@ def upload_datasets():
         files=dataset_files,
         hf_repo_name="policyengine-uk-data/policyengine-uk-data-private",
         hf_repo_type="dataset",
-        gcs_bucket_name="policyengine-uk-data",
+        gcs_bucket_name="policyengine-uk-data-private",
     )
 
 

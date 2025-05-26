@@ -35,7 +35,7 @@ def upload_data_files(
 def upload_files_to_hf(
     files: List[str],
     version: str,
-    hf_repo_name: str = "policyengine/policyengine-uk-data",
+    hf_repo_name: str = "policyengine/policyengine-uk-data-private",
     hf_repo_type: str = "model",
 ):
     """
