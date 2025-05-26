@@ -111,3 +111,8 @@
     - GCP uploads to buckets happen alongside HF uploads.
     - Versioning in data uploads.
   date: 2025-05-26 21:38:53
+- bump: patch
+  changes:
+    fixed:
+    - Typo in huggingface repo location.
+  date: 2025-05-26 21:44:28
