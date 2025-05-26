@@ -105,3 +105,9 @@
     fixed:
     - Documentation errors.
   date: 2024-12-10 10:46:07
+- bump: patch
+  changes:
+    fixed:
+    - GCP uploads to buckets happen alongside HF uploads.
+    - Versioning in data uploads.
+  date: 2025-05-26 21:38:53
