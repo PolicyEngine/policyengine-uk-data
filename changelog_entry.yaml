@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Typo in huggingface repo location.
