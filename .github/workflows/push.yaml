@@ -72,8 +72,6 @@ jobs:
         with:
           branch: gh-pages
           folder: docs/_build/html
-      - name: Build package
-        run: make
       - name: Publish a git tag
         run: ".github/publish-git-tag.sh || true"
       - name: Remove .whl files
