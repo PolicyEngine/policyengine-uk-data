@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.4] - 2025-05-26 22:10:54
+
+### Fixed
+
+- Added missing HF token
+
 ## [1.11.3] - 2025-05-26 21:44:28
 
 ### Fixed
@@ -140,6 +146,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.11.4]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.11.3...1.11.4
 [1.11.3]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.11.2...1.11.3
 [1.11.2]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.11.1...1.11.2
 [1.11.1]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.11.0...1.11.1

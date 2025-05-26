@@ -116,3 +116,8 @@
     fixed:
     - Typo in huggingface repo location.
   date: 2025-05-26 21:44:28
+- bump: patch
+  changes:
+    fixed:
+    - Added missing HF token
+  date: 2025-05-26 22:10:54
