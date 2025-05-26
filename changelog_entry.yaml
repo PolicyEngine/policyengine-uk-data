@@ -2,4 +2,5 @@
   changes:
     fixed:
     - GCP uploads to buckets happen alongside HF uploads.
+    - Versioning in data uploads.
   
