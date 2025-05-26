@@ -5,6 +5,7 @@ from google.cloud import storage
 from pathlib import Path
 from importlib import metadata
 import google.auth
+import logging
 
 
 def upload_data_files(
@@ -12,8 +13,10 @@ def upload_data_files(
     gcs_bucket_name: str = "policyengine-uk-data-private",
     hf_repo_name: str = "policyengine/policyengine-uk-data",
     hf_repo_type: str = "model",
+    version: str = None,
 ):
-    version = metadata.version("policyengine-uk-data")
+    if version is None:
+        version = metadata.version("policyengine-uk-data")
 
     api = HfApi()
     hf_operations = []
@@ -34,32 +37,18 @@ def upload_data_files(
         repo_type=hf_repo_type,
         commit_message=f"Upload data files for version {version}",
     )
-    print(f"Uploaded files to Hugging Face repository {hf_repo_name}.")
+    logging.info(f"Uploaded files to Hugging Face repository {hf_repo_name}.")
     # Tag commit with version
-    tag_name = version
-
-    # Delete the tag if it already exists to ensure the new commit is tagged.
-    # missing_ok=True ensures that if the tag doesn't exist, no error is raised.
-
-    try:
-        api.delete_tag(
-            repo_id=hf_repo_name,
-            tag=tag_name,
-            repo_type=hf_repo_type,
-        )
-        print(f"Tag {version} already exists: deleting the old tag.")
-    except RevisionNotFoundError:
-        pass
 
     # Create the new tag
     api.create_tag(
         repo_id=hf_repo_name,
-        tag=tag_name,
+        tag=version,
         revision=commit_info.oid,
         repo_type=hf_repo_type,
     )
-    print(
-        f"Tagged commit with {tag_name} in Hugging Face repository {hf_repo_name}."
+    logging.info(
+        f"Tagged commit with {version} in Hugging Face repository {hf_repo_name}."
     )
 
     # Upload to GCS
@@ -71,13 +60,14 @@ def upload_data_files(
     for file_path in files:
         file_path = Path(file_path)
         blob = bucket.blob(file_path.name)
-        blob.metadata = {"version": version}
         blob.upload_from_filename(file_path)
-        print(f"Uploaded {file_path.name} to GCS bucket {gcs_bucket_name}.")
+        logging.info(
+            f"Uploaded {file_path.name} to GCS bucket {gcs_bucket_name}."
+        )
 
         # Set metadata
         blob.metadata = {"version": version}
         blob.patch()
-        print(
+        logging.info(
             f"Set metadata for {file_path.name} in GCS bucket {gcs_bucket_name}."
         )
