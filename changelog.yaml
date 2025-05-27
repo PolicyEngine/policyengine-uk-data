@@ -121,3 +121,8 @@
     fixed:
     - Added missing HF token
   date: 2025-05-26 22:10:54
+- bump: patch
+  changes:
+    added:
+    - Child limit affected household calibration.
+  date: 2025-05-27 13:30:04
