@@ -240,7 +240,7 @@ def create_target_matrix(
             "person",
         )
         > 0
-    )
+    ) * sim.calculate("is_child", map_to="person")
     child_in_uc_household = (
         sim.calculate("universal_credit", map_to="person").values > 0
     )
