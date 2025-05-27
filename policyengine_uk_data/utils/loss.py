@@ -233,7 +233,14 @@ def create_target_matrix(
             target_names.append(name_count)
 
     # Add two-child limit targets.
-    child_is_affected = sim.calculate("uc_is_child_limit_affected")
+    child_is_affected = (
+        sim.map_result(
+            sim.calculate("uc_is_child_limit_affected", map_to="household"),
+            "household",
+            "person",
+        )
+        > 0
+    )
     child_in_uc_household = (
         sim.calculate("universal_credit", map_to="person") > 0
     )

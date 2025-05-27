@@ -4,7 +4,7 @@ format:
 	black . -l 79
 
 test:
-	pytest
+	pytest .
 
 install:
 	pip install policyengine-uk
