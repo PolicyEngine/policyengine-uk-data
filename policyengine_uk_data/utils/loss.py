@@ -249,7 +249,7 @@ def create_target_matrix(
     # https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-two-children-april-2024
     df["dwp/uc_two_child_limit_affected_household_count"] = capped_households
     target_names.append("dwp/uc_two_child_limit_affected_household_count")
-    target_values.append(440e6)  # DWP statistics for 2024/25
+    target_values.append(440e3)  # DWP statistics for 2024/25
 
     combined_targets = pd.concat(
         [
