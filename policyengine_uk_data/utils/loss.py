@@ -240,7 +240,7 @@ def create_target_matrix(
     children_in_capped_households = sim.map_result(
         child_is_affected * child_in_uc_household, "person", "household"
     )
-    capped_households = children_in_capped_households > 0
+    capped_households = (children_in_capped_households > 0) * 1.0
     df["dwp/uc_two_child_limit_affected_child_count"] = (
         children_in_capped_households
     )
