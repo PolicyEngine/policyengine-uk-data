@@ -125,7 +125,7 @@ def calibrate(
 
     optimizer = torch.optim.Adam([weights], lr=0.15)
 
-    desc = range(32) if os.environ.get("DATA_LITE") else range(epochs)
+    desc = range(128) if os.environ.get("DATA_LITE") else range(epochs)
     final_weights = (torch.exp(weights) * r).detach().numpy()
     performance = pd.DataFrame()
 

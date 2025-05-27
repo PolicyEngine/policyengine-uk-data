@@ -4,15 +4,15 @@ format:
 	black . -l 79
 
 test:
-	pytest
+	pytest .
 
 install:
-	pip install policyengine-uk==2.19.1
+	pip install policyengine-uk
 	pip install policyengine>=2.4
 	pip install -e ".[dev]" --config-settings editable_mode=compat
 
 install-uv:
-	uv pip install --system policyengine-uk==2.19.1
+	uv pip install --system policyengine-uk
 	uv pip install --system policyengine>=2.4
 	uv pip install --system -e ".[dev]" --config-settings editable_mode=compat
 
