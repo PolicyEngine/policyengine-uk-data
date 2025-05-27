@@ -5,16 +5,24 @@ def test_child_limit():
     # Initialize simulation
     sim = Microsimulation(dataset=EnhancedFRS_2022_23)
 
-    child_is_affected = sim.calculate(
-        "uc_is_child_limit_affected", map_to="household"
+    child_is_affected = (
+        sim.map_result(
+            sim.calculate("uc_is_child_limit_affected", map_to="household", period=2025),
+            "household",
+            "person",
+        )
+        > 0
+    ) * sim.calculate("is_child", map_to="person").values
+    child_in_uc_household = (
+        sim.calculate("universal_credit", map_to="person", period=2025).values > 0
     )
-    child_in_uc_household = sim.calculate("is_child", map_to="household") * (
-        sim.calculate("universal_credit", map_to="household") > 0
+    children_in_capped_households = sim.map_result(
+        child_is_affected * child_in_uc_household, "person", "household"
     )
-
-    children_affected = (child_is_affected * child_in_uc_household).sum()
-
-    households_affected = (child_is_affected * child_in_uc_household > 0).sum()
+    capped_households = (children_in_capped_households > 0) * 1.0
+    household_weight = sim.calculate("household_weight", period=2025).values
+    children_affected = (children_in_capped_households * household_weight).sum()
+    households_affected = (capped_households * household_weight).sum()
 
     child_target = 1.6e6  # Expected number of affected children
     household_target = 440e3  # Expected number of affected households
