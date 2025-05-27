@@ -29,8 +29,13 @@ def test_child_limit():
     ).sum()
     households_affected = (capped_households * household_weight).sum()
 
-    child_target = 1.6e6  # Expected number of affected children
-    household_target = 440e3  # Expected number of affected households
+    UPRATING_24_25 = 1.12  # https://ifs.org.uk/articles/two-child-limit-poverty-incentives-and-cost, table at the end
+    child_target = (
+        1.6e6 * UPRATING_24_25
+    )  # Expected number of affected children
+    household_target = (
+        440e3 * UPRATING_24_25
+    )  # Expected number of affected households
 
     assert (
         abs(children_affected / child_target - 1) < 0.1
