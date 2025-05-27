@@ -242,7 +242,7 @@ def create_target_matrix(
         > 0
     )
     child_in_uc_household = (
-        sim.calculate("universal_credit", map_to="person") > 0
+        sim.calculate("universal_credit", map_to="person").values > 0
     )
     children_in_capped_households = sim.map_result(
         child_is_affected * child_in_uc_household, "person", "household"
