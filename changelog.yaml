@@ -126,3 +126,8 @@
     added:
     - Child limit affected household calibration.
   date: 2025-05-27 13:30:04
+- bump: patch
+  changes:
+    fixed:
+    - Uprating in child limit target.
+  date: 2025-05-27 14:40:08
