@@ -232,6 +232,25 @@ def create_target_matrix(
             target_values.append(row[variable + "_count"])
             target_names.append(name_count)
 
+    # Add two-child limit targets.
+    child_is_affected = sim.calculate("uc_is_child_limit_affected")
+    child_in_uc_household = (
+        sim.calculate("universal_credit", map_to="person") > 0
+    )
+    children_in_capped_households = sim.map_result(
+        child_is_affected * child_in_uc_household, "person", "household"
+    )
+    capped_households = children_in_capped_households > 0
+    df["dwp/uc_two_child_limit_affected_child_count"] = (
+        children_in_capped_households
+    )
+    target_names.append("dwp/uc_two_child_limit_affected_child_count")
+    target_values.append(1.6e6)  # DWP statistics for 2024/25
+    # https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-two-children-april-2024
+    df["dwp/uc_two_child_limit_affected_household_count"] = capped_households
+    target_names.append("dwp/uc_two_child_limit_affected_household_count")
+    target_values.append(440e6)  # DWP statistics for 2024/25
+
     combined_targets = pd.concat(
         [
             targets,
