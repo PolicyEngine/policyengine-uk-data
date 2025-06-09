@@ -82,39 +82,60 @@ def create_constituency_target_matrix(
         employment_incomes.employment_income_lower_bound.sort_values().unique()
     ) + [np.inf]
 
-    employment_incomes_all = employment_incomes.groupby("code")[["employment_income_count","employment_income_amount"]].sum().reset_index()
-
+    employment_incomes_all = (
+        employment_incomes.groupby("code")[
+            ["employment_income_count", "employment_income_amount"]
+        ]
+        .sum()
+        .reset_index()
+    )
 
     hmrc_all_count_target = incomes["employment_income_count"].values
-    ons_all_count_target = employment_incomes_all["employment_income_count"].values
+    ons_all_count_target = employment_incomes_all[
+        "employment_income_count"
+    ].values
     count_scaling_factors = hmrc_all_count_target / ons_all_count_target
 
     hmrc_all_amount_target = incomes["employment_income_amount"].values
-    ons_all_amount_target = employment_incomes_all["employment_income_amount"].values
+    ons_all_amount_target = employment_incomes_all[
+        "employment_income_amount"
+    ].values
     amount_scaling_factors = hmrc_all_amount_target / ons_all_amount_target
 
-    print(f"Average count scaling factor: {count_scaling_factors.mean():.1%}")
-    print(f"Average count (HMRC): {hmrc_all_count_target.mean()/1e3:,.0f} (thousands)")
-    print(f"Average count (ONS): {ons_all_count_target.mean()/1e3:,.0f} (thousands)")
-    print(f"Average amount scaling factor: {amount_scaling_factors.mean():.1%}")
-    print(f"Average amount (HMRC): {hmrc_all_amount_target.mean()/1e6:,.0f} (millions)")
-    print(f"Average amount (ONS): {ons_all_amount_target.mean()/1e6:,.0f} (millions)")
-
     for lower_bound, upper_bound in zip(bounds[:-1], bounds[1:]):
-        continue
-        if lower_bound <= 12_570:
+        if (
+            lower_bound <= 15_000
+        ):  # Skip some targets with very small sample sizes
             continue
         if upper_bound >= 200_000:
             continue
-        count_target = employment_incomes[
-            (employment_incomes.employment_income_lower_bound == lower_bound)
-            & (employment_incomes.employment_income_upper_bound == upper_bound)
-        ].employment_income_count.values * count_scaling_factors
+        count_target = (
+            employment_incomes[
+                (
+                    employment_incomes.employment_income_lower_bound
+                    == lower_bound
+                )
+                & (
+                    employment_incomes.employment_income_upper_bound
+                    == upper_bound
+                )
+            ].employment_income_count.values
+            * count_scaling_factors
+        )
 
-        amount_target = employment_incomes[
-            (employment_incomes.employment_income_lower_bound == lower_bound)
-            & (employment_incomes.employment_income_upper_bound == upper_bound)
-        ].employment_income_amount.values * amount_scaling_factors
+        amount_target = (
+            employment_incomes[
+                (
+                    employment_incomes.employment_income_lower_bound
+                    == lower_bound
+                )
+                & (
+                    employment_incomes.employment_income_upper_bound
+                    == upper_bound
+                )
+            ].employment_income_amount.values
+            * amount_scaling_factors
+        )
 
         if count_target.mean() < 200:
             print(
@@ -135,11 +156,6 @@ def create_constituency_target_matrix(
             & (age >= 16)
         )
         band_str = f"{lower_bound}_{upper_bound}"
-        matrix[f"hmrc/employment_income/count/{band_str}"] = sim.map_result(
-            in_bound, "person", "household"
-        )
-        y[f"hmrc/employment_income/count/{band_str}"] = count_target
-
         matrix[f"hmrc/employment_income/amount/{band_str}"] = sim.map_result(
             employment_income * in_bound, "person", "household"
         )
