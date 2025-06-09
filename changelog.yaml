@@ -131,3 +131,8 @@
     fixed:
     - Uprating in child limit target.
   date: 2025-05-27 14:40:08
+- bump: minor
+  changes:
+    fixed:
+    - Inconsistent local area targets removed.
+  date: 2025-06-09 20:25:41
