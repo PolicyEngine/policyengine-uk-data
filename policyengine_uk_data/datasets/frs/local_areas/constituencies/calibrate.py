@@ -46,6 +46,8 @@ def calibrate(
     # Weights - 650 x 100180
     original_weights = np.log(
         sim.calculate("household_weight", 2025).values / COUNT_CONSTITUENCIES
+        + np.random.random(len(sim.calculate("household_weight", 2025).values))
+        * 0.01
     )
     weights = torch.tensor(
         np.ones((COUNT_CONSTITUENCIES, len(original_weights)))
@@ -123,7 +125,7 @@ def calibrate(
         masked_weights[mask] = mean
         return masked_weights
 
-    optimizer = torch.optim.Adam([weights], lr=0.15)
+    optimizer = torch.optim.Adam([weights], lr=1e-1)
 
     desc = range(128) if os.environ.get("DATA_LITE") else range(epochs)
     final_weights = (torch.exp(weights) * r).detach().numpy()
@@ -133,10 +135,8 @@ def calibrate(
         optimizer.zero_grad()
         weights_ = torch.exp(dropout_weights(weights, 0.05)) * r
         l = loss(weights_)
-        l.backward()
-        optimizer.step()
-        c_close = pct_close(weights_, constituency=True, national=False)
-        n_close = pct_close(weights_, constituency=False, national=True)
+        c_close = pct_close(weights_, constituency=True, national=False, t=0.1)
+        n_close = pct_close(weights_, constituency=False, national=True, t=0.1)
         if epoch % 1 == 0:
             if dropout_targets:
                 validation_loss = loss(weights_, validation=True)
@@ -181,6 +181,8 @@ def calibrate(
                     f.create_dataset(
                         "household_weight/2025", data=final_weights.sum(axis=0)
                     )
+        l.backward()
+        optimizer.step()
 
     return final_weights
 
