@@ -46,6 +46,7 @@ def calibrate(
     # Weights - 650 x 100180
     original_weights = np.log(
         sim.calculate("household_weight", 2025).values / COUNT_CONSTITUENCIES
+        + np.random.random(len(sim.calculate("household_weight", 2025).values)) * 0.1
     )
     weights = torch.tensor(
         np.ones((COUNT_CONSTITUENCIES, len(original_weights)))
@@ -89,7 +90,7 @@ def calibrate(
         else:
             mse_n = torch.mean((pred_n / (1 + y_national) - 1) ** 2)
 
-        return mse_c + mse_n
+        return mse_c# + mse_n
 
     def pct_close(w, t=0.1, constituency=True, national=True):
         # Return the percentage of metrics that are within t% of the target

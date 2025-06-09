@@ -40,6 +40,7 @@ def create_constituency_target_matrix(
     INCOME_VARIABLES = [
         "total_income",
         "self_employment_income",
+        "employment_income",
     ]
 
     for income_variable in INCOME_VARIABLES:
@@ -81,9 +82,52 @@ def create_constituency_target_matrix(
         employment_incomes.employment_income_lower_bound.sort_values().unique()
     ) + [np.inf]
 
+    employment_incomes_all = employment_incomes.groupby("code")[["employment_income_count","employment_income_amount"]].sum().reset_index()
+
+
+    hmrc_all_count_target = incomes["employment_income_count"].values
+    ons_all_count_target = employment_incomes_all["employment_income_count"].values
+    count_scaling_factors = hmrc_all_count_target / ons_all_count_target
+
+    hmrc_all_amount_target = incomes["employment_income_amount"].values
+    ons_all_amount_target = employment_incomes_all["employment_income_amount"].values
+    amount_scaling_factors = hmrc_all_amount_target / ons_all_amount_target
+
+    print(f"Average count scaling factor: {count_scaling_factors.mean():.1%}")
+    print(f"Average count (HMRC): {hmrc_all_count_target.mean()/1e3:,.0f} (thousands)")
+    print(f"Average count (ONS): {ons_all_count_target.mean()/1e3:,.0f} (thousands)")
+    print(f"Average amount scaling factor: {amount_scaling_factors.mean():.1%}")
+    print(f"Average amount (HMRC): {hmrc_all_amount_target.mean()/1e6:,.0f} (millions)")
+    print(f"Average amount (ONS): {ons_all_amount_target.mean()/1e6:,.0f} (millions)")
+
     for lower_bound, upper_bound in zip(bounds[:-1], bounds[1:]):
-        if lower_bound < 12_570 or upper_bound > 70_000:
+        continue
+        if lower_bound <= 12_570:
             continue
+        if upper_bound >= 200_000:
+            continue
+        count_target = employment_incomes[
+            (employment_incomes.employment_income_lower_bound == lower_bound)
+            & (employment_incomes.employment_income_upper_bound == upper_bound)
+        ].employment_income_count.values * count_scaling_factors
+
+        amount_target = employment_incomes[
+            (employment_incomes.employment_income_lower_bound == lower_bound)
+            & (employment_incomes.employment_income_upper_bound == upper_bound)
+        ].employment_income_amount.values * amount_scaling_factors
+
+        if count_target.mean() < 200:
+            print(
+                f"Skipping employment income band {lower_bound} to {upper_bound} due to low count target mean: {count_target.mean()}"
+            )
+            continue
+
+        if amount_target.mean() < 200 * 30e3:
+            print(
+                f"Skipping employment income band {lower_bound} to {upper_bound} due to low amount target mean: {amount_target.mean()}"
+            )
+            continue
+
         in_bound = (
             (employment_income >= lower_bound)
             & (employment_income < upper_bound)
@@ -94,18 +138,12 @@ def create_constituency_target_matrix(
         matrix[f"hmrc/employment_income/count/{band_str}"] = sim.map_result(
             in_bound, "person", "household"
         )
-        y[f"hmrc/employment_income/count/{band_str}"] = employment_incomes[
-            (employment_incomes.employment_income_lower_bound == lower_bound)
-            & (employment_incomes.employment_income_upper_bound == upper_bound)
-        ].employment_income_count.values
+        y[f"hmrc/employment_income/count/{band_str}"] = count_target
 
         matrix[f"hmrc/employment_income/amount/{band_str}"] = sim.map_result(
             employment_income * in_bound, "person", "household"
         )
-        y[f"hmrc/employment_income/amount/{band_str}"] = employment_incomes[
-            (employment_incomes.employment_income_lower_bound == lower_bound)
-            & (employment_incomes.employment_income_upper_bound == upper_bound)
-        ].employment_income_amount.values
+        y[f"hmrc/employment_income/amount/{band_str}"] = amount_target
 
     if uprate:
         y = uprate_targets(y, time_period)
@@ -128,7 +166,6 @@ def create_constituency_target_matrix(
         household_countries=sim.calculate("country").values,
         codes=const_2024.code,
     )
-
     return matrix, y, country_mask
 
 
