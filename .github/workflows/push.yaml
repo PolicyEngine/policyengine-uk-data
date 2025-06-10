@@ -70,6 +70,7 @@ jobs:
       - name: Deploy documentation
         uses: JamesIves/github-pages-deploy-action@releases/v4
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           branch: gh-pages
           folder: docs/_build/html
       - name: Publish a git tag
