@@ -169,7 +169,7 @@ def create_target_matrix(
         ].values[0]
         * 1e6
         / local_population_total
-    )
+    ) * 0.9
 
     for pe_region_name, region_name in region_to_target_name_map.items():
         for lower_age in range(0, 90, 10):
