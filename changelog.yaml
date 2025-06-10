@@ -141,3 +141,8 @@
     changed:
     - Tax-benefit targets updated from new DWP forecasts.
   date: 2025-06-10 12:37:20
+- bump: patch
+  changes:
+    fixed:
+    - Documentation deployment.
+  date: 2025-06-10 12:41:53
