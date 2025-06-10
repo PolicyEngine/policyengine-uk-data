@@ -113,7 +113,7 @@ def create_target_matrix(
     df["obr/pension_credit"] = pe("pension_credit")
     df["obr/stamp_duty_land_tax"] = pe("expected_sdlt")
     df["obr/state_pension"] = pe("state_pension")
-    df["obr/tax_credits"] = pe("tax_credits")
+    # df["obr/tax_credits"] = pe("tax_credits")
     df["obr/tv_licence_fee"] = pe("tv_licence")
 
     uc = sim.calculate("universal_credit")
@@ -149,6 +149,38 @@ def create_target_matrix(
         "NORTHERN_IRELAND": "northern_ireland",
     }
     age = sim.calculate("age")
+
+    # Ensure local populations are consistent with national population
+    local_population_total = 0
+    for pe_region_name, region_name in region_to_target_name_map.items():
+        for lower_age in range(0, 90, 10):
+            upper_age = lower_age + 10
+            name = f"ons/{region_name}_age_{lower_age}_{upper_age - 1}"
+            local_population_total += (
+                demographics[demographics.name == name][
+                    str(time_period)
+                ].values[0]
+                * 1e3
+            )
+
+    population_scaling_factor = (
+        demographics[demographics.name == "ons/uk_population"][
+            str(time_period)
+        ].values[0]
+        * 1e6
+        / local_population_total
+    )
+
+    for pe_region_name, region_name in region_to_target_name_map.items():
+        for lower_age in range(0, 90, 10):
+            upper_age = lower_age + 10
+            name = f"ons/{region_name}_age_{lower_age}_{upper_age - 1}"
+            statistics.loc[
+                (statistics.name == name)
+                & (statistics.time_period == int(time_period)),
+                "value",
+            ] *= population_scaling_factor
+
     for pe_region_name, region_name in region_to_target_name_map.items():
         for lower_age in range(0, 90, 10):
             upper_age = lower_age + 10
@@ -159,6 +191,8 @@ def create_target_matrix(
                 & (age < upper_age)
             )
             df[name] = household_from_person(person_in_criteria)
+
+    df["ons/uk_population"] = household_from_person(age >= 0)
 
     targets = (
         statistics[statistics.time_period == int(time_period)]
