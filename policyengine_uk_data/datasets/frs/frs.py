@@ -88,7 +88,7 @@ class FRS(Dataset):
 
         # Domestic rates need to be set for 2025 too
 
-        frs["domestic_rates"] = {2025: np.array(frs["domestic_rates"])}
+        frs["domestic_rates"] = {"2025": np.array(frs["domestic_rates"])}
 
         self.save_dataset(frs)
 
