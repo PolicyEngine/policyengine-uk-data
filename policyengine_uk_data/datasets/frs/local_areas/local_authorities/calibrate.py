@@ -32,8 +32,9 @@ def calibrate():
 
     # Weights - 360 x 100180
     original_weights = np.log(
-        (sim.calculate("household_weight", 2025).values + 1e-3)
-        / count_local_authority
+        sim.calculate("household_weight", 2025).values / count_local_authority
+        + np.random.random(len(sim.calculate("household_weight", 2025).values))
+        * 0.01
     )
     weights = torch.tensor(
         np.ones((count_local_authority, len(original_weights)))
@@ -93,7 +94,7 @@ def calibrate():
         masked_weights[mask] = mean
         return masked_weights
 
-    optimizer = torch.optim.Adam([weights], lr=0.15)
+    optimizer = torch.optim.Adam([weights], lr=1e-1)
 
     desc = range(32) if os.environ.get("DATA_LITE") else range(128)
 
