@@ -1,0 +1,6 @@
+- bump: patch
+  changes:
+    fixed:
+    - Documentation publishes.
+    - Local authority calibration consistent with constituency calibration.
+    - Domestic rates are nonzero.
