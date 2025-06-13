@@ -418,7 +418,7 @@ def add_household_variables(frs: h5py.File, household: DataFrame, year: int):
             ],
         )
         * 52
-    )
+    ).astype(float)
 
 
 def add_market_income(
