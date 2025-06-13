@@ -96,64 +96,63 @@ def create_local_authority_target_matrix(
     amount_scaling_factors = hmrc_all_amount_target / ons_all_amount_target
 
     for lower_bound, upper_bound in zip(bounds[:-1], bounds[1:]):
-            if (
-                lower_bound <= 15_000
-            ):  # Skip some targets with very small sample sizes
-                continue
-            if upper_bound >= 200_000:
-                continue
-            count_target = (
-                employment_incomes[
-                    (
-                        employment_incomes.employment_income_lower_bound
-                        == lower_bound
-                    )
-                    & (
-                        employment_incomes.employment_income_upper_bound
-                        == upper_bound
-                    )
-                ].employment_income_count.values
-                * count_scaling_factors
-            )
-
-            amount_target = (
-                employment_incomes[
-                    (
-                        employment_incomes.employment_income_lower_bound
-                        == lower_bound
-                    )
-                    & (
-                        employment_incomes.employment_income_upper_bound
-                        == upper_bound
-                    )
-                ].employment_income_amount.values
-                * amount_scaling_factors
-            )
-
-            if count_target.mean() < 200:
-                print(
-                    f"Skipping employment income band {lower_bound} to {upper_bound} due to low count target mean: {count_target.mean()}"
+        if (
+            lower_bound <= 15_000
+        ):  # Skip some targets with very small sample sizes
+            continue
+        if upper_bound >= 200_000:
+            continue
+        count_target = (
+            employment_incomes[
+                (
+                    employment_incomes.employment_income_lower_bound
+                    == lower_bound
                 )
-                continue
-
-            if amount_target.mean() < 200 * 30e3:
-                print(
-                    f"Skipping employment income band {lower_bound} to {upper_bound} due to low amount target mean: {amount_target.mean()}"
+                & (
+                    employment_incomes.employment_income_upper_bound
+                    == upper_bound
                 )
-                continue
+            ].employment_income_count.values
+            * count_scaling_factors
+        )
 
-            in_bound = (
-                (employment_income >= lower_bound)
-                & (employment_income < upper_bound)
-                & (employment_income != 0)
-                & (age >= 16)
-            )
-            band_str = f"{lower_bound}_{upper_bound}"
-            matrix[f"hmrc/employment_income/amount/{band_str}"] = sim.map_result(
-                employment_income * in_bound, "person", "household"
-            )
-            y[f"hmrc/employment_income/amount/{band_str}"] = amount_target
+        amount_target = (
+            employment_incomes[
+                (
+                    employment_incomes.employment_income_lower_bound
+                    == lower_bound
+                )
+                & (
+                    employment_incomes.employment_income_upper_bound
+                    == upper_bound
+                )
+            ].employment_income_amount.values
+            * amount_scaling_factors
+        )
 
+        if count_target.mean() < 200:
+            print(
+                f"Skipping employment income band {lower_bound} to {upper_bound} due to low count target mean: {count_target.mean()}"
+            )
+            continue
+
+        if amount_target.mean() < 200 * 30e3:
+            print(
+                f"Skipping employment income band {lower_bound} to {upper_bound} due to low amount target mean: {amount_target.mean()}"
+            )
+            continue
+
+        in_bound = (
+            (employment_income >= lower_bound)
+            & (employment_income < upper_bound)
+            & (employment_income != 0)
+            & (age >= 16)
+        )
+        band_str = f"{lower_bound}_{upper_bound}"
+        matrix[f"hmrc/employment_income/amount/{band_str}"] = sim.map_result(
+            employment_income * in_bound, "person", "household"
+        )
+        y[f"hmrc/employment_income/amount/{band_str}"] = amount_target
 
     if uprate:
         y = uprate_targets(y, time_period)
