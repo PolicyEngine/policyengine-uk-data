@@ -146,3 +146,10 @@
     fixed:
     - Documentation deployment.
   date: 2025-06-10 12:41:53
+- bump: patch
+  changes:
+    fixed:
+    - Documentation publishes.
+    - Local authority calibration consistent with constituency calibration.
+    - Domestic rates are nonzero.
+  date: 2025-06-13 14:51:39
