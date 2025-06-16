@@ -153,3 +153,8 @@
     - Local authority calibration consistent with constituency calibration.
     - Domestic rates are nonzero.
   date: 2025-06-13 14:51:39
+- bump: patch
+  changes:
+    fixed:
+    - Documentation used 2022 datasets rather than 2025.
+  date: 2025-06-16 15:00:47

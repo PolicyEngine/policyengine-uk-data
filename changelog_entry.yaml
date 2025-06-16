@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Documentation used 2022 datasets rather than 2025.
