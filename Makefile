@@ -36,6 +36,7 @@ data:
 	python policyengine_uk_data/datasets/frs/enhanced_frs.py
 	python policyengine_uk_data/datasets/frs/local_areas/constituencies/calibrate.py
 	python policyengine_uk_data/datasets/frs/local_areas/local_authorities/calibrate.py
+	python policyengine_uk_data/datasets/frs/synth_frs.py
 
 efrs:
 	python policyengine_uk_data/datasets/frs/enhanced_frs.py

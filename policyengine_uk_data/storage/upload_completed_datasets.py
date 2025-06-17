@@ -11,7 +11,11 @@ def upload_datasets():
         STORAGE_FOLDER / "local_authority_weights.h5",
     ]
 
-    for file_path in dataset_files:
+    public_dataset_files = [
+        STORAGE_FOLDER / "synthetic_frs_2022_23.h5",
+    ]
+
+    for file_path in dataset_files + public_dataset_files:
         if not file_path.exists():
             raise ValueError(f"File {file_path} does not exist.")
 
@@ -20,6 +24,13 @@ def upload_datasets():
         hf_repo_name="policyengine/policyengine-uk-data-private",
         hf_repo_type="model",
         gcs_bucket_name="policyengine-uk-data-private",
+    )
+
+    upload_data_files(
+        files=public_dataset_files,
+        hf_repo_name="policyengine/policyengine-uk-data-public",
+        hf_repo_type="model",
+        gcs_bucket_name="policyengine-uk-data-public",
     )
 
 

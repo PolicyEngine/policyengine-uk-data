@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    added:
+    - Synthetic (noised and shuffled) FRS data file.
