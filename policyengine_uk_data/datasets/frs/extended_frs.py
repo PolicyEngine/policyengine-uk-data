@@ -45,7 +45,7 @@ class ExtendedFRS(Dataset):
 
         # Add public services
 
-        new_data = add_public_services(new_data, simulation, self.time_period)
+        data = add_public_services(data, simulation, self.time_period)
 
         # Clone the dataset for income imputation
         new_data = {}
