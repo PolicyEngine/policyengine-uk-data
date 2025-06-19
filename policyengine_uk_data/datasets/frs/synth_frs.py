@@ -47,3 +47,8 @@ def create_synth_frs():
             grp = f.create_group(variable)
             for period, values in periods.items():
                 grp.create_dataset(str(period), data=values)
+
+
+if __name__ == "__main__":
+    create_synth_frs()
+    print("Synthetic FRS data created and saved to storage folder.")
