@@ -68,7 +68,7 @@ class ExtendedFRS(Dataset):
                         list(data[variable][time_period]) * 2
                     )
 
-        data = add_public_services(new_data, simulation, self.time_period)
+        new_data = add_public_services(new_data, simulation, self.time_period)
 
         income_inputs = simulation.calculate_dataframe(
             ["age", "gender", "region"]
