@@ -45,6 +45,8 @@ class ExtendedFRS(Dataset):
 
         # Add public services
 
+        new_data = add_public_services(new_data, simulation, self.time_period)
+
         # Clone the dataset for income imputation
         new_data = {}
         for variable in data:
@@ -67,8 +69,6 @@ class ExtendedFRS(Dataset):
                     new_data[variable][time_period] = (
                         list(data[variable][time_period]) * 2
                     )
-
-        new_data = add_public_services(new_data, simulation, self.time_period)
 
         income_inputs = simulation.calculate_dataframe(
             ["age", "gender", "region"]
