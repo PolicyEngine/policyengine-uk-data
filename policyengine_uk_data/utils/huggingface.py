@@ -10,7 +10,7 @@ def download(
         "HUGGING_FACE_TOKEN",
     )
 
-    hf_hub_download(
+    return hf_hub_download(
         repo_id=repo,
         repo_type="model",
         filename=repo_filename,

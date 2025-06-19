@@ -43,6 +43,10 @@ class ExtendedFRS(Dataset):
                 values[values < 0] = 0
                 data[output_variable] = {self.time_period: values}
 
+        # Add public services
+
+        data = add_public_services(data, simulation, self.time_period)
+
         # Clone the dataset for income imputation
         new_data = {}
         for variable in data:
@@ -97,6 +101,86 @@ class ExtendedFRS_2022_23(ExtendedFRS):
     data_format = Dataset.TIME_PERIOD_ARRAYS
     input_frs = FRS_2022_23
     time_period = 2022
+
+
+def create_public_services_inputs(sim) -> pd.DataFrame:
+    variables = [
+        "age",
+        "gender",
+        "household_weight",
+        "region",
+        "household_id",
+        "is_adult",
+        "is_child",
+        "is_SP_age",
+        "dla",
+        "pip",
+        "household_count_people",
+        "hbai_household_net_income",
+        "equiv_hbai_household_net_income",
+    ]
+    education = sim.calculate("current_education")
+
+    df = sim.calculate_dataframe(variables)
+
+    df["count_primary_education"] = education == "PRIMARY"
+    df["count_secondary_education"] = education == "LOWER_SECONDARY"
+    df["count_further_education"] = education.isin(
+        ["UPPER_SECONDARY", "TERTIARY"]
+    )
+    df["hbai_household_net_income"] = (
+        df["hbai_household_net_income"] / df["household_count_people"]
+    )
+    df["equiv_hbai_household_net_income"] = (
+        df["equiv_hbai_household_net_income"] / df["household_count_people"]
+    )
+
+    return pd.DataFrame(df)
+
+
+def add_public_services(data: dict, simulation, time_period: int):
+    """
+    Add public services data to the dataset.
+
+    Args:
+        data (dict): The dataset to which public services data will be added.
+        simulation (Microsimulation): The simulation object used to calculate public services.
+        time_period (int): The time period for which the data is being added.
+
+    Returns:
+        dict: The updated dataset with public services data added.
+    """
+    from uk_public_services_imputation import impute_public_services
+
+    public_service_data = create_public_services_inputs(simulation)
+
+    public_services = impute_public_services(public_service_data)
+    for household_variable in [
+        "dfe_education_spending",
+        "rail_subsidy_spending",
+        "bus_subsidy_spending",
+    ]:
+        data[household_variable] = {
+            time_period: public_services.groupby("household_id")[
+                household_variable
+            ]
+            .sum()
+            .values
+        }
+
+    for person_variable in [
+        "a_and_e_visits",
+        "admitted_patient_visits",
+        "outpatient_visits",
+        "nhs_a_and_e_spending",
+        "nhs_admitted_patient_spending",
+        "nhs_outpatient_spending",
+    ]:
+        data[person_variable] = {
+            time_period: public_services[person_variable].values
+        }
+
+    return data
 
 
 if __name__ == "__main__":
