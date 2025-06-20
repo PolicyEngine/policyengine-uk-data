@@ -34,11 +34,13 @@ def create_constituency_target_matrix(
     sim = Microsimulation(dataset=dataset, reform=reform)
     sim.default_calculation_period = time_period
 
+    national_incomes = pd.read_csv(STORAGE_FOLDER / "incomes_projection.csv")
+    national_incomes = national_incomes[national_incomes.year == 2025]
+
     matrix = pd.DataFrame()
     y = pd.DataFrame()
 
     INCOME_VARIABLES = [
-        "total_income",
         "self_employment_income",
         "employment_income",
     ]
@@ -49,15 +51,31 @@ def create_constituency_target_matrix(
         matrix[f"hmrc/{income_variable}/amount"] = sim.map_result(
             income_values * in_spi_frame, "person", "household"
         )
-        y[f"hmrc/{income_variable}/amount"] = incomes[
-            f"{income_variable}_amount"
-        ].values
+        local_targets = incomes[f"{income_variable}_amount"].values
+        local_target_sum = local_targets.sum()
+        national_target = national_incomes[
+            (national_incomes.total_income_lower_bound == 12_570)
+            & (national_incomes.total_income_upper_bound == np.inf)
+        ][income_variable + "_amount"].iloc[0]
+        national_consistency_adjustment_factor = (
+            national_target / local_target_sum
+        )
+        y[f"hmrc/{income_variable}/amount"] = (
+            local_targets * national_consistency_adjustment_factor
+        )
         matrix[f"hmrc/{income_variable}/count"] = sim.map_result(
             (income_values != 0) * in_spi_frame, "person", "household"
         )
-        y[f"hmrc/{income_variable}/count"] = incomes[
-            f"{income_variable}_count"
-        ].values
+        local_targets = incomes[f"{income_variable}_count"].values
+        local_target_sum = local_targets.sum()
+        national_target = national_incomes[
+            (national_incomes.total_income_lower_bound == 12_570)
+            & (national_incomes.total_income_upper_bound == np.inf)
+        ][income_variable + "_count"].iloc[0]
+        y[f"hmrc/{income_variable}/count"] = (
+            incomes[f"{income_variable}_count"].values
+            * national_consistency_adjustment_factor
+        )
 
     age = sim.calculate("age").values
     for lower_age in range(0, 80, 10):
@@ -82,26 +100,6 @@ def create_constituency_target_matrix(
         employment_incomes.employment_income_lower_bound.sort_values().unique()
     ) + [np.inf]
 
-    employment_incomes_all = (
-        employment_incomes.groupby("code")[
-            ["employment_income_count", "employment_income_amount"]
-        ]
-        .sum()
-        .reset_index()
-    )
-
-    hmrc_all_count_target = incomes["employment_income_count"].values
-    ons_all_count_target = employment_incomes_all[
-        "employment_income_count"
-    ].values
-    count_scaling_factors = hmrc_all_count_target / ons_all_count_target
-
-    hmrc_all_amount_target = incomes["employment_income_amount"].values
-    ons_all_amount_target = employment_incomes_all[
-        "employment_income_amount"
-    ].values
-    amount_scaling_factors = hmrc_all_amount_target / ons_all_amount_target
-
     for lower_bound, upper_bound in zip(bounds[:-1], bounds[1:]):
         if (
             lower_bound <= 15_000
@@ -109,33 +107,24 @@ def create_constituency_target_matrix(
             continue
         if upper_bound >= 200_000:
             continue
-        count_target = (
-            employment_incomes[
-                (
-                    employment_incomes.employment_income_lower_bound
-                    == lower_bound
-                )
-                & (
-                    employment_incomes.employment_income_upper_bound
-                    == upper_bound
-                )
-            ].employment_income_count.values
-            * count_scaling_factors
-        )
 
-        amount_target = (
-            employment_incomes[
-                (
-                    employment_incomes.employment_income_lower_bound
-                    == lower_bound
-                )
-                & (
-                    employment_incomes.employment_income_upper_bound
-                    == upper_bound
-                )
-            ].employment_income_amount.values
-            * amount_scaling_factors
-        )
+        national_data_row = national_incomes[
+            national_incomes.total_income_lower_bound == lower_bound
+        ]["employment_income_amount"].iloc[0]
+
+        count_target = employment_incomes[
+            (employment_incomes.employment_income_lower_bound == lower_bound)
+            & (employment_incomes.employment_income_upper_bound == upper_bound)
+        ].employment_income_count.values
+
+        amount_target = employment_incomes[
+            (employment_incomes.employment_income_lower_bound == lower_bound)
+            & (employment_incomes.employment_income_upper_bound == upper_bound)
+        ].employment_income_amount.values
+
+        sum_of_local_area_values = amount_target.sum()
+
+        adjustment = national_data_row / sum_of_local_area_values
 
         if count_target.mean() < 200:
             print(
@@ -159,7 +148,9 @@ def create_constituency_target_matrix(
         matrix[f"hmrc/employment_income/amount/{band_str}"] = sim.map_result(
             employment_income * in_bound, "person", "household"
         )
-        y[f"hmrc/employment_income/amount/{band_str}"] = amount_target
+        y[f"hmrc/employment_income/amount/{band_str}"] = (
+            amount_target * adjustment
+        )
 
     if uprate:
         y = uprate_targets(y, time_period)
@@ -243,29 +234,7 @@ def uprate_targets(y: pd.DataFrame, target_year: int = 2025) -> pd.DataFrame:
         is_uprated_from_2020
     ]
 
-    rel_change_21_final = (weights_final @ matrix_final) / (
-        weights_21 @ matrix_21
-    ) - 1
-    is_uprated_from_2021 = [
-        col.startswith("hmrc/") for col in matrix_21.columns
-    ]
-    uprating_from_2021 = np.zeros_like(matrix_21.columns, dtype=float)
-    uprating_from_2021[is_uprated_from_2021] = rel_change_21_final[
-        is_uprated_from_2021
-    ]
-
-    rel_change_23_final = (weights_final @ matrix_final) / (
-        weights_23 @ matrix_23
-    ) - 1
-    is_uprated_from_2023 = [
-        col.startswith("hmrc/") for col in matrix_23.columns
-    ]
-    uprating_from_2023 = np.zeros_like(matrix_23.columns, dtype=float)
-    uprating_from_2023[is_uprated_from_2023] = rel_change_23_final[
-        is_uprated_from_2023
-    ]
-
-    uprating = uprating_from_2020 + uprating_from_2021 + uprating_from_2023
+    uprating = uprating_from_2020
     y = y * (1 + uprating)
 
     return y
