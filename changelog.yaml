@@ -163,3 +163,8 @@
     added:
     - Public service imputations.
   date: 2025-06-19 21:08:19
+- bump: patch
+  changes:
+    added:
+    - Calibration log exporting.
+  date: 2025-06-24 10:48:32
