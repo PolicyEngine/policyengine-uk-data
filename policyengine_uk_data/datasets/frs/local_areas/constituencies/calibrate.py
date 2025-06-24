@@ -160,6 +160,13 @@ def calibrate(
                 excluded_training_targets,
             )
             performance_step["epoch"] = epoch
+            performance_step["loss"] = performance_step.rel_abs_error**2
+            performance_step["target_name"] = [
+                f"{area}/{metric}"
+                for area, metric in zip(
+                    performance_step.name, performance_step.metric
+                )
+            ]
             performance = pd.concat(
                 [performance, performance_step], ignore_index=True
             )
