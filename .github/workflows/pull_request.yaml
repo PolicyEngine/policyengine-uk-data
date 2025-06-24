@@ -56,7 +56,7 @@ jobs:
       - name: Save calibration log
         uses: actions/upload-artifact@v4
         with:
-          name: training_log
+          name: calibration_log
           path: calibration_log.csv
       - name: Run tests
         run: pytest
