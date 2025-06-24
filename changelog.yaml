@@ -173,3 +173,8 @@
     added:
     - Calibration improvements.
   date: 2025-06-24 11:18:42
+- bump: patch
+  changes:
+    fixed:
+    - Name corrected in calibration build artifact.
+  date: 2025-06-24 11:39:46
