@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Missing columns in the calibration log.

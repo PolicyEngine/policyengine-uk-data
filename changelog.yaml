@@ -178,3 +178,8 @@
     fixed:
     - Name corrected in calibration build artifact.
   date: 2025-06-24 11:39:46
+- bump: patch
+  changes:
+    fixed:
+    - Missing columns in the calibration log.
+  date: 2025-06-24 13:14:48
