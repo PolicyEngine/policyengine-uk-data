@@ -28,7 +28,7 @@ FOLDER = Path(__file__).parent
 def calibrate(
     epochs: int = 128,
     excluded_training_targets=[],
-    log_csv="calibration_log_constituencies.csv",
+    log_csv="calibration_log.csv",
     overwrite_efrs=True,
 ):
     matrix_, y_, country_mask = create_constituency_target_matrix(
