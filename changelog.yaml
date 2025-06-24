@@ -168,3 +168,8 @@
     added:
     - Calibration log exporting.
   date: 2025-06-24 10:48:32
+- bump: patch
+  changes:
+    added:
+    - Calibration improvements.
+  date: 2025-06-24 11:18:42
