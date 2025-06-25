@@ -446,7 +446,7 @@ def add_market_income(
         household (DataFrame)
         oddjob (DataFrame)
     """
-    frs["employment_income"] = 0# person.INEARNS * 52
+    frs["employment_income"] = person.INEARNS * 0
 
     pension_payment = sum_to_entity(
         pension.PENPAY * (pension.PENPAY > 0), pension.person_id, person.index
