@@ -58,7 +58,7 @@ def generate_spi_table(spi: pd.DataFrame):
 
     spi["employment_income"] = spi[["PAY", "EPB", "TAXTERM"]].sum(axis=1)
 
-    spi = spi
+    spi = spi.sample(100_000)
 
     return spi
 
