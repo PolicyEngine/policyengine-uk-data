@@ -289,6 +289,25 @@ def create_target_matrix(
     target_names.append("dwp/uc_two_child_limit_affected_household_count")
     target_values.append(440e3 * UPRATING_24_25)  # DWP statistics for 2024/25
 
+    # PIP daily living standard and enhanced claimant counts
+    # https://www.disabilityrightsuk.org/news/90-pip-standard-daily-living-component-recipients-would-fail-new-green-paper-test?srsltid=AfmBOoqSq3cQwtZnQBe-qLN7PT1mUBVtZ0ZINYtoG5bG5O9_ObQ90Y0n
+
+    pip_dl_category = sim.calculate("pip_dl_category")
+    on_standard = sim.map_result(
+        pip_dl_category == "STANDARD", "person", "household"
+    )
+    on_enhanced = sim.map_result(
+        pip_dl_category == "ENHANCED", "person", "household"
+    )
+
+    df["dwp/pip_dl_standard_claimants"] = on_standard
+    target_names.append("dwp/pip_dl_standard_claimants")
+    target_values.append(1_283_000)
+
+    df["dwp/pip_dl_enhanced_claimants"] = on_enhanced
+    target_names.append("dwp/pip_dl_enhanced_claimants")
+    target_values.append(1_608_000)
+
     combined_targets = pd.concat(
         [
             targets,
