@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Use all examples in the SPI to train income models, not just rich ones.
