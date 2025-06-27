@@ -183,3 +183,8 @@
     fixed:
     - Missing columns in the calibration log.
   date: 2025-06-24 13:14:48
+- bump: minor
+  changes:
+    added:
+    - PIP calibration.
+  date: 2025-06-27 09:15:13
