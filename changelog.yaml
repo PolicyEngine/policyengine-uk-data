@@ -188,3 +188,8 @@
     added:
     - PIP calibration.
   date: 2025-06-27 09:15:13
+- bump: patch
+  changes:
+    added:
+    - Free school meals
+  date: 2025-07-09 14:19:38
