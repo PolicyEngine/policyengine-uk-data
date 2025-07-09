@@ -750,6 +750,10 @@ def add_benefit_income(
         0,
     )
 
+    frs["free_school_breakfasts"] = person.FSBVAL
+    frs["free_school_fruit_veg"] = person.FSFVVAL
+    frs["free_school_meals"] = person.FSMVAL
+
 
 def add_expenses(
     frs: h5py.File,
