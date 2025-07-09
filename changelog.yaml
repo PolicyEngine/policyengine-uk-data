@@ -193,3 +193,8 @@
     added:
     - Free school meals
   date: 2025-07-09 14:19:38
+- bump: patch
+  changes:
+    fixed:
+    - Free school meals magnitude error.
+  date: 2025-07-09 15:25:53
