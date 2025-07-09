@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Free school meals magnitude error.

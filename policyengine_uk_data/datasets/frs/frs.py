@@ -750,9 +750,11 @@ def add_benefit_income(
         0,
     )
 
-    frs["free_school_breakfasts"] = person.FSBVAL
-    frs["free_school_fruit_veg"] = person.FSFVVAL
-    frs["free_school_meals"] = person.FSMVAL
+    WEEKS_IN_YEAR = 52
+
+    frs["free_school_breakfasts"] = person.FSBVAL * WEEKS_IN_YEAR
+    frs["free_school_fruit_veg"] = person.FSFVVAL * WEEKS_IN_YEAR
+    frs["free_school_meals"] = person.FSMVAL * WEEKS_IN_YEAR
 
 
 def add_expenses(
