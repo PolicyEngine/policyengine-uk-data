@@ -126,6 +126,7 @@ def impute_capital_gains(dataset, time_period: int):
         lower = row.minimum_total_income
         upper = row.maximum_total_income
         ti_in_range = (ti >= lower) * (ti < upper)
+        print(has_cg.mean(), ti_in_range.mean())
         in_target_range = has_cg * ti_in_range
         quantiles = np.random.random(int(in_target_range.sum()))
         pred_capital_gains = spline(quantiles)
