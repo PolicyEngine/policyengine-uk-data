@@ -725,6 +725,10 @@ def add_benefit_income(
         np.array(frs["winter_fuel_allowance_reported"]) / 52
     )  # This is not weeklyised by default (paid once per year)
 
+    frs["ssmg_reported"] = (
+        np.array(frs["ssmg_reported"]) / 52
+    )
+
     frs["statutory_sick_pay"] = person.SSPADJ * 52
     frs["statutory_maternity_pay"] = person.SMPADJ * 52
 
