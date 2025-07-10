@@ -46,6 +46,7 @@ class FRS(Dataset):
             "maint",
             "mortgage",
             "penprov",
+            "extchild",
         )
         (
             adult,
@@ -61,6 +62,7 @@ class FRS(Dataset):
             maintenance,
             mortgage,
             pen_prov,
+            extchild,
         ) = [dwp_frs_files[table] for table in TABLES]
         dwp_frs_files.close()
 
@@ -82,6 +84,7 @@ class FRS(Dataset):
             mortgage,
             childcare,
             pen_prov,
+            extchild,
         )
         for variable in frs:
             frs[variable] = {self.dwp_frs.time_period: np.array(frs[variable])}
@@ -752,6 +755,8 @@ def add_benefit_income(
         0,
     )
 
+    frs["healthy_start_vouchers"] = person.HEARTVAL * 52
+
     WEEKS_IN_YEAR = 52
 
     frs["free_school_breakfasts"] = person.FSBVAL * WEEKS_IN_YEAR
@@ -768,6 +773,7 @@ def add_expenses(
     mortgage: DataFrame,
     childcare: DataFrame,
     pen_prov: DataFrame,
+    extchild: DataFrame,
 ):
     """Adds expense variables
 
@@ -848,6 +854,7 @@ def add_expenses(
         ).sum()
         * 52
     )
+    frs["structural_insurance_payments"] = household.STRUINS * 52
     frs["water_and_sewerage_charges"] = (
         pd.Series(
             np.where(
@@ -857,6 +864,12 @@ def add_expenses(
             )
         ).fillna(0)
         * 52
+    )
+
+    frs["external_child_payments"] = sum_to_entity(
+        extchild.NHHAMT * 52,
+        extchild.household_id,
+        household.index,
     )
 
 
