@@ -203,3 +203,10 @@
     fixed:
     - SSMG uprating.
   date: 2025-07-10 12:41:13
+- bump: minor
+  changes:
+    added:
+    - Structural insurance payments
+    - External child payments
+    - Healthy Start payments
+  date: 2025-07-10 16:01:46
