@@ -573,6 +573,8 @@ def add_market_income(
 
     frs["lump_sum_income"] = person.REDAMT
 
+    frs["student_loan_repayments"] = person.SLREPAMT * 52
+
 
 def sum_from_positive_fields(
     table: pd.DataFrame, fields: List[str]
