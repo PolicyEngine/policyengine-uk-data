@@ -718,7 +718,7 @@ def add_benefit_income(
             benefits.person_id,
             person.index,
         )
-        * 52
+        * 52 
     )
 
     frs["winter_fuel_allowance_reported"] = (
