@@ -126,7 +126,7 @@ def impute_capital_gains(dataset, time_period: int):
         lower = row.minimum_total_income
         upper = row.maximum_total_income
         ti_in_range = (ti >= lower) * (ti < upper)
-        in_target_range = has_cg * ti_in_range
+        in_target_range = has_cg * ti_in_range > 0
         print(in_target_range.any(), in_target_range.sum())
         if not in_target_range.any():
             print(
