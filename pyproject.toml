@@ -22,6 +22,7 @@ dependencies = [
     "google-cloud-storage",
     "google-auth",
     "uk-public-services-imputation",
+    "scipy==1.12.0",
 ]
 
 [project.optional-dependencies]
