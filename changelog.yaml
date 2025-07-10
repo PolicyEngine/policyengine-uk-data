@@ -198,3 +198,8 @@
     fixed:
     - Free school meals magnitude error.
   date: 2025-07-09 15:25:53
+- bump: patch
+  changes:
+    fixed:
+    - SSMG uprating.
+  date: 2025-07-10 12:41:13
