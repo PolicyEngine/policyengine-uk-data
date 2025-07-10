@@ -127,6 +127,11 @@ def impute_capital_gains(dataset, time_period: int):
         upper = row.maximum_total_income
         ti_in_range = (ti >= lower) * (ti < upper)
         in_target_range = has_cg * ti_in_range
+        if not in_target_range.any():
+            print(
+                f"Skipping capital gains for income range {lower} to {upper}"
+            )
+            continue
         quantiles = np.random.random(int(in_target_range.sum()))
         pred_capital_gains = spline(quantiles)
         new_cg[in_target_range] = pred_capital_gains
