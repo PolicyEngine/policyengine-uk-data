@@ -128,8 +128,10 @@ def impute_capital_gains(dataset, time_period: int):
         ti_in_range = (ti >= lower) * (ti < upper)
         print(has_cg.mean(), ti_in_range.mean())
         in_target_range = has_cg * ti_in_range
+        print(in_target_range.sum(), in_target_range.mean())
         quantiles = np.random.random(int(in_target_range.sum()))
         pred_capital_gains = spline(quantiles)
+        print(pred_capital_gains)
         new_cg[in_target_range] = pred_capital_gains
 
     return new_cg, new_household_weight
