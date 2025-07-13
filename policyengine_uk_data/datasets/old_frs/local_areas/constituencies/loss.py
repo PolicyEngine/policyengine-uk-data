@@ -12,7 +12,7 @@ from policyengine_uk_data.utils.loss import (
     create_target_matrix as create_national_target_matrix,
 )
 from policyengine_uk_data.storage import STORAGE_FOLDER
-from policyengine_uk_data.datasets.frs.local_areas.constituencies.boundary_changes.mapping_matrix import (
+from policyengine_uk_data.datasets.old_frs.local_areas.constituencies.boundary_changes.mapping_matrix import (
     mapping_matrix,
 )
 
@@ -202,7 +202,7 @@ def create_country_mask(
 def uprate_targets(y: pd.DataFrame, target_year: int = 2025) -> pd.DataFrame:
     # Uprate age targets from 2020, taxable income targets from 2021, employment income targets from 2023.
     # Use PolicyEngine uprating factors.
-    from policyengine_uk_data.datasets.frs.frs import FRS_2020_21
+    from policyengine_uk_data.datasets.old_frs.frs import FRS_2020_21
 
     sim = Microsimulation(dataset=FRS_2020_21)
     matrix_20, y_20, _ = create_constituency_target_matrix(

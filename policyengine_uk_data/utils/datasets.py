@@ -23,7 +23,9 @@ def sum_to_entity(
     Returns:
         pd.Series: A value for each person.
     """
-    return values.groupby(foreign_key).sum().reindex(primary_key).fillna(0).values
+    return (
+        values.groupby(foreign_key).sum().reindex(primary_key).fillna(0).values
+    )
 
 
 def categorical(
@@ -40,10 +42,7 @@ def categorical(
     Returns:
         pd.Series: The mapped values.
     """
-    return (
-        values.fillna(default)
-        .map({i: j for i, j in zip(left, right)})
-    )
+    return values.fillna(default).map({i: j for i, j in zip(left, right)})
 
 
 def sum_from_positive_fields(

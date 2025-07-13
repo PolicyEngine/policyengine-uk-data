@@ -3,6 +3,9 @@ from pathlib import Path
 import numpy as np
 import yaml
 from policyengine_uk_data.storage import STORAGE_FOLDER
+from policyengine_uk.data import UKDataset
+from policyengine_uk import Microsimulation
+from policyengine_uk_data.utils.stack import stack_datasets
 
 LCFS_TAB_FOLDER = STORAGE_FOLDER / "lcfs_2021_22"
 
@@ -114,7 +117,9 @@ def uprate_lcfs_table(
     household["petrol_spending"] *= fuel_uprating
     household["diesel_spending"] *= fuel_uprating
 
-    cpi = system.parameters.gov.obr.consumer_price_index
+    cpi = (
+        system.parameters.gov.economic_asumptions.indices.obr.consumer_price_index
+    )
     cpi_uprating = cpi(time_period) / cpi(start_period)
 
     for variable in IMPUTATIONS:
@@ -144,15 +149,34 @@ def save_imputation_models():
     consumption.save(
         STORAGE_FOLDER / "consumption.pkl",
     )
+    return consumption
 
 
 def create_consumption_model(overwrite_existing: bool = False):
+    from policyengine_uk_data.utils.qrf import QRF
+
     if (
         STORAGE_FOLDER / "consumption.pkl"
     ).exists() and not overwrite_existing:
-        return
-    save_imputation_models()
+        return QRF(file_path=STORAGE_FOLDER / "consumption.pkl")
+    return save_imputation_models()
 
 
-if __name__ == "__main__":
-    create_consumption_model()
+def impute_consumption(dataset: UKDataset) -> UKDataset:
+    # Impute wealth, assuming same time period as trained data
+    dataset = dataset.copy()
+
+    model = create_consumption_model()
+    sim = Microsimulation(dataset=dataset)
+    predictors = model.input_columns
+
+    input_df = sim.calculate_dataframe(predictors, map_to="household")
+
+    output_df = model.predict(input_df)
+
+    for column in output_df.columns:
+        dataset.household[column] = output_df[column].values
+
+    dataset.validate()
+
+    return dataset

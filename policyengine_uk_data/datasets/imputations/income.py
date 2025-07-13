@@ -2,6 +2,9 @@ import pandas as pd
 from pathlib import Path
 import numpy as np
 from policyengine_uk_data.storage import STORAGE_FOLDER
+from policyengine_uk.data import UKDataset
+from policyengine_uk import Microsimulation
+from policyengine_uk_data.utils.stack import stack_datasets
 
 SPI_TAB_FOLDER = STORAGE_FOLDER / "spi_2020_21"
 SPI_RENAMES = dict(
@@ -58,7 +61,7 @@ def generate_spi_table(spi: pd.DataFrame):
 
     spi["employment_income"] = spi[["PAY", "EPB", "TAXTERM"]].sum(axis=1)
 
-    spi = spi[spi.TI > 500_000]
+    spi = spi[spi.TI > 100_000]
 
     return spi
 
@@ -90,13 +93,37 @@ def save_imputation_models():
     spi = spi[PREDICTORS + IMPUTATIONS]
     income.fit(spi[PREDICTORS], spi[IMPUTATIONS])
     income.save(STORAGE_FOLDER / "income.pkl")
+    return income
 
 
 def create_income_model(overwrite_existing: bool = False):
+    from policyengine_uk_data.utils.qrf import QRF
+
     if (STORAGE_FOLDER / "income.pkl").exists() and not overwrite_existing:
-        return
-    save_imputation_models()
+        return QRF(file_path=STORAGE_FOLDER / "income.pkl")
+    return save_imputation_models()
 
 
-if __name__ == "__main__":
-    create_income_model()
+def impute_income(dataset: UKDataset) -> UKDataset:
+    # Impute wealth, assuming same time period as trained data
+    dataset = dataset.copy()
+    zero_weight_copy = dataset.copy()
+    zero_weight_copy.household.household_weight = 0
+    data = stack_datasets(
+        dataset,
+        zero_weight_copy,
+    )
+
+    model = create_income_model()
+    sim = Microsimulation(dataset=data)
+
+    input_df = sim.calculate_dataframe(["age", "gender", "region"])
+
+    output_df = model.predict(input_df)
+
+    for column in output_df.columns:
+        data.person[column] = output_df[column].values
+
+    dataset.validate()
+
+    return data

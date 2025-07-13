@@ -8,7 +8,7 @@ import os
 from policyengine_uk_data.storage import STORAGE_FOLDER
 
 
-from policyengine_uk_data.datasets.frs.local_areas.local_authorities.loss import (
+from policyengine_uk_data.datasets.old_frs.local_areas.local_authorities.loss import (
     create_local_authority_target_matrix,
     create_national_target_matrix,
 )

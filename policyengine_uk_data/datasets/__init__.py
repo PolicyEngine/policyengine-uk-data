@@ -1,4 +1,4 @@
-from .frs import *
+from .old_frs import *
 from .spi import *
 
 DATASETS = [

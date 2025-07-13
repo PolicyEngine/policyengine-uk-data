@@ -4,7 +4,10 @@ import pandas as pd
 import numpy as np
 from policyengine_uk.data import UKDataset
 
-def create_spi(spi_data_file_path: str, fiscal_year: int, output_file_path: str):
+
+def create_spi(
+    spi_data_file_path: str, fiscal_year: int, output_file_path: str
+) -> UKDataset:
     df = pd.read_csv(spi_data_file_path, delimiter="\t")
 
     person = pd.DataFrame()
@@ -102,10 +105,12 @@ def create_spi(spi_data_file_path: str, fiscal_year: int, output_file_path: str)
         household=household,
         fiscal_year=fiscal_year,
     )
-    dataset.save(output_file_path)
+    return dataset
+
 
 if __name__ == "__main__":
     spi_data_file_path = STORAGE_FOLDER / "spi_2020_21" / "put2021uk.tab"
     fiscal_year = 2020
     output_file_path = STORAGE_FOLDER / "spi_2020.h5"
-    create_spi(spi_data_file_path, fiscal_year, output_file_path)
+    spi = create_spi(spi_data_file_path, fiscal_year)
+    spi.save(output_file_path)

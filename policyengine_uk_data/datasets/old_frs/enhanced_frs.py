@@ -1,12 +1,14 @@
 from policyengine_core.data import Dataset
-from policyengine_uk_data.utils.imputations import *
+from policyengine_uk_data.datasets.imputations import *
 from policyengine_uk_data.storage import STORAGE_FOLDER
-from policyengine_uk_data.datasets.frs.extended_frs import ExtendedFRS_2022_23
-from policyengine_uk_data.datasets.frs.frs import FRS_2022_23
+from policyengine_uk_data.datasets.old_frs.extended_frs import (
+    ExtendedFRS_2022_23,
+)
+from policyengine_uk_data.datasets.old_frs.frs import FRS_2022_23
 from policyengine_uk_data.utils.loss import create_target_matrix
 
-from policyengine_uk_data.utils.imputations.capital_gains import (
-    impute_cg_to_dataset,
+from policyengine_uk_data.datasets.imputations.capital_gains import (
+    impute_cg_to_doubled_dataset,
 )
 from policyengine_uk_data.utils.reweight import reweight
 
@@ -24,7 +26,7 @@ class EnhancedFRS(Dataset):
 
         # Capital gains imputation
 
-        impute_cg_to_dataset(self)
+        impute_cg_to_doubled_dataset(self)
         data = self.load_dataset()
 
         self.add_random_variables(data)

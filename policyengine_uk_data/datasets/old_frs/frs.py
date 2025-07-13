@@ -14,7 +14,7 @@ import numpy as np
 from numpy import maximum as max_, where
 from typing import Type
 import h5py
-from policyengine_uk_data.datasets.frs.dwp_frs import *
+from policyengine_uk_data.datasets.old_frs.dwp_frs import *
 
 
 class FRS(Dataset):

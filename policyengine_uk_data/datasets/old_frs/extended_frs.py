@@ -1,8 +1,8 @@
 from policyengine_core.data import Dataset
-from policyengine_uk_data.utils.imputations import *
+from policyengine_uk_data.datasets.imputations import *
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from typing import Type
-from policyengine_uk_data.datasets.frs.frs import FRS_2022_23
+from policyengine_uk_data.datasets.old_frs.frs import FRS_2022_23
 from tqdm import tqdm
 
 

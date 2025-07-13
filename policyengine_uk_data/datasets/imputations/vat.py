@@ -2,6 +2,8 @@ import pandas as pd
 from pathlib import Path
 import numpy as np
 from policyengine_uk_data.storage import STORAGE_FOLDER
+from policyengine_uk.data import UKDataset
+from policyengine_uk import Microsimulation
 
 ETB_TAB_FOLDER = STORAGE_FOLDER / "etb_1977_21"
 
@@ -41,13 +43,32 @@ def save_imputation_models():
     etb = etb[PREDICTORS + IMPUTATIONS]
     vat.fit(etb[PREDICTORS], etb[IMPUTATIONS])
     vat.save(STORAGE_FOLDER / "vat.pkl")
+    return vat
 
 
 def create_vat_model(overwrite_existing: bool = False):
+    from policyengine_uk_data.utils.qrf import QRF
+
     if (STORAGE_FOLDER / "vat.pkl").exists() and not overwrite_existing:
-        return
-    save_imputation_models()
+        return QRF(file_path=STORAGE_FOLDER / "vat.pkl")
+    return save_imputation_models()
 
 
-if __name__ == "__main__":
-    create_vat_model()
+def impute_vat(dataset: UKDataset) -> UKDataset:
+    # Impute wealth, assuming same time period as trained data
+    dataset = dataset.copy()
+
+    model = create_vat_model()
+    sim = Microsimulation(dataset=dataset)
+    predictors = model.input_columns
+
+    input_df = sim.calculate_dataframe(predictors, map_to="household")
+
+    output_df = model.predict(input_df)
+
+    for column in output_df.columns:
+        dataset.household[column] = output_df[column].values
+
+    dataset.validate()
+
+    return dataset
