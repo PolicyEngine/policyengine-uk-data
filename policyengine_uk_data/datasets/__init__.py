@@ -7,5 +7,4 @@ DATASETS = [
     FRS_2022_23,
     ReweightedFRS_2022_23,
     EnhancedFRS_2022_23,
-    SPI_2020_21,
 ]
