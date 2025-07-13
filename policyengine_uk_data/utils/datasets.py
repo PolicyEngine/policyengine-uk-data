@@ -12,7 +12,7 @@ warnings.filterwarnings("ignore")
 
 def sum_to_entity(
     values: pd.Series, foreign_key: pd.Series, primary_key
-) -> pd.Series:
+) -> np.ndarray:
     """Sums values by joining foreign and primary keys.
 
     Args:
@@ -23,7 +23,7 @@ def sum_to_entity(
     Returns:
         pd.Series: A value for each person.
     """
-    return values.groupby(foreign_key).sum().reindex(primary_key).fillna(0)
+    return values.groupby(foreign_key).sum().reindex(primary_key).fillna(0).values
 
 
 def categorical(
@@ -43,7 +43,6 @@ def categorical(
     return (
         values.fillna(default)
         .map({i: j for i, j in zip(left, right)})
-        .astype("S")
     )
 
 
