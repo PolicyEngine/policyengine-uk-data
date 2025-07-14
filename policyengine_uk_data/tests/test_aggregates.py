@@ -18,5 +18,5 @@ def test_aggregates(variable: str):
     estimate = sim.calculate(variable, map_to="household", period=2025).sum()
 
     assert (
-        abs(estimate / AGGREGATES[variable] - 1) < 0.7
+        abs(estimate / AGGREGATES[variable] - 1) < 0.5
     ), f"Expected {AGGREGATES[variable]/1e9:.1f} billion for {variable}, got {estimate/1e9:.1f} billion (relative error = {abs(estimate / AGGREGATES[variable] - 1):.1%})."

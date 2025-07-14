@@ -187,7 +187,7 @@ def calibrate(
                         del f["household_weight/2023"]
                     f.create_dataset(
                         "household_weight/2023",
-                        data=final_weights.sum(axis=0) / 1.03,
+                        data=final_weights.sum(axis=0) / 1.021,
                     )
         l.backward()
         optimizer.step()
