@@ -70,8 +70,6 @@ jobs:
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
       - name: Publish a git tag
         run: ".github/publish-git-tag.sh || true"
-      - name: Remove .whl files
-        run: rm dist/*.whl
       - name: Publish a Python distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:

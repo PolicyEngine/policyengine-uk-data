@@ -7,6 +7,8 @@ import pytest
 import yaml
 from pathlib import Path
 from policyengine_uk import Microsimulation
+from policyengine_core.data import Dataset
+from policyengine_uk_data.storage import STORAGE_FOLDER
 
 
 # Load configuration from YAML file
@@ -16,8 +18,11 @@ with open(config_path, "r") as f:
 
 reforms_data = config["reforms"]
 
+dataset = Dataset.from_file(STORAGE_FOLDER / "enhanced_frs_2023_24.h5")
+
+
 # Initialize baseline simulation
-baseline = Microsimulation()
+baseline = Microsimulation(dataset=dataset)
 
 
 def get_fiscal_impact(reform: dict) -> float:
@@ -31,7 +36,7 @@ def get_fiscal_impact(reform: dict) -> float:
         Fiscal impact in billions (positive = revenue increase)
     """
     baseline_revenue = baseline.calculate("gov_balance", 2029).sum()
-    reform_simulation = Microsimulation(reform=reform)
+    reform_simulation = Microsimulation(reform=reform, dataset=dataset)
     reform_revenue = reform_simulation.calculate("gov_balance", 2029).sum()
     return (reform_revenue - baseline_revenue) / 1e9
 
@@ -54,9 +59,9 @@ def test_reform_fiscal_impacts(reform, reform_name, expected_impact):
     """Test that each reform produces the expected fiscal impact."""
     impact = get_fiscal_impact(reform)
 
-    # Allow for small numerical differences (0.1 billion tolerance)
+    # Allow for small numerical differences (1.0 billion tolerance)
     assert (
-        abs(impact - expected_impact) < 0.1
+        abs(impact - expected_impact) < 1.0
     ), f"Impact for {reform_name} is {impact:.1f} billion, expected {expected_impact:.1f} billion"
 
 

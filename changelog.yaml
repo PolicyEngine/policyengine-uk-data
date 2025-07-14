@@ -210,3 +210,8 @@
     - External child payments
     - Healthy Start payments
   date: 2025-07-10 16:01:46
+- bump: patch
+  changes:
+    fixed:
+    - Added calibrated weights from 2022.
+  date: 2025-07-14 15:21:27

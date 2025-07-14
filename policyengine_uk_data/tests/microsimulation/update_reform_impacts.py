@@ -127,7 +127,7 @@ def main():
         "--config",
         type=Path,
         default=Path(
-            "policyengine_uk/tests/microsimulation/reforms_config.yaml"
+            "policyengine_uk_data/tests/microsimulation/reforms_config.yaml"
         ),
         help="Path to the reforms configuration file (default: reforms_config.yaml)",
     )
