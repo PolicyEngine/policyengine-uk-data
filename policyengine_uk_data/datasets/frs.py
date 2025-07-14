@@ -684,6 +684,38 @@ def create_frs(
 
     pe_household["brma"] = brmas
 
+    parameters = sim.tax_benefit_system.parameters
+    benefit = parameters(year).gov.dwp
+
+    pe_person["is_disabled_for_benefits"] = (
+        pe_person.dla_sc_reported
+        + pe_person.dla_m_reported
+        + pe_person.pip_m_reported
+        + pe_person.pip_dl_reported
+    ) > 0
+
+    THRESHOLD_SAFETY_GAP = 1 * WEEKS_IN_YEAR
+
+    pe_person["is_enhanced_disabled_for_benefits"] = (
+        pe_person.dla_sc_reported
+        > benefit.dla.self_care.higher * WEEKS_IN_YEAR - THRESHOLD_SAFETY_GAP
+    )
+
+    # Child Tax Credit Regulations 2002 s. 8
+    paragraph_3 = (
+        pe_person.dla_sc_reported
+        >= benefit.dla.self_care.higher * WEEKS_IN_YEAR - THRESHOLD_SAFETY_GAP
+    )
+    paragraph_4 = (
+        pe_person.pip_dl_reported
+        >= benefit.pip.daily_living.enhanced * WEEKS_IN_YEAR
+        - THRESHOLD_SAFETY_GAP
+    )
+    paragraph_5 = pe_person.afcs_reported > 0
+    pe_person["is_severely_disabled_for_benefits"] = (
+        paragraph_3 | paragraph_4 | paragraph_5
+    )
+
     dataset = UKDataset(
         person=pe_person,
         benunit=pe_benunit,
