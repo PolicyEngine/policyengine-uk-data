@@ -183,7 +183,7 @@ def calibrate(
         l.backward()
         optimizer.step()
 
-    return final_weights
+    return dataset
 
 
 def get_performance(weights, m_c, y_c, m_n, y_n, excluded_targets):

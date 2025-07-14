@@ -124,6 +124,8 @@ def calibrate(
                 f.create_dataset("2025", data=final_weights)
 
         dataset.household.household_weight = final_weights.sum(axis=0)
+    
+    return dataset
 
 
 if __name__ == "__main__":
