@@ -41,6 +41,9 @@ def create_target_matrix(
 
     from policyengine_uk import Microsimulation
 
+    if time_period is None:
+        time_period = dataset.time_period
+
     sim = Microsimulation(dataset=dataset, reform=reform)
     sim.default_calculation_period = time_period
 

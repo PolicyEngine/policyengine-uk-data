@@ -20,9 +20,7 @@ frs.save(
 
 frs = UKDataset(str(STORAGE_FOLDER / "frs_2022.h5"))
 
-logging.info(
-    f"FRS dataset created and saved to {STORAGE_FOLDER / 'frs_2022.h5'}"
-)
+logging.info(f"FRS dataset created and saved.")
 
 # Add imputations of consumption, wealth, VAT, income and capital gains
 
@@ -45,7 +43,11 @@ frs = impute_income(frs)
 logging.info("Imputing capital gains")
 frs = impute_capital_gains(frs)
 
-frs.save(STORAGE_FOLDER / "extended_frs_2022.h5")
-logging.info(
-    f"Extended FRS dataset created and saved to {STORAGE_FOLDER / 'extended_frs_2022.h5'}"
+from policyengine_uk_data.datasets.local_areas.constituencies.calibrate import (
+    calibrate,
 )
+
+frs_calibrated = calibrate(frs)
+
+frs.save(STORAGE_FOLDER / "enhanced_frs_2022.h5")
+logging.info(f"Extended FRS dataset created and saved.")

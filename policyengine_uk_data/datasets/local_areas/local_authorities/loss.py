@@ -8,16 +8,19 @@ from policyengine_uk_data.utils.loss import (
     create_target_matrix as create_national_target_matrix,
 )
 from policyengine_uk_data.storage import STORAGE_FOLDER
+from policyengine_uk.data import UKDataset
 
 FOLDER = Path(__file__).parent
 
 
 def create_local_authority_target_matrix(
-    dataset: str = "enhanced_frs_2022_23",
-    time_period: int = 2025,
+    dataset: UKDataset,
+    time_period: int = None,
     reform=None,
     uprate: bool = True,
 ):
+    if time_period is None:
+        time_period = dataset.time_period
     ages = pd.read_csv(FOLDER / "targets" / "age.csv")
     incomes = pd.read_csv(FOLDER / "targets" / "spi_by_la.csv")
     employment_incomes = pd.read_csv(
