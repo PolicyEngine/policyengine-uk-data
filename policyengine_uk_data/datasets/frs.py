@@ -716,11 +716,34 @@ def create_frs(
         paragraph_3 | paragraph_4 | paragraph_5
     )
 
+    # Add random variables which are for now in policyengine-uk.
+
+    RANDOM_VARIABLES = [
+        "would_evade_tv_licence_fee",
+        "would_claim_pc",
+        "would_claim_uc",
+        "would_claim_child_benefit",
+        "main_residential_property_purchased_is_first_home",
+        "household_owns_tv",
+        "is_higher_earner",
+        "attends_private_school",
+    ]
+
+    for variable in RANDOM_VARIABLES:
+        value = sim.calculate(variable).values
+        entity = sim.tax_benefit_system.variables[variable].entity.key
+        if entity == "person":
+            pe_person[variable] = value
+        elif entity == "household":
+            pe_household[variable] = value
+        elif entity == "benunit":
+            pe_benunit[variable] = value
+
     dataset = UKDataset(
         person=pe_person,
         benunit=pe_benunit,
         household=pe_household,
-        fiscal_year=2022,
+        fiscal_year=year,
     )
 
     return dataset
