@@ -21,10 +21,13 @@ FOLDER = Path(__file__).parent
 
 
 def create_constituency_target_matrix(
-    dataset:  UKDataset,
+    dataset: UKDataset,
+    time_period: int = None,
     reform=None,
     uprate: bool = True,
 ):
+    if time_period is None:
+        time_period = dataset.time_period
     ages = pd.read_csv(FOLDER / "targets" / "age.csv")
     incomes = pd.read_csv(FOLDER / "targets" / "spi_by_constituency.csv")
     employment_incomes = pd.read_csv(
@@ -35,7 +38,7 @@ def create_constituency_target_matrix(
     sim.default_calculation_period = dataset.time_period
 
     national_incomes = pd.read_csv(STORAGE_FOLDER / "incomes_projection.csv")
-    national_incomes = national_incomes[national_incomes.year == dataset.time_period]
+    national_incomes = national_incomes[national_incomes.year == int(dataset.time_period)]
 
     matrix = pd.DataFrame()
     y = pd.DataFrame()
