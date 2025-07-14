@@ -739,6 +739,30 @@ def create_frs(
         elif entity == "benunit":
             pe_benunit[variable] = value
 
+    # Add Tax-Free Childcare assumptions
+
+    count_benunits = len(pe_benunit)
+
+    extended_would_claim = np.random.random(count_benunits) < 0.812
+    tfc_would_claim = np.random.random(count_benunits) < 0.586
+    universal_would_claim = np.random.random(count_benunits) < 0.563
+    targeted_would_claim = np.random.random(count_benunits) < 0.597
+
+    # Generate extended childcare hours usage values with mean 15.019 and sd 4.972
+    extended_hours_values = np.random.normal(15.019, 4.972, count_benunits)
+    # Clip values to be between 0 and 30 hours
+    extended_hours_values = np.clip(extended_hours_values, 0, 30)
+
+    pe_benunit["would_claim_extended_childcare"] = extended_would_claim
+    pe_benunit["would_claim_tfc"] = tfc_would_claim
+    pe_benunit["would_claim_universal_childcare"] = universal_would_claim
+    pe_benunit["would_claim_targeted_childcare"] = targeted_would_claim
+
+    # Add the maximum extended childcare hours usage
+    pe_benunit["maximum_extended_childcare_hours_usage"] = (
+        extended_hours_values
+    )
+
     dataset = UKDataset(
         person=pe_person,
         benunit=pe_benunit,

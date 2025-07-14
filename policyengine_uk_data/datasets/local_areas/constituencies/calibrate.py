@@ -11,42 +11,44 @@ import argparse
 import pandas as pd
 import numpy as np
 
-from policyengine_uk_data.datasets.old_frs.local_areas.constituencies.loss import (
+from policyengine_uk_data.datasets.local_areas.constituencies.loss import (
     create_constituency_target_matrix,
     create_national_target_matrix,
 )
-from policyengine_uk_data.datasets.old_frs.local_areas.constituencies.boundary_changes.mapping_matrix import (
+from policyengine_uk_data.datasets.local_areas.constituencies.boundary_changes.mapping_matrix import (
     mapping_matrix,
 )
 from pathlib import Path
 from policyengine_uk_data.storage import STORAGE_FOLDER
-from policyengine_uk_data.datasets import EnhancedFRS_2022_23
+from policyengine_uk.data import UKDataset
 
 FOLDER = Path(__file__).parent
 
 
 def calibrate(
+    dataset: UKDataset,
     epochs: int = 128,
     excluded_training_targets=[],
     log_csv="calibration_log.csv",
-    overwrite_efrs=True,
 ):
+    dataset = dataset.copy()
     matrix_, y_, country_mask = create_constituency_target_matrix(
-        EnhancedFRS_2022_23, 2025
+        dataset
     )
 
     m_national_, y_national_ = create_national_target_matrix(
-        EnhancedFRS_2022_23, 2025
+        dataset
     )
 
-    sim = Microsimulation(dataset=EnhancedFRS_2022_23)
+    sim = Microsimulation(dataset=dataset)
+    sim.default_calculation_period = dataset.time_period
 
     COUNT_CONSTITUENCIES = 650
 
     # Weights - 650 x 100180
     original_weights = np.log(
-        sim.calculate("household_weight", 2025).values / COUNT_CONSTITUENCIES
-        + np.random.random(len(sim.calculate("household_weight", 2025).values))
+        sim.calculate("household_weight").values / COUNT_CONSTITUENCIES
+        + np.random.random(len(sim.calculate("household_weight").values))
         * 0.01
     )
     weights = torch.tensor(
@@ -179,15 +181,8 @@ def calibrate(
             ) as f:
                 f.create_dataset("2025", data=final_weights)
 
-            if overwrite_efrs:
-                with h5py.File(
-                    STORAGE_FOLDER / "enhanced_frs_2022_23.h5", "r+"
-                ) as f:
-                    if "household_weight/2025" in f:
-                        del f["household_weight/2025"]
-                    f.create_dataset(
-                        "household_weight/2025", data=final_weights.sum(axis=0)
-                    )
+            dataset.household.household_weight = final_weights.sum(axis=0)
+        
         l.backward()
         optimizer.step()
 

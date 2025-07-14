@@ -12,16 +12,16 @@ from policyengine_uk_data.utils.loss import (
     create_target_matrix as create_national_target_matrix,
 )
 from policyengine_uk_data.storage import STORAGE_FOLDER
-from policyengine_uk_data.datasets.old_frs.local_areas.constituencies.boundary_changes.mapping_matrix import (
+from policyengine_uk_data.datasets.local_areas.constituencies.boundary_changes.mapping_matrix import (
     mapping_matrix,
 )
+from policyengine_uk.data import UKDataset
 
 FOLDER = Path(__file__).parent
 
 
 def create_constituency_target_matrix(
-    dataset: str = "enhanced_frs_2022_23",
-    time_period: int = 2025,
+    dataset:  UKDataset,
     reform=None,
     uprate: bool = True,
 ):
@@ -32,10 +32,10 @@ def create_constituency_target_matrix(
     )
 
     sim = Microsimulation(dataset=dataset, reform=reform)
-    sim.default_calculation_period = time_period
+    sim.default_calculation_period = dataset.time_period
 
     national_incomes = pd.read_csv(STORAGE_FOLDER / "incomes_projection.csv")
-    national_incomes = national_incomes[national_incomes.year == 2025]
+    national_incomes = national_incomes[national_incomes.year == dataset.time_period]
 
     matrix = pd.DataFrame()
     y = pd.DataFrame()
@@ -153,7 +153,7 @@ def create_constituency_target_matrix(
         )
 
     if uprate:
-        y = uprate_targets(y, time_period)
+        y = uprate_targets(y, dataset.time_period)
 
     const_2024 = pd.read_csv(STORAGE_FOLDER / "constituencies_2024.csv")
     const_2010 = pd.read_csv(STORAGE_FOLDER / "constituencies_2010.csv")
