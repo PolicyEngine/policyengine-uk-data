@@ -2,6 +2,7 @@ from policyengine_uk_data.datasets.frs import create_frs
 from policyengine_uk_data.storage import STORAGE_FOLDER
 import logging
 from policyengine_uk.data import UKDataset
+from policyengine_uk_data.utils.uprating import uprate_dataset
 
 logging.basicConfig(level=logging.INFO)
 
@@ -10,15 +11,15 @@ logging.basicConfig(level=logging.INFO)
 logging.info("Creating FRS dataset")
 
 frs = create_frs(
-    raw_frs_folder=STORAGE_FOLDER / "frs_2022_23",
-    year=2022,
+    raw_frs_folder=STORAGE_FOLDER / "frs_2023_24",
+    year=2023,
 )
 
 frs.save(
-    STORAGE_FOLDER / "frs_2022.h5",
+    STORAGE_FOLDER / "frs_2023.h5",
 )
 
-frs = UKDataset(str(STORAGE_FOLDER / "frs_2022.h5"))
+frs = UKDataset(str(STORAGE_FOLDER / "frs_2023.h5"))
 
 logging.info(f"FRS dataset created and saved.")
 
@@ -43,11 +44,19 @@ frs = impute_income(frs)
 logging.info("Imputing capital gains")
 frs = impute_capital_gains(frs)
 
+# Uprate to 2024
+
+logging.info("Uprating dataset to 2024")
+
+frs = uprate_dataset(frs, 2024)
+
 from policyengine_uk_data.datasets.local_areas.constituencies.calibrate import (
     calibrate,
 )
 
+logging.info("Calibrating dataset with national and constituency targets.")
+
 frs_calibrated = calibrate(frs)
 
-frs.save(STORAGE_FOLDER / "enhanced_frs_2022.h5")
+frs.save(STORAGE_FOLDER / "enhanced_frs_2024.h5")
 logging.info(f"Extended FRS dataset created and saved.")
