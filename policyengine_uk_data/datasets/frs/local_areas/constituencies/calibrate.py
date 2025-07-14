@@ -183,10 +183,11 @@ def calibrate(
                 with h5py.File(
                     STORAGE_FOLDER / "enhanced_frs_2022_23.h5", "r+"
                 ) as f:
-                    if "household_weight/2025" in f:
-                        del f["household_weight/2025"]
+                    if "household_weight/2022" in f:
+                        del f["household_weight/2022"]
                     f.create_dataset(
-                        "household_weight/2025", data=final_weights.sum(axis=0)
+                        "household_weight/2022",
+                        data=final_weights.sum(axis=0) / 1.035,
                     )
         l.backward()
         optimizer.step()
