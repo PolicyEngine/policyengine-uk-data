@@ -32,13 +32,9 @@ def calibrate(
     log_csv="calibration_log.csv",
 ):
     dataset = dataset.copy()
-    matrix_, y_, country_mask = create_constituency_target_matrix(
-        dataset
-    )
+    matrix_, y_, country_mask = create_constituency_target_matrix(dataset)
 
-    m_national_, y_national_ = create_national_target_matrix(
-        dataset
-    )
+    m_national_, y_national_ = create_national_target_matrix(dataset)
 
     sim = Microsimulation(dataset=dataset)
     sim.default_calculation_period = dataset.time_period
@@ -182,7 +178,7 @@ def calibrate(
                 f.create_dataset("2025", data=final_weights)
 
             dataset.household.household_weight = final_weights.sum(axis=0)
-        
+
         l.backward()
         optimizer.step()
 

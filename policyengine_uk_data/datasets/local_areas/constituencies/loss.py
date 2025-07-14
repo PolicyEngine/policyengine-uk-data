@@ -38,7 +38,10 @@ def create_constituency_target_matrix(
     sim.default_calculation_period = dataset.time_period
 
     national_incomes = pd.read_csv(STORAGE_FOLDER / "incomes_projection.csv")
-    national_incomes = national_incomes[national_incomes.year == int(dataset.time_period)]
+    national_incomes = national_incomes[
+        national_incomes.year
+        == max(national_incomes.year.min(), int(dataset.time_period))
+    ]
 
     matrix = pd.DataFrame()
     y = pd.DataFrame()
