@@ -190,6 +190,14 @@ class FRS_2022_23(FRS):
     time_period = 2022
 
 
+class FRS_2023_24(FRS):
+    dwp_frs = DWP_FRS_2023_24
+    name = "frs_2023_24"
+    label = "FRS (2023-24)"
+    file_path = STORAGE_FOLDER / "frs_2023_24.h5"
+    time_period = 2023
+
+
 def add_id_variables(frs: h5py.File, person: DataFrame, household: DataFrame):
     """Adds ID variables and weights.
 
@@ -931,3 +939,4 @@ def impute_brmas(dataset, frs):
 if __name__ == "__main__":
     FRS_2020_21().generate()
     FRS_2022_23().generate()
+    FRS_2023_24().generate()
