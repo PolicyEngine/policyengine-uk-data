@@ -2,7 +2,7 @@ from policyengine_core.data import Dataset
 from policyengine_uk_data.utils.imputations import *
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from typing import Type
-from policyengine_uk_data.datasets.frs.frs import FRS_2022_23
+from policyengine_uk_data.datasets.frs.frs import FRS_2022_23, FRS_2023_24
 from tqdm import tqdm
 
 
@@ -103,6 +103,15 @@ class ExtendedFRS_2022_23(ExtendedFRS):
     time_period = 2022
 
 
+class ExtendedFRS_2023_24(ExtendedFRS):
+    name = "extended_frs_2023_24"
+    label = "Extended FRS (2023-24)"
+    file_path = STORAGE_FOLDER / "extended_frs_2023_24.h5"
+    data_format = Dataset.TIME_PERIOD_ARRAYS
+    input_frs = FRS_2023_24
+    time_period = 2023
+
+
 def create_public_services_inputs(sim) -> pd.DataFrame:
     variables = [
         "age",
@@ -184,4 +193,4 @@ def add_public_services(data: dict, simulation, time_period: int):
 
 
 if __name__ == "__main__":
-    ExtendedFRS_2022_23().generate()
+    ExtendedFRS_2023_24().generate()

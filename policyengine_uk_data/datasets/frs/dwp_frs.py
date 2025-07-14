@@ -108,6 +108,15 @@ class DWP_FRS_2022_23(DWP_FRS):
     time_period = 2022
 
 
+class DWP_FRS_2023_24(DWP_FRS):
+    folder = STORAGE_FOLDER / "frs_2023_24"
+    name = "dwp_frs_2023_24"
+    label = "DWP FRS (2023-24)"
+    file_path = STORAGE_FOLDER / "dwp_frs_2023_24.h5"
+    time_period = 2023
+
+
 if __name__ == "__main__":
     DWP_FRS_2020_21().generate()
     DWP_FRS_2022_23().generate()
+    DWP_FRS_2023_24().generate()

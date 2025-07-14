@@ -20,7 +20,7 @@ from policyengine_uk_data.datasets.frs.local_areas.constituencies.boundary_chang
 )
 from pathlib import Path
 from policyengine_uk_data.storage import STORAGE_FOLDER
-from policyengine_uk_data.datasets import EnhancedFRS_2022_23
+from policyengine_uk_data.datasets import EnhancedFRS_2023_24
 
 FOLDER = Path(__file__).parent
 
@@ -32,14 +32,14 @@ def calibrate(
     overwrite_efrs=True,
 ):
     matrix_, y_, country_mask = create_constituency_target_matrix(
-        EnhancedFRS_2022_23, 2025
+        EnhancedFRS_2023_24, 2025
     )
 
     m_national_, y_national_ = create_national_target_matrix(
-        EnhancedFRS_2022_23, 2025
+        EnhancedFRS_2023_24, 2025
     )
 
-    sim = Microsimulation(dataset=EnhancedFRS_2022_23)
+    sim = Microsimulation(dataset=EnhancedFRS_2023_24)
 
     COUNT_CONSTITUENCIES = 650
 
@@ -181,12 +181,13 @@ def calibrate(
 
             if overwrite_efrs:
                 with h5py.File(
-                    STORAGE_FOLDER / "enhanced_frs_2022_23.h5", "r+"
+                    STORAGE_FOLDER / "enhanced_frs_2023_24.h5", "r+"
                 ) as f:
-                    if "household_weight/2025" in f:
-                        del f["household_weight/2025"]
+                    if "household_weight/2023" in f:
+                        del f["household_weight/2023"]
                     f.create_dataset(
-                        "household_weight/2025", data=final_weights.sum(axis=0)
+                        "household_weight/2023",
+                        data=final_weights.sum(axis=0) / 1.021,
                     )
         l.backward()
         optimizer.step()

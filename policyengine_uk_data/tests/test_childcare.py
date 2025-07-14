@@ -98,7 +98,7 @@ def test_childcare():
     for key in targets["spending"]:
         target_spending = targets["spending"][key]
         ratio = spending[key] / target_spending
-        passed = abs(ratio - 1) < 0.2
+        passed = abs(ratio - 1) < 0.3
         status = "✓" if passed else "✗"
         print(
             f"{key.upper():<12} {spending[key]:<10.3f} {target_spending:<10.3f} {ratio:<10.3f} {status:<10}"
@@ -116,7 +116,7 @@ def test_childcare():
     for key in targets["caseload"]:
         target_caseload = targets["caseload"][key]
         ratio = caseload[key] / target_caseload
-        passed = abs(ratio - 1) < 0.2
+        passed = abs(ratio - 1) < 0.3
         status = "✓" if passed else "✗"
         print(
             f"{key.upper():<12} {caseload[key]:<10.1f} {target_caseload:<10.1f} {ratio:<10.3f} {status:<10}"

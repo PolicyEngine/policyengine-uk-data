@@ -1,7 +1,10 @@
 from policyengine_core.data import Dataset
 from policyengine_uk_data.utils.imputations import *
 from policyengine_uk_data.storage import STORAGE_FOLDER
-from policyengine_uk_data.datasets.frs.extended_frs import ExtendedFRS_2022_23
+from policyengine_uk_data.datasets.frs.extended_frs import (
+    ExtendedFRS_2022_23,
+    ExtendedFRS_2023_24,
+)
 from policyengine_uk_data.datasets.frs.frs import FRS_2022_23
 from policyengine_uk_data.utils.loss import create_target_matrix
 
@@ -156,6 +159,14 @@ class EnhancedFRS_2022_23(EnhancedFRS):
     end_year = 2028
 
 
+class EnhancedFRS_2023_24(EnhancedFRS):
+    name = "enhanced_frs_2023_24"
+    label = "Enhanced FRS (2023-24)"
+    file_path = STORAGE_FOLDER / "enhanced_frs_2023_24.h5"
+    data_format = Dataset.TIME_PERIOD_ARRAYS
+    input_frs = ExtendedFRS_2023_24
+    time_period = 2023
+
+
 if __name__ == "__main__":
-    ReweightedFRS_2022_23().generate()
-    EnhancedFRS_2022_23().generate()
+    EnhancedFRS_2023_24().generate()
