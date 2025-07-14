@@ -105,7 +105,7 @@ def create_frs(
     ).fillna("SINGLE")
 
     # Add education levels
-    if "FTED" in person.columns:
+    if "fted" in person.columns:
         fted = person.fted
     else:
         fted = person.educft  # Renamed in FRS 2022-23
@@ -510,7 +510,7 @@ def create_frs(
     pe_person["statutory_maternity_pay"] = person.smpadj * WEEKS_IN_YEAR
 
     pe_person["student_loans"] = np.maximum(person.tuborr, 0)
-    if "ADEMA" not in person.columns:
+    if "adema" not in person.columns:
         person["adema"] = person.eduma
         person["ademaamt"] = person.edumaamt
     pe_person["adult_ema"] = fill_with_mean(person, "adema", "ademaamt")

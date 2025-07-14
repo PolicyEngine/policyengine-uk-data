@@ -12,28 +12,33 @@ from policyengine_uk_data.datasets.local_areas.local_authorities.loss import (
     create_local_authority_target_matrix,
     create_national_target_matrix,
 )
-from policyengine_uk_data.datasets import EnhancedFRS_2022_23
+from policyengine_uk.data import UKDataset
 
 DEVICE = "cpu"
 
 
-def calibrate():
+def calibrate(
+    dataset: UKDataset,
+    verbose: bool = False,
+):
+    dataset = dataset.copy()
     matrix, y, r = create_local_authority_target_matrix(
-        EnhancedFRS_2022_23, 2025
+        dataset, dataset.time_period
     )
 
     m_national, y_national = create_national_target_matrix(
-        EnhancedFRS_2022_23, 2025
+        dataset, dataset.time_period
     )
 
-    sim = Microsimulation(dataset=EnhancedFRS_2022_23)
+    sim = Microsimulation(dataset=dataset)
+    sim.default_calculation_period = dataset.time_period
 
     count_local_authority = 360
 
     # Weights - 360 x 100180
     original_weights = np.log(
-        sim.calculate("household_weight", 2025).values / count_local_authority
-        + np.random.random(len(sim.calculate("household_weight", 2025).values))
+        sim.calculate("household_weight").values / count_local_authority
+        + np.random.random(len(sim.calculate("household_weight").values))
         * 0.01
     )
     weights = torch.tensor(
@@ -106,7 +111,7 @@ def calibrate():
         optimizer.step()
         c_close = pct_close(weights_, la=True, national=False)
         n_close = pct_close(weights_, la=False, national=True)
-        if epoch % 1 == 0:
+        if verbose and (epoch % 1 == 0):
             print(
                 f"Loss: {l.item()}, Epoch: {epoch}, Local Authority<10%: {c_close:.1%}, National<10%: {n_close:.1%}"
             )
@@ -117,6 +122,8 @@ def calibrate():
                 STORAGE_FOLDER / "local_authority_weights.h5", "w"
             ) as f:
                 f.create_dataset("2025", data=final_weights)
+
+        dataset.household.household_weight = final_weights.sum(axis=0)
 
 
 if __name__ == "__main__":

@@ -184,24 +184,17 @@ def create_country_mask(
 def uprate_targets(y: pd.DataFrame, target_year: int = 2025) -> pd.DataFrame:
     # Uprate age targets from 2020, taxable income targets from 2021, employment income targets from 2023.
     # Use PolicyEngine uprating factors.
-    from policyengine_uk_data.datasets import FRS_2020_21
 
-    sim = Microsimulation(dataset=FRS_2020_21)
-    matrix_20, y_20, _ = create_local_authority_target_matrix(
-        FRS_2020_21, 2020, uprate=False
+    frs_2020 = UKDataset(STORAGE_FOLDER / "frs_2020.h5")
+
+    sim = Microsimulation(dataset=frs_2020)
+    matrix_20, _, _ = create_local_authority_target_matrix(
+        frs_2020, 2020, uprate=False
     )
-    matrix_21, y_21, _ = create_local_authority_target_matrix(
-        FRS_2020_21, 2021, uprate=False
-    )
-    matrix_23, y_23, _ = create_local_authority_target_matrix(
-        FRS_2020_21, 2023, uprate=False
-    )
-    matrix_final, y_final, _ = create_local_authority_target_matrix(
-        FRS_2020_21, target_year, uprate=False
+    matrix_final, _, _ = create_local_authority_target_matrix(
+        frs_2020, target_year, uprate=False
     )
     weights_20 = sim.calculate("household_weight", 2020)
-    weights_21 = sim.calculate("household_weight", 2021)
-    weights_23 = sim.calculate("household_weight", 2023)
     weights_final = sim.calculate("household_weight", target_year)
 
     rel_change_20_final = (weights_final @ matrix_final) / (

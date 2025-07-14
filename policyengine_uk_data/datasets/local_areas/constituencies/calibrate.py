@@ -30,6 +30,7 @@ def calibrate(
     epochs: int = 128,
     excluded_training_targets=[],
     log_csv="calibration_log.csv",
+    verbose: bool = False,
 ):
     dataset = dataset.copy()
     matrix_, y_, country_mask = create_constituency_target_matrix(dataset)
@@ -135,7 +136,7 @@ def calibrate(
         l = loss(weights_)
         c_close = pct_close(weights_, constituency=True, national=False, t=0.1)
         n_close = pct_close(weights_, constituency=False, national=True, t=0.1)
-        if epoch % 1 == 0:
+        if verbose and (epoch % 1 == 0):
             if dropout_targets:
                 validation_loss = loss(weights_, validation=True)
                 print(
