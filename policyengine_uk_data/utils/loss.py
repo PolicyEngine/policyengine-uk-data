@@ -312,7 +312,7 @@ def create_target_matrix(
 
     ct_data = pd.read_csv(STORAGE_FOLDER / "council_tax_bands_2024.csv")
     uk_population = (
-        sim.tax_benefit_system.parameters.economic_assumptions.indices.ons.population
+        sim.tax_benefit_system.parameters.gov.economic_assumptions.indices.ons.population
     )
     uprating = uk_population(time_period) / uk_population(2024)
 
