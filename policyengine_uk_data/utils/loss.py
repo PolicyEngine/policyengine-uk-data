@@ -316,6 +316,10 @@ def create_target_matrix(
     )
     uprating = uk_population(time_period) / uk_population(2024)
 
+    # England and Wales data from https://www.gov.uk/government/statistics/council-tax-stock-of-properties-2024
+
+    # Scotland data from https://www.gov.scot/publications/council-tax-datasets/ (Number of chargeable dwellings, 2024)
+
     for i, row in ct_data.iterrows():
         selected_region = row["Region"]
         in_region = sim.calculate("region").values == selected_region
