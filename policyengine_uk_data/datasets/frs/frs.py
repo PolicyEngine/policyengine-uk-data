@@ -89,15 +89,6 @@ class FRS(Dataset):
         for variable in frs:
             frs[variable] = {self.dwp_frs.time_period: np.array(frs[variable])}
 
-        # Domestic rates need to be set for 2025 too
-        domestic_rates = np.array(
-            frs["domestic_rates"][self.dwp_frs.time_period]
-        )
-        frs["domestic_rates"] = {
-            self.dwp_frs.time_period: domestic_rates,
-            "2025": domestic_rates,
-        }
-
         self.save_dataset(frs)
 
         impute_brmas(self, frs)
