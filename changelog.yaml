@@ -215,3 +215,8 @@
     fixed:
     - Added calibrated weights from 2022.
   date: 2025-07-14 15:21:27
+- bump: patch
+  changes:
+    added:
+    - Council Tax calibration.
+  date: 2025-07-17 11:44:26
