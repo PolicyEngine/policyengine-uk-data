@@ -328,12 +328,12 @@ def create_target_matrix(
             in_band = sim.calculate("council_tax_band") == band
             df[name] = in_band * in_region
             target_names.append(name)
-            target_values.append(row[band] * uprating)
+            target_values.append(float(row[band]) * uprating)
         # Add total row
         name = f"voa/council_tax/{selected_region}/total"
         df[name] = in_region
         target_names.append(name)
-        target_values.append(row["Total"] * uprating)
+        target_values.append(float(row["Total"]) * uprating)
 
     combined_targets = pd.concat(
         [
