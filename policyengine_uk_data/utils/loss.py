@@ -326,12 +326,12 @@ def create_target_matrix(
         for band in ["A", "B", "C", "D", "E", "F", "G", "H", "I"]:
             name = f"voa/council_tax/{selected_region}/{band}"
             in_band = sim.calculate("council_tax_band") == band
-            df[name] = in_band * in_region
+            df[name] = (in_band * in_region).astype(float)
             target_names.append(name)
             target_values.append(float(row[band]) * uprating)
         # Add total row
         name = f"voa/council_tax/{selected_region}/total"
-        df[name] = in_region
+        df[name] = (in_region).astype(float)
         target_names.append(name)
         target_values.append(float(row["Total"]) * uprating)
 
