@@ -14,6 +14,7 @@ FOLDER = Path(__file__).parent
 FILES = [
     "frs_2020_21.zip",
     "frs_2022_23.zip",
+    "frs_2023_24.zip",
     "lcfs_2021_22.zip",
     "was_2006_20.zip",
     "etb_1977_21.zip",

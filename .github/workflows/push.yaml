@@ -68,20 +68,8 @@ jobs:
         run: make upload
         env:
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
-      - name: Test documentation builds
-        run: make documentation
-      - name: Build Jupyter Book
-        run: make documentation
-      - name: Deploy documentation
-        uses: JamesIves/github-pages-deploy-action@releases/v3
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: gh-pages  # The branch the action should deploy to.
-          FOLDER: docs/_build/html
       - name: Publish a git tag
         run: ".github/publish-git-tag.sh || true"
-      - name: Remove .whl files
-        run: rm dist/*.whl
       - name: Publish a Python distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
