@@ -2,40 +2,34 @@ import torch
 from policyengine_uk import Microsimulation
 import pandas as pd
 import numpy as np
-
-# Fill in missing constituencies with average column values
-import pandas as pd
-import numpy as np
 from pathlib import Path
 
 from policyengine_uk_data.utils.loss import (
     create_target_matrix as create_national_target_matrix,
 )
 from policyengine_uk_data.storage import STORAGE_FOLDER
-from policyengine_uk_data.datasets.frs.local_areas.constituencies.boundary_changes.mapping_matrix import (
-    mapping_matrix,
-)
+from policyengine_uk.data import UKDataset
 
 FOLDER = Path(__file__).parent
 
 
-def create_constituency_target_matrix(
-    dataset: str = "enhanced_frs_2022_23",
-    time_period: int = 2025,
+def create_local_authority_target_matrix(
+    dataset: UKDataset,
+    time_period: int = None,
     reform=None,
     uprate: bool = True,
 ):
+    if time_period is None:
+        time_period = dataset.time_period
     ages = pd.read_csv(FOLDER / "targets" / "age.csv")
-    incomes = pd.read_csv(FOLDER / "targets" / "spi_by_constituency.csv")
+    incomes = pd.read_csv(FOLDER / "targets" / "spi_by_la.csv")
     employment_incomes = pd.read_csv(
         FOLDER / "targets" / "employment_income.csv"
     )
+    la_codes = pd.read_csv(STORAGE_FOLDER / "local_authorities_2021.csv")
 
     sim = Microsimulation(dataset=dataset, reform=reform)
     sim.default_calculation_period = time_period
-
-    national_incomes = pd.read_csv(STORAGE_FOLDER / "incomes_projection.csv")
-    national_incomes = national_incomes[national_incomes.year == 2025]
 
     matrix = pd.DataFrame()
     y = pd.DataFrame()
@@ -44,6 +38,9 @@ def create_constituency_target_matrix(
         "self_employment_income",
         "employment_income",
     ]
+
+    national_incomes = pd.read_csv(STORAGE_FOLDER / "incomes_projection.csv")
+    national_incomes = national_incomes[national_incomes.year == 2025]
 
     for income_variable in INCOME_VARIABLES:
         income_values = sim.calculate(income_variable).values
@@ -121,11 +118,9 @@ def create_constituency_target_matrix(
             (employment_incomes.employment_income_lower_bound == lower_bound)
             & (employment_incomes.employment_income_upper_bound == upper_bound)
         ].employment_income_amount.values
-
         sum_of_local_area_values = amount_target.sum()
 
         adjustment = national_data_row / sum_of_local_area_values
-
         if count_target.mean() < 200:
             print(
                 f"Skipping employment income band {lower_bound} to {upper_bound} due to low count target mean: {count_target.mean()}"
@@ -155,24 +150,11 @@ def create_constituency_target_matrix(
     if uprate:
         y = uprate_targets(y, time_period)
 
-    const_2024 = pd.read_csv(STORAGE_FOLDER / "constituencies_2024.csv")
-    const_2010 = pd.read_csv(STORAGE_FOLDER / "constituencies_2010.csv")
-
-    y_2010 = y.copy()
-    y_2010["name"] = const_2010["name"].values
-
-    y_columns = list(y.columns)
-    y_values = mapping_matrix @ y.values  # Transform to 2024 constituencies
-
-    y = pd.DataFrame(y_values, columns=y_columns)
-
-    y_2024 = y.copy()
-    y_2024["name"] = const_2024["name"].values
-
     country_mask = create_country_mask(
         household_countries=sim.calculate("country").values,
-        codes=const_2024.code,
+        codes=la_codes.code,
     )
+
     return matrix, y, country_mask
 
 
@@ -202,25 +184,17 @@ def create_country_mask(
 def uprate_targets(y: pd.DataFrame, target_year: int = 2025) -> pd.DataFrame:
     # Uprate age targets from 2020, taxable income targets from 2021, employment income targets from 2023.
     # Use PolicyEngine uprating factors.
-    from policyengine_uk_data.datasets.frs.frs import FRS_2020_21
 
-    sim = Microsimulation(dataset=FRS_2020_21)
-    matrix_20, y_20, _ = create_constituency_target_matrix(
-        FRS_2020_21, 2020, uprate=False
-    )
-    matrix_21, y_21, _ = create_constituency_target_matrix(
-        FRS_2020_21, 2021, uprate=False
-    )
-    matrix_23, y_23, _ = create_constituency_target_matrix(
-        FRS_2020_21, 2023, uprate=False
-    )
-    matrix_final, y_final, _ = create_constituency_target_matrix(
-        FRS_2020_21, target_year, uprate=False
-    )
+    frs_2020 = UKDataset(STORAGE_FOLDER / "frs_2020.h5")
 
+    sim = Microsimulation(dataset=frs_2020)
+    matrix_20, _, _ = create_local_authority_target_matrix(
+        frs_2020, 2020, uprate=False
+    )
+    matrix_final, _, _ = create_local_authority_target_matrix(
+        frs_2020, target_year, uprate=False
+    )
     weights_20 = sim.calculate("household_weight", 2020)
-    weights_21 = sim.calculate("household_weight", 2021)
-    weights_23 = sim.calculate("household_weight", 2023)
     weights_final = sim.calculate("household_weight", target_year)
 
     rel_change_20_final = (weights_final @ matrix_final) / (
@@ -233,7 +207,6 @@ def uprate_targets(y: pd.DataFrame, target_year: int = 2025) -> pd.DataFrame:
     uprating_from_2020[is_uprated_from_2020] = rel_change_20_final[
         is_uprated_from_2020
     ]
-
     uprating = uprating_from_2020
     y = y * (1 + uprating)
 

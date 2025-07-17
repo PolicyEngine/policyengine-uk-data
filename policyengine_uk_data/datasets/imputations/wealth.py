@@ -1,5 +1,8 @@
 import pandas as pd
 from policyengine_uk_data.storage import STORAGE_FOLDER
+from policyengine_uk.data import UKDataset
+from policyengine_uk import Microsimulation
+
 
 WAS_TAB_FOLDER = STORAGE_FOLDER / "was_2006_20"
 
@@ -145,13 +148,35 @@ def save_imputation_models():
         was[IMPUTE_VARIABLES],
     )
     wealth.save(STORAGE_FOLDER / "wealth.pkl")
+    return wealth
 
 
 def create_wealth_model(overwrite_existing: bool = False):
+    from policyengine_uk_data.utils.qrf import QRF
+
     if (STORAGE_FOLDER / "wealth.pkl").exists() and not overwrite_existing:
-        return
-    save_imputation_models()
+        return QRF(file_path=STORAGE_FOLDER / "wealth.pkl")
+    return save_imputation_models()
 
 
-if __name__ == "__main__":
-    create_wealth_model()
+def impute_wealth(dataset: UKDataset) -> UKDataset:
+    # Impute wealth, assuming same time period as trained data
+    dataset = dataset.copy()
+
+    model = create_wealth_model()
+    sim = Microsimulation(dataset=dataset)
+    predictors = model.input_columns
+
+    input_df = sim.calculate_dataframe(predictors, map_to="household")
+
+    input_df["region"] = input_df["region"].replace(
+        "NORTHERN_IRELAND", "WALES"
+    )  # WAS doesn't sample NI -> put NI households in Wales (closest aggregate)
+    output_df = model.predict(input_df)
+
+    for column in output_df.columns:
+        dataset.household[column] = output_df[column].values
+
+    dataset.validate()
+
+    return dataset
