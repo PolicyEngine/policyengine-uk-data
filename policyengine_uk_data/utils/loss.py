@@ -308,6 +308,33 @@ def create_target_matrix(
     target_names.append("dwp/pip_dl_enhanced_claimants")
     target_values.append(1_608_000)
 
+    # Council Tax band counts
+
+    ct_data = pd.read_csv(STORAGE_FOLDER / "council_tax_bands_2024.csv")
+    uk_population = (
+        sim.tax_benefit_system.parameters.gov.economic_assumptions.indices.ons.population
+    )
+    uprating = uk_population(time_period) / uk_population(2024)
+
+    # England and Wales data from https://www.gov.uk/government/statistics/council-tax-stock-of-properties-2024
+
+    # Scotland data from https://www.gov.scot/publications/council-tax-datasets/ (Number of chargeable dwellings, 2024)
+
+    for i, row in ct_data.iterrows():
+        selected_region = row["Region"]
+        in_region = sim.calculate("region").values == selected_region
+        for band in ["A", "B", "C", "D", "E", "F", "G", "H", "I"]:
+            name = f"voa/council_tax/{selected_region}/{band}"
+            in_band = sim.calculate("council_tax_band") == band
+            df[name] = (in_band * in_region).astype(float)
+            target_names.append(name)
+            target_values.append(float(row[band]) * uprating)
+        # Add total row
+        name = f"voa/council_tax/{selected_region}/total"
+        df[name] = (in_region).astype(float)
+        target_names.append(name)
+        target_values.append(float(row["Total"]) * uprating)
+
     combined_targets = pd.concat(
         [
             targets,
