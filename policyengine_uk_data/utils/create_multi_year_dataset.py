@@ -17,13 +17,13 @@ def convert_legacy_to_multi_year_dataset(
     sim = Microsimulation(dataset=Dataset.from_file(file_path))
 
     dataset = UKSingleYearDataset.from_simulation(sim, fiscal_year=start_year)
-    dataset.time_period = start_year
+    dataset.time_period = str(start_year)
 
     datasets = [dataset]
 
     for year in range(start_year + 1, end_year + 1):
         dataset = dataset.copy()
-        dataset.time_period = year
+        dataset.time_period = str(year)
 
     datasets.append(dataset)
 
