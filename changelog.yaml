@@ -220,3 +220,8 @@
     added:
     - Council Tax calibration.
   date: 2025-07-17 11:44:26
+- bump: minor
+  changes:
+    added:
+    - New multi-year dataset format for FRS and Enhanced FRS.
+  date: 2025-07-21 13:53:43
