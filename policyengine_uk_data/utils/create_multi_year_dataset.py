@@ -25,6 +25,8 @@ def convert_legacy_to_multi_year_dataset(
         dataset = dataset.copy()
         dataset.time_period = str(year)
 
+    datasets.append(dataset)
+
     multi_year_dataset = UKMultiYearDataset(
         datasets=datasets,
     )
