@@ -230,3 +230,8 @@
     fixed:
     - Bug in new multi-year dataset.
   date: 2025-07-22 08:53:18
+- bump: patch
+  changes:
+    changed:
+    - Updated policyengine-uk to 2.40.2 (pin).
+  date: 2025-07-22 09:41:46
