@@ -225,3 +225,8 @@
     added:
     - New multi-year dataset format for FRS and Enhanced FRS.
   date: 2025-07-21 13:53:43
+- bump: patch
+  changes:
+    fixed:
+    - Bug in new multi-year dataset.
+  date: 2025-07-22 08:53:18
