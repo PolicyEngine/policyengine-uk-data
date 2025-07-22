@@ -13,7 +13,7 @@ install:
 
 install-uv:
 	uv pip install --system policyengine-uk
-	uv pip install --system policyengine>=2.4
+	uv pip install --system policyengine>=2.40.2
 	uv pip install --system -e ".[dev]" --config-settings editable_mode=compat
 
 download:
