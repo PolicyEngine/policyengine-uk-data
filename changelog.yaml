@@ -235,3 +235,8 @@
     changed:
     - Updated policyengine-uk to 2.40.2 (pin).
   date: 2025-07-22 09:41:46
+- bump: patch
+  changes:
+    fixed:
+    - UK model actually bumped.
+  date: 2025-07-22 11:17:39
