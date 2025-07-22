@@ -25,6 +25,8 @@ def convert_legacy_to_multi_year_dataset(
         dataset = dataset.copy()
         dataset.time_period = str(year)
 
+        datasets.append(dataset.copy())
+
     multi_year_dataset = UKMultiYearDataset(
         datasets=datasets,
     )
@@ -51,3 +53,7 @@ if __name__ == "__main__":
             end_year=2029,
         )
         print(f"Converted {file_path} to {new_file_path}")
+        # Test here
+        sim = Microsimulation(
+            dataset=UKMultiYearDataset(file_path=str(new_file_path))
+        )
