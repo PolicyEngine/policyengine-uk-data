@@ -63,13 +63,15 @@ jobs:
           name: calibration_log.csv
           path: calibration_log.csv
       - name: Run tests
-        run: pytest
+        run: make test
       - name: Upload data
         run: make upload
         env:
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
       - name: Publish a git tag
         run: ".github/publish-git-tag.sh || true"
+      - name: Build
+        run: make build
       - name: Publish a Python distribution to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:

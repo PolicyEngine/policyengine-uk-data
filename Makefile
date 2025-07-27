@@ -7,14 +7,7 @@ test:
 	pytest .
 
 install:
-	pip install policyengine-uk
-	pip install policyengine>=2.4
-	pip install -e ".[dev]" --config-settings editable_mode=compat
-
-install-uv:
-	uv pip install --system policyengine-uk
-	uv pip install --system policyengine>=2.4
-	uv pip install --system -e ".[dev]" --config-settings editable_mode=compat
+	uv pip install -e ".[dev]" --config-settings editable_mode=compat
 
 download:
 	python policyengine_uk_data/storage/download_private_prerequisites.py
@@ -22,25 +15,12 @@ download:
 upload:
 	python policyengine_uk_data/storage/upload_completed_datasets.py
 
-docker:
-	docker buildx build --platform linux/amd64 . -t policyengine-uk-data:latest
-
 documentation:
 	jb clean docs && jb build docs
 	python docs/add_plotly_to_book.py docs
 
 data:
-	python policyengine_uk_data/datasets/frs/dwp_frs.py
-	python policyengine_uk_data/datasets/frs/frs.py
-	python policyengine_uk_data/datasets/frs/extended_frs.py
-	python policyengine_uk_data/datasets/frs/enhanced_frs.py
-	python policyengine_uk_data/datasets/frs/local_areas/constituencies/calibrate.py
-	python policyengine_uk_data/datasets/frs/local_areas/local_authorities/calibrate.py
-
-efrs:
-	python policyengine_uk_data/datasets/frs/enhanced_frs.py
-	python policyengine_uk_data/datasets/frs/local_areas/constituencies/calibrate.py
-	python policyengine_uk_data/datasets/frs/local_areas/local_authorities/calibrate.py
+	python policyengine_uk_data/create_datasets.py
 
 build:
 	python -m build

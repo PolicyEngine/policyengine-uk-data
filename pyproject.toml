@@ -11,7 +11,7 @@ authors = [
     {name = "PolicyEngine", email = "hello@policyengine.org"},
 ]
 license = {file = "LICENSE"}
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "policyengine_core",
     "requests",
@@ -22,6 +22,7 @@ dependencies = [
     "google-cloud-storage",
     "google-auth",
     "uk-public-services-imputation",
+    "policyengine-uk>=2.43.0",
 ]
 
 [project.optional-dependencies]
