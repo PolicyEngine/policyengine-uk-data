@@ -20,7 +20,7 @@ documentation:
 	python docs/add_plotly_to_book.py docs
 
 data:
-	python policyengine_uk_data/create_datasets.py
+	python policyengine_uk_data/datasets/create_datasets.py
 
 build:
 	python -m build
