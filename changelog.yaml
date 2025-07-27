@@ -215,3 +215,28 @@
     fixed:
     - Added calibrated weights from 2022.
   date: 2025-07-14 15:21:27
+- bump: patch
+  changes:
+    added:
+    - Council Tax calibration.
+  date: 2025-07-17 11:44:26
+- bump: minor
+  changes:
+    added:
+    - New multi-year dataset format for FRS and Enhanced FRS.
+  date: 2025-07-21 13:53:43
+- bump: patch
+  changes:
+    fixed:
+    - Bug in new multi-year dataset.
+  date: 2025-07-22 08:53:18
+- bump: patch
+  changes:
+    changed:
+    - Updated policyengine-uk to 2.40.2 (pin).
+  date: 2025-07-22 09:41:46
+- bump: patch
+  changes:
+    fixed:
+    - UK model actually bumped.
+  date: 2025-07-22 11:17:39
