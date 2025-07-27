@@ -2,7 +2,9 @@ from policyengine_uk.data import UKSingleYearDataset
 import pandas as pd
 
 
-def stack_datasets(data_1: UKSingleYearDataset, data_2: UKSingleYearDataset) -> UKSingleYearDataset:
+def stack_datasets(
+    data_1: UKSingleYearDataset, data_2: UKSingleYearDataset
+) -> UKSingleYearDataset:
     person_id_offset = data_1.person.person_id.max() + 1
     benunit_id_offset = data_1.benunit.benunit_id.max() + 1
     household_id_offset = data_1.household.household_id.max() + 1
