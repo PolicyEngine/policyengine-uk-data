@@ -1,7 +1,7 @@
 from policyengine_uk_data.datasets.frs import create_frs
 from policyengine_uk_data.storage import STORAGE_FOLDER
 import logging
-from policyengine_uk.data import UKDataset
+from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk_data.utils.uprating import uprate_dataset
 
 logging.basicConfig(level=logging.INFO)
@@ -19,7 +19,7 @@ frs.save(
     STORAGE_FOLDER / "frs_2023.h5",
 )
 
-frs = UKDataset(str(STORAGE_FOLDER / "frs_2023.h5"))
+frs = UKSingleYearDataset(str(STORAGE_FOLDER / "frs_2023.h5"))
 
 logging.info(f"FRS dataset created and saved.")
 

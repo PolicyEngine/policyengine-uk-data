@@ -12,13 +12,13 @@ from policyengine_uk_data.datasets.local_areas.local_authorities.loss import (
     create_local_authority_target_matrix,
     create_national_target_matrix,
 )
-from policyengine_uk.data import UKDataset
+from policyengine_uk.data import UKSingleYearDataset
 
 DEVICE = "cpu"
 
 
 def calibrate(
-    dataset: UKDataset,
+    dataset: UKSingleYearDataset,
     verbose: bool = False,
 ):
     dataset = dataset.copy()

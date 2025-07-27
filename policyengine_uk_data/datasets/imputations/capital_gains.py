@@ -13,7 +13,7 @@ import copy
 import torch
 from torch.optim import Adam
 from tqdm import tqdm
-from policyengine_uk.data import UKDataset
+from policyengine_uk.data import UKSingleYearDataset
 import logging
 
 capital_gains = pd.read_csv(
@@ -27,7 +27,7 @@ capital_gains["maximum_total_income"] = (
 logging.basicConfig(level=logging.INFO)
 
 
-def impute_cg_to_doubled_dataset(dataset: UKDataset):
+def impute_cg_to_doubled_dataset(dataset: UKSingleYearDataset):
     """Assumes that the capital gains distribution is the same for all years."""
 
     from policyengine_uk import Microsimulation
@@ -140,7 +140,7 @@ def impute_cg_to_doubled_dataset(dataset: UKDataset):
     return new_cg, new_household_weight
 
 
-def impute_capital_gains(dataset: UKDataset) -> UKDataset:
+def impute_capital_gains(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     zero_weight_copy = dataset.copy()
     zero_weight_copy.household.household_weight = 1
     data = stack_datasets(

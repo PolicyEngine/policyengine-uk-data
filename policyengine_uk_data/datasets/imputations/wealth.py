@@ -1,6 +1,6 @@
 import pandas as pd
 from policyengine_uk_data.storage import STORAGE_FOLDER
-from policyengine_uk.data import UKDataset
+from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk import Microsimulation
 
 
@@ -159,7 +159,7 @@ def create_wealth_model(overwrite_existing: bool = False):
     return save_imputation_models()
 
 
-def impute_wealth(dataset: UKDataset) -> UKDataset:
+def impute_wealth(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     # Impute wealth, assuming same time period as trained data
     dataset = dataset.copy()
 

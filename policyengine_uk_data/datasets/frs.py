@@ -1,4 +1,4 @@
-from policyengine_uk.data import UKDataset
+from policyengine_uk.data import UKSingleYearDataset
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -15,7 +15,7 @@ from policyengine_uk_data.utils.datasets import (
 def create_frs(
     raw_frs_folder: str,
     year: int,
-) -> UKDataset:
+) -> UKSingleYearDataset:
     raw_folder = Path(raw_frs_folder)
     if not raw_folder.exists():
         raise FileNotFoundError(f"Raw folder {raw_folder} does not exist.")
@@ -628,7 +628,7 @@ def create_frs(
         household.index,
     )
 
-    dataset = UKDataset(
+    dataset = UKSingleYearDataset(
         person=pe_person,
         benunit=pe_benunit,
         household=pe_household,
@@ -763,7 +763,7 @@ def create_frs(
         extended_hours_values
     )
 
-    dataset = UKDataset(
+    dataset = UKSingleYearDataset(
         person=pe_person,
         benunit=pe_benunit,
         household=pe_household,

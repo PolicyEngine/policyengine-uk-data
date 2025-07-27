@@ -8,13 +8,13 @@ from policyengine_uk_data.utils.loss import (
     create_target_matrix as create_national_target_matrix,
 )
 from policyengine_uk_data.storage import STORAGE_FOLDER
-from policyengine_uk.data import UKDataset
+from policyengine_uk.data import UKSingleYearDataset
 
 FOLDER = Path(__file__).parent
 
 
 def create_local_authority_target_matrix(
-    dataset: UKDataset,
+    dataset: UKSingleYearDataset,
     time_period: int = None,
     reform=None,
     uprate: bool = True,
@@ -185,7 +185,7 @@ def uprate_targets(y: pd.DataFrame, target_year: int = 2025) -> pd.DataFrame:
     # Uprate age targets from 2020, taxable income targets from 2021, employment income targets from 2023.
     # Use PolicyEngine uprating factors.
 
-    frs_2020 = UKDataset(STORAGE_FOLDER / "frs_2020.h5")
+    frs_2020 = UKSingleYearDataset(STORAGE_FOLDER / "frs_2020.h5")
 
     sim = Microsimulation(dataset=frs_2020)
     matrix_20, _, _ = create_local_authority_target_matrix(

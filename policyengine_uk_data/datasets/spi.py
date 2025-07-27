@@ -2,12 +2,12 @@ from policyengine_core.data import Dataset
 from policyengine_uk_data.storage import STORAGE_FOLDER
 import pandas as pd
 import numpy as np
-from policyengine_uk.data import UKDataset
+from policyengine_uk.data import UKSingleYearDataset
 
 
 def create_spi(
     spi_data_file_path: str, fiscal_year: int, output_file_path: str
-) -> UKDataset:
+) -> UKSingleYearDataset:
     df = pd.read_csv(spi_data_file_path, delimiter="\t")
 
     person = pd.DataFrame()
@@ -99,7 +99,7 @@ def create_spi(
     person["blind_persons_allowance"] = df.BPADUE
     person["marriage_allowance"] = np.where(df.MAIND == 1, 1_250, 0)
 
-    dataset = UKDataset(
+    dataset = UKSingleYearDataset(
         person=person,
         benunit=benunit,
         household=household,

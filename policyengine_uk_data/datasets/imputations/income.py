@@ -2,7 +2,7 @@ import pandas as pd
 from pathlib import Path
 import numpy as np
 from policyengine_uk_data.storage import STORAGE_FOLDER
-from policyengine_uk.data import UKDataset
+from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk import Microsimulation
 from policyengine_uk_data.utils.stack import stack_datasets
 
@@ -104,7 +104,7 @@ def create_income_model(overwrite_existing: bool = False):
     return save_imputation_models()
 
 
-def impute_income(dataset: UKDataset) -> UKDataset:
+def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     # Impute wealth, assuming same time period as trained data
     dataset = dataset.copy()
     zero_weight_copy = dataset.copy()

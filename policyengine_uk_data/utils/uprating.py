@@ -1,6 +1,6 @@
 from policyengine_uk_data.storage import STORAGE_FOLDER
 import pandas as pd
-from policyengine_uk.data import UKDataset
+from policyengine_uk.data import UKSingleYearDataset
 
 START_YEAR = 2020
 END_YEAR = 2034
@@ -57,7 +57,7 @@ def uprate_values(values, variable_name, start_year=2020, end_year=2034):
     return values * relative_change
 
 
-def uprate_dataset(dataset: UKDataset, target_year=2034):
+def uprate_dataset(dataset: UKSingleYearDataset, target_year=2034):
     dataset = dataset.copy()
     uprating_factors = pd.read_csv(STORAGE_FOLDER / "uprating_factors.csv")
     uprating_factors = uprating_factors.set_index("Variable")

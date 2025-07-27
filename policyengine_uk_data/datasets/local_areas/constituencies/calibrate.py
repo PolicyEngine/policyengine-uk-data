@@ -20,13 +20,13 @@ from policyengine_uk_data.datasets.local_areas.constituencies.boundary_changes.m
 )
 from pathlib import Path
 from policyengine_uk_data.storage import STORAGE_FOLDER
-from policyengine_uk.data import UKDataset
+from policyengine_uk.data import UKSingleYearDataset
 
 FOLDER = Path(__file__).parent
 
 
 def calibrate(
-    dataset: UKDataset,
+    dataset: UKSingleYearDataset,
     epochs: int = 128,
     excluded_training_targets=[],
     log_csv="calibration_log.csv",
