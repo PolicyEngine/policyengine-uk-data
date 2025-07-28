@@ -110,46 +110,58 @@ def create_frs(
     else:
         fted = person.educft  # Renamed in FRS 2022-23
     typeed2 = person.typeed2
-    pe_person["current_education"] = np.select(
+
+    def determine_education_level(fted_val, typeed2_val, age_val):
+        # By default, not in education
+        if fted_val in (2, -1, 0):
+            return "NOT_IN_EDUCATION"
+        # In pre-primary
+        elif typeed2_val == 1:
+            return "PRE_PRIMARY"
+        # In primary education
+        elif (
+            typeed2_val in (2, 4)
+            or (typeed2_val in (3, 8) and age_val < 11)
+            or (
+                typeed2_val == 0
+                and fted_val == 1
+                and age_val > 5
+                and age_val < 11
+            )
+        ):
+            return "PRIMARY"
+        # In lower secondary
+        elif (
+            typeed2_val in (5, 6)
+            or (typeed2_val in (3, 8) and age_val >= 11 and age_val <= 16)
+            or (typeed2_val == 0 and fted_val == 1 and age_val <= 16)
+        ):
+            return "LOWER_SECONDARY"
+        # In upper secondary
+        elif (
+            typeed2_val == 7
+            or (typeed2_val in (3, 8) and age_val > 16)
+            or (typeed2_val == 0 and fted_val == 1 and age_val > 16)
+        ):
+            return "UPPER_SECONDARY"
+        # In post-secondary
+        elif typeed2_val in (7, 8) and age_val >= 19:
+            return "POST_SECONDARY"
+        # In tertiary
+        elif typeed2_val == 9 or (
+            typeed2_val == 0 and fted_val == 1 and age_val >= 19
+        ):
+            return "TERTIARY"
+        else:
+            return "NOT_IN_EDUCATION"
+
+    # Apply the function to determine education level
+    pe_person["current_education"] = pd.Series(
         [
-            fted.isin((2, -1, 0)),  # By default, not in education
-            typeed2 == 1,  # In pre-primary
-            typeed2.isin((2, 4))  # In primary, or...
-            | (
-                typeed2.isin((3, 8)) & (age < 11)
-            )  # special or private education (and under 11), or...
-            | (
-                (typeed2 == 0) & (fted == 1) & (age > 5) & (age < 11)
-            ),  # not given, full-time and between 5 and 11
-            typeed2.isin((5, 6))  # In secondary, or...
-            | (
-                typeed2.isin((3, 8)) & (age >= 11) & (age <= 16)
-            )  # special/private and meets age criteria, or...
-            | (
-                (typeed2 == 0) & (fted == 1) & (age <= 16)
-            ),  # not given, full-time and under 17
-            (typeed2 == 7)  # Non-advanced further education, or...
-            | (
-                typeed2.isin((3, 8)) & (age > 16)
-            )  # special/private and meets age criteria, or...
-            | (
-                (typeed2 == 0) & (fted == 1) & (age > 16)
-            ),  # not given, full-time and over 16
-            typeed2.isin((7, 8)) & (age >= 19),  # In post-secondary
-            (typeed2 == 9)
-            | (
-                (typeed2 == 0) & (fted == 1) & (age >= 19)
-            ),  # In tertiary, or meets age condition
+            determine_education_level(f, t, a)
+            for f, t, a in zip(fted, typeed2, age)
         ],
-        [
-            "NOT_IN_EDUCATION",
-            "PRE_PRIMARY",
-            "PRIMARY",
-            "LOWER_SECONDARY",
-            "UPPER_SECONDARY",
-            "POST_SECONDARY",
-            "TERTIARY",
-        ],
+        index=pe_person.index,
     )
 
     # Add employment status
