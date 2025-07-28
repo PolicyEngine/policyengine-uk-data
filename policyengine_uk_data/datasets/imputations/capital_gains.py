@@ -27,7 +27,9 @@ capital_gains["maximum_total_income"] = (
 logging.basicConfig(level=logging.INFO)
 
 
-def impute_cg_to_doubled_dataset(dataset: UKSingleYearDataset):
+def impute_cg_to_doubled_dataset(
+    dataset: UKSingleYearDataset,
+) -> tuple[np.ndarray, np.ndarray]:
     """Assumes that the capital gains distribution is the same for all years."""
 
     from policyengine_uk import Microsimulation
