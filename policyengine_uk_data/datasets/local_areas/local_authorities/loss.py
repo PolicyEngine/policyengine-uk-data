@@ -182,31 +182,23 @@ def create_country_mask(
 
 
 def uprate_targets(y: pd.DataFrame, target_year: int = 2025) -> pd.DataFrame:
-    # Uprate age targets from 2020, taxable income targets from 2021, employment income targets from 2023.
-    # Use PolicyEngine uprating factors.
+    frs_2023 = UKSingleYearDataset(STORAGE_FOLDER / "frs_2023.h5")
 
-    frs_2020 = UKSingleYearDataset(STORAGE_FOLDER / "frs_2020.h5")
-
-    sim = Microsimulation(dataset=frs_2020)
-    matrix_20, _, _ = create_local_authority_target_matrix(
-        frs_2020, 2020, uprate=False
-    )
+    sim = Microsimulation(dataset=frs_2023)
     matrix_final, _, _ = create_local_authority_target_matrix(
-        frs_2020, target_year, uprate=False
+        frs_2023, target_year, uprate=False
     )
-    weights_20 = sim.calculate("household_weight", 2020)
-    weights_final = sim.calculate("household_weight", target_year)
-
-    rel_change_20_final = (weights_final @ matrix_final) / (
-        weights_20 @ matrix_20
-    ) - 1
     is_uprated_from_2020 = [
-        col.startswith("age/") for col in matrix_20.columns
+        col.startswith("age/") for col in matrix_final.columns
     ]
-    uprating_from_2020 = np.zeros_like(matrix_20.columns, dtype=float)
-    uprating_from_2020[is_uprated_from_2020] = rel_change_20_final[
-        is_uprated_from_2020
-    ]
+    uprating_from_2020 = np.zeros_like(matrix_final.columns, dtype=float)
+    population = (
+        sim.tax_benefit_system.parameters.gov.economic_assumptions.indices.ons.population
+    )
+    uprating_from_2020[is_uprated_from_2020] = population(
+        target_year
+    ) / population(2020)
+
     uprating = uprating_from_2020
     y = y * (1 + uprating)
 
