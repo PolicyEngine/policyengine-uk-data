@@ -128,8 +128,7 @@ def create_frs(
             | (
                 (typeed2 == 0) & (fted == 1) & (age <= 16)
             ),  # not given, full-time and under 17
-            typeed2  # Non-advanced further education, or...
-            == 7
+            (typeed2 == 7)  # Non-advanced further education, or...
             | (
                 typeed2.isin((3, 8)) & (age > 16)
             )  # special/private and meets age criteria, or...
@@ -137,8 +136,7 @@ def create_frs(
                 (typeed2 == 0) & (fted == 1) & (age > 16)
             ),  # not given, full-time and over 16
             typeed2.isin((7, 8)) & (age >= 19),  # In post-secondary
-            typeed2
-            == 9
+            (typeed2 == 9)
             | (
                 (typeed2 == 0) & (fted == 1) & (age >= 19)
             ),  # In tertiary, or meets age condition
