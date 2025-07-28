@@ -649,10 +649,8 @@ def create_frs(
     from policyengine_uk import Microsimulation
 
     sim = Microsimulation(dataset=dataset)
-    region = (
-        sim.populations["benunit"]
-        .household("region", dataset.time_period)
-        .decode_to_str()
+    region = sim.populations["benunit"].household(
+        "region", dataset.time_period
     )
     lha_category = sim.calculate("LHA_category", year)
 
