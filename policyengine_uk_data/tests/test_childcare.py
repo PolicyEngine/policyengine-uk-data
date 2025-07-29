@@ -1,6 +1,4 @@
-def test_childcare():
-    from policyengine_uk import Microsimulation
-    from policyengine_uk_data.datasets import EnhancedFRS_2022_23
+def test_childcare(baseline, enhanced_frs):
     import numpy as np
 
     # Define targets (same as in the optimization script)
@@ -19,11 +17,8 @@ def test_childcare():
         },
     }
 
-    # Initialize simulation
-    sim = Microsimulation(dataset=EnhancedFRS_2022_23)
-
     # Calculate dataframe with all required variables
-    df = sim.calculate_dataframe(
+    df = baseline.calculate_dataframe(
         [
             "age",
             "tax_free_childcare",
@@ -45,12 +40,16 @@ def test_childcare():
 
     # Calculate actual spending values
     spending = {
-        "tfc": sim.calculate("tax_free_childcare", 2024).sum() / 1e9,
-        "extended": sim.calculate("extended_childcare_entitlement", 2024).sum()
+        "tfc": baseline.calculate("tax_free_childcare", 2024).sum() / 1e9,
+        "extended": baseline.calculate(
+            "extended_childcare_entitlement", 2024
+        ).sum()
         / 1e9,
-        "targeted": sim.calculate("targeted_childcare_entitlement", 2024).sum()
+        "targeted": baseline.calculate(
+            "targeted_childcare_entitlement", 2024
+        ).sum()
         / 1e9,
-        "universal": sim.calculate(
+        "universal": baseline.calculate(
             "universal_childcare_entitlement", 2024
         ).sum()
         / 1e9,

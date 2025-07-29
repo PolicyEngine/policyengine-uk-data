@@ -44,11 +44,11 @@ frs = impute_income(frs)
 logging.info("Imputing capital gains")
 frs = impute_capital_gains(frs)
 
-# Uprate to 2024
+# Uprate to 2025
 
-logging.info("Uprating dataset to 2024")
+logging.info("Uprating dataset to 2025")
 
-frs = uprate_dataset(frs, 2024)
+frs = uprate_dataset(frs, 2025)
 
 from policyengine_uk_data.datasets.local_areas.constituencies.calibrate import (
     calibrate,
@@ -58,5 +58,9 @@ logging.info("Calibrating dataset with national and constituency targets.")
 
 frs_calibrated = calibrate(frs)
 
-frs.save(STORAGE_FOLDER / "enhanced_frs_2024.h5")
+# Downrate back to 2023
+
+frs_calibrated = uprate_dataset(frs_calibrated, 2023)
+
+frs_calibrated.save(STORAGE_FOLDER / "enhanced_frs_2023.h5")
 logging.info(f"Extended FRS dataset created and saved.")
