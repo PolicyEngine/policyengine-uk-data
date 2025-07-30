@@ -110,7 +110,7 @@ def create_constituency_target_matrix(
 
     # Adjust for consistency
     for lower_age in range(0, 80, 10):
-        upper_age = lower_age + 5
+        upper_age = lower_age + 10
 
         in_age_band = (age >= lower_age) & (age < upper_age)
 
