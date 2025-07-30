@@ -8,32 +8,37 @@ import os
 from policyengine_uk_data.storage import STORAGE_FOLDER
 
 
-from policyengine_uk_data.datasets.frs.local_areas.local_authorities.loss import (
+from policyengine_uk_data.datasets.local_areas.local_authorities.loss import (
     create_local_authority_target_matrix,
     create_national_target_matrix,
 )
-from policyengine_uk_data.datasets import EnhancedFRS_2023_24
+from policyengine_uk.data import UKSingleYearDataset
 
 DEVICE = "cpu"
 
 
-def calibrate():
+def calibrate(
+    dataset: UKSingleYearDataset,
+    verbose: bool = False,
+):
+    dataset = dataset.copy()
     matrix, y, r = create_local_authority_target_matrix(
-        EnhancedFRS_2023_24, 2025
+        dataset, dataset.time_period
     )
 
     m_national, y_national = create_national_target_matrix(
-        EnhancedFRS_2023_24, 2025
+        dataset, dataset.time_period
     )
 
-    sim = Microsimulation(dataset=EnhancedFRS_2023_24)
+    sim = Microsimulation(dataset=dataset)
+    sim.default_calculation_period = dataset.time_period
 
     count_local_authority = 360
 
     # Weights - 360 x 100180
     original_weights = np.log(
-        sim.calculate("household_weight", 2025).values / count_local_authority
-        + np.random.random(len(sim.calculate("household_weight", 2025).values))
+        sim.calculate("household_weight").values / count_local_authority
+        + np.random.random(len(sim.calculate("household_weight").values))
         * 0.01
     )
     weights = torch.tensor(
@@ -96,7 +101,7 @@ def calibrate():
 
     optimizer = torch.optim.Adam([weights], lr=1e-1)
 
-    desc = range(32) if os.environ.get("DATA_LITE") else range(128)
+    desc = range(128)
 
     for epoch in desc:
         optimizer.zero_grad()
@@ -106,7 +111,7 @@ def calibrate():
         optimizer.step()
         c_close = pct_close(weights_, la=True, national=False)
         n_close = pct_close(weights_, la=False, national=True)
-        if epoch % 1 == 0:
+        if verbose and (epoch % 1 == 0):
             print(
                 f"Loss: {l.item()}, Epoch: {epoch}, Local Authority<10%: {c_close:.1%}, National<10%: {n_close:.1%}"
             )
@@ -117,6 +122,10 @@ def calibrate():
                 STORAGE_FOLDER / "local_authority_weights.h5", "w"
             ) as f:
                 f.create_dataset("2025", data=final_weights)
+
+        dataset.household.household_weight = final_weights.sum(axis=0)
+
+    return dataset
 
 
 if __name__ == "__main__":

@@ -1,5 +1,3 @@
-from policyengine_uk import Microsimulation
-from policyengine_uk_data.datasets import EnhancedFRS_2022_23
 import pytest
 
 AGGREGATES = {
@@ -9,13 +7,12 @@ AGGREGATES = {
     "bus_subsidy_spending": 2.5e9,
 }
 
-# Initialize simulation
-sim = Microsimulation(dataset=EnhancedFRS_2022_23)
-
 
 @pytest.mark.parametrize("variable", AGGREGATES.keys())
-def test_aggregates(variable: str):
-    estimate = sim.calculate(variable, map_to="household", period=2025).sum()
+def test_aggregates(baseline, variable: str):
+    estimate = baseline.calculate(
+        variable, map_to="household", period=2025
+    ).sum()
 
     assert (
         abs(estimate / AGGREGATES[variable] - 1) < 0.7

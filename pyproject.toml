@@ -13,7 +13,7 @@ authors = [
 license = {file = "LICENSE"}
 requires-python = ">=3.11"
 dependencies = [
-    "policyengine_core",
+    "policyengine-core>=3.19.4",
     "requests",
     "tqdm",
     "tabulate",
@@ -22,7 +22,7 @@ dependencies = [
     "google-cloud-storage",
     "google-auth",
     "uk-public-services-imputation",
-    "policyengine-uk>=2.40.2",
+    "policyengine-uk>=2.43.5",
 ]
 
 [project.optional-dependencies]

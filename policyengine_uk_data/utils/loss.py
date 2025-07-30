@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk_data.utils import uprate_values
+from policyengine_uk.data import UKSingleYearDataset
 
 tax_benefit = pd.read_csv(STORAGE_FOLDER / "tax_benefit.csv")
 tax_benefit["name"] = tax_benefit["name"].apply(lambda x: f"obr/{x}")
@@ -25,8 +26,8 @@ statistics = statistics[statistics.value.notnull()]
 
 
 def create_target_matrix(
-    dataset: str,
-    time_period: str,
+    dataset: UKSingleYearDataset,
+    time_period: str = None,
     reform=None,
 ) -> np.ndarray:
     """
@@ -39,6 +40,9 @@ def create_target_matrix(
     # First- tax-benefit outcomes from the DWP and OBR.
 
     from policyengine_uk import Microsimulation
+
+    if time_period is None:
+        time_period = dataset.time_period
 
     sim = Microsimulation(dataset=dataset, reform=reform)
     sim.default_calculation_period = time_period

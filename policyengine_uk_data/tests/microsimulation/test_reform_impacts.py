@@ -18,14 +18,8 @@ with open(config_path, "r") as f:
 
 reforms_data = config["reforms"]
 
-dataset = Dataset.from_file(STORAGE_FOLDER / "enhanced_frs_2023_24.h5")
 
-
-# Initialize baseline simulation
-baseline = Microsimulation(dataset=dataset)
-
-
-def get_fiscal_impact(reform: dict) -> float:
+def get_fiscal_impact(baseline, enhanced_frs, reform: dict) -> float:
     """
     Calculate the fiscal impact of a reform in billions.
 
@@ -36,7 +30,7 @@ def get_fiscal_impact(reform: dict) -> float:
         Fiscal impact in billions (positive = revenue increase)
     """
     baseline_revenue = baseline.calculate("gov_balance", 2029).sum()
-    reform_simulation = Microsimulation(reform=reform, dataset=dataset)
+    reform_simulation = Microsimulation(reform=reform, dataset=enhanced_frs)
     reform_revenue = reform_simulation.calculate("gov_balance", 2029).sum()
     return (reform_revenue - baseline_revenue) / 1e9
 
@@ -55,9 +49,11 @@ reform_names = [reform["name"] for reform in reforms_data]
     test_params,
     ids=reform_names,
 )
-def test_reform_fiscal_impacts(reform, reform_name, expected_impact):
+def test_reform_fiscal_impacts(
+    baseline, enhanced_frs, reform, reform_name, expected_impact
+):
     """Test that each reform produces the expected fiscal impact."""
-    impact = get_fiscal_impact(reform)
+    impact = get_fiscal_impact(baseline, enhanced_frs, reform)
 
     # Allow for small numerical differences (1.0 billion tolerance)
     assert (

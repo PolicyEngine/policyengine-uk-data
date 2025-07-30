@@ -12,30 +12,37 @@ from policyengine_uk_data.utils.loss import (
     create_target_matrix as create_national_target_matrix,
 )
 from policyengine_uk_data.storage import STORAGE_FOLDER
-from policyengine_uk_data.datasets.frs.local_areas.constituencies.boundary_changes.mapping_matrix import (
+from policyengine_uk_data.datasets.local_areas.constituencies.boundary_changes.mapping_matrix import (
     mapping_matrix,
 )
+from policyengine_uk.data import UKSingleYearDataset
 
 FOLDER = Path(__file__).parent
 
 
 def create_constituency_target_matrix(
-    dataset: str = "enhanced_frs_2022_23",
-    time_period: int = 2025,
+    dataset: UKSingleYearDataset,
+    time_period: int = None,
     reform=None,
     uprate: bool = True,
 ):
+    if time_period is None:
+        time_period = dataset.time_period
     ages = pd.read_csv(FOLDER / "targets" / "age.csv")
+    national_demographics = pd.read_csv(STORAGE_FOLDER / "demographics.csv")
     incomes = pd.read_csv(FOLDER / "targets" / "spi_by_constituency.csv")
     employment_incomes = pd.read_csv(
         FOLDER / "targets" / "employment_income.csv"
     )
 
     sim = Microsimulation(dataset=dataset, reform=reform)
-    sim.default_calculation_period = time_period
+    sim.default_calculation_period = dataset.time_period
 
     national_incomes = pd.read_csv(STORAGE_FOLDER / "incomes_projection.csv")
-    national_incomes = national_incomes[national_incomes.year == 2025]
+    national_incomes = national_incomes[
+        national_incomes.year
+        == max(national_incomes.year.min(), int(dataset.time_period))
+    ]
 
     matrix = pd.DataFrame()
     y = pd.DataFrame()
@@ -77,7 +84,15 @@ def create_constituency_target_matrix(
             * national_consistency_adjustment_factor
         )
 
+    uk_total_population = (
+        national_demographics[national_demographics.name == "uk_population"][
+            str(time_period)
+        ].values[0]
+        * 1e6
+    )
+
     age = sim.calculate("age").values
+    targets_total_pop = 0
     for lower_age in range(0, 80, 10):
         upper_age = lower_age + 10
 
@@ -94,6 +109,16 @@ def create_constituency_target_matrix(
 
         age_str = f"{lower_age}_{upper_age}"
         y[f"age/{age_str}"] = age_count.values
+        targets_total_pop += age_count.values.sum()
+
+    # Adjust for consistency
+    for lower_age in range(0, 80, 10):
+        upper_age = lower_age + 10
+
+        in_age_band = (age >= lower_age) & (age < upper_age)
+
+        age_str = f"{lower_age}_{upper_age}"
+        y[f"age/{age_str}"] *= uk_total_population / targets_total_pop
 
     employment_income = sim.calculate("employment_income").values
     bounds = list(
@@ -152,9 +177,6 @@ def create_constituency_target_matrix(
             amount_target * adjustment
         )
 
-    if uprate:
-        y = uprate_targets(y, time_period)
-
     const_2024 = pd.read_csv(STORAGE_FOLDER / "constituencies_2024.csv")
     const_2010 = pd.read_csv(STORAGE_FOLDER / "constituencies_2010.csv")
 
@@ -197,44 +219,3 @@ def create_country_mask(
         r[i] = household_countries == constituency_countries[i]
 
     return r
-
-
-def uprate_targets(y: pd.DataFrame, target_year: int = 2025) -> pd.DataFrame:
-    # Uprate age targets from 2020, taxable income targets from 2021, employment income targets from 2023.
-    # Use PolicyEngine uprating factors.
-    from policyengine_uk_data.datasets.frs.frs import FRS_2020_21
-
-    sim = Microsimulation(dataset=FRS_2020_21)
-    matrix_20, y_20, _ = create_constituency_target_matrix(
-        FRS_2020_21, 2020, uprate=False
-    )
-    matrix_21, y_21, _ = create_constituency_target_matrix(
-        FRS_2020_21, 2021, uprate=False
-    )
-    matrix_23, y_23, _ = create_constituency_target_matrix(
-        FRS_2020_21, 2023, uprate=False
-    )
-    matrix_final, y_final, _ = create_constituency_target_matrix(
-        FRS_2020_21, target_year, uprate=False
-    )
-
-    weights_20 = sim.calculate("household_weight", 2020)
-    weights_21 = sim.calculate("household_weight", 2021)
-    weights_23 = sim.calculate("household_weight", 2023)
-    weights_final = sim.calculate("household_weight", target_year)
-
-    rel_change_20_final = (weights_final @ matrix_final) / (
-        weights_20 @ matrix_20
-    ) - 1
-    is_uprated_from_2020 = [
-        col.startswith("age/") for col in matrix_20.columns
-    ]
-    uprating_from_2020 = np.zeros_like(matrix_20.columns, dtype=float)
-    uprating_from_2020[is_uprated_from_2020] = rel_change_20_final[
-        is_uprated_from_2020
-    ]
-
-    uprating = uprating_from_2020
-    y = y * (1 + uprating)
-
-    return y
