@@ -100,7 +100,7 @@ def create_local_authority_target_matrix(
         targets_total_pop += age_count.values.sum()
 
     # Adjust for consistency
-    for lower_age in range(80, 120, 5):
+    for lower_age in range(0, 80, 10):
         upper_age = lower_age + 5
 
         in_age_band = (age >= lower_age) & (age < upper_age)
