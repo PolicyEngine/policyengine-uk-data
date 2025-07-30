@@ -76,9 +76,12 @@ def create_local_authority_target_matrix(
 
     age = sim.calculate("age").values
     national_demographics = pd.read_csv(STORAGE_FOLDER / "demographics.csv")
-    uk_total_population = national_demographics[
-        national_demographics.name == "uk_population"
-    ][str(time_period)].values[0]
+    uk_total_population = (
+        national_demographics[national_demographics.name == "uk_population"][
+            str(time_period)
+        ].values[0]
+        * 1e6
+    )
 
     age = sim.calculate("age").values
     for lower_age in range(0, 80, 10):

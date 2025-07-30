@@ -84,9 +84,12 @@ def create_constituency_target_matrix(
             * national_consistency_adjustment_factor
         )
 
-    uk_total_population = national_demographics[
-        national_demographics.name == "uk_population"
-    ][str(time_period)].values[0]
+    uk_total_population = (
+        national_demographics[national_demographics.name == "uk_population"][
+            str(time_period)
+        ].values[0]
+        * 1e6
+    )
 
     age = sim.calculate("age").values
     targets_total_pop = 0
