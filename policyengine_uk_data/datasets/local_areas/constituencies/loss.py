@@ -29,6 +29,7 @@ def create_constituency_target_matrix(
     if time_period is None:
         time_period = dataset.time_period
     ages = pd.read_csv(FOLDER / "targets" / "age.csv")
+    national_demographics = pd.read_csv(STORAGE_FOLDER / "demographics.csv")
     incomes = pd.read_csv(FOLDER / "targets" / "spi_by_constituency.csv")
     employment_incomes = pd.read_csv(
         FOLDER / "targets" / "employment_income.csv"
@@ -83,7 +84,12 @@ def create_constituency_target_matrix(
             * national_consistency_adjustment_factor
         )
 
+    uk_total_population = national_demographics[
+        national_demographics.name == "uk_population"
+    ][str(time_period)].values[0]
+
     age = sim.calculate("age").values
+    targets_total_pop = 0
     for lower_age in range(0, 80, 10):
         upper_age = lower_age + 10
 
@@ -100,6 +106,16 @@ def create_constituency_target_matrix(
 
         age_str = f"{lower_age}_{upper_age}"
         y[f"age/{age_str}"] = age_count.values
+        targets_total_pop += age_count.values.sum()
+
+    # Adjust for consistency
+    for lower_age in range(80, 120, 5):
+        upper_age = lower_age + 5
+
+        in_age_band = (age >= lower_age) & (age < upper_age)
+
+        age_str = f"{lower_age}_{upper_age}"
+        y[f"age/{age_str}"] *= uk_total_population / targets_total_pop
 
     employment_income = sim.calculate("employment_income").values
     bounds = list(
@@ -158,9 +174,6 @@ def create_constituency_target_matrix(
             amount_target * adjustment
         )
 
-    if uprate:
-        y = uprate_targets(y, dataset.time_period)
-
     const_2024 = pd.read_csv(STORAGE_FOLDER / "constituencies_2024.csv")
     const_2010 = pd.read_csv(STORAGE_FOLDER / "constituencies_2010.csv")
 
@@ -203,29 +216,3 @@ def create_country_mask(
         r[i] = household_countries == constituency_countries[i]
 
     return r
-
-
-def uprate_targets(y: pd.DataFrame, target_year: int = 2025) -> pd.DataFrame:
-    # Uprate age targets from 2020.
-
-    frs_2023 = UKSingleYearDataset(STORAGE_FOLDER / "frs_2023.h5")
-
-    sim = Microsimulation(dataset=frs_2023)
-    matrix_final, _, _ = create_constituency_target_matrix(
-        frs_2023, target_year, uprate=False
-    )
-    is_uprated_from_2020 = [
-        col.startswith("age/") for col in matrix_final.columns
-    ]
-    uprating_from_2020 = np.zeros_like(matrix_final.columns, dtype=float)
-    population = (
-        sim.tax_benefit_system.parameters.gov.economic_assumptions.indices.ons.population
-    )
-    uprating_from_2020[is_uprated_from_2020] = population(
-        target_year
-    ) / population(2020)
-
-    uprating = uprating_from_2020
-    y = y * (1 + uprating)
-
-    return y

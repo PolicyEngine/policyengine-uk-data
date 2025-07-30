@@ -75,6 +75,12 @@ def create_local_authority_target_matrix(
         )
 
     age = sim.calculate("age").values
+    national_demographics = pd.read_csv(STORAGE_FOLDER / "demographics.csv")
+    uk_total_population = national_demographics[
+        national_demographics.name == "uk_population"
+    ][str(time_period)].values[0]
+
+    age = sim.calculate("age").values
     for lower_age in range(0, 80, 10):
         upper_age = lower_age + 10
 
@@ -91,6 +97,16 @@ def create_local_authority_target_matrix(
 
         age_str = f"{lower_age}_{upper_age}"
         y[f"age/{age_str}"] = age_count.values
+        targets_total_pop += age_count.values.sum()
+
+    # Adjust for consistency
+    for lower_age in range(80, 120, 5):
+        upper_age = lower_age + 5
+
+        in_age_band = (age >= lower_age) & (age < upper_age)
+
+        age_str = f"{lower_age}_{upper_age}"
+        y[f"age/{age_str}"] *= uk_total_population / targets_total_pop
 
     employment_income = sim.calculate("employment_income").values
     bounds = list(
@@ -147,9 +163,6 @@ def create_local_authority_target_matrix(
             amount_target * adjustment
         )
 
-    if uprate:
-        y = uprate_targets(y, time_period)
-
     country_mask = create_country_mask(
         household_countries=sim.calculate("country").values,
         codes=la_codes.code,
@@ -179,27 +192,3 @@ def create_country_mask(
         r[i] = household_countries == constituency_countries[i]
 
     return r
-
-
-def uprate_targets(y: pd.DataFrame, target_year: int = 2025) -> pd.DataFrame:
-    frs_2023 = UKSingleYearDataset(STORAGE_FOLDER / "frs_2023.h5")
-
-    sim = Microsimulation(dataset=frs_2023)
-    matrix_final, _, _ = create_local_authority_target_matrix(
-        frs_2023, target_year, uprate=False
-    )
-    is_uprated_from_2020 = [
-        col.startswith("age/") for col in matrix_final.columns
-    ]
-    uprating_from_2020 = np.zeros_like(matrix_final.columns, dtype=float)
-    population = (
-        sim.tax_benefit_system.parameters.gov.economic_assumptions.indices.ons.population
-    )
-    uprating_from_2020[is_uprated_from_2020] = population(
-        target_year
-    ) / population(2020)
-
-    uprating = uprating_from_2020
-    y = y * (1 + uprating)
-
-    return y
