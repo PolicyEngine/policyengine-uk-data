@@ -21,8 +21,8 @@ dependencies = [
     "policyengine",
     "google-cloud-storage",
     "google-auth",
-    "uk-public-services-imputation",
     "policyengine-uk>=2.43.5",
+    "microcalibrate>=0.18.0",
 ]
 
 [project.optional-dependencies]

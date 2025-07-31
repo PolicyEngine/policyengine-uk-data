@@ -16,6 +16,7 @@ upload:
 	python policyengine_uk_data/storage/upload_completed_datasets.py
 
 documentation:
+	pip install --pre "jupyter-book>=2"
 	jb clean docs && jb build docs
 	python docs/add_plotly_to_book.py docs
 
