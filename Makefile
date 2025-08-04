@@ -12,8 +12,7 @@ install:
 	pip install -e ".[dev]" --config-settings editable_mode=compat
 
 install-uv:
-	uv pip install --system policyengine-uk
-	uv pip install --system policyengine>=2.40.2
+	uv pip install --system "jupyter-book>=2.0.0a0"
 	uv pip install --system -e ".[dev]" --config-settings editable_mode=compat
 
 download:
@@ -37,6 +36,7 @@ data:
 	python policyengine_uk_data/datasets/frs/local_areas/constituencies/calibrate.py
 	python policyengine_uk_data/datasets/frs/local_areas/local_authorities/calibrate.py
 	python policyengine_uk_data/utils/create_multi_year_dataset.py
+	python policyengine_uk_data/storage/migrate_to_uk_single_year_datasets.py
 
 efrs:
 	python policyengine_uk_data/datasets/frs/enhanced_frs.py
