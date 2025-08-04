@@ -22,7 +22,7 @@ dependencies = [
     "google-cloud-storage",
     "google-auth",
     "uk-public-services-imputation",
-    "policyengine-uk>=2.45.4",
+    "policyengine-uk==2.40.2",
 ]
 
 [project.optional-dependencies]
