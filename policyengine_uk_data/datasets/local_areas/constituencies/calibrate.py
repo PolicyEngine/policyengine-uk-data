@@ -1,22 +1,11 @@
-import torch
-from policyengine_uk import Microsimulation
 import pandas as pd
-import numpy as np
-import h5py
-
+from policyengine_uk_data.utils.calibrate import calibrate_local_areas
 from policyengine_uk_data.datasets.local_areas.constituencies.loss import (
     create_constituency_target_matrix,
     create_national_target_matrix,
 )
-from policyengine_uk_data.datasets.local_areas.constituencies.boundary_changes.mapping_matrix import (
-    mapping_matrix,
-)
-from pathlib import Path
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
-
-FOLDER = Path(__file__).parent
-
 
 def calibrate(
     dataset: UKSingleYearDataset,
@@ -25,157 +14,18 @@ def calibrate(
     log_csv="calibration_log.csv",
     verbose: bool = False,
 ):
-    dataset = dataset.copy()
-    matrix_, y_, country_mask = create_constituency_target_matrix(dataset)
-    m_national_, y_national_ = create_national_target_matrix(dataset)
-
-    sim = Microsimulation(dataset=dataset)
-    sim.default_calculation_period = dataset.time_period
-
-    COUNT_CONSTITUENCIES = 650
-
-    # Weights - 650 x 100180
-    original_weights = np.log(
-        sim.calculate("household_weight").values / COUNT_CONSTITUENCIES
-        + np.random.random(len(sim.calculate("household_weight").values))
-        * 0.01
+    return calibrate_local_areas(
+        dataset=dataset,
+        matrix_fn=create_constituency_target_matrix,
+        national_matrix_fn=create_national_target_matrix,
+        area_count=650,
+        weight_file="parliamentary_constituency_weights.h5",
+        epochs=epochs,
+        excluded_training_targets=excluded_training_targets,
+        log_csv=log_csv,
+        verbose=verbose,
+        area_name="Constituency",
     )
-    weights = torch.tensor(
-        np.ones((COUNT_CONSTITUENCIES, len(original_weights)))
-        * original_weights,
-        dtype=torch.float32,
-        requires_grad=True,
-    )
-    validation_targets_c = matrix_.columns.isin(excluded_training_targets)
-    validation_targets_n = m_national_.columns.isin(excluded_training_targets)
-    if len(excluded_training_targets) > 0:
-        dropout_targets = True
-    else:
-        dropout_targets = False
-
-    metrics = torch.tensor(matrix_.values, dtype=torch.float32)
-    y = torch.tensor(y_.values, dtype=torch.float32)
-    matrix_national = torch.tensor(m_national_.values, dtype=torch.float32)
-    y_national = torch.tensor(y_national_.values, dtype=torch.float32)
-    r = torch.tensor(country_mask, dtype=torch.float32)
-
-    def loss(w, validation: bool = False):
-        pred_c = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
-        if dropout_targets:
-            if validation:
-                mask = validation_targets_c
-            else:
-                mask = ~validation_targets_c
-            pred_c = pred_c[:, mask]
-            mse_c = torch.mean((pred_c / (1 + y[:, mask]) - 1) ** 2)
-        else:
-            mse_c = torch.mean((pred_c / (1 + y) - 1) ** 2)
-
-        pred_n = (w.sum(axis=0) * matrix_national.T).sum(axis=1)
-        if dropout_targets:
-            if validation:
-                mask = validation_targets_n
-            else:
-                mask = ~validation_targets_n
-            pred_n = pred_n[mask]
-            mse_n = torch.mean((pred_n / (1 + y_national[mask]) - 1) ** 2)
-        else:
-            mse_n = torch.mean((pred_n / (1 + y_national) - 1) ** 2)
-
-        return mse_c + mse_n
-
-    def pct_close(w, t=0.1, constituency=True, national=True):
-        # Return the percentage of metrics that are within t% of the target
-        numerator = 0
-        denominator = 0
-        pred_c = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
-        e_c = torch.sum(torch.abs((pred_c / (1 + y) - 1)) < t).item()
-        c_c = pred_c.shape[0] * pred_c.shape[1]
-
-        if constituency:
-            numerator += e_c
-            denominator += c_c
-
-        pred_n = (w.sum(axis=0) * matrix_national.T).sum(axis=1)
-        e_n = torch.sum(torch.abs((pred_n / (1 + y_national) - 1)) < t).item()
-        c_n = pred_n.shape[0]
-
-        if national:
-            numerator += e_n
-            denominator += c_n
-
-        return numerator / denominator
-
-    def dropout_weights(weights, p):
-        if p == 0:
-            return weights
-        # Replace p% of the weights with the mean value of the rest of them
-        mask = torch.rand_like(weights) < p
-        mean = weights[~mask].mean()
-        masked_weights = weights.clone()
-        masked_weights[mask] = mean
-        return masked_weights
-
-    optimizer = torch.optim.Adam([weights], lr=1e-1)
-
-    desc = range(epochs)
-    final_weights = (torch.exp(weights) * r).detach().numpy()
-    performance = pd.DataFrame()
-
-    for epoch in desc:
-        optimizer.zero_grad()
-        weights_ = torch.exp(dropout_weights(weights, 0.05)) * r
-        l = loss(weights_)
-        c_close = pct_close(weights_, constituency=True, national=False, t=0.1)
-        n_close = pct_close(weights_, constituency=False, national=True, t=0.1)
-        if verbose and (epoch % 1 == 0):
-            if dropout_targets:
-                validation_loss = loss(weights_, validation=True)
-                print(
-                    f"Training loss: {l.item():,.3f}, Validation loss: {validation_loss.item():,.3f}, Epoch: {epoch}, "
-                    f"Constituency<10%: {c_close:.1%}, National<10%: {n_close:.1%}"
-                )
-            else:
-                print(
-                    f"Loss: {l.item()}, Epoch: {epoch}, Constituency<10%: {c_close:.1%}, National<10%: {n_close:.1%}"
-                )
-        if epoch % 10 == 0:
-            final_weights = (torch.exp(weights) * r).detach().numpy()
-
-            performance_step = get_performance(
-                final_weights,
-                matrix_,
-                y_,
-                m_national_,
-                y_national_,
-                excluded_training_targets,
-            )
-            performance_step["epoch"] = epoch
-            performance_step["loss"] = performance_step.rel_abs_error**2
-            performance_step["target_name"] = [
-                f"{area}/{metric}"
-                for area, metric in zip(
-                    performance_step.name, performance_step.metric
-                )
-            ]
-            performance = pd.concat(
-                [performance, performance_step], ignore_index=True
-            )
-
-            if log_csv:
-                performance.to_csv(log_csv, index=False)
-
-            with h5py.File(
-                STORAGE_FOLDER / "parliamentary_constituency_weights.h5", "w"
-            ) as f:
-                f.create_dataset("2025", data=final_weights)
-
-            dataset.household.household_weight = final_weights.sum(axis=0)
-
-        l.backward()
-        optimizer.step()
-
-    return dataset
 
 
 def get_performance(weights, m_c, y_c, m_n, y_n, excluded_targets):
