@@ -21,7 +21,7 @@ FOLDER = Path(__file__).parent
 
 def calibrate(
     dataset: UKSingleYearDataset,
-    epochs: int = 528,
+    epochs: int = 128,
     excluded_training_targets=[],
     log_csv="calibration_log.csv",
     verbose: bool = False,
@@ -53,13 +53,17 @@ def calibrate(
         if isinstance(weights, torch.Tensor):
             device = weights.device
         else:
-            device = torch.device('cpu')
+            device = torch.device("cpu")
             weights = torch.tensor(weights, dtype=torch.float32, device=device)
-            
+
         # Convert numpy arrays to torch tensors on the same device
-        constituency_expanded_torch = torch.tensor(constituency_expanded, dtype=torch.float32, device=device)
-        m_national_torch = torch.tensor(m_national_.values.T, dtype=torch.float32, device=device)
-            
+        constituency_expanded_torch = torch.tensor(
+            constituency_expanded, dtype=torch.float32, device=device
+        )
+        m_national_torch = torch.tensor(
+            m_national_.values.T, dtype=torch.float32, device=device
+        )
+
         # weights shape: (650, num_households)
         # Constituency estimates: sum over households for each constituency
         constituency_estimates = torch.sum(
@@ -68,7 +72,7 @@ def calibrate(
 
         # National estimates: sum all weights then multiply by national matrix
         national_weights = weights.sum(dim=0)
-        
+
         # m_national_ is the matrix with households as rows and targets as columns
         # We need to transpose it to get targets as rows and households as columns for A @ w
         national_estimates = m_national_torch @ national_weights
@@ -80,11 +84,17 @@ def calibrate(
     constituency_targets = y_.values.flatten()
     national_targets = y_national_.values
     combined_targets = np.concatenate([constituency_targets, national_targets])
-    
+
     # Create target names
-    constituency_target_names = [f"{col}_{const}" for col in y_.columns for const in range(COUNT_CONSTITUENCIES)]
+    constituency_target_names = [
+        f"{col}_{const}"
+        for col in y_.columns
+        for const in range(COUNT_CONSTITUENCIES)
+    ]
     national_target_names = list(y_national_.index)
-    combined_target_names = np.array(constituency_target_names + national_target_names)
+    combined_target_names = np.array(
+        constituency_target_names + national_target_names
+    )
 
     # Initialize weights with some noise
     initial_weights = (

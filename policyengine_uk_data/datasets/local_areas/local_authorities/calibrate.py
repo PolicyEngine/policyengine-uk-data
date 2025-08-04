@@ -15,7 +15,7 @@ from policyengine_uk.data import UKSingleYearDataset
 
 def calibrate(
     dataset: UKSingleYearDataset,
-    epochs: int = 528,
+    epochs: int = 128,
     verbose: bool = False,
 ):
     dataset = dataset.copy()
@@ -50,13 +50,17 @@ def calibrate(
         if isinstance(weights, torch.Tensor):
             device = weights.device
         else:
-            device = torch.device('cpu')
+            device = torch.device("cpu")
             weights = torch.tensor(weights, dtype=torch.float32, device=device)
-            
+
         # Convert numpy arrays to torch tensors on the same device
-        la_expanded_torch = torch.tensor(la_expanded, dtype=torch.float32, device=device)
-        m_national_torch = torch.tensor(m_national.values.T, dtype=torch.float32, device=device)
-            
+        la_expanded_torch = torch.tensor(
+            la_expanded, dtype=torch.float32, device=device
+        )
+        m_national_torch = torch.tensor(
+            m_national.values.T, dtype=torch.float32, device=device
+        )
+
         # weights shape: (360, num_households)
         # Local authority estimates: sum over households for each LA
         la_estimates = torch.sum(
@@ -65,7 +69,7 @@ def calibrate(
 
         # National estimates: sum all weights then multiply by national matrix
         national_weights = weights.sum(dim=0)
-        
+
         # m_national is the matrix with households as rows and targets as columns
         # We need to transpose it to get targets as rows and households as columns for A @ w
         national_estimates = m_national_torch @ national_weights
@@ -77,9 +81,13 @@ def calibrate(
     la_targets = y.values.flatten()
     national_targets = y_national.values
     combined_targets = np.concatenate([la_targets, national_targets])
-    
+
     # Create target names
-    la_target_names = [f"{col}_{la}" for col in y.columns for la in range(count_local_authority)]
+    la_target_names = [
+        f"{col}_{la}"
+        for col in y.columns
+        for la in range(count_local_authority)
+    ]
     national_target_names = list(y_national.index)
     combined_target_names = np.array(la_target_names + national_target_names)
 

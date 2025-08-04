@@ -25,4 +25,5 @@ def enhanced_frs():
 def baseline(enhanced_frs: UKSingleYearDataset):
     """Baseline microsimulation using enhanced FRS."""
     from policyengine_uk import Microsimulation
+
     return Microsimulation(dataset=enhanced_frs)
