@@ -42,7 +42,7 @@ def calibrate(
     la_expanded = np.repeat(
         matrix.values, count_local_authority, axis=0
     ).reshape(count_local_authority, matrix.shape[0], matrix.shape[1])
-    national_expanded = np.tile(m_national.values, (count_local_authority, 1))
+    # Don't expand national matrix - we only need the original for calculations
 
     # Create estimate function that combines local authority and national estimates
     def estimate_function(weights, matrix=None):

@@ -45,7 +45,7 @@ def calibrate(
     constituency_expanded = np.repeat(
         matrix_.values, COUNT_CONSTITUENCIES, axis=0
     ).reshape(COUNT_CONSTITUENCIES, matrix_.shape[0], matrix_.shape[1])
-    national_expanded = np.tile(m_national_.values, (COUNT_CONSTITUENCIES, 1))
+    # Don't expand national matrix - we only need the original for calculations
 
     # Create estimate function that combines constituency and national estimates
     def estimate_function(weights, matrix=None):
