@@ -12,7 +12,7 @@ install:
 	pip install -e ".[dev]" --config-settings editable_mode=compat
 
 install-uv:
-	uv pip install --system jupyter-book>=2.0.0a0
+	uv pip install --system "jupyter-book>=2.0.0a0"
 	uv pip install --system -e ".[dev]" --config-settings editable_mode=compat
 
 download:
