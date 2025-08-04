@@ -23,6 +23,7 @@ dependencies = [
     "google-auth",
     "uk-public-services-imputation",
     "policyengine-uk>=2.45.3",
+    "jupyter-book>=2.0.0a0",
 ]
 
 [project.optional-dependencies]
