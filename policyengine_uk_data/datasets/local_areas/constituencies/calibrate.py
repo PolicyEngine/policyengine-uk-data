@@ -1,9 +1,8 @@
+import torch
 from policyengine_uk import Microsimulation
 import pandas as pd
 import numpy as np
 import h5py
-import torch
-from microcalibrate.calibration import Calibration
 
 from policyengine_uk_data.datasets.local_areas.constituencies.loss import (
     create_constituency_target_matrix,
@@ -35,106 +34,232 @@ def calibrate(
 
     COUNT_CONSTITUENCIES = 650
 
-    # Initial weights
-    original_weights = (
+    # Weights - 650 x 100180
+    original_weights = np.log(
         sim.calculate("household_weight").values / COUNT_CONSTITUENCIES
+        + np.random.random(len(sim.calculate("household_weight").values))
+        * 0.01
     )
-
-    # Create combined estimate matrix and targets
-    # Combine constituency and national matrices
-    constituency_expanded = np.repeat(
-        matrix_.values, COUNT_CONSTITUENCIES, axis=0
-    ).reshape(COUNT_CONSTITUENCIES, matrix_.shape[0], matrix_.shape[1])
-    # Don't expand national matrix - we only need the original for calculations
-
-    # Create estimate function that combines constituency and national estimates
-    def estimate_function(weights, matrix=None):
-        # Use torch operations to preserve gradients
-        if isinstance(weights, torch.Tensor):
-            device = weights.device
-        else:
-            device = torch.device("cpu")
-            weights = torch.tensor(weights, dtype=torch.float32, device=device)
-
-        # Convert numpy arrays to torch tensors on the same device
-        constituency_expanded_torch = torch.tensor(
-            constituency_expanded, dtype=torch.float32, device=device
-        )
-        m_national_torch = torch.tensor(
-            m_national_.values.T, dtype=torch.float32, device=device
-        )
-
-        # weights shape: (650, num_households)
-        # Constituency estimates: sum over households for each constituency
-        constituency_estimates = torch.sum(
-            weights[:, :, None] * constituency_expanded_torch, dim=1
-        ).flatten()
-
-        # National estimates: sum all weights then multiply by national matrix
-        national_weights = weights.sum(dim=0)
-
-        # m_national_ is the matrix with households as rows and targets as columns
-        # We need to transpose it to get targets as rows and households as columns for A @ w
-        national_estimates = m_national_torch @ national_weights
-
-        result = torch.cat([constituency_estimates, national_estimates])
-        return result
-
-    # Create combined targets
-    constituency_targets = y_.values.flatten()
-    national_targets = y_national_.values
-    combined_targets = np.concatenate([constituency_targets, national_targets])
-
-    # Create target names
-    constituency_target_names = [
-        f"{col}_{const}"
-        for col in y_.columns
-        for const in range(COUNT_CONSTITUENCIES)
-    ]
-    national_target_names = list(y_national_.index)
-    combined_target_names = np.array(
-        constituency_target_names + national_target_names
-    )
-
-    # Initialize weights with some noise
-    initial_weights = (
+    weights = torch.tensor(
         np.ones((COUNT_CONSTITUENCIES, len(original_weights)))
-        * original_weights
+        * original_weights,
+        dtype=torch.float32,
+        requires_grad=True,
     )
-    initial_weights *= 1 + np.random.random(initial_weights.shape) * 0.01
+    validation_targets_c = matrix_.columns.isin(excluded_training_targets)
+    validation_targets_n = m_national_.columns.isin(excluded_training_targets)
+    if len(excluded_training_targets) > 0:
+        dropout_targets = True
+    else:
+        dropout_targets = False
 
-    # Apply country mask
-    initial_weights = initial_weights * country_mask
+    metrics = torch.tensor(matrix_.values, dtype=torch.float32)
+    y = torch.tensor(y_.values, dtype=torch.float32)
+    matrix_national = torch.tensor(m_national_.values, dtype=torch.float32)
+    y_national = torch.tensor(y_national_.values, dtype=torch.float32)
+    r = torch.tensor(country_mask, dtype=torch.float32)
 
-    calibrator = Calibration(
-        weights=initial_weights,
-        targets=combined_targets,
-        target_names=combined_target_names,
-        estimate_function=estimate_function,
-        noise_level=0.05,
-        epochs=epochs,
-        learning_rate=0.01,
-        dropout_rate=0.05,
-    )
+    def loss(w, validation: bool = False):
+        pred_c = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
+        if dropout_targets:
+            if validation:
+                mask = validation_targets_c
+            else:
+                mask = ~validation_targets_c
+            pred_c = pred_c[:, mask]
+            mse_c = torch.mean((pred_c / (1 + y[:, mask]) - 1) ** 2)
+        else:
+            mse_c = torch.mean((pred_c / (1 + y) - 1) ** 2)
 
-    performance_df = calibrator.calibrate()
+        pred_n = (w.sum(axis=0) * matrix_national.T).sum(axis=1)
+        if dropout_targets:
+            if validation:
+                mask = validation_targets_n
+            else:
+                mask = ~validation_targets_n
+            pred_n = pred_n[mask]
+            mse_n = torch.mean((pred_n / (1 + y_national[mask]) - 1) ** 2)
+        else:
+            mse_n = torch.mean((pred_n / (1 + y_national) - 1) ** 2)
 
-    # Get final weights
-    final_weights = calibrator.weights * country_mask
+        return mse_c + mse_n
 
-    # Save weights
-    with h5py.File(
-        STORAGE_FOLDER / "parliamentary_constituency_weights.h5", "w"
-    ) as f:
-        f.create_dataset("2025", data=final_weights)
+    def pct_close(w, t=0.1, constituency=True, national=True):
+        # Return the percentage of metrics that are within t% of the target
+        numerator = 0
+        denominator = 0
+        pred_c = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
+        e_c = torch.sum(torch.abs((pred_c / (1 + y) - 1)) < t).item()
+        c_c = pred_c.shape[0] * pred_c.shape[1]
 
-    dataset.household.household_weight = final_weights.sum(axis=0)
+        if constituency:
+            numerator += e_c
+            denominator += c_c
 
-    # Convert performance to match original format if log_csv is specified
-    if log_csv:
-        performance_df.to_csv(log_csv, index=False)
+        pred_n = (w.sum(axis=0) * matrix_national.T).sum(axis=1)
+        e_n = torch.sum(torch.abs((pred_n / (1 + y_national) - 1)) < t).item()
+        c_n = pred_n.shape[0]
+
+        if national:
+            numerator += e_n
+            denominator += c_n
+
+        return numerator / denominator
+
+    def dropout_weights(weights, p):
+        if p == 0:
+            return weights
+        # Replace p% of the weights with the mean value of the rest of them
+        mask = torch.rand_like(weights) < p
+        mean = weights[~mask].mean()
+        masked_weights = weights.clone()
+        masked_weights[mask] = mean
+        return masked_weights
+
+    optimizer = torch.optim.Adam([weights], lr=1e-1)
+
+    desc = range(epochs)
+    final_weights = (torch.exp(weights) * r).detach().numpy()
+    performance = pd.DataFrame()
+
+    for epoch in desc:
+        optimizer.zero_grad()
+        weights_ = torch.exp(dropout_weights(weights, 0.05)) * r
+        l = loss(weights_)
+        c_close = pct_close(weights_, constituency=True, national=False, t=0.1)
+        n_close = pct_close(weights_, constituency=False, national=True, t=0.1)
+        if verbose and (epoch % 1 == 0):
+            if dropout_targets:
+                validation_loss = loss(weights_, validation=True)
+                print(
+                    f"Training loss: {l.item():,.3f}, Validation loss: {validation_loss.item():,.3f}, Epoch: {epoch}, "
+                    f"Constituency<10%: {c_close:.1%}, National<10%: {n_close:.1%}"
+                )
+            else:
+                print(
+                    f"Loss: {l.item()}, Epoch: {epoch}, Constituency<10%: {c_close:.1%}, National<10%: {n_close:.1%}"
+                )
+        if epoch % 10 == 0:
+            final_weights = (torch.exp(weights) * r).detach().numpy()
+
+            performance_step = get_performance(
+                final_weights,
+                matrix_,
+                y_,
+                m_national_,
+                y_national_,
+                excluded_training_targets,
+            )
+            performance_step["epoch"] = epoch
+            performance_step["loss"] = performance_step.rel_abs_error**2
+            performance_step["target_name"] = [
+                f"{area}/{metric}"
+                for area, metric in zip(
+                    performance_step.name, performance_step.metric
+                )
+            ]
+            performance = pd.concat(
+                [performance, performance_step], ignore_index=True
+            )
+
+            if log_csv:
+                performance.to_csv(log_csv, index=False)
+
+            with h5py.File(
+                STORAGE_FOLDER / "parliamentary_constituency_weights.h5", "w"
+            ) as f:
+                f.create_dataset("2025", data=final_weights)
+
+            dataset.household.household_weight = final_weights.sum(axis=0)
+
+        l.backward()
+        optimizer.step()
 
     return dataset
+
+
+def get_performance(weights, m_c, y_c, m_n, y_n, excluded_targets):
+    constituency_target_matrix, constituency_actuals = m_c, y_c
+    national_target_matrix, national_actuals = m_n, y_n
+    constituencies = pd.read_csv(STORAGE_FOLDER / "constituencies_2024.csv")
+    constituency_wide = weights @ constituency_target_matrix
+    constituency_wide.index = constituencies.code.values
+    constituency_wide["name"] = constituencies.name.values
+
+    constituency_results = pd.melt(
+        constituency_wide.reset_index(),
+        id_vars=["index", "name"],
+        var_name="variable",
+        value_name="value",
+    )
+
+    constituency_actuals.index = constituencies.code.values
+    constituency_actuals["name"] = constituencies.name.values
+    constituency_actuals_long = pd.melt(
+        constituency_actuals.reset_index(),
+        id_vars=["index", "name"],
+        var_name="variable",
+        value_name="value",
+    )
+
+    constituency_target_validation = pd.merge(
+        constituency_results,
+        constituency_actuals_long,
+        on=["index", "variable"],
+        suffixes=("_target", "_actual"),
+    )
+    constituency_target_validation.drop("name_actual", axis=1, inplace=True)
+    constituency_target_validation.columns = [
+        "index",
+        "name",
+        "metric",
+        "estimate",
+        "target",
+    ]
+
+    constituency_target_validation["error"] = (
+        constituency_target_validation["estimate"]
+        - constituency_target_validation["target"]
+    )
+    constituency_target_validation["abs_error"] = (
+        constituency_target_validation["error"].abs()
+    )
+    constituency_target_validation["rel_abs_error"] = (
+        constituency_target_validation["abs_error"]
+        / constituency_target_validation["target"]
+    )
+
+    national_performance = weights.sum(axis=0) @ national_target_matrix
+    national_target_validation = pd.DataFrame(
+        {
+            "metric": national_performance.index,
+            "estimate": national_performance.values,
+        }
+    )
+    national_target_validation["target"] = national_actuals.values
+
+    national_target_validation["error"] = (
+        national_target_validation["estimate"]
+        - national_target_validation["target"]
+    )
+    national_target_validation["abs_error"] = national_target_validation[
+        "error"
+    ].abs()
+    national_target_validation["rel_abs_error"] = (
+        national_target_validation["abs_error"]
+        / national_target_validation["target"]
+    )
+
+    df = pd.concat(
+        [
+            constituency_target_validation,
+            national_target_validation.assign(name="UK", index=0),
+        ]
+    ).reset_index(drop=True)
+
+    df["validation"] = df.metric.isin(excluded_targets)
+
+    return df
 
 
 if __name__ == "__main__":
