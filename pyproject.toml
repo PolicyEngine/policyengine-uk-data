@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "policyengine_uk_data"
-version = "1.17.3"
+version = "1.17.4"
 description = "A package to create representative microdata for the UK."
 readme = "README.md"
 authors = [
@@ -32,7 +32,6 @@ dev = [
     "torch",
     "tables",
     "furo",
-    "jupyter-book",
     "yaml-changelog>=0.1.7",
     "itables",
     "quantile-forest",
