@@ -84,6 +84,7 @@ def create_local_authority_target_matrix(
     )
 
     age = sim.calculate("age").values
+    targets_total_pop = 0
     for lower_age in range(0, 80, 10):
         upper_age = lower_age + 10
 
