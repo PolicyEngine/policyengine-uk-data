@@ -240,3 +240,8 @@
     fixed:
     - UK model actually bumped.
   date: 2025-07-22 11:17:39
+- bump: patch
+  changes:
+    fixed:
+    - Migrated to more efficient dataset version.
+  date: 2025-08-04 15:08:06
