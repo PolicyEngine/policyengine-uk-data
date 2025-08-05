@@ -10,7 +10,7 @@ from policyengine_uk.data import UKSingleYearDataset
 
 def calibrate(
     dataset: UKSingleYearDataset,
-    epochs: int = 128,
+    epochs: int = None,
     excluded_training_targets=[],
     log_csv="calibration_log.csv",
     verbose: bool = False,
