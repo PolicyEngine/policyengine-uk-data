@@ -245,3 +245,8 @@
     fixed:
     - Migrated to more efficient dataset version.
   date: 2025-08-04 15:08:06
+- bump: patch
+  changes:
+    added:
+    - Added index.html file to docs folder to fix GitHub Pages 404 error
+  date: 2025-08-05 11:15:17
