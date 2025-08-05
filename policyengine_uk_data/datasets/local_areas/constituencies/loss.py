@@ -111,6 +111,8 @@ def create_constituency_target_matrix(
         y[f"age/{age_str}"] = age_count.values
         targets_total_pop += age_count.values.sum()
 
+    targets_total_pop *= 0.9  # Adjust for consistency
+
     # Adjust for consistency
     for lower_age in range(0, 80, 10):
         upper_age = lower_age + 10
