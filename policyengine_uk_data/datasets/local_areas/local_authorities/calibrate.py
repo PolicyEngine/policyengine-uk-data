@@ -8,7 +8,6 @@ from policyengine_uk.data import UKSingleYearDataset
 
 def calibrate(
     dataset: UKSingleYearDataset,
-    epochs: int = None,
     verbose: bool = False,
 ):
     return calibrate_local_areas(
@@ -21,7 +20,6 @@ def calibrate(
         ),
         area_count=360,
         weight_file="local_authority_weights.h5",
-        epochs=epochs,
         excluded_training_targets=[],
         log_csv=None,
         verbose=verbose,
