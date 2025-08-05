@@ -29,6 +29,7 @@ from policyengine_uk_data.datasets.imputations import (
     impute_vat,
     impute_income,
     impute_capital_gains,
+    impute_services,
 )
 
 logging.info("Imputing consumption")
@@ -37,6 +38,8 @@ logging.info("Imputing wealth")
 frs = impute_wealth(frs)
 logging.info("Imputing VAT")
 frs = impute_vat(frs)
+logging.info("Imputing public service usage")
+frs = impute_services(frs)
 logging.info("Imputing income")
 frs = impute_income(frs)
 logging.info("Imputing capital gains")
