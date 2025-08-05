@@ -7,7 +7,7 @@ from policyengine_uk_data.storage import STORAGE_FOLDER
 def frs():
     """FRS dataset for testing."""
     try:
-        return UKSingleYearDataset(STORAGE_FOLDER / "frs_2023.h5")
+        return UKSingleYearDataset(STORAGE_FOLDER / "frs_2023_24.h5")
     except FileNotFoundError:
         pytest.skip("FRS dataset not available")
 
@@ -16,7 +16,7 @@ def frs():
 def enhanced_frs():
     """Enhanced FRS dataset for testing."""
     try:
-        return UKSingleYearDataset(STORAGE_FOLDER / "enhanced_frs_2023.h5")
+        return UKSingleYearDataset(STORAGE_FOLDER / "enhanced_frs_2023_24.h5")
     except FileNotFoundError:
         pytest.skip("Enhanced FRS dataset not available")
 
