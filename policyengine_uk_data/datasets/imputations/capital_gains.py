@@ -15,6 +15,7 @@ from torch.optim import Adam
 from tqdm import tqdm
 from policyengine_uk.data import UKSingleYearDataset
 import logging
+from policyengine_uk_data.utils.subsample import subsample_dataset
 
 capital_gains = pd.read_csv(
     STORAGE_FOLDER / "capital_gains_distribution_advani_summers.csv.gz"

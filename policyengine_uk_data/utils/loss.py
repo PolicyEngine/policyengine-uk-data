@@ -233,13 +233,12 @@ def create_target_matrix(
         "private_pension_income",
         "property_income",
         "savings_interest_income",
-        "dividend_income",
     ]
 
     income_df = sim.calculate_dataframe(["total_income"] + INCOME_VARIABLES)
 
     incomes = pd.read_csv(STORAGE_FOLDER / "incomes_projection.csv")
-    incomes = incomes[incomes.year == time_period]
+    incomes = incomes[incomes.year.astype(str) == str(time_period)]
     for i, row in incomes.iterrows():
         lower = row.total_income_lower_bound
         upper = row.total_income_upper_bound
@@ -248,7 +247,9 @@ def create_target_matrix(
         )
         for variable in INCOME_VARIABLES:
             name_amount = (
-                "hmrc/" + variable + f"_income_band_{i}_{lower:_}_to_{upper:_}"
+                "hmrc/"
+                + variable
+                + f"_income_band_{i}_{lower:_.0f}_to_{upper:_.0f}"
             )
             df[name_amount] = household_from_person(
                 income_df[variable] * in_income_band
@@ -258,7 +259,7 @@ def create_target_matrix(
             name_count = (
                 "hmrc/"
                 + variable
-                + f"_count_income_band_{i}_{lower:_}_to_{upper:_}"
+                + f"_count_income_band_{i}_{lower:_.0f}_to_{upper:_.0f}"
             )
             df[name_count] = household_from_person(
                 (income_df[variable] > 0) * in_income_band
@@ -327,7 +328,7 @@ def create_target_matrix(
     for i, row in ct_data.iterrows():
         selected_region = row["Region"]
         in_region = sim.calculate("region").values == selected_region
-        for band in ["A", "B", "C", "D", "E", "F", "G", "H", "I"]:
+        for band in ["A", "B", "C", "D", "E", "F", "G", "H"]:
             name = f"voa/council_tax/{selected_region}/{band}"
             in_band = sim.calculate("council_tax_band") == band
             df[name] = (in_band * in_region).astype(float)

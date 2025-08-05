@@ -118,6 +118,7 @@ def create_local_authority_target_matrix(
     ) + [np.inf]
 
     for lower_bound, upper_bound in zip(bounds[:-1], bounds[1:]):
+        continue
         if (
             lower_bound <= 15_000
         ):  # Skip some targets with very small sample sizes

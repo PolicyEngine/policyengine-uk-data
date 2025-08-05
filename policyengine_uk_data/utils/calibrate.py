@@ -19,10 +19,11 @@ def calibrate_local_areas(
     log_csv=None,
     verbose: bool = False,
     area_name: str = "area",
+    get_performance=None,
 ):
     """
     Generic calibration function for local areas (constituencies, local authorities, etc.)
-    
+
     Args:
         dataset: The dataset to calibrate
         matrix_fn: Function that returns (matrix, targets, mask) for the local areas
@@ -38,15 +39,14 @@ def calibrate_local_areas(
     """
     dataset = dataset.copy()
     matrix, y, r = matrix_fn(dataset)
+    m_c, y_c = matrix.copy(), y.copy()
     m_national, y_national = national_matrix_fn(dataset)
-
-    sim = Microsimulation(dataset=dataset)
-    sim.default_calculation_period = dataset.time_period
+    m_n, y_n = m_national.copy(), y_national.copy()
 
     # Weights - area_count x num_households
     original_weights = np.log(
-        sim.calculate("household_weight").values / area_count
-        + np.random.random(len(sim.calculate("household_weight").values))
+        dataset.household.household_weight.values / area_count
+        + np.random.random(len(dataset.household.household_weight.values))
         * 0.01
     )
     weights = torch.tensor(
@@ -54,18 +54,42 @@ def calibrate_local_areas(
         dtype=torch.float32,
         requires_grad=True,
     )
-    
+
     # Set up validation targets if specified
-    validation_targets_local = matrix.columns.isin(excluded_training_targets) if hasattr(matrix, 'columns') else None
-    validation_targets_national = m_national.columns.isin(excluded_training_targets) if hasattr(m_national, 'columns') else None
+    validation_targets_local = (
+        matrix.columns.isin(excluded_training_targets)
+        if hasattr(matrix, "columns")
+        else None
+    )
+    validation_targets_national = (
+        m_national.columns.isin(excluded_training_targets)
+        if hasattr(m_national, "columns")
+        else None
+    )
     dropout_targets = len(excluded_training_targets) > 0
 
     # Convert to tensors
-    metrics = torch.tensor(matrix.values if hasattr(matrix, 'values') else matrix, dtype=torch.float32)
-    y = torch.tensor(y.values if hasattr(y, 'values') else y, dtype=torch.float32)
-    matrix_national = torch.tensor(m_national.values if hasattr(m_national, 'values') else m_national, dtype=torch.float32)
-    y_national = torch.tensor(y_national.values if hasattr(y_national, 'values') else y_national, dtype=torch.float32)
+    metrics = torch.tensor(
+        matrix.values if hasattr(matrix, "values") else matrix,
+        dtype=torch.float32,
+    )
+    y = torch.tensor(
+        y.values if hasattr(y, "values") else y, dtype=torch.float32
+    )
+    matrix_national = torch.tensor(
+        m_national.values if hasattr(m_national, "values") else m_national,
+        dtype=torch.float32,
+    )
+    y_national = torch.tensor(
+        y_national.values if hasattr(y_national, "values") else y_national,
+        dtype=torch.float32,
+    )
     r = torch.tensor(r, dtype=torch.float32)
+
+    def sre(x, y):
+        one_way = ((1 + x) / (1 + y) - 1) ** 2
+        other_way = ((1 + y) / (1 + x) - 1) ** 2
+        return torch.min(one_way, other_way)
 
     def loss(w, validation: bool = False):
         pred_local = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
@@ -75,9 +99,9 @@ def calibrate_local_areas(
             else:
                 mask = ~validation_targets_local
             pred_local = pred_local[:, mask]
-            mse_local = torch.mean((pred_local / (1 + y[:, mask]) - 1) ** 2)
+            mse_local = torch.mean(sre(pred_local, y[:, mask]))
         else:
-            mse_local = torch.mean((pred_local / (1 + y) - 1) ** 2)
+            mse_local = torch.mean(sre(pred_local, y))
 
         pred_national = (w.sum(axis=0) * matrix_national.T).sum(axis=1)
         if dropout_targets and validation_targets_national is not None:
@@ -86,9 +110,9 @@ def calibrate_local_areas(
             else:
                 mask = ~validation_targets_national
             pred_national = pred_national[mask]
-            mse_national = torch.mean((pred_national / (1 + y_national[mask]) - 1) ** 2)
+            mse_national = torch.mean(sre(pred_national, y_national[mask]))
         else:
-            mse_national = torch.mean((pred_national / (1 + y_national) - 1) ** 2)
+            mse_national = torch.mean(sre(pred_national, y_national))
 
         return mse_local + mse_national
 
@@ -96,17 +120,21 @@ def calibrate_local_areas(
         """Return the percentage of metrics that are within t% of the target"""
         numerator = 0
         denominator = 0
-        
+
         if local:
             pred_local = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
-            e_local = torch.sum(torch.abs((pred_local / (1 + y) - 1)) < t).item()
+            e_local = torch.sum(
+                torch.abs((pred_local / (1 + y) - 1)) < t
+            ).item()
             c_local = pred_local.shape[0] * pred_local.shape[1]
             numerator += e_local
             denominator += c_local
 
         if national:
             pred_national = (w.sum(axis=0) * matrix_national.T).sum(axis=1)
-            e_national = torch.sum(torch.abs((pred_national / (1 + y_national) - 1)) < t).item()
+            e_national = torch.sum(
+                torch.abs((pred_national / (1 + y_national) - 1)) < t
+            ).item()
             c_national = pred_national.shape[0]
             numerator += e_national
             denominator += c_national
@@ -133,10 +161,10 @@ def calibrate_local_areas(
         l = loss(weights_)
         l.backward()
         optimizer.step()
-        
+
         local_close = pct_close(weights_, local=True, national=False)
         national_close = pct_close(weights_, local=False, national=True)
-        
+
         if verbose and (epoch % 1 == 0):
             if dropout_targets:
                 validation_loss = loss(weights_, validation=True)
@@ -148,18 +176,18 @@ def calibrate_local_areas(
                 print(
                     f"Loss: {l.item()}, Epoch: {epoch}, {area_name}<10%: {local_close:.1%}, National<10%: {national_close:.1%}"
                 )
-                
+
         if epoch % 10 == 0:
             final_weights = (torch.exp(weights) * r).detach().numpy()
 
             # Log performance if requested and get_performance function is available
-            if log_csv and 'get_performance' in globals():
+            if log_csv:
                 performance_step = get_performance(
                     final_weights,
-                    matrix,
-                    y,
-                    m_national,
-                    y_national,
+                    m_c,
+                    y_c,
+                    m_n,
+                    y_n,
                     excluded_training_targets,
                 )
                 performance_step["epoch"] = epoch

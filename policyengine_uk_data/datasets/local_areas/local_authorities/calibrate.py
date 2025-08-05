@@ -13,8 +13,12 @@ def calibrate(
 ):
     return calibrate_local_areas(
         dataset=dataset,
-        matrix_fn=lambda ds: create_local_authority_target_matrix(ds, ds.time_period),
-        national_matrix_fn=lambda ds: create_national_target_matrix(ds, ds.time_period),
+        matrix_fn=lambda ds: create_local_authority_target_matrix(
+            ds, ds.time_period
+        ),
+        national_matrix_fn=lambda ds: create_national_target_matrix(
+            ds, ds.time_period
+        ),
         area_count=360,
         weight_file="local_authority_weights.h5",
         epochs=epochs,

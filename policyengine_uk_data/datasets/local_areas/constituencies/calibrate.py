@@ -7,6 +7,7 @@ from policyengine_uk_data.datasets.local_areas.constituencies.loss import (
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 
+
 def calibrate(
     dataset: UKSingleYearDataset,
     epochs: int = 128,
@@ -25,6 +26,7 @@ def calibrate(
         log_csv=log_csv,
         verbose=verbose,
         area_name="Constituency",
+        get_performance=get_performance,
     )
 
 

@@ -300,12 +300,14 @@ def create_frs(
     pe_person["employment_income"] = person.inearns * WEEKS_IN_YEAR
 
     pension_payment = sum_to_entity(
-        pension.penpay * (pension.penpay > 0), pension.person_id, person.index
+        pension.penpay * (pension.penpay > 0),
+        pension.person_id,
+        person.person_id,
     )
     pension_tax_paid = sum_to_entity(
         (pension.ptamt * ((pension.ptinc == 2) & (pension.ptamt > 0))),
         pension.person_id,
-        person.index,
+        person.person_id,
     )
     pension_deductions_removed = sum_to_entity(
         pension.poamt
@@ -314,7 +316,7 @@ def create_frs(
             & (pension.poamt > 0)
         ),
         pension.person_id,
-        person.index,
+        person.person_id,
     )
 
     pe_person["private_pension_income"] = (
@@ -329,7 +331,7 @@ def create_frs(
         sum_to_entity(
             account.accint * (account.account == 21),
             account.person_id,
-            person.index,
+            person.person_id,
         )
         * WEEKS_IN_YEAR
     )
@@ -341,7 +343,7 @@ def create_frs(
             )
             * (account.account.isin((1, 3, 5, 27, 28))),
             account.person_id,
-            person.index,
+            person.person_id,
         )
         * WEEKS_IN_YEAR
     )
@@ -370,7 +372,7 @@ def create_frs(
     persons_household_property_income = (
         pd.Series(
             household_property_income[person.household_id].values,
-            index=person.index,
+            index=person.person_id,
         )
         .fillna(0)
         .values
@@ -397,7 +399,7 @@ def create_frs(
     )
 
     odd_job_income = sum_to_entity(
-        oddjob.ojamt * (oddjob.ojnow == 1), oddjob.person_id, person.index
+        oddjob.ojamt * (oddjob.ojnow == 1), oddjob.person_id, person.person_id
     )
 
     MISC_INCOME_FIELDS = [
@@ -453,13 +455,12 @@ def create_frs(
         pip_m=97,
         pip_dl=96,
     )
-
     for benefit, code in BENEFIT_CODES.items():
         pe_person[benefit + "_reported"] = (
             sum_to_entity(
                 benefits.benamt * (benefits.benefit == code),
-                benefits.person_id,
-                person.index,
+                benefits.person_id.values,
+                person.person_id,
             )
             * WEEKS_IN_YEAR
         )
@@ -470,7 +471,7 @@ def create_frs(
             * (benefits.var2.isin((1, 3)))
             * (benefits.benefit == 14),
             benefits.person_id,
-            person.index,
+            person.person_id,
         )
         * WEEKS_IN_YEAR
     )
@@ -480,7 +481,7 @@ def create_frs(
             * (benefits.var2.isin((2, 4)))
             * (benefits.benefit == 14),
             benefits.person_id,
-            person.index,
+            person.person_id,
         )
         * WEEKS_IN_YEAR
     )
@@ -490,7 +491,7 @@ def create_frs(
             * (benefits.var2.isin((1, 3)))
             * (benefits.benefit == 16),
             benefits.person_id,
-            person.index,
+            person.person_id,
         )
         * WEEKS_IN_YEAR
     )
@@ -500,7 +501,7 @@ def create_frs(
             * (benefits.var2.isin((2, 4)))
             * (benefits.benefit == 16),
             benefits.person_id,
-            person.index,
+            person.person_id,
         )
         * WEEKS_IN_YEAR
     )
@@ -509,7 +510,7 @@ def create_frs(
         sum_to_entity(
             benefits.benamt * (benefits.benefit.isin((6, 9))),
             benefits.person_id,
-            person.index,
+            person.person_id,
         )
         * WEEKS_IN_YEAR
     )
@@ -536,7 +537,7 @@ def create_frs(
         (person.hrpid == 1)
         * pd.Series(
             household.ctrebamt[person.household_id.values].values,
-            index=person.index,
+            index=person.person_id,
         )
         .fillna(0)
         .values
@@ -558,8 +559,9 @@ def create_frs(
         )
         .groupby(maintenance.person_id)
         .sum()
-        .reindex(person.index)
+        .reindex(person.person_id)
         .fillna(0)
+        .values
         * WEEKS_IN_YEAR
     )
     pe_household["rent"] = household.hhrent.fillna(0).values * WEEKS_IN_YEAR
@@ -582,7 +584,7 @@ def create_frs(
             * (childcare.cost == 1)
             * (childcare.registrd == 1),
             childcare.person_id,
-            person.index,
+            person.person_id,
         )
         * 52
     )
@@ -592,13 +594,13 @@ def create_frs(
         sum_to_entity(
             pen_prov.penamt[pen_prov.stemppen.isin((5, 6))],
             pen_prov.person_id,
-            person.index,
+            person.person_id,
         ).clip(0, pen_prov.penamt.quantile(0.95))
         * WEEKS_IN_YEAR,
     )
     pe_person["employee_pension_contributions"] = np.maximum(
         0,
-        sum_to_entity(job.deduc1.fillna(0), job.person_id, person.index)
+        sum_to_entity(job.deduc1.fillna(0), job.person_id, person.person_id)
         * WEEKS_IN_YEAR,
     )
     pe_person["employer_pension_contributions"] = (

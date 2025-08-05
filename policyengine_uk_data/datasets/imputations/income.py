@@ -5,6 +5,7 @@ from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk import Microsimulation
 from policyengine_uk_data.utils.stack import stack_datasets
+from policyengine_uk_data.utils.subsample import subsample_dataset
 
 SPI_TAB_FOLDER = STORAGE_FOLDER / "spi_2020_21"
 SPI_RENAMES = dict(
@@ -61,7 +62,12 @@ def generate_spi_table(spi: pd.DataFrame):
 
     spi["employment_income"] = spi[["PAY", "EPB", "TAXTERM"]].sum(axis=1)
 
-    spi = spi[spi.TI > 100_000]
+    spi = pd.concat(
+        [
+            spi.sample(20_000),
+            spi[spi.TI > 1_000_000],
+        ]
+    )
 
     return spi
 
@@ -78,9 +84,7 @@ IMPUTATIONS = [
     "savings_interest_income",
     "dividend_income",
     "private_pension_income",
-    "employment_expenses",
     "property_income",
-    "gift_aid",
 ]
 
 
@@ -109,21 +113,23 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     dataset = dataset.copy()
     zero_weight_copy = dataset.copy()
     zero_weight_copy.household.household_weight = 0
-    data = stack_datasets(
-        dataset,
-        zero_weight_copy,
-    )
+    zero_weight_copy = subsample_dataset(zero_weight_copy, 10_000)
 
     model = create_income_model()
-    sim = Microsimulation(dataset=data)
+    sim = Microsimulation(dataset=zero_weight_copy)
 
     input_df = sim.calculate_dataframe(["age", "gender", "region"])
 
     output_df = model.predict(input_df)
 
     for column in output_df.columns:
-        data.person[column] = output_df[column].values
+        zero_weight_copy.person[column] = output_df[column].fillna(0).values
 
-    dataset.validate()
+    zero_weight_copy.validate()
+
+    data = stack_datasets(
+        dataset,
+        zero_weight_copy,
+    )
 
     return data

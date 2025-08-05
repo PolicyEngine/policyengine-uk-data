@@ -126,11 +126,12 @@ def create_constituency_target_matrix(
     ) + [np.inf]
 
     for lower_bound, upper_bound in zip(bounds[:-1], bounds[1:]):
+        continue
         if (
-            lower_bound <= 15_000
+            lower_bound <= 20_000
         ):  # Skip some targets with very small sample sizes
             continue
-        if upper_bound >= 200_000:
+        if upper_bound >= 100_000:
             continue
 
         national_data_row = national_incomes[
