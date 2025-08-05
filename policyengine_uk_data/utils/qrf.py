@@ -5,10 +5,16 @@ This module provides a simplified interface to the microimpute QRF model
 with serialisation support for trained models.
 """
 
+import logging
 from microimpute.models import QRF as MicroImputeQRF
 import pandas as pd
 import numpy as np
 import pickle
+
+# Silence microimpute INFO level logging and warnings
+logging.getLogger('microimpute').setLevel(logging.ERROR)
+# Also silence root logger warnings from microimpute
+logging.getLogger('root').setLevel(logging.ERROR)
 
 
 class QRF:

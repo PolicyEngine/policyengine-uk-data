@@ -25,6 +25,7 @@ dependencies = [
     "microcalibrate>=0.18.0",
     "microimpute>=1.0.1",
     "black>=25.1.0",
+    "rich>=13.0.0",
 ]
 
 [project.optional-dependencies]

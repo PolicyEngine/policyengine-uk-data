@@ -24,8 +24,8 @@ capital_gains["maximum_total_income"] = (
     capital_gains.minimum_total_income.shift(-1).fillna(np.inf)
 )
 
-# Set log level to info
-logging.basicConfig(level=logging.INFO)
+# Silence verbose logging
+logging.getLogger('root').setLevel(logging.WARNING)
 
 
 def impute_cg_to_doubled_dataset(
