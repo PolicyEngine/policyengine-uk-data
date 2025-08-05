@@ -138,7 +138,6 @@ def create_target_matrix(
     df["obr/income_tax"] = pe("income_tax")
     df["obr/jobseekers_allowance"] = pe("jsa_income") + pe("jsa_contrib")
     df["obr/pension_credit"] = pe("pension_credit")
-    df["obr/stamp_duty_land_tax"] = pe("expected_sdlt")
     df["obr/state_pension"] = pe("state_pension")
     # df["obr/tax_credits"] = pe("tax_credits")
     df["obr/tv_licence_fee"] = pe("tv_licence")
