@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+      - Added index.html file to docs folder to fix GitHub Pages 404 error
