@@ -158,12 +158,14 @@ def calibrate_local_areas(
     performance = pd.DataFrame()
 
     progress_tracker = ProcessingProgress() if verbose else None
-    
+
     if verbose and progress_tracker:
-        with progress_tracker.track_calibration(epochs, nested_progress) as update_calibration:
+        with progress_tracker.track_calibration(
+            epochs, nested_progress
+        ) as update_calibration:
             for epoch in range(epochs):
                 update_calibration(epoch + 1, calculating_loss=True)
-                
+
                 optimizer.zero_grad()
                 weights_ = torch.exp(dropout_weights(weights, 0.05)) * r
                 l = loss(weights_)
@@ -171,20 +173,20 @@ def calibrate_local_areas(
                 optimizer.step()
 
                 local_close = pct_close(weights_, local=True, national=False)
-                national_close = pct_close(weights_, local=False, national=True)
+                national_close = pct_close(
+                    weights_, local=False, national=True
+                )
 
                 if dropout_targets:
                     validation_loss = loss(weights_, validation=True)
                     update_calibration(
-                        epoch + 1, 
+                        epoch + 1,
                         loss_value=validation_loss.item(),
-                        calculating_loss=False
+                        calculating_loss=False,
                     )
                 else:
                     update_calibration(
-                        epoch + 1,
-                        loss_value=l.item(),
-                        calculating_loss=False
+                        epoch + 1, loss_value=l.item(), calculating_loss=False
                     )
 
                 if epoch % 10 == 0:
@@ -201,7 +203,9 @@ def calibrate_local_areas(
                             excluded_training_targets,
                         )
                         performance_step["epoch"] = epoch
-                        performance_step["loss"] = performance_step.rel_abs_error**2
+                        performance_step["loss"] = (
+                            performance_step.rel_abs_error**2
+                        )
                         performance_step["target_name"] = [
                             f"{area}/{metric}"
                             for area, metric in zip(
@@ -217,7 +221,9 @@ def calibrate_local_areas(
                     with h5py.File(STORAGE_FOLDER / weight_file, "w") as f:
                         f.create_dataset(dataset_key, data=final_weights)
 
-                    dataset.household.household_weight = final_weights.sum(axis=0)
+                    dataset.household.household_weight = final_weights.sum(
+                        axis=0
+                    )
     else:
         for epoch in range(epochs):
             optimizer.zero_grad()

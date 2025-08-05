@@ -12,9 +12,9 @@ import numpy as np
 import pickle
 
 # Silence microimpute INFO level logging and warnings
-logging.getLogger('microimpute').setLevel(logging.ERROR)
+logging.getLogger("microimpute").setLevel(logging.ERROR)
 # Also silence root logger warnings from microimpute
-logging.getLogger('root').setLevel(logging.ERROR)
+logging.getLogger("root").setLevel(logging.ERROR)
 
 
 class QRF:

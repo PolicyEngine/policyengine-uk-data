@@ -25,7 +25,7 @@ capital_gains["maximum_total_income"] = (
 )
 
 # Silence verbose logging
-logging.getLogger('root').setLevel(logging.WARNING)
+logging.getLogger("root").setLevel(logging.WARNING)
 
 
 def impute_cg_to_doubled_dataset(
