@@ -1,3 +1,11 @@
+"""
+Loss functions and target matrices for dataset calibration.
+
+This module creates target matrices comparing PolicyEngine UK model outputs
+against official statistics from OBR, ONS, HMRC, DWP and other sources.
+Used for calibrating household weights to match aggregate targets.
+"""
+
 import numpy as np
 import pandas as pd
 from policyengine_uk_data.storage import STORAGE_FOLDER
@@ -31,10 +39,25 @@ def create_target_matrix(
     reform=None,
 ) -> np.ndarray:
     """
-    Create a target matrix A, s.t. for household weights w, the target vector b and a perfectly calibrated PolicyEngine UK:
+    Create target matrix for calibration against official statistics.
 
-    A * w = b
+    Creates a matrix A such that for household weights w, target vector b
+    and a perfectly calibrated PolicyEngine UK: A * w = b
 
+    Compares model outputs against:
+    - OBR tax and benefit aggregates
+    - ONS demographic and regional statistics
+    - HMRC income distribution data
+    - DWP benefit caseload data
+    - VOA council tax statistics
+
+    Args:
+        dataset: PolicyEngine UK dataset to analyse.
+        time_period: Year for target statistics (uses dataset default if None).
+        reform: Policy reform to apply during analysis.
+
+    Returns:
+        Tuple of (target_matrix, target_values) for calibration.
     """
 
     # First- tax-benefit outcomes from the DWP and OBR.
@@ -173,7 +196,7 @@ def create_target_matrix(
         ].values[0]
         * 1e6
         / local_population_total
-    ) * 0.9
+    ) * 0.8
 
     for pe_region_name, region_name in region_to_target_name_map.items():
         for lower_age in range(0, 90, 10):
@@ -358,6 +381,18 @@ def create_target_matrix(
 def get_loss_results(
     dataset, time_period, reform=None, household_weights=None
 ):
+    """
+    Calculate loss metrics comparing model outputs to targets.
+
+    Args:
+        dataset: PolicyEngine UK dataset to evaluate.
+        time_period: Year for comparison.
+        reform: Policy reform to apply.
+        household_weights: Custom weights (uses dataset weights if None).
+
+    Returns:
+        DataFrame with estimate vs target comparisons and error metrics.
+    """
     matrix, targets = create_target_matrix(dataset, time_period, reform)
     from policyengine_uk import Microsimulation
 

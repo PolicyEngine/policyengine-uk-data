@@ -1,3 +1,12 @@
+"""
+Family Resources Survey (FRS) dataset processing for PolicyEngine UK.
+
+This module processes raw FRS survey data into PolicyEngine UK dataset format,
+handling household demographics, income, benefits, and other survey variables.
+The FRS is the primary source of UK household survey data used for tax-benefit
+modelling and policy analysis.
+"""
+
 from policyengine_uk.data import UKSingleYearDataset
 from pathlib import Path
 import pandas as pd
@@ -16,6 +25,21 @@ def create_frs(
     raw_frs_folder: str,
     year: int,
 ) -> UKSingleYearDataset:
+    """
+    Process raw FRS data into PolicyEngine UK dataset format.
+
+    Transforms the Family Resources Survey microdata from raw tab-delimited
+    files into a structured PolicyEngine UK dataset with person, benefit unit,
+    and household-level variables mapped to the appropriate tax-benefit system
+    variables.
+
+    Args:
+        raw_frs_folder: Path to folder containing raw FRS .tab files.
+        year: Survey year for the dataset.
+
+    Returns:
+        UKSingleYearDataset with processed FRS data ready for policy simulation.
+    """
     raw_folder = Path(raw_frs_folder)
     if not raw_folder.exists():
         raise FileNotFoundError(f"Raw folder {raw_folder} does not exist.")

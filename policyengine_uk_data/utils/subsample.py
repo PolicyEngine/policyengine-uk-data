@@ -1,3 +1,10 @@
+"""
+Dataset subsampling utilities for PolicyEngine UK.
+
+This module provides functions to create smaller samples from full datasets,
+useful for testing and development workflows.
+"""
+
 from policyengine_uk.data import UKSingleYearDataset
 import numpy as np
 

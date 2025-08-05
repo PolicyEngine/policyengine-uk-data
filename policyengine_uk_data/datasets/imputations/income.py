@@ -1,3 +1,11 @@
+"""
+Income imputation using Survey of Personal Incomes data.
+
+This module imputes detailed income components (employment, self-employment,
+pensions, property, savings interest, dividends) using machine learning
+models trained on HMRC Survey of Personal Incomes (SPI) data.
+"""
+
 import pandas as pd
 from pathlib import Path
 import numpy as np
@@ -31,6 +39,15 @@ SPI_RENAMES = dict(
 
 
 def generate_spi_table(spi: pd.DataFrame):
+    """
+    Clean and transform SPI data for income imputation model training.
+
+    Args:
+        spi: Raw SPI survey data DataFrame.
+
+    Returns:
+        Cleaned DataFrame with age and region mappings applied.
+    """
     LOWER = np.array([0, 16, 25, 35, 45, 55, 65, 75])
     UPPER = np.array([16, 25, 35, 45, 55, 65, 75, 80])
     age_range = spi.AGERANGE
@@ -89,6 +106,12 @@ IMPUTATIONS = [
 
 
 def save_imputation_models():
+    """
+    Train and save income imputation model.
+
+    Returns:
+        Trained QRF model for income imputation.
+    """
     from policyengine_uk_data.utils import QRF
 
     income = QRF()
@@ -101,6 +124,15 @@ def save_imputation_models():
 
 
 def create_income_model(overwrite_existing: bool = False):
+    """
+    Create or load income imputation model.
+
+    Args:
+        overwrite_existing: Whether to retrain model if it exists.
+
+    Returns:
+        QRF model for income imputation.
+    """
     from policyengine_uk_data.utils.qrf import QRF
 
     if (STORAGE_FOLDER / "income.pkl").exists() and not overwrite_existing:
@@ -109,6 +141,19 @@ def create_income_model(overwrite_existing: bool = False):
 
 
 def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
+    """
+    Impute detailed income components using trained model.
+
+    Uses SPI-trained models to predict various income sources for individuals
+    based on age, gender, and region. Creates a synthetic population with
+    the imputed income data.
+
+    Args:
+        dataset: PolicyEngine UK dataset to augment with income data.
+
+    Returns:
+        Combined dataset with original data plus synthetic high-income individuals.
+    """
     # Impute wealth, assuming same time period as trained data
     dataset = dataset.copy()
     zero_weight_copy = dataset.copy()

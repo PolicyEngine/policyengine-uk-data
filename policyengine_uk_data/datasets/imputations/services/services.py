@@ -1,3 +1,10 @@
+"""
+Service imputations for UK households.
+
+This module coordinates the imputation of various public services including
+NHS usage, education spending, and transport subsidies to UK households.
+"""
+
 from policyengine_uk.data import UKSingleYearDataset
 from .nhs import impute_nhs_usage
 from .etb import impute_public_services, create_efrs_input_dataset
@@ -6,6 +13,19 @@ from .etb import impute_public_services, create_efrs_input_dataset
 def impute_services(
     dataset: UKSingleYearDataset,
 ) -> UKSingleYearDataset:
+    """
+    Impute public service usage and spending for households.
+
+    This function combines NHS usage imputations with other public services
+    (education, rail, and bus subsidies) to create a comprehensive dataset
+    of household public service consumption.
+
+    Args:
+        dataset: A PolicyEngine UK dataset containing household and person data.
+
+    Returns:
+        Updated dataset with imputed service usage and spending variables.
+    """
     dataset = dataset.copy()
     input_data = create_efrs_input_dataset(dataset)
 
