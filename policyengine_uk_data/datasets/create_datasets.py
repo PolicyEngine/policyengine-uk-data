@@ -16,10 +16,8 @@ frs = create_frs(
 )
 
 frs.save(
-    STORAGE_FOLDER / "frs_2023.h5",
+    STORAGE_FOLDER / "frs_2023_24.h5",
 )
-
-frs = UKSingleYearDataset(str(STORAGE_FOLDER / "frs_2023.h5"))
 
 logging.info(f"FRS dataset created and saved.")
 
@@ -62,5 +60,5 @@ frs_calibrated = calibrate(frs)
 
 frs_calibrated = uprate_dataset(frs_calibrated, 2023)
 
-frs_calibrated.save(STORAGE_FOLDER / "enhanced_frs_2023.h5")
+frs_calibrated.save(STORAGE_FOLDER / "enhanced_frs_2023_24.h5")
 logging.info(f"Extended FRS dataset created and saved.")
