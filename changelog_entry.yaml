@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+      - Add index.yaml to fix GitHub Pages 404 error
