@@ -82,7 +82,7 @@ def create_local_authority_target_matrix(
         ].values[0]
         * 1e6
     )
-    uk_total_population *= 0.7  # Adjust for consistency
+    uk_total_population *= 0.85  # Adjust for consistency
 
     age = sim.calculate("age").values
     targets_total_pop = 0
