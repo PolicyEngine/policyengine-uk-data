@@ -82,7 +82,6 @@ def create_local_authority_target_matrix(
         ].values[0]
         * 1e6
     )
-    uk_total_population *= 0.85  # Adjust for consistency
 
     age = sim.calculate("age").values
     targets_total_pop = 0
@@ -111,7 +110,7 @@ def create_local_authority_target_matrix(
         in_age_band = (age >= lower_age) & (age < upper_age)
 
         age_str = f"{lower_age}_{upper_age}"
-        y[f"age/{age_str}"] *= uk_total_population / targets_total_pop
+        y[f"age/{age_str}"] *= uk_total_population / targets_total_pop * 0.9
 
     employment_income = sim.calculate("employment_income").values
     bounds = list(
