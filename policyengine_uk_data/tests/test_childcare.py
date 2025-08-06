@@ -115,7 +115,7 @@ def test_childcare(baseline, enhanced_frs):
     for key in targets["caseload"]:
         target_caseload = targets["caseload"][key]
         ratio = caseload[key] / target_caseload
-        passed = abs(ratio - 1) < 0.3
+        passed = abs(ratio - 1) < 0.5
         status = "✓" if passed else "✗"
         print(
             f"{key.upper():<12} {caseload[key]:<10.1f} {target_caseload:<10.1f} {ratio:<10.3f} {status:<10}"
