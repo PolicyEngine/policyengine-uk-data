@@ -260,3 +260,8 @@
     changed:
     - Moved to functional, simplified architecture.
   date: 2025-08-06 10:08:10
+- bump: patch
+  changes:
+    fixed:
+    - Test result.
+  date: 2025-08-06 10:28:59
