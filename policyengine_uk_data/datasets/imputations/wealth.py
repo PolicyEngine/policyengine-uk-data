@@ -1,5 +1,16 @@
+"""
+Household wealth imputation using Wealth and Assets Survey data.
+
+This module imputes various types of household wealth (property, financial,
+corporate) using machine learning models trained on the UK Wealth and Assets
+Survey (WAS) data.
+"""
+
 import pandas as pd
 from policyengine_uk_data.storage import STORAGE_FOLDER
+from policyengine_uk.data import UKSingleYearDataset
+from policyengine_uk import Microsimulation
+
 
 WAS_TAB_FOLDER = STORAGE_FOLDER / "was_2006_20"
 
@@ -45,6 +56,15 @@ IMPUTE_VARIABLES = [
 
 
 def generate_was_table(was: pd.DataFrame):
+    """
+    Clean and transform WAS data for model training.
+
+    Args:
+        was: Raw WAS survey data DataFrame.
+
+    Returns:
+        Cleaned DataFrame with renamed columns and computed variables.
+    """
     was = was.rename(columns={col: col.lower() for col in was.columns})
 
     to_remove = []
@@ -129,6 +149,12 @@ def generate_was_table(was: pd.DataFrame):
 
 
 def save_imputation_models():
+    """
+    Train and save wealth imputation model.
+
+    Returns:
+        Trained QRF model.
+    """
     from policyengine_uk_data.utils.qrf import QRF
 
     was = pd.read_csv(
@@ -145,13 +171,56 @@ def save_imputation_models():
         was[IMPUTE_VARIABLES],
     )
     wealth.save(STORAGE_FOLDER / "wealth.pkl")
+    return wealth
 
 
 def create_wealth_model(overwrite_existing: bool = False):
+    """
+    Create or load wealth imputation model.
+
+    Args:
+        overwrite_existing: Whether to retrain model if it exists.
+
+    Returns:
+        QRF model for wealth imputation.
+    """
+    from policyengine_uk_data.utils.qrf import QRF
+
     if (STORAGE_FOLDER / "wealth.pkl").exists() and not overwrite_existing:
-        return
-    save_imputation_models()
+        return QRF(file_path=STORAGE_FOLDER / "wealth.pkl")
+    return save_imputation_models()
 
 
-if __name__ == "__main__":
-    create_wealth_model()
+def impute_wealth(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
+    """
+    Impute household wealth variables using trained model.
+
+    Uses WAS-trained models to predict various wealth components for
+    households based on income, demographics, and housing characteristics.
+
+    Args:
+        dataset: PolicyEngine UK dataset to augment with wealth data.
+
+    Returns:
+        Dataset with imputed wealth variables added to household table.
+    """
+    # Impute wealth, assuming same time period as trained data
+    dataset = dataset.copy()
+
+    model = create_wealth_model()
+    sim = Microsimulation(dataset=dataset)
+    predictors = model.input_columns
+
+    input_df = sim.calculate_dataframe(predictors, map_to="household")
+
+    input_df["region"] = input_df["region"].replace(
+        "NORTHERN_IRELAND", "WALES"
+    )  # WAS doesn't sample NI -> put NI households in Wales (closest aggregate)
+    output_df = model.predict(input_df)
+
+    for column in output_df.columns:
+        dataset.household[column] = output_df[column].values
+
+    dataset.validate()
+
+    return dataset

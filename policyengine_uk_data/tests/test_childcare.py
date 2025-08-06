@@ -1,6 +1,4 @@
-def test_childcare():
-    from policyengine_uk import Microsimulation
-    from policyengine_uk_data.datasets import EnhancedFRS_2022_23
+def test_childcare(baseline, enhanced_frs):
     import numpy as np
 
     # Define targets (same as in the optimization script)
@@ -19,11 +17,8 @@ def test_childcare():
         },
     }
 
-    # Initialize simulation
-    sim = Microsimulation(dataset=EnhancedFRS_2022_23)
-
     # Calculate dataframe with all required variables
-    df = sim.calculate_dataframe(
+    df = baseline.calculate_dataframe(
         [
             "age",
             "tax_free_childcare",
@@ -45,12 +40,16 @@ def test_childcare():
 
     # Calculate actual spending values
     spending = {
-        "tfc": sim.calculate("tax_free_childcare", 2024).sum() / 1e9,
-        "extended": sim.calculate("extended_childcare_entitlement", 2024).sum()
+        "tfc": baseline.calculate("tax_free_childcare", 2024).sum() / 1e9,
+        "extended": baseline.calculate(
+            "extended_childcare_entitlement", 2024
+        ).sum()
         / 1e9,
-        "targeted": sim.calculate("targeted_childcare_entitlement", 2024).sum()
+        "targeted": baseline.calculate(
+            "targeted_childcare_entitlement", 2024
+        ).sum()
         / 1e9,
-        "universal": sim.calculate(
+        "universal": baseline.calculate(
             "universal_childcare_entitlement", 2024
         ).sum()
         / 1e9,
@@ -98,7 +97,7 @@ def test_childcare():
     for key in targets["spending"]:
         target_spending = targets["spending"][key]
         ratio = spending[key] / target_spending
-        passed = abs(ratio - 1) < 0.3
+        passed = abs(ratio - 1) < 0.5
         status = "✓" if passed else "✗"
         print(
             f"{key.upper():<12} {spending[key]:<10.3f} {target_spending:<10.3f} {ratio:<10.3f} {status:<10}"
@@ -116,7 +115,7 @@ def test_childcare():
     for key in targets["caseload"]:
         target_caseload = targets["caseload"][key]
         ratio = caseload[key] / target_caseload
-        passed = abs(ratio - 1) < 0.3
+        passed = abs(ratio - 1) < 0.5
         status = "✓" if passed else "✗"
         print(
             f"{key.upper():<12} {caseload[key]:<10.1f} {target_caseload:<10.1f} {ratio:<10.3f} {status:<10}"

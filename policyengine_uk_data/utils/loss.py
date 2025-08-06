@@ -1,7 +1,16 @@
+"""
+Loss functions and target matrices for dataset calibration.
+
+This module creates target matrices comparing PolicyEngine UK model outputs
+against official statistics from OBR, ONS, HMRC, DWP and other sources.
+Used for calibrating household weights to match aggregate targets.
+"""
+
 import numpy as np
 import pandas as pd
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk_data.utils import uprate_values
+from policyengine_uk.data import UKSingleYearDataset
 
 tax_benefit = pd.read_csv(STORAGE_FOLDER / "tax_benefit.csv")
 tax_benefit["name"] = tax_benefit["name"].apply(lambda x: f"obr/{x}")
@@ -25,20 +34,38 @@ statistics = statistics[statistics.value.notnull()]
 
 
 def create_target_matrix(
-    dataset: str,
-    time_period: str,
+    dataset: UKSingleYearDataset,
+    time_period: str = None,
     reform=None,
 ) -> np.ndarray:
     """
-    Create a target matrix A, s.t. for household weights w, the target vector b and a perfectly calibrated PolicyEngine UK:
+    Create target matrix for calibration against official statistics.
 
-    A * w = b
+    Creates a matrix A such that for household weights w, target vector b
+    and a perfectly calibrated PolicyEngine UK: A * w = b
 
+    Compares model outputs against:
+    - OBR tax and benefit aggregates
+    - ONS demographic and regional statistics
+    - HMRC income distribution data
+    - DWP benefit caseload data
+    - VOA council tax statistics
+
+    Args:
+        dataset: PolicyEngine UK dataset to analyse.
+        time_period: Year for target statistics (uses dataset default if None).
+        reform: Policy reform to apply during analysis.
+
+    Returns:
+        Tuple of (target_matrix, target_values) for calibration.
     """
 
     # First- tax-benefit outcomes from the DWP and OBR.
 
     from policyengine_uk import Microsimulation
+
+    if time_period is None:
+        time_period = dataset.time_period
 
     sim = Microsimulation(dataset=dataset, reform=reform)
     sim.default_calculation_period = time_period
@@ -111,7 +138,6 @@ def create_target_matrix(
     df["obr/income_tax"] = pe("income_tax")
     df["obr/jobseekers_allowance"] = pe("jsa_income") + pe("jsa_contrib")
     df["obr/pension_credit"] = pe("pension_credit")
-    df["obr/stamp_duty_land_tax"] = pe("expected_sdlt")
     df["obr/state_pension"] = pe("state_pension")
     # df["obr/tax_credits"] = pe("tax_credits")
     df["obr/tv_licence_fee"] = pe("tv_licence")
@@ -229,13 +255,12 @@ def create_target_matrix(
         "private_pension_income",
         "property_income",
         "savings_interest_income",
-        "dividend_income",
     ]
 
     income_df = sim.calculate_dataframe(["total_income"] + INCOME_VARIABLES)
 
     incomes = pd.read_csv(STORAGE_FOLDER / "incomes_projection.csv")
-    incomes = incomes[incomes.year == time_period]
+    incomes = incomes[incomes.year.astype(str) == str(time_period)]
     for i, row in incomes.iterrows():
         lower = row.total_income_lower_bound
         upper = row.total_income_upper_bound
@@ -244,7 +269,9 @@ def create_target_matrix(
         )
         for variable in INCOME_VARIABLES:
             name_amount = (
-                "hmrc/" + variable + f"_income_band_{i}_{lower:_}_to_{upper:_}"
+                "hmrc/"
+                + variable
+                + f"_income_band_{i}_{lower:_.0f}_to_{upper:_.0f}"
             )
             df[name_amount] = household_from_person(
                 income_df[variable] * in_income_band
@@ -254,7 +281,7 @@ def create_target_matrix(
             name_count = (
                 "hmrc/"
                 + variable
-                + f"_count_income_band_{i}_{lower:_}_to_{upper:_}"
+                + f"_count_income_band_{i}_{lower:_.0f}_to_{upper:_.0f}"
             )
             df[name_count] = household_from_person(
                 (income_df[variable] > 0) * in_income_band
@@ -323,7 +350,7 @@ def create_target_matrix(
     for i, row in ct_data.iterrows():
         selected_region = row["Region"]
         in_region = sim.calculate("region").values == selected_region
-        for band in ["A", "B", "C", "D", "E", "F", "G", "H", "I"]:
+        for band in ["A", "B", "C", "D", "E", "F", "G", "H"]:
             name = f"voa/council_tax/{selected_region}/{band}"
             in_band = sim.calculate("council_tax_band") == band
             df[name] = (in_band * in_region).astype(float)
@@ -353,6 +380,18 @@ def create_target_matrix(
 def get_loss_results(
     dataset, time_period, reform=None, household_weights=None
 ):
+    """
+    Calculate loss metrics comparing model outputs to targets.
+
+    Args:
+        dataset: PolicyEngine UK dataset to evaluate.
+        time_period: Year for comparison.
+        reform: Policy reform to apply.
+        household_weights: Custom weights (uses dataset weights if None).
+
+    Returns:
+        DataFrame with estimate vs target comparisons and error metrics.
+    """
     matrix, targets = create_target_matrix(dataset, time_period, reform)
     from policyengine_uk import Microsimulation
 

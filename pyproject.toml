@@ -11,9 +11,9 @@ authors = [
     {name = "PolicyEngine", email = "hello@policyengine.org"},
 ]
 license = {file = "LICENSE"}
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
-    "policyengine_core",
+    "policyengine-core>=3.19.4",
     "requests",
     "tqdm",
     "tabulate",
@@ -21,8 +21,11 @@ dependencies = [
     "policyengine",
     "google-cloud-storage",
     "google-auth",
-    "uk-public-services-imputation",
-    "policyengine-uk==2.40.2",
+    "policyengine-uk>=2.43.5",
+    "microcalibrate>=0.18.0",
+    "microimpute>=1.0.1",
+    "black>=25.1.0",
+    "rich>=13.0.0",
 ]
 
 [project.optional-dependencies]
@@ -47,8 +50,18 @@ include-package-data = true
 
 [tool.pytest.ini_options]
 addopts = "-v"
-testpaths = [
-    "tests",
+testpaths = ["policyengine_uk_data/tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "unit: marks tests as unit tests",  
+    "integration: marks tests as integration tests",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
 ]
 
 [tool.black]

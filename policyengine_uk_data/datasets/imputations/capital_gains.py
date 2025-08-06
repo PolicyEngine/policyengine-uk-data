@@ -1,22 +1,21 @@
 import pandas as pd
 import numpy as np
 from policyengine_core.data import Dataset
+from policyengine_uk_data.utils.stack import stack_datasets
 
 # Fit a spline to each income band's percentiles
-try:
-    from scipy.interpolate import UnivariateSpline
-except ImportError:
-    pass
+from scipy.interpolate import UnivariateSpline
+
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from tqdm import tqdm
 import copy
 
-try:
-    import torch
-    from torch.optim import Adam
-except ImportError:
-    pass
+import torch
+from torch.optim import Adam
 from tqdm import tqdm
+from policyengine_uk.data import UKSingleYearDataset
+import logging
+from policyengine_uk_data.utils.subsample import subsample_dataset
 
 capital_gains = pd.read_csv(
     STORAGE_FOLDER / "capital_gains_distribution_advani_summers.csv.gz"
@@ -25,16 +24,21 @@ capital_gains["maximum_total_income"] = (
     capital_gains.minimum_total_income.shift(-1).fillna(np.inf)
 )
 
+# Silence verbose logging
+logging.getLogger("root").setLevel(logging.WARNING)
 
-def impute_capital_gains(dataset, time_period: int):
+
+def impute_cg_to_doubled_dataset(
+    dataset: UKSingleYearDataset,
+) -> tuple[np.ndarray, np.ndarray]:
     """Assumes that the capital gains distribution is the same for all years."""
 
     from policyengine_uk import Microsimulation
     from policyengine_uk.system import system
 
     sim = Microsimulation(dataset=dataset)
-    ti = sim.calculate("total_income", time_period)
-    household_weight = sim.calculate("household_weight", time_period).values
+    ti = sim.calculate("total_income").values
+    household_weight = sim.calculate("household_weight").values
     first_half = (
         np.concatenate(
             [
@@ -45,7 +49,7 @@ def impute_capital_gains(dataset, time_period: int):
         > 0
     )
     # Give capital gains to one adult aged 15+ in each household
-    adult_index = sim.calculate("adult_index", time_period)
+    adult_index = sim.calculate("adult_index").values == 1
     in_person_second_half = np.zeros(len(ti)) > 0
     in_person_second_half[len(ti) // 2 :] = True
     has_cg = np.zeros(len(ti)) > 0
@@ -88,13 +92,16 @@ def impute_capital_gains(dataset, time_period: int):
             pred_cg_in_income_range = (
                 blended_household_weight * household_cg_in_income_range_count
             ).sum()
-            pred_pct_with_gains = pred_cg_in_income_range / pred_ti_in_range
+            pred_pct_with_gains = pred_cg_in_income_range / torch.clip(
+                pred_ti_in_range, 1
+            )
             loss += (pred_pct_with_gains - true_pct_with_gains) ** 2
 
         return loss
 
     optimiser = Adam([blend_factor], lr=1e-1)
     progress = range(100)
+    logging.info("Splitting household weights into has-gains and no-gains")
     for i in progress:
         optimiser.zero_grad()
         loss_value = loss(blend_factor)
@@ -116,6 +123,8 @@ def impute_capital_gains(dataset, time_period: int):
     # Impute actual capital gains amounts given gains
     new_cg = np.zeros(len(ti))
 
+    logging.info("Imputing capital gains among those with gains")
+
     for i in range(len(capital_gains)):
         row = capital_gains.iloc[i]
         spline = UnivariateSpline(
@@ -127,57 +136,25 @@ def impute_capital_gains(dataset, time_period: int):
         upper = row.maximum_total_income
         ti_in_range = (ti >= lower) * (ti < upper)
         in_target_range = has_cg * ti_in_range > 0
-        quantiles = np.random.random(int(in_target_range.values.sum()))
+        quantiles = np.random.random(int(in_target_range.sum()))
         pred_capital_gains = spline(quantiles)
         new_cg[in_target_range] = pred_capital_gains
 
     return new_cg, new_household_weight
 
 
-def stack_datasets(data_1, data_2):
-    assert isinstance(
-        data_1[list(data_1.keys())[0]], dict
-    ), "Data must be in variable-time-period format."
-    joined_data = {}
+def impute_capital_gains(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
+    zero_weight_copy = dataset.copy()
+    zero_weight_copy.household.household_weight = 1
+    data = stack_datasets(
+        dataset,
+        zero_weight_copy,
+    )
 
-    for variable in data_1:
-        joined_data[variable] = {}
-        for time_period in data_1[variable]:
-            if "_id" in variable:
-                joined_data[variable][time_period] = np.concatenate(
-                    [
-                        data_1[variable][time_period],
-                        data_2[variable][time_period]
-                        + data_1[variable][time_period].max(),
-                    ]
-                )
-            else:
-                joined_data[variable][time_period] = np.concatenate(
-                    [
-                        data_1[variable][time_period],
-                        data_2[variable][time_period],
-                    ]
-                )
+    pred_cg, household_weight = impute_cg_to_doubled_dataset(data)
 
-    return joined_data
+    data.person["capital_gains"] = pred_cg
+    data.household["household_weight"] = household_weight
 
-
-def impute_cg_to_dataset(dataset: Dataset):
-    data = dataset.load_dataset()
-    zero_weight_copy_1 = copy.deepcopy(data)
-    zero_weight_copy_2 = copy.deepcopy(data)
-
-    for time_period in zero_weight_copy_2["household_weight"]:
-        zero_weight_copy_2["household_weight"][time_period] = np.zeros_like(
-            zero_weight_copy_1["household_weight"][time_period]
-        )
-
-    data = stack_datasets(data, zero_weight_copy_2)
-
-    dataset.save_dataset(data)
-
-    pred_cg, household_weights_22 = impute_capital_gains(dataset, 2022)
-
-    data["capital_gains"] = {2022: pred_cg}
-    data["household_weight"][2022] = household_weights_22
-    dataset.save_dataset(data)
+    data.validate()
+    return data

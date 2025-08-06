@@ -1,29 +1,27 @@
-def test_child_limit():
-    from policyengine_uk import Microsimulation
-    from policyengine_uk_data.datasets import EnhancedFRS_2022_23
-
-    # Initialize simulation
-    sim = Microsimulation(dataset=EnhancedFRS_2022_23)
-
+def test_child_limit(baseline):
     child_is_affected = (
-        sim.map_result(
-            sim.calculate(
+        baseline.map_result(
+            baseline.calculate(
                 "uc_is_child_limit_affected", map_to="household", period=2025
             ),
             "household",
             "person",
         )
         > 0
-    ) * sim.calculate("is_child", map_to="person").values
+    ) * baseline.calculate("is_child", map_to="person").values
     child_in_uc_household = (
-        sim.calculate("universal_credit", map_to="person", period=2025).values
+        baseline.calculate(
+            "universal_credit", map_to="person", period=2025
+        ).values
         > 0
     )
-    children_in_capped_households = sim.map_result(
+    children_in_capped_households = baseline.map_result(
         child_is_affected * child_in_uc_household, "person", "household"
     )
     capped_households = (children_in_capped_households > 0) * 1.0
-    household_weight = sim.calculate("household_weight", period=2025).values
+    household_weight = baseline.calculate(
+        "household_weight", period=2025
+    ).values
     children_affected = (
         children_in_capped_households * household_weight
     ).sum()
