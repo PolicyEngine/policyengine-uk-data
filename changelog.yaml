@@ -255,3 +255,8 @@
     added:
     - Add index.yaml to fix GitHub Pages 404 error
   date: 2025-08-05 11:47:08
+- bump: patch
+  changes:
+    changed:
+    - Moved to functional, simplified architecture.
+  date: 2025-08-06 10:08:10
