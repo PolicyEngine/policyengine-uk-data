@@ -64,7 +64,7 @@ class QRF:
         Returns:
             Predictions at the 0.5 quantile (median).
         """
-        return self.model.predict(X)[0.5]
+        return self.model.predict(X)
 
     def save(self, file_path: str):
         """
