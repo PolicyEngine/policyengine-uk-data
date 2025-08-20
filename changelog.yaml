@@ -265,3 +265,8 @@
     fixed:
     - Test result.
   date: 2025-08-06 10:28:59
+- bump: patch
+  changes:
+    fixed:
+    - Imputation model syntax.
+  date: 2025-08-20 10:32:56
