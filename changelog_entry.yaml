@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    added:
+    - Firm synthetic data generation script with ONS and HMRC data integration
