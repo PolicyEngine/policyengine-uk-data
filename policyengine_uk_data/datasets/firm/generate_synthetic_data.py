@@ -1813,13 +1813,9 @@ def main():
     # Generate synthetic data
     synthetic_df = generator.generate_synthetic_firms()
 
-    # Save results to STORAGE_FOLDER
-    output_path = STORAGE_FOLDER / "synthetic_firms_turnover.csv"
-    synthetic_df.to_csv(output_path, index=False)
-
-    file_size_mb = output_path.stat().st_size / 1024 / 1024
-    logger.info(f"Saved {len(synthetic_df):,} firms to {output_path}")
-    logger.info(f"File size: {file_size_mb:.1f} MB")
+    # Log results (CSV output now temporary, not saved to disk)
+    logger.info(f"Generated {len(synthetic_df):,} synthetic firms")
+    logger.info(f"Data size: {synthetic_df.memory_usage(deep=True).sum() / 1024 / 1024:.1f} MB")
     logger.info(f"Columns: {list(synthetic_df.columns)}")
 
     logger.info("Synthetic data generation complete!")
