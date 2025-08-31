@@ -13,6 +13,7 @@
 !demographics.csv
 !incomes_projection.csv
 !policyengine_uk_data/datasets/local_areas/**/*.csv
+!policyengine_uk_data/datasets/firm/**/*.csv
 **/_build
 !policyengine_uk_data/storage/*.csv
 **/version.json
