@@ -71,45 +71,45 @@ def create_firm(year: int = 2023):
         synthetic_df["vat_registered"].astype(bool).values
     )
 
-    # Add derived variables that exist in generate_synthetic_data.py validation
-    def map_to_hmrc_band(turnover_k):
-        if turnover_k <= 0:
-            return "Negative_or_Zero"
-        elif turnover_k <= 85:
-            return "£1_to_Threshold"
-        elif turnover_k <= 150:
-            return "£Threshold_to_£150k"
-        elif turnover_k <= 300:
-            return "£150k_to_£300k"
-        elif turnover_k <= 500:
-            return "£300k_to_£500k"
-        elif turnover_k <= 1000:
-            return "£500k_to_£1m"
-        elif turnover_k <= 10000:
-            return "£1m_to_£10m"
-        else:
-            return "Greater_than_£10m"
-
-    def _map_employment_to_band(employment):
-        if employment <= 4:
-            return "0-4"
-        elif employment <= 9:
-            return "5-9"
-        elif employment <= 19:
-            return "10-19"
-        elif employment <= 49:
-            return "20-49"
-        elif employment <= 99:
-            return "50-99"
-        elif employment <= 249:
-            return "100-249"
-        else:
-            return "250+"
-
-    pe_firm["hmrc_band"] = pe_firm["annual_turnover_k"].apply(map_to_hmrc_band)
-    pe_firm["employment_band"] = pe_firm["employment"].apply(
-        _map_employment_to_band
+    # Add derived variables using pd.cut for efficiency
+    turnover_bins = [0, 85, 150, 300, 500, 1000, 10000, float("inf")]
+    turnover_labels = [
+        "£1_to_Threshold",
+        "£Threshold_to_£150k",
+        "£150k_to_£300k",
+        "£300k_to_£500k",
+        "£500k_to_£1m",
+        "£1m_to_£10m",
+        "Greater_than_£10m",
+    ]
+    pe_firm["hmrc_band"] = (
+        pd.cut(
+            pe_firm["annual_turnover_k"],
+            bins=turnover_bins,
+            labels=turnover_labels,
+            include_lowest=True,
+        )
+        .astype(str)
+        .replace("nan", "Negative_or_Zero")
     )
+
+    employment_bins = [0, 4, 9, 19, 49, 99, 249, float("inf")]
+    employment_labels = [
+        "0-4",
+        "5-9",
+        "10-19",
+        "20-49",
+        "50-99",
+        "100-249",
+        "250+",
+    ]
+    pe_firm["employment_band"] = pd.cut(
+        pe_firm["employment"],
+        bins=employment_bins,
+        labels=employment_labels,
+        include_lowest=True,
+    ).astype(str)
+
     pe_firm["sic_numeric"] = pe_firm["sic_code"].astype(int)
 
     # Add year field
