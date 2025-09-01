@@ -362,6 +362,25 @@ def create_target_matrix(
         target_names.append(name)
         target_values.append(float(row["Total"]) * uprating)
 
+    # Benefit cap counts
+
+    benefit_cap_reduction = sim.calculate(
+        "benefit_cap_reduction", map_to="household"
+    ).values
+    df["dwp/benefit_capped_households"] = (benefit_cap_reduction > 0).astype(
+        float
+    )
+    target_names.append("dwp/benefit_capped_households")
+    target_values.append(
+        115_000
+    )  # https://www.gov.uk/government/statistics/benefit-cap-number-of-households-capped-to-february-2025/benefit-cap-number-of-households-capped-to-february-2025
+
+    df["dwp/benefit_cap_total_reduction"] = benefit_cap_reduction.astype(float)
+    target_names.append("dwp/benefit_cap_total_reduction")
+    target_values.append(
+        60 * 52 * 115_000
+    )  # same source as above, multiply avg cap amount by total capped population
+
     combined_targets = pd.concat(
         [
             targets,
