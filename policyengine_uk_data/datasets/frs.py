@@ -799,7 +799,7 @@ def create_frs(
 
     # Add marital status at the benefit unit level
 
-    pe_benunit["is_married"] = frs["benunit"].FAMTYPB2.isin([5, 7])
+    pe_benunit["is_married"] = frs["benunit"].famtypb2.isin([5, 7])
 
     dataset = UKSingleYearDataset(
         person=pe_person,
