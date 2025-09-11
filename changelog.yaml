@@ -275,3 +275,8 @@
     added:
     - Calibration to benefit cap statistics.
   date: 2025-09-01 09:33:20
+- bump: patch
+  changes:
+    fixed:
+    - Add is_married to FRS benefit unit dataset
+  date: 2025-09-11 16:14:02
