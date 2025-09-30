@@ -36,8 +36,10 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install Jupyter Book 2.0
-        run: uv pip install --pre "jupyter-book==2.*" --system
+      - name: Install Jupyter Book 2.0 and MyST
+        run: |
+          uv pip install --pre "jupyter-book==2.*" --system
+          npm install -g mystmd
 
       - name: Build book
         run: |
