@@ -2,7 +2,9 @@ version: 1
 project:
   title: PolicyEngine UK data
   authors:
-    - name: PolicyEngine
+    - name:
+        given: PolicyEngine
+        family: Team
   copyright: '2024'
   github: policyengine/policyengine-uk-data
   toc:
