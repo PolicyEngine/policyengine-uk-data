@@ -1,4 +1,6 @@
-- bump: patch
+- bump: minor
   changes:
+    changed:
+    - Upgraded documentation to Jupyter Book 2.0 (MyST-based)
     fixed:
     - Jupyter Book deployment to GitHub Pages by adding docs workflow and fixing branch reference

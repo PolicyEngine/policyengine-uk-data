@@ -37,11 +37,19 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Install Python dependencies
-        run: uv pip install -e ".[dev]" --system
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Jupyter Book 2.0
+        run: uv pip install --pre "jupyter-book==2.*" --system
 
       - name: Build book
-        run: jupyter-book build docs
+        run: |
+          cd docs
+          echo "Y" | jupyter book || true
+          jupyter book build --html
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
