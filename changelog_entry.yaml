@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Jupyter Book deployment to GitHub Pages by adding docs workflow and fixing branch reference

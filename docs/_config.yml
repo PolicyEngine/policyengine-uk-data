@@ -10,7 +10,7 @@ execute:
 
 repository:
   url: https://github.com/policyengine/policyengine-uk-data
-  branch: master
+  branch: main
   path_to_book: docs
 
 sphinx:
