@@ -37,19 +37,11 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Install MyST
-        run: npm install -g mystmd
-
       - name: Install Python dependencies
         run: uv pip install -e ".[dev]" --system
 
       - name: Build book
-        run: myst build docs --html
+        run: jupyter-book build docs
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
