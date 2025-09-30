@@ -1,0 +1,60 @@
+name: Deploy Jupyter Book
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs.yaml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Jupyter Book 2.0 and MyST
+        run: |
+          uv pip install --pre "jupyter-book==2.*" --system
+          npm install -g mystmd
+
+      - name: Build book
+        run: |
+          cd docs
+          rm -rf _build .jupyter_cache
+          myst clean || true
+          myst build --html
+          touch _build/html/.nojekyll
+        env:
+          BASE_URL: /policyengine-uk-data
+
+      - name: Deploy to GitHub Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          branch: gh-pages
+          folder: docs/_build/html
+          clean: true

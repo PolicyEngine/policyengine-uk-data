@@ -1,0 +1,25 @@
+version: 1
+project:
+  title: PolicyEngine UK data
+  authors:
+    - name:
+        given: PolicyEngine
+        family: Team
+  copyright: '2024'
+  github: policyengine/policyengine-uk-data
+  toc:
+    - file: intro.md
+    - file: methodology.ipynb
+    - file: validation/index.md
+      children:
+        - file: validation/national.ipynb
+        - file: validation/constituencies.ipynb
+        - file: validation/local_authorities.ipynb
+    - file: pension_contributions.ipynb
+    - file: constituency_methodology.ipynb
+    - file: LA_methodology.ipynb
+site:
+  options:
+    logo: logo.png
+    folders: true
+  template: book-theme
