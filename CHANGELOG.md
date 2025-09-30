@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.0] - 2025-09-30 13:58:18
+
+### Changed
+
+- Upgraded documentation to Jupyter Book 2.0 (MyST-based)
+
+### Fixed
+
+- Jupyter Book deployment to GitHub Pages by adding docs workflow and fixing branch reference
+
 ## [1.17.11] - 2025-09-11 16:14:02
 
 ### Fixed
@@ -336,6 +346,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.18.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.17.11...1.18.0
 [1.17.11]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.17.10...1.17.11
 [1.17.10]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.17.9...1.17.10
 [1.17.9]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.17.8...1.17.9
