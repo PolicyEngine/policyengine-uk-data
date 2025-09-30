@@ -9,15 +9,25 @@ project:
   github: policyengine/policyengine-uk-data
   toc:
     - file: intro.md
-    - file: methodology.ipynb
-    - file: validation/index.md
+    - file: getting_started.md
+    - file: examples.md
+    - title: User Guide
       children:
+        - file: api_reference.md
+        - file: data_sources.md
+        - file: glossary.md
+    - title: Technical Details
+      children:
+        - file: methodology.ipynb
+        - file: pension_contributions.ipynb
+        - file: constituency_methodology.ipynb
+        - file: LA_methodology.ipynb
+    - title: Validation
+      children:
+        - file: validation/index.md
         - file: validation/national.ipynb
         - file: validation/constituencies.ipynb
         - file: validation/local_authorities.ipynb
-    - file: pension_contributions.ipynb
-    - file: constituency_methodology.ipynb
-    - file: LA_methodology.ipynb
 site:
   options:
     logo: logo.png

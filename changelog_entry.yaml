@@ -1,0 +1,12 @@
+- bump: minor
+  changes:
+    added:
+    - Comprehensive README with installation, quick start, and examples
+    - Getting Started guide with detailed setup instructions
+    - API Reference documentation for all datasets and functions
+    - Usage Examples page with common analysis patterns
+    - Data Sources documentation explaining FRS, WAS, LCFS, SPI, ETB
+    - Glossary of technical terms and abbreviations
+    changed:
+    - Enhanced introduction with clearer problem statement and use cases
+    - Reorganized documentation TOC into User Guide, Technical Details, and Validation sections
