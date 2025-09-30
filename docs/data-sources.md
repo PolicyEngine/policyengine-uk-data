@@ -8,7 +8,7 @@ PolicyEngine UK Data combines multiple UK government surveys to create comprehen
 
 **Publisher:** Department for Work and Pensions (DWP)
 
-**Coverage:** ~20,000 UK households annually
+**Coverage:** ~20,000 UK households annually[^frs-sample]
 
 **Purpose:** Main source of household demographics, income, and benefits data
 
@@ -40,7 +40,7 @@ PolicyEngine UK Data combines multiple UK government surveys to create comprehen
 
 **Publisher:** Office for National Statistics (ONS)
 
-**Coverage:** ~20,000 UK households biennially
+**Coverage:** ~18,000 UK households biennially[^was-sample]
 
 **Purpose:** Wealth variable imputations
 
@@ -69,7 +69,7 @@ PolicyEngine UK Data combines multiple UK government surveys to create comprehen
 
 **Publisher:** Office for National Statistics (ONS)
 
-**Coverage:** ~5,000 UK households annually
+**Coverage:** ~5,000 UK households annually[^lcfs-sample]
 
 **Purpose:** Consumption expenditure imputations
 
@@ -98,7 +98,7 @@ PolicyEngine UK Data combines multiple UK government surveys to create comprehen
 
 **Publisher:** HM Revenue & Customs (HMRC)
 
-**Coverage:** All UK taxpayers (~30 million records, 1% sample released)
+**Coverage:** All UK taxpayers (~30 million records, 1% sample released)[^spi-sample]
 
 **Purpose:** Correct high-income underreporting
 
@@ -187,37 +187,68 @@ PolicyEngine UK Data combines multiple UK government surveys to create comprehen
 
 ## Data Processing Pipeline
 
-```
-┌─────────────┐
-│     FRS     │  Base demographics & income
-└──────┬──────┘
-       │
-       ├──────> [Apply tax-benefit model]
-       │
-       ├──────> [Impute from WAS] ──> Wealth variables
-       │
-       ├──────> [Impute from LCFS] ──> Consumption variables
-       │
-       ├──────> [Impute from ETB] ──> VAT exposure
-       │
-       ▼
-┌─────────────────┐
-│  Extended FRS   │
-└────────┬────────┘
-         │
-         ├──────> [Enhance from SPI] ──> High-income correction
-         │
-         ▼
-┌─────────────────┐
-│  Enhanced FRS   │
-└────────┬────────┘
-         │
-         ├──────> [Calibrate to official stats]
-         │
-         ▼
-┌─────────────────┐
-│ Reweighted FRS  │
-└─────────────────┘
+```mermaid
+graph TD
+    subgraph sources["Source Datasets"]
+        FRS["FRS 2022-23<br/>20k households"]:::data
+        WAS["WAS<br/>18k households"]:::data
+        LCFS["LCFS<br/>5k households"]:::data
+        SPI["SPI<br/>~300k taxpayers"]:::data
+        ETB["ETB<br/>(from LCFS)"]:::data
+    end
+
+    SimBenefits("Simulate benefits<br/>(replace reported)"):::process
+
+    ImputeWealth("Impute wealth variables"):::process
+    ImputeConsumption("Impute consumption"):::process
+    ImputeVAT("Impute VAT exposure"):::process
+
+    Extended["Extended FRS<br/>20k households<br/>+ wealth + consumption"]:::data
+
+    CloneFRS("Clone FRS records"):::process
+    TrainQRF("Train QRF on SPI"):::process
+    ImputeIncome("Impute high incomes"):::process
+    Concat("Concatenate copies"):::process
+
+    Enhanced["Enhanced FRS<br/>40k observations<br/>+ corrected incomes"]:::data
+
+    Targets{{"Official Statistics<br/>2000+ targets<br/>HMRC | DWP | ONS | OBR"}}:::targets
+
+    Calibrate("Optimize weights"):::process
+
+    Reweighted{{"Reweighted FRS<br/>Final Dataset"}}:::output
+
+    FRS --> SimBenefits
+
+    SimBenefits --> ImputeWealth
+    SimBenefits --> ImputeConsumption
+    SimBenefits --> ImputeVAT
+
+    WAS --> ImputeWealth
+    LCFS --> ImputeConsumption
+    ETB --> ImputeVAT
+
+    ImputeWealth --> Extended
+    ImputeConsumption --> Extended
+    ImputeVAT --> Extended
+
+    Extended --> CloneFRS
+    SPI --> TrainQRF
+
+    CloneFRS --> ImputeIncome
+    TrainQRF --> ImputeIncome
+
+    ImputeIncome --> Concat
+    Concat --> Enhanced
+
+    Enhanced --> Calibrate
+    Targets --> Calibrate
+    Calibrate --> Reweighted
+
+    classDef data fill:#2C6496,stroke:#2C6496,color:#FFFFFF
+    classDef process fill:#39C6C0,stroke:#2C6496,color:#FFFFFF
+    classDef targets fill:#FFA500,stroke:#2C6496,color:#FFFFFF
+    classDef output fill:#5091CC,stroke:#2C6496,color:#FFFFFF
 ```
 
 ## Accessing Raw Data
@@ -292,3 +323,13 @@ Based on:
 - [Methodology](methodology.ipynb) - How we process and combine these sources
 - [Glossary](glossary.md) - Definitions of surveys and terms
 - [Validation](validation/) - How outputs compare to official statistics
+
+## References
+
+[^frs-sample]: Department for Work and Pensions. (2023). *Family Resources Survey 2022/23*. Sample of approximately 19,000 households. [UK Data Service SN 9016](https://beta.ukdataservice.ac.uk/datacatalogue/series/series?id=200017).
+
+[^was-sample]: Office for National Statistics. (2020). *Wealth and Assets Survey, Waves 1-7, 2006-2020*. Approximately 18,000 households per wave. [UK Data Service SN 7215](https://beta.ukdataservice.ac.uk/datacatalogue/studies/study?id=7215).
+
+[^lcfs-sample]: Office for National Statistics. (2023). *Living Costs and Food Survey, 2022*. Sample of approximately 5,000 households. [UK Data Service SN 9114](https://beta.ukdataservice.ac.uk/datacatalogue/series/series?id=200017).
+
+[^spi-sample]: HM Revenue & Customs. (2024). *Survey of Personal Incomes, 2020-21*. Based on administrative records of all UK taxpayers; 1% sample (~300,000 individuals) released for research. [HMRC Statistics](https://www.gov.uk/government/statistics/personal-incomes-statistics-to-2020-to-2021).

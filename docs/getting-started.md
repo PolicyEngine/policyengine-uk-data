@@ -244,7 +244,7 @@ For large-scale analysis:
 ## Next Steps
 
 - **[Examples](examples.md)** - More detailed usage examples
-- **[API Reference](api_reference.md)** - Complete API documentation
+- **[API Reference](api-reference.md)** - Complete API documentation
 - **[Methodology](methodology.ipynb)** - Understand how datasets are created
 - **[Validation](validation/)** - See how datasets compare to official statistics
 

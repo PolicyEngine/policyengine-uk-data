@@ -165,6 +165,6 @@ Households gaining (winners) or losing (losers) income under a policy reform.
 
 ## See Also
 
-- [Data Sources](data_sources.md) - Detailed information on each survey
+- [Data Sources](data-sources.md) - Detailed information on each survey
 - [Methodology](methodology.ipynb) - Technical details of enhancement process
-- [API Reference](api_reference.md) - Function and class documentation
+- [API Reference](api-reference.md) - Function and class documentation

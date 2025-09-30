@@ -287,6 +287,6 @@ print(f"Median absolute relative error: {results.abs_rel_error.median():.2%}")
 
 ## Next Steps
 
-- [API Reference](api_reference.md) - Complete function documentation
+- [API Reference](api-reference.md) - Complete function documentation
 - [Methodology](methodology.ipynb) - Understand dataset construction
 - [Validation](validation/) - See accuracy metrics

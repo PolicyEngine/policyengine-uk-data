@@ -244,6 +244,6 @@ Each module provides functions to add imputed variables to datasets.
 
 ## See Also
 
-- [Getting Started](getting_started.md) - Installation and basic usage
+- [Getting Started](getting-started.md) - Installation and basic usage
 - [Examples](examples.md) - Detailed usage examples
 - [Methodology](methodology.ipynb) - How datasets are created

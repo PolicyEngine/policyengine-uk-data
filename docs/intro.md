@@ -74,21 +74,21 @@ With PolicyEngine UK Data, you can:
 
 | I want to... | Go to... |
 |--------------|----------|
-| Install and use the package | [Getting Started](getting_started.md) |
+| Install and use the package | [Getting Started](getting-started.md) |
 | See code examples | [Examples](examples.md) |
 | Understand the methodology | [Methodology](methodology.ipynb) |
-| Look up functions and classes | [API Reference](api_reference.md) |
+| Look up functions and classes | [API Reference](api-reference.md) |
 | Check dataset accuracy | [Validation](validation/) |
 | Understand technical terms | [Glossary](glossary.md) |
-| Learn about data sources | [Data Sources](data_sources.md) |
+| Learn about data sources | [Data Sources](data-sources.md) |
 
 ## How This Documentation is Organized
 
 1. **User Guide** - Practical information for using the package
-   - [Getting Started](getting_started.md) - Installation and first steps
+   - [Getting Started](getting-started.md) - Installation and first steps
    - [Examples](examples.md) - Code examples for common tasks
-   - [API Reference](api_reference.md) - Complete function documentation
-   - [Data Sources](data_sources.md) - Information on source surveys
+   - [API Reference](api-reference.md) - Complete function documentation
+   - [Data Sources](data-sources.md) - Information on source surveys
    - [Glossary](glossary.md) - Definitions and terminology
 
 2. **Technical Details** - In-depth methodology

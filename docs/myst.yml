@@ -9,12 +9,12 @@ project:
   github: policyengine/policyengine-uk-data
   toc:
     - file: intro.md
-    - file: getting_started.md
+    - file: getting-started.md
     - file: examples.md
     - title: User Guide
       children:
-        - file: api_reference.md
-        - file: data_sources.md
+        - file: api-reference.md
+        - file: data-sources.md
         - file: glossary.md
     - title: Technical Details
       children:

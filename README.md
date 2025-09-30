@@ -86,10 +86,10 @@ print(f"Mean household net income: £{mean_income:,.0f}")
 
 ## Documentation
 
-- **[Getting Started Guide](https://policyengine.github.io/policyengine-uk-data/getting_started.html)** - Detailed installation and setup
-- **[Methodology](https://policyengine.github.io/policyengine-uk-data/methodology.html)** - How we create the datasets
-- **[API Reference](https://policyengine.github.io/policyengine-uk-data/api_reference.html)** - Complete API documentation
-- **[Examples](https://policyengine.github.io/policyengine-uk-data/examples.html)** - Usage examples and tutorials
+- **[Getting Started Guide](https://policyengine.github.io/policyengine-uk-data/getting-started)** - Detailed installation and setup
+- **[Methodology](https://policyengine.github.io/policyengine-uk-data/methodology)** - How we create the datasets
+- **[API Reference](https://policyengine.github.io/policyengine-uk-data/api-reference)** - Complete API documentation
+- **[Examples](https://policyengine.github.io/policyengine-uk-data/examples)** - Usage examples and tutorials
 - **[Validation](https://policyengine.github.io/policyengine-uk-data/validation/)** - Comparison with official statistics
 
 ## Building the Datasets
@@ -120,7 +120,7 @@ This package combines data from multiple UK surveys:
 - **Survey of Personal Incomes (SPI)** - high-income enhancement
 - **Effects of Taxes and Benefits (ETB)** - VAT exposure
 
-See [Data Sources documentation](https://policyengine.github.io/policyengine-uk-data/data_sources.html) for details.
+See [Data Sources documentation](https://policyengine.github.io/policyengine-uk-data/data-sources) for details.
 
 ## Citation
 
