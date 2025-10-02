@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    fixed:
+      - Re-add dividends to calibration target set.
