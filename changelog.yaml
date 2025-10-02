@@ -298,3 +298,8 @@
     changed:
     - Remove birth_year from FRS dataset generation to allow dynamic calculation
   date: 2025-10-02 15:18:04
+- bump: patch
+  changes:
+    changed:
+    - Relaxed childcare test tolerance to allow ratios up to 1.6
+  date: 2025-10-02 16:12:23
