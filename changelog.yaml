@@ -288,3 +288,8 @@
     - Jupyter Book deployment to GitHub Pages by adding docs workflow and fixing branch
       reference
   date: 2025-09-30 13:58:18
+- bump: minor
+  changes:
+    fixed:
+    - Re-add dividends to calibration target set.
+  date: 2025-10-02 14:29:16
