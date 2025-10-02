@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+    - Relaxed childcare test tolerance to allow ratios within 100% of target (0 to 2.0)
