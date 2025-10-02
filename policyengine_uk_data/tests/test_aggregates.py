@@ -2,7 +2,7 @@ import pytest
 
 AGGREGATES = {
     "nhs_spending": 200e9,
-    #"dfe_education_spending": 70e9,
+    # "dfe_education_spending": 70e9,
     "rail_subsidy_spending": 12e9,
     "bus_subsidy_spending": 2.5e9,
 }
