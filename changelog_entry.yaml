@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-    - Remove birth_year from FRS dataset generation to allow dynamic calculation

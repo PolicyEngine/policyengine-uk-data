@@ -293,3 +293,8 @@
     fixed:
     - Re-add dividends to calibration target set.
   date: 2025-10-02 14:29:16
+- bump: patch
+  changes:
+    changed:
+    - Remove birth_year from FRS dataset generation to allow dynamic calculation
+  date: 2025-10-02 15:18:04
