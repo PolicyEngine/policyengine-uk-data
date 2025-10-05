@@ -19,6 +19,7 @@ from policyengine_uk_data.utils.datasets import (
     fill_with_mean,
     STORAGE_FOLDER,
 )
+from policyengine_uk_data.parameters import load_take_up_rate, load_parameter
 
 
 def create_frs(
@@ -751,35 +752,89 @@ def create_frs(
         paragraph_3 | paragraph_4 | paragraph_5
     )
 
-    # Add random seed variables for stochastic simulation
-    # Each seed is for a specific independent random decision to avoid artificial correlations
-    # Random seeds are generated once during dataset creation and stored
+    # Generate stochastic take-up decisions
+    # All randomness is generated here in the data package using take-up rates
+    # stored in YAML parameter files. This keeps the country package purely deterministic.
 
     generator = np.random.default_rng(seed=100)
 
-    # Person-level seeds
-    pe_person["is_disabled_for_benefits_seed"] = generator.random(len(pe_person))
-    pe_person["marriage_allowance_take_up_seed"] = generator.random(len(pe_person))
-    pe_person["is_higher_earner_seed"] = generator.random(len(pe_person))
-    pe_person["attends_private_school_seed"] = generator.random(len(pe_person))
+    # Load take-up rates from parameter files
+    child_benefit_rate = load_take_up_rate("child_benefit", year)
+    pension_credit_rate = load_take_up_rate("pension_credit", year)
+    universal_credit_rate = load_take_up_rate("universal_credit", year)
+    marriage_allowance_rate = load_take_up_rate("marriage_allowance", year)
+    child_benefit_opts_out_rate = load_take_up_rate(
+        "child_benefit_opts_out_rate", year
+    )
+    tfc_rate = load_take_up_rate("tax_free_childcare", year)
+    extended_childcare_rate = load_take_up_rate("extended_childcare", year)
+    universal_childcare_rate = load_take_up_rate("universal_childcare", year)
+    targeted_childcare_rate = load_take_up_rate("targeted_childcare", year)
 
-    # Benefit unit-level seeds
-    pe_benunit["child_benefit_take_up_seed"] = generator.random(len(pe_benunit))
-    pe_benunit["child_benefit_opts_out_seed"] = generator.random(len(pe_benunit))
-    pe_benunit["pension_credit_take_up_seed"] = generator.random(len(pe_benunit))
-    pe_benunit["universal_credit_take_up_seed"] = generator.random(len(pe_benunit))
+    # Generate take-up decisions by comparing random draws to take-up rates
+    # Person-level
+    pe_person["would_claim_marriage_allowance"] = (
+        generator.random(len(pe_person)) < marriage_allowance_rate
+    )
 
-    # Household-level seeds
-    pe_household["first_home_purchase_seed"] = generator.random(len(pe_household))
-    pe_household["household_owns_tv_seed"] = generator.random(len(pe_household))
-    pe_household["tv_licence_evasion_seed"] = generator.random(len(pe_household))
+    # Benefit unit-level
+    pe_benunit["would_claim_child_benefit"] = (
+        generator.random(len(pe_benunit)) < child_benefit_rate
+    )
+    pe_benunit["child_benefit_opts_out"] = (
+        generator.random(len(pe_benunit)) < child_benefit_opts_out_rate
+    )
+    pe_benunit["would_claim_pc"] = (
+        generator.random(len(pe_benunit)) < pension_credit_rate
+    )
+    pe_benunit["would_claim_uc"] = (
+        generator.random(len(pe_benunit)) < universal_credit_rate
+    )
+    pe_benunit["would_claim_tfc"] = (
+        generator.random(len(pe_benunit)) < tfc_rate
+    )
+    pe_benunit["would_claim_extended_childcare"] = (
+        generator.random(len(pe_benunit)) < extended_childcare_rate
+    )
+    pe_benunit["would_claim_universal_childcare"] = (
+        generator.random(len(pe_benunit)) < universal_childcare_rate
+    )
+    pe_benunit["would_claim_targeted_childcare"] = (
+        generator.random(len(pe_benunit)) < targeted_childcare_rate
+    )
 
-    # Add childcare take-up seeds
-    # These will be used by the formulas in policyengine-uk with parameters
-    pe_benunit["tax_free_childcare_take_up_seed"] = generator.random(len(pe_benunit))
-    pe_benunit["extended_childcare_take_up_seed"] = generator.random(len(pe_benunit))
-    pe_benunit["universal_childcare_take_up_seed"] = generator.random(len(pe_benunit))
-    pe_benunit["targeted_childcare_take_up_seed"] = generator.random(len(pe_benunit))
+    # Generate other stochastic variables using rates from parameter files
+    # These are also generated in the dataset to keep the country package deterministic
+    tv_ownership_rate = load_parameter("stochastic", "tv_ownership_rate", year)
+    tv_evasion_rate = load_parameter(
+        "stochastic", "tv_licence_evasion_rate", year
+    )
+    first_time_buyer_rate = load_parameter(
+        "stochastic", "first_time_buyer_rate", year
+    )
+
+    # Household-level: TV ownership
+    pe_household["household_owns_tv"] = (
+        generator.random(len(pe_household)) < tv_ownership_rate
+    )
+
+    # Household-level: TV licence evasion
+    pe_household["would_evade_tv_licence_fee"] = (
+        generator.random(len(pe_household)) < tv_evasion_rate
+    )
+
+    # Household-level: First home purchase
+    pe_household["main_residential_property_purchased_is_first_home"] = (
+        generator.random(len(pe_household)) < first_time_buyer_rate
+    )
+
+    # Person-level: Tie-breaking for higher earner (uniform random for tie-breaking)
+    pe_person["higher_earner_tie_break"] = generator.random(len(pe_person))
+
+    # Person-level: Private school attendance random draw
+    pe_person["attends_private_school_random_draw"] = generator.random(
+        len(pe_person)
+    )
 
     # Generate extended childcare hours usage values with mean 15.019 and sd 4.972
     extended_hours_values = generator.normal(15.019, 4.972, len(pe_benunit))
