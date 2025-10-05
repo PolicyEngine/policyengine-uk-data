@@ -751,40 +751,28 @@ def create_frs(
         paragraph_3 | paragraph_4 | paragraph_5
     )
 
-    # Add random variables which are for now in policyengine-uk.
+    # Add random seed variables for stochastic simulation
+    # These replace the old approach of calculating random variables directly
+    # Random seeds are generated once during dataset creation and stored
 
-    RANDOM_VARIABLES = [
-        "would_evade_tv_licence_fee",
-        "would_claim_pc",
-        "would_claim_uc",
-        "would_claim_child_benefit",
-        "main_residential_property_purchased_is_first_home",
-        "household_owns_tv",
-        "is_higher_earner",
-        "attends_private_school",
-    ]
+    generator = np.random.default_rng(seed=100)
 
-    for variable in RANDOM_VARIABLES:
-        value = sim.calculate(variable).values
-        entity = sim.tax_benefit_system.variables[variable].entity.key
-        if entity == "person":
-            pe_person[variable] = value
-        elif entity == "household":
-            pe_household[variable] = value
-        elif entity == "benunit":
-            pe_benunit[variable] = value
+    pe_person["person_random_seed"] = generator.random(len(pe_person))
+    pe_benunit["benunit_random_seed"] = generator.random(len(pe_benunit))
+    pe_household["household_random_seed"] = generator.random(len(pe_household))
 
     # Add Tax-Free Childcare assumptions
+    # Use seeded generator for reproducibility
 
     count_benunits = len(pe_benunit)
 
-    extended_would_claim = np.random.random(count_benunits) < 0.812
-    tfc_would_claim = np.random.random(count_benunits) < 0.586
-    universal_would_claim = np.random.random(count_benunits) < 0.563
-    targeted_would_claim = np.random.random(count_benunits) < 0.597
+    extended_would_claim = generator.random(count_benunits) < 0.812
+    tfc_would_claim = generator.random(count_benunits) < 0.586
+    universal_would_claim = generator.random(count_benunits) < 0.563
+    targeted_would_claim = generator.random(count_benunits) < 0.597
 
     # Generate extended childcare hours usage values with mean 15.019 and sd 4.972
-    extended_hours_values = np.random.normal(15.019, 4.972, count_benunits)
+    extended_hours_values = generator.normal(15.019, 4.972, count_benunits)
     # Clip values to be between 0 and 30 hours
     extended_hours_values = np.clip(extended_hours_values, 0, 30)
 
