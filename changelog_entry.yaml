@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - Regional and country labels for UK constituencies.
