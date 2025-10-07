@@ -309,3 +309,8 @@
     - Relaxed childcare test tolerance to allow ratios within 100% of target (0 to
       2.0)
   date: 2025-10-02 16:46:59
+- bump: patch
+  changes:
+    added:
+    - Regional and country labels for UK constituencies.
+  date: 2025-10-07 16:32:10
