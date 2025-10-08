@@ -73,8 +73,10 @@ def create_spi(
     age_range = df.AGERANGE
 
     # Randomly assign ages in age ranges
+    # Use seeded generator for reproducibility
 
-    percent_along_age_range = np.random.rand(len(df))
+    generator = np.random.default_rng(seed=100)
+    percent_along_age_range = generator.random(len(df))
     min_age = np.array([AGE_RANGES[age][0] for age in age_range])
     max_age = np.array([AGE_RANGES[age][1] for age in age_range])
     person["age"] = (

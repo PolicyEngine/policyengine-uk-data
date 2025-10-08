@@ -51,7 +51,9 @@ def generate_spi_table(spi: pd.DataFrame):
     LOWER = np.array([0, 16, 25, 35, 45, 55, 65, 75])
     UPPER = np.array([16, 25, 35, 45, 55, 65, 75, 80])
     age_range = spi.AGERANGE
-    spi["age"] = LOWER[age_range] + np.random.rand(len(spi)) * (
+    # Use seeded generator for reproducibility
+    generator = np.random.default_rng(seed=100)
+    spi["age"] = LOWER[age_range] + generator.random(len(spi)) * (
         UPPER[age_range] - LOWER[age_range]
     )
 

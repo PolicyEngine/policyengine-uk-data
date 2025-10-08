@@ -125,6 +125,9 @@ def impute_cg_to_doubled_dataset(
 
     logging.info("Imputing capital gains among those with gains")
 
+    # Use seeded generator for reproducibility
+    generator = np.random.default_rng(seed=100)
+
     for i in range(len(capital_gains)):
         row = capital_gains.iloc[i]
         spline = UnivariateSpline(
@@ -136,7 +139,7 @@ def impute_cg_to_doubled_dataset(
         upper = row.maximum_total_income
         ti_in_range = (ti >= lower) * (ti < upper)
         in_target_range = has_cg * ti_in_range > 0
-        quantiles = np.random.random(int(in_target_range.sum()))
+        quantiles = generator.random(int(in_target_range.sum()))
         pred_capital_gains = spline(quantiles)
         new_cg[in_target_range] = pred_capital_gains
 
