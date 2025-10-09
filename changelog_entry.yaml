@@ -1,0 +1,5 @@
+- bump: patch
+  changes:
+    changed:
+    - Update Black target version from py311 to py313 to match project requirements
+    - Update Makefile commands to consistently use uv run for Python execution
