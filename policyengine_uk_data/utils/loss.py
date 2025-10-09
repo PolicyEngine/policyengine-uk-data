@@ -255,6 +255,7 @@ def create_target_matrix(
         "private_pension_income",
         "property_income",
         "savings_interest_income",
+        "dividend_income",
     ]
 
     income_df = sim.calculate_dataframe(["total_income"] + INCOME_VARIABLES)

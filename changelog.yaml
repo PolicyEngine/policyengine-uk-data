@@ -288,3 +288,29 @@
     - Jupyter Book deployment to GitHub Pages by adding docs workflow and fixing branch
       reference
   date: 2025-09-30 13:58:18
+- bump: minor
+  changes:
+    fixed:
+    - Re-add dividends to calibration target set.
+  date: 2025-10-02 14:29:16
+- bump: patch
+  changes:
+    changed:
+    - Remove birth_year from FRS dataset generation to allow dynamic calculation
+  date: 2025-10-02 15:18:04
+- bump: patch
+  changes:
+    changed:
+    - Relaxed childcare test tolerance to allow ratios up to 1.6
+  date: 2025-10-02 16:12:23
+- bump: patch
+  changes:
+    changed:
+    - Relaxed childcare test tolerance to allow ratios within 100% of target (0 to
+      2.0)
+  date: 2025-10-02 16:46:59
+- bump: patch
+  changes:
+    added:
+    - Regional and country labels for UK constituencies.
+  date: 2025-10-07 16:32:10
