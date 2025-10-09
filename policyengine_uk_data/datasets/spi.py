@@ -22,7 +22,7 @@ def create_spi(
     household["household_weight"] = df.FACT
     person["dividend_income"] = df.DIVIDENDS
     person["gift_aid"] = df.GIFTAID
-    person["region"] = (
+    household["region"] = (
         df.GORCODE.map(
             {
                 1: "NORTH_EAST",
@@ -39,9 +39,11 @@ def create_spi(
                 12: "NORTHERN_IRELAND",
             }
         )
-        .fillna("UNKNOWN")
-        .astype("S")
+        .fillna("SOUTH_EAST")
     )
+    household["rent"] = 0
+    household["tenure_type"] = "OWNED_OUTRIGHT"
+    household["council_tax"] = 0
     person["savings_interest_income"] = df.INCBBS
     person["property_income"] = df.INCPROP
     person["employment_income"] = df.PAY + df.EPB
