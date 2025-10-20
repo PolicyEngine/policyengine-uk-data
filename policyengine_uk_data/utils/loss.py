@@ -11,6 +11,7 @@ import pandas as pd
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk_data.utils import uprate_values
 from policyengine_uk.data import UKSingleYearDataset
+from policyengine_uk_data.utils.uc_data import uc_national_payment_dist
 
 tax_benefit = pd.read_csv(STORAGE_FOLDER / "tax_benefit.csv")
 tax_benefit["name"] = tax_benefit["name"].apply(lambda x: f"obr/{x}")
@@ -381,6 +382,26 @@ def create_target_matrix(
     target_values.append(
         60 * 52 * 115_000
     )  # same source as above, multiply avg cap amount by total capped population
+
+    # UC national payment distribution
+
+    uc_payment_dist = uc_national_payment_dist
+    uc_payments = sim.calculate("universal_credit", map_to="benunit").values
+    uc_family_type = sim.calculate("family_type", map_to="benunit").values
+
+    for i, row in uc_payment_dist.iterrows():
+        lower = row.uc_annual_payment_min
+        upper = row.uc_annual_payment_max
+        family_type = row.family_type
+        in_band = (
+            (uc_payments >= lower)
+            & (uc_payments < upper)
+            & (uc_family_type == family_type)
+        )
+        name = f"dwp/uc_payment_dist/{family_type}_annual_payment_{lower:_.0f}_to_{upper:_.0f}"
+        df[name] = household_from_family(in_band)
+        target_names.append(name)
+        target_values.append(row.household_count)
 
     combined_targets = pd.concat(
         [

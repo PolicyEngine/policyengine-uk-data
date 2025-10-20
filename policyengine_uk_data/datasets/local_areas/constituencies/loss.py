@@ -16,6 +16,7 @@ from policyengine_uk_data.datasets.local_areas.constituencies.boundary_changes.m
     mapping_matrix,
 )
 from policyengine_uk.data import UKSingleYearDataset
+from policyengine_uk_data.utils.uc_data import uc_pc_households
 
 FOLDER = Path(__file__).parent
 
@@ -124,6 +125,12 @@ def create_constituency_target_matrix(
     bounds = list(
         employment_incomes.employment_income_lower_bound.sort_values().unique()
     ) + [np.inf]
+
+    # UC household count by constituency
+    y["uc_households"] = uc_pc_households.household_count.values
+    matrix["uc_households"] = sim.map_result(
+        (sim.calculate("universal_credit").values > 0).astype(int), "benunit", "household"
+    )
 
     for lower_bound, upper_bound in zip(bounds[:-1], bounds[1:]):
         continue
