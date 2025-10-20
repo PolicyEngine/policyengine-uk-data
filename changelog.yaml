@@ -314,3 +314,8 @@
     added:
     - Regional and country labels for UK constituencies.
   date: 2025-10-07 16:32:10
+- bump: patch
+  changes:
+    fixed:
+    - Bump patch version to try and get HF upload passing.
+  date: 2025-10-20 16:37:14
