@@ -129,7 +129,9 @@ def create_constituency_target_matrix(
     # UC household count by constituency
     y["uc_households"] = uc_pc_households.household_count.values
     matrix["uc_households"] = sim.map_result(
-        (sim.calculate("universal_credit").values > 0).astype(int), "benunit", "household"
+        (sim.calculate("universal_credit").values > 0).astype(int),
+        "benunit",
+        "household",
     )
 
     for lower_bound, upper_bound in zip(bounds[:-1], bounds[1:]):

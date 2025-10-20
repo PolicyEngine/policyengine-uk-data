@@ -27,14 +27,20 @@ def _parse_uc_national_payment_dist():
             household_count = df.iloc[idx, col_idx]
 
             # Skip missing, ".." (suppressed), or zero values
-            if pd.isna(household_count) or household_count == ".." or household_count == 0:
+            if (
+                pd.isna(household_count)
+                or household_count == ".."
+                or household_count == 0
+            ):
                 continue
 
-            data_rows.append({
-                "monthly_award_band": award_band,
-                "family_type": family_type,
-                "household_count": int(household_count)
-            })
+            data_rows.append(
+                {
+                    "monthly_award_band": award_band,
+                    "family_type": family_type,
+                    "household_count": int(household_count),
+                }
+            )
 
     result_df = pd.DataFrame(data_rows)
 
@@ -46,21 +52,30 @@ def _parse_uc_national_payment_dist():
             return float(parts[0]) * 12, float(parts[1]) * 12
         return None, None
 
-    result_df[["uc_annual_payment_min", "uc_annual_payment_max"]] = result_df["monthly_award_band"].apply(
-        lambda x: pd.Series(parse_band(x))
-    )
+    result_df[["uc_annual_payment_min", "uc_annual_payment_max"]] = result_df[
+        "monthly_award_band"
+    ].apply(lambda x: pd.Series(parse_band(x)))
 
     # Map family types to constant names
     family_type_mapping = {
         "Single, no children": "SINGLE",
         "Single, with children": "LONE_PARENT",
         "Couple, no children": "COUPLE_NO_CHILDREN",
-        "Couple, with children": "COUPLE_WITH_CHILDREN"
+        "Couple, with children": "COUPLE_WITH_CHILDREN",
     }
-    result_df["family_type"] = result_df["family_type"].map(family_type_mapping)
+    result_df["family_type"] = result_df["family_type"].map(
+        family_type_mapping
+    )
 
     # Reorder columns and drop monthly band
-    result_df = result_df[["uc_annual_payment_min", "uc_annual_payment_max", "family_type", "household_count"]]
+    result_df = result_df[
+        [
+            "uc_annual_payment_min",
+            "uc_annual_payment_max",
+            "family_type",
+            "household_count",
+        ]
+    ]
 
     return result_df
 
@@ -80,43 +95,55 @@ def _parse_uc_pc_households():
         household_count = df_gb.iloc[idx, 3]  # Column 3: household count
 
         # Skip if empty, invalid, Total row, or Unknown
-        if pd.isna(constituency) or pd.isna(household_count) or constituency in ["Total", "Unknown"]:
+        if (
+            pd.isna(constituency)
+            or pd.isna(household_count)
+            or constituency in ["Total", "Unknown"]
+        ):
             continue
 
-        gb_data_rows.append({
-            "constituency_name": constituency,
-            "household_count": int(household_count)
-        })
+        gb_data_rows.append(
+            {
+                "constituency_name": constituency,
+                "household_count": int(household_count),
+            }
+        )
 
     # Parse NI data
     ni_file_path = storage_path / "dfc-ni-uc-stats-supp-tables-may-2025.ods"
-    df_ni = pd.read_excel(ni_file_path, sheet_name='5b', engine='odf', header=None)
+    df_ni = pd.read_excel(
+        ni_file_path, sheet_name="5b", engine="odf", header=None
+    )
 
     # Get constituency names from row 2, columns 1-18
     ni_constituencies = df_ni.iloc[2, 1:19].tolist()
 
     # Find May 2025 row
-    may_2025_row = df_ni[df_ni[0] == 'May 2025'].iloc[0]
+    may_2025_row = df_ni[df_ni[0] == "May 2025"].iloc[0]
 
     ni_data_rows = []
     for col_idx, constituency_name in enumerate(ni_constituencies, start=1):
         household_count = may_2025_row[col_idx]
 
         if pd.notna(household_count) and household_count != 0:
-            ni_data_rows.append({
-                "constituency_name": constituency_name,
-                "household_count": int(household_count)
-            })
+            ni_data_rows.append(
+                {
+                    "constituency_name": constituency_name,
+                    "household_count": int(household_count),
+                }
+            )
 
     # Combine GB and NI data
     result_df = pd.DataFrame(gb_data_rows + ni_data_rows)
 
     # Scale constituency counts to match national total
-    national_total = _parse_uc_national_payment_dist()['household_count'].sum()
-    constituency_total = result_df['household_count'].sum()
+    national_total = _parse_uc_national_payment_dist()["household_count"].sum()
+    constituency_total = result_df["household_count"].sum()
     scaling_factor = national_total / constituency_total
 
-    result_df['household_count'] = (result_df['household_count'] * scaling_factor).round().astype(int)
+    result_df["household_count"] = (
+        (result_df["household_count"] * scaling_factor).round().astype(int)
+    )
 
     return result_df
 
