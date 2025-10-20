@@ -110,7 +110,8 @@ def create_frs(
     # Add basic personal variables
     age = person.age80 + person.age
     pe_person["age"] = age
-    pe_person["birth_year"] = np.ones_like(person.age) * (year - age)
+    # birth_year should be calculated from age and period in the model,
+    # not stored as static data (see PolicyEngine/policyengine-uk#1352)
     # Age fields are AGE80 (top-coded) and AGE in the adult and child tables, respectively.
     pe_person["gender"] = np.where(person.sex == 1, "MALE", "FEMALE")
     pe_person["hours_worked"] = np.maximum(person.tothours, 0) * 52
