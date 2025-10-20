@@ -1,0 +1,11 @@
+- bump: minor
+  changes:
+    added:
+      - Take-up rate parameters in YAML files for stochastic simulation
+      - Parameter loader for take-up rates
+      - Generation of all stochastic boolean variables in FRS dataset
+      - Random draws for tie-breaking and conditional probabilities
+    changed:
+      - Moved all randomness from policyengine-uk to policyengine-uk-data
+      - Country package is now purely deterministic
+      - All stochastic decisions generated once during dataset creation
