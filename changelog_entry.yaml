@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Bump patch version to try and get HF upload passing.
