@@ -326,3 +326,9 @@
       main dataset.
     - Removed winter fuel allowance from loss calculations.
   date: 2025-10-21 10:18:38
+- bump: minor
+  changes:
+    added:
+    - Universal Credit calibration at national level by award amount and family type,
+      and at constituency level in total.
+  date: 2025-10-21 12:09:14
