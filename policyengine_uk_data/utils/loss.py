@@ -122,7 +122,7 @@ def create_target_matrix(
         on_uc * ~unemployed
     )
 
-    df["obr/winter_fuel_allowance_count"] = pe_count("winter_fuel_allowance")
+    # df["obr/winter_fuel_allowance_count"] = pe_count("winter_fuel_allowance")
     df["obr/capital_gains_tax"] = pe("capital_gains_tax")
     df["obr/child_benefit"] = pe("child_benefit")
 
@@ -152,7 +152,7 @@ def create_target_matrix(
     )
 
     df["obr/vat"] = pe("vat")
-    df["obr/winter_fuel_allowance"] = pe("winter_fuel_allowance")
+    # df["obr/winter_fuel_allowance"] = pe("winter_fuel_allowance")
 
     # Not strictly from the OBR but from the 2024 Independent Schools Council census. OBR will be using that.
     df["obr/private_school_students"] = pe("attends_private_school")
