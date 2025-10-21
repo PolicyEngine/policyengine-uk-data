@@ -26,6 +26,9 @@ dependencies = [
     "microimpute>=1.0.1",
     "black>=25.1.0",
     "rich>=13.0.0",
+    "odfpy",
+    "pandas",
+    "openpyxl",
 ]
 
 [project.optional-dependencies]
