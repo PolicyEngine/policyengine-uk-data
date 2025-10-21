@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.6] - 2025-10-21 10:18:38
+
+### Changed
+
+- Refactored income imputation to selectively impute only dividend income on the main dataset.
+- Removed winter fuel allowance from loss calculations.
+
 ## [1.19.5] - 2025-10-20 16:37:14
 
 ### Fixed
@@ -382,6 +389,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.19.6]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.19.5...1.19.6
 [1.19.5]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.19.4...1.19.5
 [1.19.4]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.19.3...1.19.4
 [1.19.3]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.19.2...1.19.3

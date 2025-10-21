@@ -319,3 +319,10 @@
     fixed:
     - Bump patch version to try and get HF upload passing.
   date: 2025-10-20 16:37:14
+- bump: patch
+  changes:
+    changed:
+    - Refactored income imputation to selectively impute only dividend income on the
+      main dataset.
+    - Removed winter fuel allowance from loss calculations.
+  date: 2025-10-21 10:18:38
