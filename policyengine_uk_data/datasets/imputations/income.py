@@ -140,6 +140,31 @@ def create_income_model(overwrite_existing: bool = False):
     return save_imputation_models()
 
 
+def impute_over_incomes(
+    dataset: UKSingleYearDataset, model, output_variables: list[str]
+) -> pd.DataFrame:
+    """
+    Impute specified income components using trained model.
+
+    Args:
+        dataset: PolicyEngine UK dataset to augment with income data.
+        output_variables: List of income components to impute.
+
+    Returns:
+        DataFrame with imputed income components.
+    """
+    dataset = dataset.copy()
+    input_df = Microsimulation(dataset=dataset).calculate_dataframe(
+        ["age", "gender", "region"]
+    )
+    output_df = model.predict(input_df)
+
+    for column in output_variables:
+        dataset.person[column] = output_df[column].fillna(0).values
+
+    return dataset
+
+
 def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     """
     Impute detailed income components using trained model.
@@ -161,16 +186,23 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     zero_weight_copy = subsample_dataset(zero_weight_copy, 10_000)
 
     model = create_income_model()
-    sim = Microsimulation(dataset=zero_weight_copy)
 
-    input_df = sim.calculate_dataframe(["age", "gender", "region"])
+    # Impute just dividends on the original, full variable set on the copy
 
-    output_df = model.predict(input_df)
+    zero_weight_copy = impute_over_incomes(
+        zero_weight_copy,
+        model,
+        IMPUTATIONS,
+    )
 
-    for column in output_df.columns:
-        zero_weight_copy.person[column] = output_df[column].fillna(0).values
+    dataset = impute_over_incomes(
+        dataset,
+        model,
+        ["dividend_income"],
+    )
 
     zero_weight_copy.validate()
+    dataset.validate()
 
     data = stack_datasets(
         dataset,
