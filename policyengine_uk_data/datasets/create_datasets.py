@@ -27,7 +27,8 @@ def main():
             "Impute income",
             "Impute capital gains",
             "Uprate to 2025",
-            "Calibrate dataset",
+            "Calibrate constituency weights",
+            "Calibrate local authority weights",
             "Downrate to 2023",
             "Save final dataset",
         ]
@@ -86,12 +87,12 @@ def main():
             frs = uprate_dataset(frs, 2025)
             update_dataset("Uprate to 2025", "completed")
 
-            # Calibrate dataset with nested progress
+            # Calibrate constituency weights with nested progress
             from policyengine_uk_data.datasets.local_areas.constituencies.calibrate import (
                 calibrate,
             )
 
-            update_dataset("Calibrate dataset", "processing")
+            update_dataset("Calibrate constituency weights", "processing")
 
             # Use a separate progress tracker for calibration with nested display
             from policyengine_uk_data.utils.calibrate import (
@@ -120,7 +121,30 @@ def main():
                 nested_progress=nested_progress,  # Pass the nested progress manager
             )
 
-            update_dataset("Calibrate dataset", "completed")
+            update_dataset("Calibrate constituency weights", "completed")
+
+            # Calibrate local authority weights
+            from policyengine_uk_data.datasets.local_areas.local_authorities.loss import (
+                create_local_authority_target_matrix,
+                create_national_target_matrix as create_national_target_matrix_la,
+            )
+
+            update_dataset("Calibrate local authority weights", "processing")
+
+            frs_calibrated = calibrate_local_areas(
+                dataset=frs_calibrated,
+                matrix_fn=create_local_authority_target_matrix,
+                national_matrix_fn=create_national_target_matrix_la,
+                area_count=360,
+                weight_file="local_authority_weights.h5",
+                excluded_training_targets=[],
+                log_csv=None,
+                verbose=True,
+                area_name="Local Authority",
+                nested_progress=nested_progress,
+            )
+
+            update_dataset("Calibrate local authority weights", "completed")
 
             # Downrate and save
             update_dataset("Downrate to 2023", "processing")
@@ -138,7 +162,7 @@ def main():
                 "base_dataset": "frs_2023_24.h5",
                 "enhanced_dataset": "enhanced_frs_2023_24.h5",
                 "imputations_applied": "consumption, wealth, VAT, services, income, capital_gains",
-                "calibration": "national and constituency targets",
+                "calibration": "national, constituency, and local authority targets",
             },
         )
 
