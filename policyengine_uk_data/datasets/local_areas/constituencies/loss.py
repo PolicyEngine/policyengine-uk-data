@@ -32,9 +32,6 @@ def create_constituency_target_matrix(
     ages = pd.read_csv(FOLDER / "targets" / "age.csv")
     national_demographics = pd.read_csv(STORAGE_FOLDER / "demographics.csv")
     incomes = pd.read_csv(FOLDER / "targets" / "spi_by_constituency.csv")
-    employment_incomes = pd.read_csv(
-        FOLDER / "targets" / "employment_income.csv"
-    )
 
     sim = Microsimulation(dataset=dataset, reform=reform)
     sim.default_calculation_period = dataset.time_period
@@ -121,11 +118,6 @@ def create_constituency_target_matrix(
         age_str = f"{lower_age}_{upper_age}"
         y[f"age/{age_str}"] *= uk_total_population / targets_total_pop * 0.9
 
-    employment_income = sim.calculate("employment_income").values
-    bounds = list(
-        employment_incomes.employment_income_lower_bound.sort_values().unique()
-    ) + [np.inf]
-
     # UC household count by constituency
     y["uc_households"] = uc_pc_households.household_count.values
     matrix["uc_households"] = sim.map_result(
@@ -133,59 +125,6 @@ def create_constituency_target_matrix(
         "benunit",
         "household",
     )
-
-    for lower_bound, upper_bound in zip(bounds[:-1], bounds[1:]):
-        continue
-        if (
-            lower_bound <= 20_000
-        ):  # Skip some targets with very small sample sizes
-            continue
-        if upper_bound >= 100_000:
-            continue
-
-        national_data_row = national_incomes[
-            national_incomes.total_income_lower_bound == lower_bound
-        ]["employment_income_amount"].iloc[0]
-
-        count_target = employment_incomes[
-            (employment_incomes.employment_income_lower_bound == lower_bound)
-            & (employment_incomes.employment_income_upper_bound == upper_bound)
-        ].employment_income_count.values
-
-        amount_target = employment_incomes[
-            (employment_incomes.employment_income_lower_bound == lower_bound)
-            & (employment_incomes.employment_income_upper_bound == upper_bound)
-        ].employment_income_amount.values
-
-        sum_of_local_area_values = amount_target.sum()
-
-        adjustment = national_data_row / sum_of_local_area_values
-
-        if count_target.mean() < 200:
-            print(
-                f"Skipping employment income band {lower_bound} to {upper_bound} due to low count target mean: {count_target.mean()}"
-            )
-            continue
-
-        if amount_target.mean() < 200 * 30e3:
-            print(
-                f"Skipping employment income band {lower_bound} to {upper_bound} due to low amount target mean: {amount_target.mean()}"
-            )
-            continue
-
-        in_bound = (
-            (employment_income >= lower_bound)
-            & (employment_income < upper_bound)
-            & (employment_income != 0)
-            & (age >= 16)
-        )
-        band_str = f"{lower_bound}_{upper_bound}"
-        matrix[f"hmrc/employment_income/amount/{band_str}"] = sim.map_result(
-            employment_income * in_bound, "person", "household"
-        )
-        y[f"hmrc/employment_income/amount/{band_str}"] = (
-            amount_target * adjustment
-        )
 
     const_2024 = pd.read_csv(STORAGE_FOLDER / "constituencies_2024.csv")
     const_2010 = pd.read_csv(STORAGE_FOLDER / "constituencies_2010.csv")
