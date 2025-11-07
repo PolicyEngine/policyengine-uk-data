@@ -1,9 +1,4 @@
-import torch
 from policyengine_uk import Microsimulation
-import pandas as pd
-import numpy as np
-
-# Fill in missing constituencies with average column values
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -25,7 +20,6 @@ def create_constituency_target_matrix(
     dataset: UKSingleYearDataset,
     time_period: int = None,
     reform=None,
-    uprate: bool = True,
 ):
     if time_period is None:
         time_period = dataset.time_period

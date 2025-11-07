@@ -1,4 +1,3 @@
-import torch
 from policyengine_uk import Microsimulation
 import pandas as pd
 import numpy as np
@@ -9,6 +8,7 @@ from policyengine_uk_data.utils.loss import (
 )
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
+from policyengine_uk_data.utils.uc_data import uc_la_households
 
 FOLDER = Path(__file__).parent
 
@@ -17,7 +17,6 @@ def create_local_authority_target_matrix(
     dataset: UKSingleYearDataset,
     time_period: int = None,
     reform=None,
-    uprate: bool = True,
 ):
     if time_period is None:
         time_period = dataset.time_period
@@ -111,6 +110,14 @@ def create_local_authority_target_matrix(
 
         age_str = f"{lower_age}_{upper_age}"
         y[f"age/{age_str}"] *= uk_total_population / targets_total_pop * 0.9
+
+    # UC household count by local authority
+    y["uc_households"] = uc_la_households.household_count.values
+    matrix["uc_households"] = sim.map_result(
+        (sim.calculate("universal_credit").values > 0).astype(int),
+        "benunit",
+        "household",
+    )
 
     country_mask = create_country_mask(
         household_countries=sim.calculate("country").values,
