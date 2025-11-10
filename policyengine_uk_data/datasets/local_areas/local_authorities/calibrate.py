@@ -35,7 +35,9 @@ def calibrate(
 def get_performance(weights, m_c, y_c, m_n, y_n, excluded_targets):
     la_target_matrix, la_actuals = m_c, y_c
     national_target_matrix, national_actuals = m_n, y_n
-    local_authorities = pd.read_csv(STORAGE_FOLDER / "local_authorities_2021.csv")
+    local_authorities = pd.read_csv(
+        STORAGE_FOLDER / "local_authorities_2021.csv"
+    )
     la_wide = weights @ la_target_matrix
     la_wide.index = local_authorities.code.values
     la_wide["name"] = local_authorities.name.values
@@ -72,15 +74,11 @@ def get_performance(weights, m_c, y_c, m_n, y_n, excluded_targets):
     ]
 
     la_target_validation["error"] = (
-        la_target_validation["estimate"]
-        - la_target_validation["target"]
+        la_target_validation["estimate"] - la_target_validation["target"]
     )
-    la_target_validation["abs_error"] = (
-        la_target_validation["error"].abs()
-    )
+    la_target_validation["abs_error"] = la_target_validation["error"].abs()
     la_target_validation["rel_abs_error"] = (
-        la_target_validation["abs_error"]
-        / la_target_validation["target"]
+        la_target_validation["abs_error"] / la_target_validation["target"]
     )
 
     national_performance = weights.sum(axis=0) @ national_target_matrix
