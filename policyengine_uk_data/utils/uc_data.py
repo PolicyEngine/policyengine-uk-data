@@ -162,8 +162,12 @@ def _parse_uc_la_households():
         la_name = df_gb.iloc[idx, 2]  # Column 2: LA name
         household_count = df_gb.iloc[idx, 3]  # Column 3: household count
 
-        # Skip if empty or invalid
-        if pd.isna(la_name) or pd.isna(household_count):
+        # Skip if empty, invalid, Total row, or Unknown
+        if (
+            pd.isna(la_name)
+            or pd.isna(household_count)
+            or la_name in ["Total", "Unknown"]
+        ):
             continue
 
         gb_data_rows.append(
@@ -189,6 +193,10 @@ def _parse_uc_la_households():
     for col_idx, lgd_name in enumerate(ni_lgd_names, start=1):
         if pd.notna(lgd_name):
             household_count = may_2025_row[col_idx]
+
+            # Skip Ards and North Down to match target datasets (they have 10 NI LGDs, not 11)
+            if lgd_name == "Ards and North Down":
+                continue
 
             if pd.notna(household_count) and household_count != 0:
                 ni_data_rows.append(
