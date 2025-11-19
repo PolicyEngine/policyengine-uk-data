@@ -631,12 +631,20 @@ def create_frs(
     pe_person["employer_pension_contributions"] = (
         pe_person["employee_pension_contributions"] * 3
     )  # Rough estimate based on aggregates.
+    # Salary sacrifice pension contributions from FRS Job table (SPNAMT field)
+    # SPNAMT represents employer pension contributions made via salary sacrifice
+    # arrangements where employees forego salary in exchange for increased pension
+    # contributions. This is separate from regular employee pension contributions
+    # (deduc1) and provides tax advantages for both employer and employee.
+    # Uses same pattern as employee_pension_contributions (deduc1) without outlier
+    # clipping, as job-level data is generally cleaner than pension provider data.
+    # Source: https://datacatalogue.ukdataservice.ac.uk/datasets/dataset/630d4a8d-ba6a-82b3-f33d-c713c66efcb3
+    # Note: Values are annualized from weekly amounts reported in the survey.
     pe_person["pension_contributions_via_salary_sacrifice"] = np.maximum(
         0,
         sum_to_entity(job.spnamt.fillna(0), job.person_id, person.person_id)
         * WEEKS_IN_YEAR,
     )
-    # link to the variable: https://datacatalogue.ukdataservice.ac.uk/datasets/dataset/630d4a8d-ba6a-82b3-f33d-c713c66efcb3
 
     pe_household["housing_service_charges"] = (
         pd.DataFrame(
