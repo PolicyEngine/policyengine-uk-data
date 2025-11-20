@@ -332,3 +332,8 @@
     - Universal Credit calibration at national level by award amount and family type,
       and at constituency level in total.
   date: 2025-10-21 12:09:14
+- bump: minor
+  changes:
+    added:
+    - Add pension_contributions_via_salary_sacrifice variable from FRS SPNAMT field
+  date: 2025-11-20 13:08:22

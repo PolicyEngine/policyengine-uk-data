@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    added:
-      - Add pension_contributions_via_salary_sacrifice variable from FRS SPNAMT field
