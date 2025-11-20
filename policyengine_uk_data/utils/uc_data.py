@@ -148,6 +148,80 @@ def _parse_uc_pc_households():
     return result_df
 
 
+def _parse_uc_la_households():
+    """Parse UC local authority households (GB + NI)."""
+    storage_path = Path(__file__).parent.parent / "storage"
+
+    # Parse GB data
+    gb_file_path = storage_path / "uc_la_households.xlsx"
+    df_gb = pd.read_excel(gb_file_path, header=None)
+
+    gb_data_rows = []
+
+    for idx in range(8, len(df_gb)):
+        la_name = df_gb.iloc[idx, 2]  # Column 2: LA name
+        household_count = df_gb.iloc[idx, 3]  # Column 3: household count
+
+        # Skip if empty, invalid, Total row, or Unknown
+        if (
+            pd.isna(la_name)
+            or pd.isna(household_count)
+            or la_name in ["Total", "Unknown"]
+        ):
+            continue
+
+        gb_data_rows.append(
+            {
+                "la_name": la_name,
+                "household_count": int(household_count),
+            }
+        )
+
+    # Parse NI data
+    ni_file_path = storage_path / "dfc-ni-uc-stats-supp-tables-may-2025.ods"
+    df_ni = pd.read_excel(
+        ni_file_path, sheet_name="5c", engine="odf", header=None
+    )
+
+    # Get LGD names from row 2, columns 1-11
+    ni_lgd_names = df_ni.iloc[2, 1:12].tolist()
+
+    # Find May 2025 row
+    may_2025_row = df_ni[df_ni[0] == "May 2025"].iloc[0]
+
+    ni_data_rows = []
+    for col_idx, lgd_name in enumerate(ni_lgd_names, start=1):
+        if pd.notna(lgd_name):
+            household_count = may_2025_row[col_idx]
+
+            # Skip Ards and North Down to match target datasets (they have 10 NI LGDs, not 11)
+            if lgd_name == "Ards and North Down":
+                continue
+
+            if pd.notna(household_count) and household_count != 0:
+                ni_data_rows.append(
+                    {
+                        "la_name": lgd_name,
+                        "household_count": int(household_count),
+                    }
+                )
+
+    # Combine GB and NI data
+    result_df = pd.DataFrame(gb_data_rows + ni_data_rows)
+
+    # Scale LA counts to match national total
+    national_total = _parse_uc_national_payment_dist()["household_count"].sum()
+    la_total = result_df["household_count"].sum()
+    scaling_factor = national_total / la_total
+
+    result_df["household_count"] = (
+        (result_df["household_count"] * scaling_factor).round().astype(int)
+    )
+
+    return result_df
+
+
 # Module-level dataframes for easy import
 uc_national_payment_dist = _parse_uc_national_payment_dist()
 uc_pc_households = _parse_uc_pc_households()
+uc_la_households = _parse_uc_la_households()

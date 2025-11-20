@@ -1,4 +1,3 @@
-import torch
 from policyengine_uk import Microsimulation
 import pandas as pd
 import numpy as np
@@ -9,6 +8,7 @@ from policyengine_uk_data.utils.loss import (
 )
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
+from policyengine_uk_data.utils.uc_data import uc_la_households
 
 FOLDER = Path(__file__).parent
 
@@ -17,15 +17,11 @@ def create_local_authority_target_matrix(
     dataset: UKSingleYearDataset,
     time_period: int = None,
     reform=None,
-    uprate: bool = True,
 ):
     if time_period is None:
         time_period = dataset.time_period
     ages = pd.read_csv(FOLDER / "targets" / "age.csv")
     incomes = pd.read_csv(FOLDER / "targets" / "spi_by_la.csv")
-    employment_incomes = pd.read_csv(
-        FOLDER / "targets" / "employment_income.csv"
-    )
     la_codes = pd.read_csv(STORAGE_FOLDER / "local_authorities_2021.csv")
 
     sim = Microsimulation(dataset=dataset, reform=reform)
@@ -40,7 +36,10 @@ def create_local_authority_target_matrix(
     ]
 
     national_incomes = pd.read_csv(STORAGE_FOLDER / "incomes_projection.csv")
-    national_incomes = national_incomes[national_incomes.year == 2025]
+    national_incomes = national_incomes[
+        national_incomes.year
+        == max(national_incomes.year.min(), int(dataset.time_period))
+    ]
 
     for income_variable in INCOME_VARIABLES:
         income_values = sim.calculate(income_variable).values
@@ -112,61 +111,13 @@ def create_local_authority_target_matrix(
         age_str = f"{lower_age}_{upper_age}"
         y[f"age/{age_str}"] *= uk_total_population / targets_total_pop * 0.9
 
-    employment_income = sim.calculate("employment_income").values
-    bounds = list(
-        employment_incomes.employment_income_lower_bound.sort_values().unique()
-    ) + [np.inf]
-
-    for lower_bound, upper_bound in zip(bounds[:-1], bounds[1:]):
-        continue
-        if (
-            lower_bound <= 15_000
-        ):  # Skip some targets with very small sample sizes
-            continue
-        if upper_bound >= 200_000:
-            continue
-
-        national_data_row = national_incomes[
-            national_incomes.total_income_lower_bound == lower_bound
-        ]["employment_income_amount"].iloc[0]
-
-        count_target = employment_incomes[
-            (employment_incomes.employment_income_lower_bound == lower_bound)
-            & (employment_incomes.employment_income_upper_bound == upper_bound)
-        ].employment_income_count.values
-
-        amount_target = employment_incomes[
-            (employment_incomes.employment_income_lower_bound == lower_bound)
-            & (employment_incomes.employment_income_upper_bound == upper_bound)
-        ].employment_income_amount.values
-        sum_of_local_area_values = amount_target.sum()
-
-        adjustment = national_data_row / sum_of_local_area_values
-        if count_target.mean() < 200:
-            print(
-                f"Skipping employment income band {lower_bound} to {upper_bound} due to low count target mean: {count_target.mean()}"
-            )
-            continue
-
-        if amount_target.mean() < 200 * 30e3:
-            print(
-                f"Skipping employment income band {lower_bound} to {upper_bound} due to low amount target mean: {amount_target.mean()}"
-            )
-            continue
-
-        in_bound = (
-            (employment_income >= lower_bound)
-            & (employment_income < upper_bound)
-            & (employment_income != 0)
-            & (age >= 16)
-        )
-        band_str = f"{lower_bound}_{upper_bound}"
-        matrix[f"hmrc/employment_income/amount/{band_str}"] = sim.map_result(
-            employment_income * in_bound, "person", "household"
-        )
-        y[f"hmrc/employment_income/amount/{band_str}"] = (
-            amount_target * adjustment
-        )
+    # UC household count by local authority
+    y["uc_households"] = uc_la_households.household_count.values
+    matrix["uc_households"] = sim.map_result(
+        (sim.calculate("universal_credit").values > 0).astype(int),
+        "benunit",
+        "household",
+    )
 
     country_mask = create_country_mask(
         household_countries=sim.calculate("country").values,
