@@ -390,26 +390,27 @@ def create_target_matrix(
 
     # HMRC Table 6.2 - Salary sacrifice income tax relief by tax rate (2023-24)
     # https://assets.publishing.service.gov.uk/media/687a294e312ee8a5f0806b6d/Tables_6_1_and_6_2.csv
-    # Values in £m: Basic £1,600, Higher £4,400, Additional £1,200
+    # Values in £bn
+    SS_IT_RELIEF_BASIC_2024 = 1.6e9
+    SS_IT_RELIEF_HIGHER_2024 = 4.4e9
+    SS_IT_RELIEF_ADDITIONAL_2024 = 1.2e9
+    SS_CONTRIBUTIONS_2024 = 24e9  # £7.2bn IT relief / 0.30 avg rate
+
     # Uprate by ~3% per year for wage growth
     years_from_2024 = max(0, int(time_period) - 2024)
     uprating_factor = 1.03**years_from_2024
 
     target_names.append("hmrc/salary_sacrifice_it_relief_basic")
-    target_values.append(1.6e9 * uprating_factor)
+    target_values.append(SS_IT_RELIEF_BASIC_2024 * uprating_factor)
 
     target_names.append("hmrc/salary_sacrifice_it_relief_higher")
-    target_values.append(4.4e9 * uprating_factor)
+    target_values.append(SS_IT_RELIEF_HIGHER_2024 * uprating_factor)
 
     target_names.append("hmrc/salary_sacrifice_it_relief_additional")
-    target_values.append(1.2e9 * uprating_factor)
+    target_values.append(SS_IT_RELIEF_ADDITIONAL_2024 * uprating_factor)
 
-    # Total gross salary sacrifice contributions
-    # Derived from IT relief: £7.2bn at ~30% avg marginal rate = ~£24bn gross
-    # But use the IT relief total as a cross-check
     target_names.append("hmrc/salary_sacrifice_contributions")
-    # Back-calculate: £7.2bn IT relief / 0.30 avg rate ≈ £24bn
-    target_values.append(24e9 * uprating_factor)
+    target_values.append(SS_CONTRIBUTIONS_2024 * uprating_factor)
 
     # Add two-child limit targets.
     child_is_affected = (
