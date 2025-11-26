@@ -1,19 +1,20 @@
 """
 Salary sacrifice imputation for pension contributions.
 
-This module imputes salary sacrifice participation using machine learning
-models trained on FRS respondents who were asked the SALSAC question.
+This module imputes salary sacrifice pension amounts using QRF trained on
+FRS respondents who were asked the SALSAC question. The model predicts
+the continuous amount (pension_contributions_via_salary_sacrifice), with
+non-participants naturally having 0.
 
 Training data (FRS 2023-24):
-- SALSAC='1' (Yes, uses salary sacrifice): ~224 jobs
-- SALSAC='2' (No, doesn't use): ~3,803 jobs
+- SALSAC='1' (Yes): ~224 jobs with reported SPNAMT amounts
+- SALSAC='2' (No): ~3,803 jobs with SPNAMT=0
 
 Imputation candidates:
 - SALSAC=' ' (skip/not asked): ~13,265 jobs
 
-The imputation predicts participation based on the observed relationship
-in the training data. Targeting to HMRC totals (~24bn SS contributions,
-~30% participation rate) happens via weight calibration, not here.
+Targeting to HMRC totals (~24bn SS contributions) happens via weight
+calibration, not in this imputation step.
 """
 
 import pandas as pd
@@ -29,16 +30,18 @@ PREDICTORS = [
 ]
 
 IMPUTATIONS = [
-    "uses_salary_sacrifice",
+    "pension_contributions_via_salary_sacrifice",
 ]
 
 
 def save_salary_sacrifice_model():
     """
-    Train and save salary sacrifice imputation model using FRS SALSAC data.
+    Train and save salary sacrifice imputation model using FRS data.
 
     Uses FRS respondents who were asked about salary sacrifice (SALSAC field)
-    as training data to predict participation for non-respondents.
+    as training data. The model learns to predict the SS pension amount
+    directly - non-participants have 0, participants have their reported
+    SPNAMT value.
 
     Returns:
         Trained QRF model for salary sacrifice imputation.
@@ -60,17 +63,19 @@ def save_salary_sacrifice_model():
     age = sim.calculate("age").values
     employment_income = sim.calculate("employment_income").values
 
-    # Get salary sacrifice indicators from dataset
+    # Get SS amounts and indicator for who was asked
+    ss_amount = (
+        dataset.person.pension_contributions_via_salary_sacrifice.values
+    )
     if "salary_sacrifice_asked" not in dataset.person.columns:
         raise ValueError(
             "Dataset missing salary_sacrifice_asked field. "
             "Ensure frs.py extracts SALSAC before numeric conversion."
         )
-
-    ss_reported = dataset.person.salary_sacrifice_reported.values
     ss_asked = dataset.person.salary_sacrifice_asked.values
 
     # Build training DataFrame with only those who were asked
+    # This includes both participants (with amounts) and non-participants (0)
     training_mask = ss_asked == 1
 
     if training_mask.sum() == 0:
@@ -82,15 +87,25 @@ def save_salary_sacrifice_model():
         {
             "age": age[training_mask],
             "employment_income": employment_income[training_mask],
-            "uses_salary_sacrifice": ss_reported[training_mask].astype(bool),
+            "pension_contributions_via_salary_sacrifice": ss_amount[
+                training_mask
+            ],
         }
     )
 
+    n_participants = (
+        train_df["pension_contributions_via_salary_sacrifice"] > 0
+    ).sum()
     print(f"Training salary sacrifice model on {len(train_df)} observations")
     print(
-        f"  SS users: {train_df['uses_salary_sacrifice'].sum()} "
-        f"({train_df['uses_salary_sacrifice'].mean():.1%})"
+        f"  With SS contributions: {n_participants} "
+        f"({n_participants / len(train_df):.1%})"
     )
+    mean_amount = train_df.loc[
+        train_df["pension_contributions_via_salary_sacrifice"] > 0,
+        "pension_contributions_via_salary_sacrifice",
+    ].mean()
+    print(f"  Mean SS amount (participants): £{mean_amount:,.0f}")
 
     # Train QRF model
     model = QRF()
@@ -102,7 +117,7 @@ def save_salary_sacrifice_model():
 
 def create_salary_sacrifice_model(overwrite_existing: bool = False):
     """
-    Create or load salary sacrifice participation model.
+    Create or load salary sacrifice imputation model.
 
     Args:
         overwrite_existing: Whether to retrain model if it exists.
@@ -122,23 +137,22 @@ def impute_salary_sacrifice(
     dataset: UKSingleYearDataset,
 ) -> UKSingleYearDataset:
     """
-    Impute salary sacrifice participation for FRS non-respondents.
+    Impute salary sacrifice pension amounts for FRS non-respondents.
 
     For respondents not asked about salary sacrifice (SALSAC=' '), uses
-    a QRF model trained on those who were asked to predict participation.
-    For participants, assigns SS contributions equal to their employee
-    pension contributions.
+    a QRF model trained on those who were asked to predict the SS pension
+    contribution amount directly. The model naturally predicts 0 for
+    non-participants and positive amounts for likely participants.
 
-    Note: This imputation does NOT target any specific participation rate
-    or contribution total. Targeting to HMRC figures happens via weight
-    calibration in a subsequent step.
+    Note: This imputation does NOT target any specific total. Targeting
+    to HMRC figures happens via weight calibration in a subsequent step.
 
     Args:
-        dataset: PolicyEngine UK dataset with salary_sacrifice_reported
-            and salary_sacrifice_asked fields from FRS processing.
+        dataset: PolicyEngine UK dataset with salary_sacrifice_asked
+            field from FRS processing.
 
     Returns:
-        Dataset with imputed salary sacrifice participation and amounts.
+        Dataset with imputed salary sacrifice amounts.
     """
     dataset = dataset.copy()
     sim = Microsimulation(dataset=dataset)
@@ -146,20 +160,19 @@ def impute_salary_sacrifice(
     # Get variables needed for imputation
     age = sim.calculate("age").values
     employment_income = sim.calculate("employment_income").values
-    employee_pension = sim.calculate("employee_pension_contributions").values
-    current_ss = dataset.person.pension_contributions_via_salary_sacrifice
+    current_ss = (
+        dataset.person.pension_contributions_via_salary_sacrifice.values
+    )
 
-    # Get indicators
-    if "salary_sacrifice_reported" in dataset.person.columns:
-        ss_reported = dataset.person.salary_sacrifice_reported.values
-        ss_asked = dataset.person.salary_sacrifice_asked.values
-    else:
-        # If indicators not available, skip imputation
+    # Get indicator for who was asked
+    if "salary_sacrifice_asked" not in dataset.person.columns:
         print(
             "Warning: salary_sacrifice_asked not in dataset, "
             "skipping imputation"
         )
         return dataset
+
+    ss_asked = dataset.person.salary_sacrifice_asked.values
 
     # Identify imputation candidates: those not asked about SS
     not_asked = ss_asked == 0
@@ -176,31 +189,20 @@ def impute_salary_sacrifice(
     model = create_salary_sacrifice_model()
     predictions = model.predict(pred_df)
 
-    # microimpute returns boolean for bool target variables
-    imputed_uses_ss = predictions["uses_salary_sacrifice"].values
+    # Get imputed amounts (QRF predicts continuous values)
+    imputed_ss = predictions[
+        "pension_contributions_via_salary_sacrifice"
+    ].values
 
-    # For those who were asked, use their actual response
-    # For those not asked, use the imputed value
-    final_uses_ss = np.where(
-        ss_asked == 1,
-        ss_reported.astype(bool),
-        imputed_uses_ss,
-    )
+    # Ensure non-negative
+    imputed_ss = np.maximum(0, imputed_ss)
 
-    # For SS participants, set their SS contributions equal to
-    # employee pension contributions (typical SS arrangement)
-    # Only impute amounts for those not asked - keep reported amounts
-    new_ss_amounts = np.where(
-        final_uses_ss & (not_asked),
-        employee_pension,
-        0,
-    )
-
-    # Combine with existing SS amounts
+    # For those who were asked, keep their reported values
+    # For those not asked, use the imputed values
     final_ss = np.where(
         ss_asked == 1,
-        current_ss.values,  # Keep reported values exactly
-        np.maximum(current_ss.values, new_ss_amounts),
+        current_ss,  # Keep reported values exactly
+        imputed_ss,  # Use imputed for non-respondents
     )
 
     # Update dataset
@@ -210,12 +212,12 @@ def impute_salary_sacrifice(
     weights = sim.calculate("person_weight").values
     is_employee = employment_income > 0
     total_ss = (final_ss * weights).sum()
-    participation_rate = (final_uses_ss * weights * is_employee).sum() / (
+    participation_rate = ((final_ss > 0) * weights * is_employee).sum() / (
         weights * is_employee
     ).sum()
 
     print("Salary sacrifice imputation results (pre-calibration):")
-    print(f"  Total SS contributions: {total_ss / 1e9:.1f}bn")
+    print(f"  Total SS contributions: £{total_ss / 1e9:.1f}bn")
     print(f"  Employee participation rate: {participation_rate:.1%}")
     print("  (Final totals depend on subsequent weight calibration)")
 
