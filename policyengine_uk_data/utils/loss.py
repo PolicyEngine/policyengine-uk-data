@@ -198,7 +198,15 @@ def create_target_matrix(
     # This helps calibrate the distribution of SS users by income level
     # 2023-24 values (£m): Basic £1,600, Higher £4,400, Additional £1,200
     # Total IT relief from SS: £7,200m
-    adjusted_net_income = sim.calculate("adjusted_net_income")
+    # Use true counterfactual: IT relief = counterfactual IT - baseline IT
+    income_tax_baseline = sim.calculate("income_tax")
+    income_tax_cf = counterfactual_sim.calculate("income_tax", time_period)
+    it_relief = income_tax_cf - income_tax_baseline
+
+    # Get tax band from counterfactual adjusted net income (where SS is wages)
+    adjusted_net_income_cf = counterfactual_sim.calculate(
+        "adjusted_net_income", time_period
+    )
     basic_rate_threshold = (
         sim.tax_benefit_system.parameters.gov.hmrc.income_tax.rates.uk[
             0
@@ -215,25 +223,19 @@ def create_target_matrix(
         ].threshold(time_period)
     )
 
-    # Determine tax band for each person
-    is_basic_rate = (adjusted_net_income > basic_rate_threshold) & (
-        adjusted_net_income <= higher_rate_threshold
+    # Determine tax band for each person based on counterfactual income
+    is_basic_rate = (adjusted_net_income_cf > basic_rate_threshold) & (
+        adjusted_net_income_cf <= higher_rate_threshold
     )
-    is_higher_rate = (adjusted_net_income > higher_rate_threshold) & (
-        adjusted_net_income <= additional_rate_threshold
+    is_higher_rate = (adjusted_net_income_cf > higher_rate_threshold) & (
+        adjusted_net_income_cf <= additional_rate_threshold
     )
-    is_additional_rate = adjusted_net_income > additional_rate_threshold
+    is_additional_rate = adjusted_net_income_cf > additional_rate_threshold
 
-    # Calculate IT relief from SS = SS contributions * marginal rate
-    basic_rate = 0.20
-    higher_rate = 0.40
-    additional_rate = 0.45
-
-    ss_it_relief_basic = ss_contributions * basic_rate * is_basic_rate
-    ss_it_relief_higher = ss_contributions * higher_rate * is_higher_rate
-    ss_it_relief_additional = (
-        ss_contributions * additional_rate * is_additional_rate
-    )
+    # Allocate the true IT relief to tax bands
+    ss_it_relief_basic = it_relief * is_basic_rate
+    ss_it_relief_higher = it_relief * is_higher_rate
+    ss_it_relief_additional = it_relief * is_additional_rate
 
     df["hmrc/salary_sacrifice_it_relief_basic"] = household_from_person(
         ss_it_relief_basic
