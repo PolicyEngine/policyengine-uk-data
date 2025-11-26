@@ -158,6 +158,40 @@ def create_target_matrix(
     # Not strictly from the OBR but from the 2024 Independent Schools Council census. OBR will be using that.
     df["obr/private_school_students"] = pe("attends_private_school")
 
+    # Salary sacrifice NI relief - SPP estimates £4.1bn total (£1.2bn employee + £2.9bn employer)
+    # Calculate relief via counterfactual: what additional NI would be paid if SS became income
+    ss_contributions = sim.calculate("pension_contributions_via_salary_sacrifice")
+    employment_income = sim.calculate("employment_income")
+
+    # Run counterfactual simulation with SS converted to employment income
+    counterfactual_sim = Microsimulation(dataset=dataset, reform=reform)
+    counterfactual_sim.set_input(
+        "pension_contributions_via_salary_sacrifice",
+        time_period,
+        np.zeros_like(ss_contributions),
+    )
+    counterfactual_sim.set_input(
+        "employment_income",
+        time_period,
+        employment_income + ss_contributions,
+    )
+
+    # NI relief = counterfactual NI - baseline NI
+    ni_employee_baseline = sim.calculate("ni_employee")
+    ni_employer_baseline = sim.calculate("ni_employer")
+    ni_employee_cf = counterfactual_sim.calculate("ni_employee", time_period)
+    ni_employer_cf = counterfactual_sim.calculate("ni_employer", time_period)
+
+    employee_ni_relief = ni_employee_cf - ni_employee_baseline
+    employer_ni_relief = ni_employer_cf - ni_employer_baseline
+
+    df["obr/salary_sacrifice_employee_ni_relief"] = household_from_person(
+        employee_ni_relief
+    )
+    df["obr/salary_sacrifice_employer_ni_relief"] = household_from_person(
+        employer_ni_relief
+    )
+
     # Population statistics from the ONS.
 
     region = sim.calculate("region", map_to="person")

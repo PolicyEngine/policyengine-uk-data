@@ -42,3 +42,5 @@ universal_credit_non_jobseekers,gbp-bn,obr_march_2024_efo,6.2,15.3,21.7,27.6,32.
 vat,gbp-bn,obr_march_2024_efo,,,,,159.7,168.9,170.3,178.8,186.6,193.9,201.7,209.8
 winter_fuel_allowance,gbp-bn,obr_march_2024_efo,2.0,2.0,2.0,2.0,2.0,2.0,0.3,0.3,0.3,0.3,0.3,0.3
 private_school_students,person-k,obr_march_2024_efo,557,557,557,557,557,557,557,557,557,557,557,
+salary_sacrifice_employee_ni_relief,gbp-bn,spp_ni_relief_2023,,,,,,,1.2,1.24,1.28,1.32,1.36,1.40
+salary_sacrifice_employer_ni_relief,gbp-bn,spp_ni_relief_2023,,,,,,,2.9,3.0,3.1,3.2,3.3,3.4
