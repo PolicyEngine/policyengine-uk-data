@@ -675,13 +675,25 @@ def create_frs(
             .astype(int)
         )
         # Aggregate to person level: take max (any job with SS = person has SS)
-        pe_person["salary_sacrifice_reported"] = sum_to_entity(
-            (salsac_numeric == 1).astype(int), job.person_id, person.person_id
-        ).clip(upper=1)
+        pe_person["salary_sacrifice_reported"] = np.clip(
+            sum_to_entity(
+                (salsac_numeric == 1).astype(int),
+                job.person_id,
+                person.person_id,
+            ),
+            0,
+            1,
+        )
         # Track if person was asked about SS in any job (for imputation)
-        pe_person["salary_sacrifice_asked"] = sum_to_entity(
-            (salsac_numeric >= 0).astype(int), job.person_id, person.person_id
-        ).clip(upper=1)
+        pe_person["salary_sacrifice_asked"] = np.clip(
+            sum_to_entity(
+                (salsac_numeric >= 0).astype(int),
+                job.person_id,
+                person.person_id,
+            ),
+            0,
+            1,
+        )
     else:
         # If SALSAC not available, mark all as not asked
         pe_person["salary_sacrifice_reported"] = 0
