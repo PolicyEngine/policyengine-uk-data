@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    added:
-      - Salary sacrifice imputation using FRS SALSAC routing question to impute ~30% employee participation per HMRC survey data.

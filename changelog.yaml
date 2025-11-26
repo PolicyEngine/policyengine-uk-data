@@ -337,3 +337,9 @@
     added:
     - Add pension_contributions_via_salary_sacrifice variable from FRS SPNAMT field
   date: 2025-11-20 13:08:22
+- bump: minor
+  changes:
+    added:
+    - Salary sacrifice imputation using FRS SALSAC routing question to impute ~30%
+      employee participation per HMRC survey data.
+  date: 2025-11-26 22:46:41
