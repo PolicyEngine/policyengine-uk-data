@@ -81,8 +81,7 @@ def generate_spi_table(spi: pd.DataFrame):
 
     spi = pd.concat(
         [
-            spi.sample(20_000),
-            spi[spi.TI > 1_000_000],
+            spi.sample(100_000, weights=spi.person_weight),
         ]
     )
 
