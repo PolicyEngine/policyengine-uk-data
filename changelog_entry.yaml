@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    added:
-      - rail_usage variable derived from rail_subsidy_spending / fare_index at survey year, enabling fare reforms to modify prices independently of usage quantity
