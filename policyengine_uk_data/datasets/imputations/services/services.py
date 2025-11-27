@@ -6,14 +6,30 @@ NHS usage, education spending, and transport subsidies to UK households.
 """
 
 from policyengine_uk.data import UKSingleYearDataset
+from policyengine_uk.system import system
 from .nhs import impute_nhs_usage
 from .etb import impute_public_services, create_efrs_input_dataset
 
-# Rail fare index for the survey year (2021, from ETB data)
-# This is the cumulative fare index from base year 2020
-# Used to derive rail_usage (quantity) from rail_subsidy_spending
-# See: policyengine-uk gov.dft.rail.fare_index parameter
-RAIL_FARE_INDEX_SURVEY_YEAR = 1.010  # 2021 value (+1.0% from 2020)
+# ETB survey year (most recent year in ETB data)
+ETB_SURVEY_YEAR = 2021
+
+# Fallback fare index for 2021 if parameter not yet available in policyengine-uk
+# This is the cumulative fare index from base year 2020 (+1.0% from 2020)
+FALLBACK_FARE_INDEX_2021 = 1.010
+
+
+def get_fare_index_survey_year() -> float:
+    """
+    Get the rail fare index for the ETB survey year.
+
+    Attempts to read from policyengine-uk parameters, falls back to
+    hardcoded value if parameter not yet available.
+    """
+    try:
+        return system.parameters.gov.dft.rail.fare_index(ETB_SURVEY_YEAR)
+    except AttributeError:
+        # Parameter not yet available in policyengine-uk
+        return FALLBACK_FARE_INDEX_2021
 
 
 def impute_services(
@@ -51,11 +67,11 @@ def impute_services(
         )
 
     # Derive rail_usage (quantity at base year prices) from rail_subsidy_spending
-    # rail_usage = rail_subsidy_spending / fare_index
+    # rail_usage = rail_subsidy_spending / fare_index at survey year
     # This allows reforms to modify fare_index independently of usage quantity
+    fare_index_survey_year = get_fare_index_survey_year()
     dataset.household["rail_usage"] = (
-        dataset.household["rail_subsidy_spending"]
-        / RAIL_FARE_INDEX_SURVEY_YEAR
+        dataset.household["rail_subsidy_spending"] / fare_index_survey_year
     )
 
     visit_variables = [
