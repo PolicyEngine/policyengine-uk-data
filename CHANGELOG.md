@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.23.0] - 2025-11-27 15:30:00
+
+### Added
+
+- Add salary sacrifice NI relief as calibration targets (employee £1.2bn, employer £2.9bn from SPP)
+
 ## [1.22.0] - 2025-11-26 22:46:41
 
 ### Added
@@ -407,6 +413,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.23.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.22.0...1.23.0
 [1.22.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.21.0...1.22.0
 [1.21.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.20.0...1.21.0
 [1.20.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.19.6...1.20.0
