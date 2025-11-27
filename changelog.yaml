@@ -354,3 +354,8 @@
     fixed:
     - Hallucinated calibration targets.
   date: 2025-11-27 16:12:15
+- bump: patch
+  changes:
+    added:
+    - SS HMRC calibration targets.
+  date: 2025-11-27 16:29:01
