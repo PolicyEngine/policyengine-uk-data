@@ -54,7 +54,8 @@ def impute_services(
     # rail_usage = rail_subsidy_spending / fare_index
     # This allows reforms to modify fare_index independently of usage quantity
     dataset.household["rail_usage"] = (
-        dataset.household["rail_subsidy_spending"] / RAIL_FARE_INDEX_SURVEY_YEAR
+        dataset.household["rail_subsidy_spending"]
+        / RAIL_FARE_INDEX_SURVEY_YEAR
     )
 
     visit_variables = [

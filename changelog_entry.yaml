@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    added:
+      - rail_usage variable derived from rail_subsidy_spending for price/quantity decomposition
