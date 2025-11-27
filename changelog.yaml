@@ -349,3 +349,8 @@
     - "Add salary sacrifice NI relief as calibration targets (employee \xA31.2bn,\
       \ employer \xA32.9bn from SPP)"
   date: 2025-11-27 15:30:00
+- bump: patch
+  changes:
+    fixed:
+    - Hallucinated calibration targets.
+  date: 2025-11-27 16:12:15
