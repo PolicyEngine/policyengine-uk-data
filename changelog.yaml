@@ -359,3 +359,8 @@
     added:
     - SS HMRC calibration targets.
   date: 2025-11-27 16:29:01
+- bump: patch
+  changes:
+    fixed:
+    - Updated personal allowance reform test expected value after calibration fix.
+  date: 2025-11-27 17:11:09
