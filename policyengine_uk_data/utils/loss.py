@@ -194,6 +194,66 @@ def create_target_matrix(
         employer_ni_relief
     )
 
+    # HMRC Table 6.2 - Salary sacrifice income tax relief by tax rate
+    # This helps calibrate the distribution of SS users by income level
+    # 2023-24 values (£m): Basic £1,600, Higher £4,400, Additional £1,200
+    # Total IT relief from SS: £7,200m
+    # Use true counterfactual: IT relief = counterfactual IT - baseline IT
+    income_tax_baseline = sim.calculate("income_tax")
+    income_tax_cf = counterfactual_sim.calculate("income_tax", time_period)
+    it_relief = income_tax_cf - income_tax_baseline
+
+    # Get tax band from counterfactual adjusted net income (where SS is wages)
+    adjusted_net_income_cf = counterfactual_sim.calculate(
+        "adjusted_net_income", time_period
+    )
+    basic_rate_threshold = (
+        sim.tax_benefit_system.parameters.gov.hmrc.income_tax.rates.uk[
+            0
+        ].threshold(time_period)
+    )
+    higher_rate_threshold = (
+        sim.tax_benefit_system.parameters.gov.hmrc.income_tax.rates.uk[
+            1
+        ].threshold(time_period)
+    )
+    additional_rate_threshold = (
+        sim.tax_benefit_system.parameters.gov.hmrc.income_tax.rates.uk[
+            2
+        ].threshold(time_period)
+    )
+
+    # Determine tax band for each person based on counterfactual income
+    is_basic_rate = (adjusted_net_income_cf > basic_rate_threshold) & (
+        adjusted_net_income_cf <= higher_rate_threshold
+    )
+    is_higher_rate = (adjusted_net_income_cf > higher_rate_threshold) & (
+        adjusted_net_income_cf <= additional_rate_threshold
+    )
+    is_additional_rate = adjusted_net_income_cf > additional_rate_threshold
+
+    # Allocate the true IT relief to tax bands
+    ss_it_relief_basic = it_relief * is_basic_rate
+    ss_it_relief_higher = it_relief * is_higher_rate
+    ss_it_relief_additional = it_relief * is_additional_rate
+
+    df["hmrc/salary_sacrifice_it_relief_basic"] = household_from_person(
+        ss_it_relief_basic
+    )
+    df["hmrc/salary_sacrifice_it_relief_higher"] = household_from_person(
+        ss_it_relief_higher
+    )
+    df["hmrc/salary_sacrifice_it_relief_additional"] = household_from_person(
+        ss_it_relief_additional
+    )
+
+    # Total gross salary sacrifice contributions
+    # This is derived from the IT relief: £7.2bn IT relief at ~30% avg rate
+    # implies ~£24bn gross contributions (but we target the relief directly)
+    df["hmrc/salary_sacrifice_contributions"] = household_from_person(
+        ss_contributions
+    )
+
     # Population statistics from the ONS.
 
     region = sim.calculate("region", map_to="person")
@@ -351,6 +411,8 @@ def create_target_matrix(
 
     target_names.append("hmrc/salary_sacrifice_contributions")
     target_values.append(SS_CONTRIBUTIONS_2024 * uprating_factor)
+
+    print(target_names[-4:], target_values[-4:])
 
     # Add two-child limit targets.
     child_is_affected = (
