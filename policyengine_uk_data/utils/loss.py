@@ -349,9 +349,7 @@ def create_target_matrix(
     savings_income = sim.calculate("savings_interest_income")
     df["ons/savings_interest_income"] = household_from_person(savings_income)
     target_names.append("ons/savings_interest_income")
-    target_values.append(
-        ONS_SAVINGS_INCOME.get(int(time_period), 55.0e9)
-    )
+    target_values.append(ONS_SAVINGS_INCOME.get(int(time_period), 55.0e9))
 
     # HMRC Table 6.2 - Salary sacrifice income tax relief by tax rate
     # This helps calibrate the distribution of SS users by income level
