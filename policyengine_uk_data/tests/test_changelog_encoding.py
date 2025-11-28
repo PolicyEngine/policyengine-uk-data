@@ -34,6 +34,10 @@ class TestChangelogEncoding:
         # Read as bytes and try to decode as UTF-8
         content_bytes = changelog_entry_path.read_bytes()
 
+        # Skip if file is empty (happens after versioning workflow consumes it)
+        if not content_bytes.strip():
+            pytest.skip("changelog_entry.yaml is empty")
+
         try:
             content_bytes.decode("utf-8")
         except UnicodeDecodeError as e:
@@ -56,10 +60,18 @@ class TestChangelogEncoding:
 
         content = changelog_entry_path.read_text(encoding="utf-8")
 
+        # Skip if file is empty (happens after versioning workflow consumes it)
+        if not content.strip():
+            pytest.skip("changelog_entry.yaml is empty")
+
         try:
             data = yaml.safe_load(content)
         except yaml.YAMLError as e:
             pytest.fail(f"changelog_entry.yaml is not valid YAML: {e}")
+
+        # Skip if data is None (empty YAML)
+        if data is None:
+            pytest.skip("changelog_entry.yaml is empty")
 
         # Verify structure
         assert isinstance(data, list), "changelog_entry.yaml must be a list"
