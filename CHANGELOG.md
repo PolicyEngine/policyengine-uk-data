@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.24.1] - 2025-11-28 16:14:35
+
+### Changed
+
+- Calibrate savings income from ONS National Accounts D.41g household interest data instead of SPI (fixes underestimation from ~3bn to ~55bn)
+
 ## [1.24.0] - 2025-11-27 18:33:27
 
 ### Added
@@ -437,6 +443,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.24.1]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.24.0...1.24.1
 [1.24.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.23.3...1.24.0
 [1.23.3]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.23.2...1.23.3
 [1.23.2]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.23.1...1.23.2
