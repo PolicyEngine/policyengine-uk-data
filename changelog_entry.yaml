@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+      - Update savings income uprating factors to match ONS D.41g household interest data
