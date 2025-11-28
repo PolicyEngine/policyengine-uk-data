@@ -60,15 +60,13 @@ def create_target_matrix(
     target_names = []
     target_values = []
 
-    # Note: savings_interest_income is excluded here because SPI data
-    # significantly underestimates household interest income. It is instead
-    # calibrated from ONS National Accounts D.41g data in tax_benefit.csv.
     INCOME_VARIABLES = [
         "employment_income",
         "self_employment_income",
         "state_pension",
         "private_pension_income",
         "property_income",
+        "savings_interest_income",
         "dividend_income",
     ]
 
@@ -159,15 +157,13 @@ def create_income_projections():
     sim = Microsimulation(dataset=SPI_2020_21)
     sim.set_input("household_weight", 2022, reweighted_weights)
 
-    # Note: savings_interest_income is excluded because SPI significantly
-    # underestimates it. Savings income is calibrated from ONS National
-    # Accounts D.41g household interest data in tax_benefit.csv instead.
     INCOME_VARIABLES = [
         "employment_income",
         "self_employment_income",
         "state_pension",
         "private_pension_income",
         "property_income",
+        "savings_interest_income",
         "dividend_income",
     ]
 
