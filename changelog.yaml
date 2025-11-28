@@ -376,3 +376,9 @@
     - Calibrate savings income from ONS National Accounts D.41g household interest
       data instead of SPI (fixes underestimation from ~3bn to ~55bn)
   date: 2025-11-28 16:14:35
+- bump: patch
+  changes:
+    fixed:
+    - Fix changelog encoding test to skip when changelog_entry.yaml is empty after
+      versioning
+  date: 2025-11-28 17:23:26

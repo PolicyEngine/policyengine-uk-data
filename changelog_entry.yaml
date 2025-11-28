@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-      - Fix changelog encoding test to skip when changelog_entry.yaml is empty after versioning
