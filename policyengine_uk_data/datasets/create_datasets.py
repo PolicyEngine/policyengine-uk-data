@@ -27,6 +27,7 @@ def main():
             "Impute income",
             "Impute capital gains",
             "Impute salary sacrifice",
+            "Impute student loan plan",
             "Uprate to 2025",
             "Calibrate dataset",
             "Downrate to 2023",
@@ -56,6 +57,7 @@ def main():
                 impute_capital_gains,
                 impute_services,
                 impute_salary_sacrifice,
+                impute_student_loan_plan,
             )
 
             # Apply imputations with progress tracking
@@ -86,6 +88,10 @@ def main():
             update_dataset("Impute salary sacrifice", "processing")
             frs = impute_salary_sacrifice(frs)
             update_dataset("Impute salary sacrifice", "completed")
+
+            update_dataset("Impute student loan plan", "processing")
+            frs = impute_student_loan_plan(frs, year=2023)
+            update_dataset("Impute student loan plan", "completed")
 
             # Uprate dataset
             update_dataset("Uprate to 2025", "processing")
@@ -143,7 +149,7 @@ def main():
             details={
                 "base_dataset": "frs_2023_24.h5",
                 "enhanced_dataset": "enhanced_frs_2023_24.h5",
-                "imputations_applied": "consumption, wealth, VAT, services, income, capital_gains, salary_sacrifice",
+                "imputations_applied": "consumption, wealth, VAT, services, income, capital_gains, salary_sacrifice, student_loan_plan",
                 "calibration": "national and constituency targets",
             },
         )
