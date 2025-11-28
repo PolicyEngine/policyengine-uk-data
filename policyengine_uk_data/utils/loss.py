@@ -285,13 +285,15 @@ def create_target_matrix(
     target_names = []
     target_values = []
 
+    # Note: savings_interest_income is excluded because SPI significantly
+    # underestimates it. Savings income is calibrated from ONS National
+    # Accounts D.41g household interest data separately below.
     INCOME_VARIABLES = [
         "employment_income",
         "self_employment_income",
         "state_pension",
         "private_pension_income",
         "property_income",
-        "savings_interest_income",
         "dividend_income",
     ]
 
@@ -326,6 +328,28 @@ def create_target_matrix(
             )
             target_values.append(row[variable + "_count"])
             target_names.append(name_count)
+
+    # Savings interest income from ONS National Accounts D.41
+    # Source: ONS HAXV - Households (S.14): Interest (D.41) Resources
+    # https://www.ons.gov.uk/economy/grossdomesticproductgdp/timeseries/haxv/ukea
+    # SPI significantly underestimates savings income (~£3bn vs £43-98bn actual)
+    # because it only captures taxable interest, not tax-free ISAs/NS&I
+    ONS_SAVINGS_INCOME = {
+        2020: 16.0e9,
+        2021: 19.6e9,
+        2022: 43.3e9,
+        2023: 86.0e9,
+        2024: 98.2e9,
+        2025: 98.2e9,  # Projected (held flat)
+        2026: 98.2e9,
+        2027: 98.2e9,
+        2028: 98.2e9,
+        2029: 98.2e9,
+    }
+    savings_income = sim.calculate("savings_interest_income")
+    df["ons/savings_interest_income"] = household_from_person(savings_income)
+    target_names.append("ons/savings_interest_income")
+    target_values.append(ONS_SAVINGS_INCOME.get(int(time_period), 55.0e9))
 
     # HMRC Table 6.2 - Salary sacrifice income tax relief by tax rate
     # This helps calibrate the distribution of SS users by income level

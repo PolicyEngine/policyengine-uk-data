@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+      - Calibrate savings income from ONS National Accounts D.41g household interest data instead of SPI (fixes underestimation from ~£3bn to ~£55bn)
