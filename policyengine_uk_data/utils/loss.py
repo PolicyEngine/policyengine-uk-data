@@ -329,20 +329,22 @@ def create_target_matrix(
             target_values.append(row[variable + "_count"])
             target_names.append(name_count)
 
-    # Savings interest income from ONS National Accounts D.41g
-    # Source: ONS Sector Accounts - Households (S.14) - Interest received
-    # https://www.ons.gov.uk/economy/nationalaccounts/uksectoraccounts
-    # SPI significantly underestimates savings income (~£3bn vs £55bn actual)
+    # Savings interest income from ONS National Accounts D.41
+    # Source: ONS HAXV - Households (S.14): Interest (D.41) Resources
+    # https://www.ons.gov.uk/economy/grossdomesticproductgdp/timeseries/haxv/ukea
+    # SPI significantly underestimates savings income (~£3bn vs £43-98bn actual)
     # because it only captures taxable interest, not tax-free ISAs/NS&I
     ONS_SAVINGS_INCOME = {
-        2022: 14.0e9,  # ONS D.41g household interest receipts
-        2023: 37.0e9,
-        2024: 55.0e9,
-        2025: 55.0e9,  # Projected
-        2026: 55.0e9,
-        2027: 55.0e9,
-        2028: 55.0e9,
-        2029: 55.0e9,
+        2020: 16.0e9,
+        2021: 19.6e9,
+        2022: 43.3e9,
+        2023: 86.0e9,
+        2024: 98.2e9,
+        2025: 98.2e9,  # Projected (held flat)
+        2026: 98.2e9,
+        2027: 98.2e9,
+        2028: 98.2e9,
+        2029: 98.2e9,
     }
     savings_income = sim.calculate("savings_interest_income")
     df["ons/savings_interest_income"] = household_from_person(savings_income)
