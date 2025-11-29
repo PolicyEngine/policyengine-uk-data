@@ -382,3 +382,8 @@
     - Fix changelog encoding test to skip when changelog_entry.yaml is empty after
       versioning
   date: 2025-11-28 17:23:26
+- bump: minor
+  changes:
+    added:
+    - Student loan plan imputation based on age and reported repayments
+  date: 2025-11-29 00:33:46
