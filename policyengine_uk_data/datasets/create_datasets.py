@@ -154,7 +154,9 @@ def main():
 
             # Downrate and save
             update_dataset("Downrate to 2023", "processing")
-            frs_calibrated = uprate_dataset(frs_calibrated_constituencies, 2023)
+            frs_calibrated = uprate_dataset(
+                frs_calibrated_constituencies, 2023
+            )
             update_dataset("Downrate to 2023", "completed")
 
             update_dataset("Save final dataset", "processing")
