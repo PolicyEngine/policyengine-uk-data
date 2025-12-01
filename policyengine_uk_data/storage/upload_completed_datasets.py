@@ -7,6 +7,7 @@ def upload_datasets():
         STORAGE_FOLDER / "frs_2023_24.h5",
         STORAGE_FOLDER / "enhanced_frs_2023_24.h5",
         STORAGE_FOLDER / "parliamentary_constituency_weights.h5",
+        STORAGE_FOLDER / "local_authority_weights.h5",
     ]
 
     for file_path in dataset_files:
