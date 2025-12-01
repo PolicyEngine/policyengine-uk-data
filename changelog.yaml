@@ -387,3 +387,8 @@
     added:
     - Student loan plan imputation based on age and reported repayments
   date: 2025-11-29 00:33:46
+- bump: minor
+  changes:
+    fixed:
+    - LA calibration now consistent with constituency calibration.
+  date: 2025-12-01 11:20:56

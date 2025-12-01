@@ -29,7 +29,8 @@ def main():
             "Impute salary sacrifice",
             "Impute student loan plan",
             "Uprate to 2025",
-            "Calibrate dataset",
+            "Calibrate constituency weights",
+            "Calibrate local authority weights",
             "Downrate to 2023",
             "Save final dataset",
         ]
@@ -98,12 +99,12 @@ def main():
             frs = uprate_dataset(frs, 2025)
             update_dataset("Uprate to 2025", "completed")
 
-            # Calibrate dataset with nested progress
+            # Calibrate constituency weights with nested progress
             from policyengine_uk_data.datasets.local_areas.constituencies.calibrate import (
                 calibrate,
             )
 
-            update_dataset("Calibrate dataset", "processing")
+            update_dataset("Calibrate constituency weights", "processing")
 
             # Use a separate progress tracker for calibration with nested display
             from policyengine_uk_data.utils.calibrate import (
@@ -170,7 +171,7 @@ def main():
                 "base_dataset": "frs_2023_24.h5",
                 "enhanced_dataset": "enhanced_frs_2023_24.h5",
                 "imputations_applied": "consumption, wealth, VAT, services, income, capital_gains, salary_sacrifice, student_loan_plan",
-                "calibration": "national and constituency targets",
+                "calibration": "national, LA and  constituency targets",
             },
         )
 
