@@ -30,18 +30,61 @@ from policyengine_uk_data.storage import STORAGE_FOLDER
 WAS_TAB_FOLDER = STORAGE_FOLDER / "was_2006_20"
 
 # Predictor variables available in both WAS and FRS (household level)
-# Age is critical - student loans are highly concentrated in younger households
+# These are the key predictors for student loan debt:
+# - Age: Student loans concentrated in younger households (most important)
+# - Tenure: Mortgaged owners have highest rates (8.3%), outright owners lowest (1.3%)
+# - Employment: Employed (7.3%) vs retired (0.5%)
+# - Income/household composition: Basic controls
 STUDENT_LOAN_PREDICTORS = [
     "household_net_income",
     "num_adults",
     "num_children",
     "hrp_age_band",  # HRP age band (2-8), critical for student loan prediction
+    "tenure_type",  # 1=owned outright, 2=mortgaged, 3=part own, 4=rented, 5=rent-free
+    "hrp_employed",  # 1=employed/self-employed, 0=not
 ]
 
 # WAS age band mapping (hrpdvage8r7)
 # Band 2: 16-24, Band 3: 25-34, Band 4: 35-44, Band 5: 45-54
 # Band 6: 55-64, Band 7: 65-74, Band 8: 75+
 AGE_BAND_BOUNDARIES = [0, 16, 25, 35, 45, 55, 65, 75, 200]
+
+# WAS tenure mapping (ten1r7)
+# 1 = Owned outright, 2 = Buying with mortgage, 3 = Part rent/part mortgage
+# 4 = Rented, 5 = Rent-free
+WAS_TENURE_MAP = {
+    1: 1,
+    2: 2,
+    3: 3,
+    4: 4,
+    5: 5,
+    -8: 4,
+}  # -8 (don't know) -> rented
+
+# FRS tenure mapping to WAS codes
+FRS_TENURE_MAP = {
+    "OWNED_OUTRIGHT": 1,
+    "OWNED_WITH_MORTGAGE": 2,
+    "RENT_FROM_COUNCIL": 4,
+    "RENT_FROM_HA": 4,
+    "RENT_PRIVATELY": 4,
+    "RENT_FREE": 5,
+}
+
+# WAS employment status mapping (hrpempstat2r7)
+# 1=Employee, 2=Self-employed, 3=Govt scheme, 4=Waiting to start
+# 5=Unemployed, 6=Sick/disabled, 7=Retired, 8=Other inactive
+# Note: WAS stores these as strings, so we include both int and str versions
+WAS_EMPLOYED_CODES = {
+    1,
+    2,
+    3,
+    4,
+    "1",
+    "2",
+    "3",
+    "4",
+}  # Codes that count as "employed"
 
 
 def age_to_band(age: int) -> int:
@@ -177,6 +220,14 @@ def generate_was_student_loan_table() -> pd.DataFrame:
     # HRP age band is critical - student loans concentrated in younger households
     was["hrp_age_band"] = was["hrpdvage8r7"]
 
+    # Tenure type: strong predictor (mortgaged 8.3% vs outright 1.3%)
+    was["tenure_type"] = was["ten1r7"].map(WAS_TENURE_MAP).fillna(4)
+
+    # HRP employment status: employed vs not (7.3% vs 0.5% for retired)
+    was["hrp_employed"] = (
+        was["hrpempstat2r7"].isin(WAS_EMPLOYED_CODES).astype(int)
+    )
+
     # Fill missing values
     was = was.fillna(0)
 
@@ -197,6 +248,7 @@ def get_frs_predictors(sim: Microsimulation, year: int = 2025) -> pd.DataFrame:
     # Get person-level data
     age = sim.calculate("age", year).values
     person_hh_id = sim.calculate("household_id", map_to="person").values
+    in_work = sim.calculate("in_work", year).values
 
     # Create person-level DataFrame
     person_df = pd.DataFrame(
@@ -205,6 +257,7 @@ def get_frs_predictors(sim: Microsimulation, year: int = 2025) -> pd.DataFrame:
             "household_id": person_hh_id,
             "is_adult": age >= 18,
             "is_child": age < 18,
+            "in_work": in_work,
         }
     )
 
@@ -220,20 +273,35 @@ def get_frs_predictors(sim: Microsimulation, year: int = 2025) -> pd.DataFrame:
                 else 0
             ),
         ),
+        any_in_work=("in_work", "any"),  # HRP proxy: any adult in work
     )
 
-    # Get household income
+    # Get household-level variables
     hh_ids = sim.calculate("household_id", year).values
     hh_income = sim.calculate("household_net_income", year).values
-    hh_income_df = pd.DataFrame(
-        {"household_id": hh_ids, "household_net_income": hh_income}
+    tenure = sim.calculate("tenure_type", year).values
+
+    hh_vars_df = pd.DataFrame(
+        {
+            "household_id": hh_ids,
+            "household_net_income": hh_income,
+            "tenure_type_str": tenure,
+        }
     )
-    hh_agg = hh_agg.join(hh_income_df.set_index("household_id"))
+    hh_agg = hh_agg.join(hh_vars_df.set_index("household_id"))
 
     # Convert max adult age to WAS-style age band
     hh_agg["hrp_age_band"] = hh_agg["max_adult_age"].apply(
         lambda x: age_to_band(int(x)) if pd.notna(x) and x > 0 else 8
     )
+
+    # Convert tenure to WAS codes
+    hh_agg["tenure_type"] = (
+        hh_agg["tenure_type_str"].map(FRS_TENURE_MAP).fillna(4)
+    )
+
+    # HRP employed: use any_in_work as proxy
+    hh_agg["hrp_employed"] = hh_agg["any_in_work"].astype(int)
 
     return hh_agg[STUDENT_LOAN_PREDICTORS].reset_index()
 
@@ -283,17 +351,19 @@ def impute_student_loan_balance(
     """
     Impute student loan balance for individuals with student loans.
 
-    The imputation assigns balances based on plan type using SLC admin statistics:
-    1. Use FRS-reported repayments to identify who has a student loan
-    2. Assign average balance by plan type from SLC statistics
+    The imputation uses a hybrid approach:
+    1. Use FRS-reported repayments (student_loan_repayments > 0) to identify
+       who has a student loan - FRS captures ~4.35m repayers vs admin ~3.8m,
+       so we have good coverage
+    2. Assign balances based on plan type using SLC admin statistics
     3. Apply age-based decay to account for repayments over time
     4. Calibration to admin totals happens in the main calibration step
 
     Average outstanding balances by plan type (SLC 2024):
-    - Plan 1: ~£8k (older loans, lower original amounts, more repaid)
+    - Plan 1: ~£10k (older loans, lower original amounts, more repaid)
     - Plan 2: ~£45k (higher fees since 2012)
-    - Plan 4: ~£15k (Scottish loans)
-    - Plan 5: ~£12k (new loans since 2023, partial borrowing)
+    - Plan 4: ~£13k (Scottish loans)
+    - Plan 5: ~£15k (new loans since 2023, partial borrowing)
 
     Args:
         dataset: PolicyEngine UK dataset with student_loan_plan imputed.
@@ -307,6 +377,7 @@ def impute_student_loan_balance(
 
     # Get required variables
     age = sim.calculate("age").values
+    student_loan_repayments = sim.calculate("student_loan_repayments").values
     plan_values = dataset.person.get(
         "student_loan_plan", np.full(len(dataset.person.person_id), "NONE")
     )
@@ -315,38 +386,40 @@ def impute_student_loan_balance(
         plan_values = plan_values.values
     weights = sim.calculate("person_weight").values
 
+    # Use FRS repayments as indicator of who has student loan
+    # FRS captures ~4.35m repayers, admin shows ~3.8m, so good coverage
+    has_student_loan = student_loan_repayments > 0
+
     # Estimate years since graduation (assume graduated at 21)
     years_since_grad = np.maximum(0, age - 21)
 
     # Base balances by plan type from SLC statistics
     # https://www.gov.uk/government/statistics/student-loans-in-england-2024-to-2025
-    # Note: FRS only captures ~3.75m repayers, but SLC shows 9.4m borrowers.
-    # We assign balances to identified repayers; calibration will adjust weights.
     # SLC average balance is ~£31k overall.
     person_balance = np.zeros(len(age))
 
     # Plan 1: Older loans (pre-2012), lower original amounts.
     # Average outstanding ~£10k due to years of repayment and write-offs.
-    plan_1_mask = plan_values == "PLAN_1"
+    plan_1_mask = has_student_loan & (plan_values == "PLAN_1")
     person_balance[plan_1_mask] = 10000 * np.exp(
         -0.02 * years_since_grad[plan_1_mask]
     )
 
     # Plan 2: Higher fees (£9k+ since 2012), average ~£45k outstanding.
     # These are the bulk of the debt stock.
-    plan_2_mask = plan_values == "PLAN_2"
+    plan_2_mask = has_student_loan & (plan_values == "PLAN_2")
     person_balance[plan_2_mask] = 45000 * np.exp(
         -0.01 * years_since_grad[plan_2_mask]
     )
 
     # Plan 4: Scottish loans, average ~£13k
-    plan_4_mask = plan_values == "PLAN_4"
+    plan_4_mask = has_student_loan & (plan_values == "PLAN_4")
     person_balance[plan_4_mask] = 13000 * np.exp(
         -0.02 * years_since_grad[plan_4_mask]
     )
 
     # Plan 5: Very new (2023+), near original amounts (~£15k for first year)
-    plan_5_mask = plan_values == "PLAN_5"
+    plan_5_mask = has_student_loan & (plan_values == "PLAN_5")
     person_balance[plan_5_mask] = 15000
 
     # Store the balance
@@ -364,6 +437,9 @@ def impute_student_loan_balance(
         mean_balance = 0
 
     print("Student loan balance imputation results:")
+    print(
+        f"  People with reported repayments: {(has_student_loan * weights).sum() / 1e6:.2f}m"
+    )
     print(
         f"  People with balance > 0: {weights[has_balance].sum() / 1e6:.2f}m"
     )

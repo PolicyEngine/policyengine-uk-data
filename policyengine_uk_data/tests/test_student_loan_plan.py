@@ -83,3 +83,47 @@ def test_student_loan_predictor_variables():
     assert "household_net_income" in STUDENT_LOAN_PREDICTORS
     assert "num_adults" in STUDENT_LOAN_PREDICTORS
     assert "num_children" in STUDENT_LOAN_PREDICTORS
+    # New predictors added for better accuracy
+    assert "hrp_age_band" in STUDENT_LOAN_PREDICTORS
+    assert "tenure_type" in STUDENT_LOAN_PREDICTORS
+    assert "hrp_employed" in STUDENT_LOAN_PREDICTORS
+
+
+def test_age_to_band():
+    """Test age band conversion matches WAS coding."""
+    from policyengine_uk_data.datasets.imputations.student_loans import (
+        age_to_band,
+    )
+
+    # Band 2: 16-24
+    assert age_to_band(18) == 2
+    assert age_to_band(24) == 2
+    # Band 3: 25-34
+    assert age_to_band(25) == 3
+    assert age_to_band(30) == 3
+    # Band 4: 35-44
+    assert age_to_band(35) == 4
+    assert age_to_band(40) == 4
+    # Band 7: 65-74
+    assert age_to_band(65) == 7
+    assert age_to_band(70) == 7
+    # Band 8: 75+
+    assert age_to_band(75) == 8
+    assert age_to_band(90) == 8
+
+
+def test_tenure_mappings():
+    """Test that tenure mappings are consistent."""
+    from policyengine_uk_data.datasets.imputations.student_loans import (
+        WAS_TENURE_MAP,
+        FRS_TENURE_MAP,
+    )
+
+    # WAS codes should be 1-5
+    assert set(WAS_TENURE_MAP.values()) <= {1, 2, 3, 4, 5}
+    # FRS codes should map to same range
+    assert set(FRS_TENURE_MAP.values()) <= {1, 2, 3, 4, 5}
+    # Key mappings
+    assert FRS_TENURE_MAP["OWNED_OUTRIGHT"] == 1
+    assert FRS_TENURE_MAP["OWNED_WITH_MORTGAGE"] == 2
+    assert FRS_TENURE_MAP["RENT_PRIVATELY"] == 4
