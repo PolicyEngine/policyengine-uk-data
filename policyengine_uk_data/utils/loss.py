@@ -549,6 +549,26 @@ def create_target_matrix(
         target_names.append(name)
         target_values.append(row.household_count)
 
+    # Vehicle ownership calibration targets
+    # NTS 2024: 22% no car, 44% one car, 34% two+ cars
+    # https://www.gov.uk/government/statistics/national-travel-survey-2024
+    num_cars = pe("num_cars")
+    total_households = (
+        df["ons/uk_population"].sum() / 2.4
+    )  # avg household size
+
+    df["nts/households_no_car"] = (num_cars == 0).astype(float)
+    target_names.append("nts/households_no_car")
+    target_values.append(total_households * 0.22)
+
+    df["nts/households_one_car"] = (num_cars == 1).astype(float)
+    target_names.append("nts/households_one_car")
+    target_values.append(total_households * 0.44)
+
+    df["nts/households_two_plus_cars"] = (num_cars >= 2).astype(float)
+    target_names.append("nts/households_two_plus_cars")
+    target_values.append(total_households * 0.34)
+
     combined_targets = pd.concat(
         [
             targets,
