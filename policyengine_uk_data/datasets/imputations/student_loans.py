@@ -211,14 +211,21 @@ def impute_student_loan_balance(
     """
     Impute student loan balance for individuals with student loans.
 
-    The imputation uses a QRF model trained on WAS household-level SLC debt:
-    1. Predict household-level SLC debt using household characteristics
-    2. Allocate to individuals within households who have student loans
-    3. Calibration to admin totals happens in the main calibration step
+    The imputation assigns balances based on plan type using SLC admin statistics:
+    1. Use FRS-reported repayments to identify who has a student loan
+    2. Assign average balance by plan type from SLC statistics
+    3. Apply age-based decay to account for repayments over time
+    4. Calibration to admin totals happens in the main calibration step
+
+    Average outstanding balances by plan type (SLC 2024):
+    - Plan 1: ~£8k (older loans, lower original amounts, more repaid)
+    - Plan 2: ~£45k (higher fees since 2012)
+    - Plan 4: ~£15k (Scottish loans)
+    - Plan 5: ~£12k (new loans since 2023, partial borrowing)
 
     Args:
         dataset: PolicyEngine UK dataset with student_loan_plan imputed.
-        year: Simulation year (currently unused, for future time adjustment).
+        year: Simulation year for calculating years since graduation.
 
     Returns:
         Dataset with student_loan_balance variable added.
@@ -226,53 +233,54 @@ def impute_student_loan_balance(
     dataset = dataset.copy()
     sim = Microsimulation(dataset=dataset)
 
-    # Get the trained model
-    model = create_student_loan_model()
-
-    # Get household-level predictors
-    input_df = sim.calculate_dataframe(
-        STUDENT_LOAN_PREDICTORS, map_to="household"
-    )
-
-    # Predict household-level SLC debt
-    household_slc_debt = model.predict(input_df)["slc_debt"].values
-
-    # Get person-level data for allocation
-    plan = dataset.person.get(
+    # Get required variables
+    age = sim.calculate("age").values
+    plan_values = dataset.person.get(
         "student_loan_plan", np.full(len(dataset.person.person_id), "NONE")
     )
-    has_student_loan = plan != "NONE"
+    # Convert to numpy array if it's a pandas Series
+    if hasattr(plan_values, "values"):
+        plan_values = plan_values.values
+    weights = sim.calculate("person_weight").values
 
-    # Get household membership
-    person_household_id = sim.calculate("household_id").values
-    household_ids = dataset.household.household_id.values
+    # Estimate years since graduation (assume graduated at 21)
+    years_since_grad = np.maximum(0, age - 21)
 
-    # Create person-to-household index mapping
-    household_id_to_idx = {hh_id: idx for idx, hh_id in enumerate(household_ids)}
-    person_household_idx = np.array(
-        [household_id_to_idx[hh_id] for hh_id in person_household_id]
+    # Base balances by plan type from SLC statistics
+    # https://www.gov.uk/government/statistics/student-loans-in-england-2024-to-2025
+    # Note: FRS only captures ~3.75m repayers, but SLC shows 9.4m borrowers.
+    # We assign balances to identified repayers; calibration will adjust weights.
+    # SLC average balance is ~£31k overall.
+    person_balance = np.zeros(len(age))
+
+    # Plan 1: Older loans (pre-2012), lower original amounts.
+    # Average outstanding ~£10k due to years of repayment and write-offs.
+    plan_1_mask = plan_values == "PLAN_1"
+    person_balance[plan_1_mask] = 10000 * np.exp(
+        -0.02 * years_since_grad[plan_1_mask]
     )
 
-    # Allocate household debt to individuals with student loans
-    # First, count how many people with loans are in each household
-    loans_per_household = np.zeros(len(household_ids))
-    for person_idx, hh_idx in enumerate(person_household_idx):
-        if has_student_loan[person_idx]:
-            loans_per_household[hh_idx] += 1
+    # Plan 2: Higher fees (£9k+ since 2012), average ~£45k outstanding.
+    # These are the bulk of the debt stock.
+    plan_2_mask = plan_values == "PLAN_2"
+    person_balance[plan_2_mask] = 45000 * np.exp(
+        -0.01 * years_since_grad[plan_2_mask]
+    )
 
-    # Allocate household debt equally among loan holders in that household
-    person_balance = np.zeros(len(plan))
-    for person_idx, hh_idx in enumerate(person_household_idx):
-        if has_student_loan[person_idx] and loans_per_household[hh_idx] > 0:
-            person_balance[person_idx] = (
-                household_slc_debt[hh_idx] / loans_per_household[hh_idx]
-            )
+    # Plan 4: Scottish loans, average ~£13k
+    plan_4_mask = plan_values == "PLAN_4"
+    person_balance[plan_4_mask] = 13000 * np.exp(
+        -0.02 * years_since_grad[plan_4_mask]
+    )
+
+    # Plan 5: Very new (2023+), near original amounts (~£15k for first year)
+    plan_5_mask = plan_values == "PLAN_5"
+    person_balance[plan_5_mask] = 15000
 
     # Store the balance
     dataset.person["student_loan_balance"] = person_balance
 
     # Report results
-    weights = sim.calculate("person_weight").values
     has_balance = person_balance > 0
     total_balance = (person_balance * weights).sum()
 
@@ -290,4 +298,5 @@ def impute_student_loan_balance(
     print(f"  Mean balance (those with loans): £{mean_balance:,.0f}")
     print("  Note: Calibration to admin totals happens in main calibration step")
 
+    dataset.validate()
     return dataset
