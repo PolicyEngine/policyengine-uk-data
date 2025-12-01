@@ -549,6 +549,88 @@ def create_target_matrix(
         target_names.append(name)
         target_values.append(row.household_count)
 
+    # Student loan calibration targets
+    # Sources:
+    # - SLC: https://www.gov.uk/government/statistics/student-loans-in-england-2024-to-2025
+    # - DfE forecasts: https://www.gov.uk/government/statistics/student-loan-forecasts-for-england
+    # - OBR: https://obr.uk/forecasts-in-depth/tax-by-tax-spend-by-spend/student-loans/
+
+    # Total outstanding balance (£294bn as of March 2025, growing ~£20bn/year)
+    SLC_TOTAL_BALANCE = {
+        2023: 236e9,
+        2024: 264e9,
+        2025: 294e9,
+        2026: 314e9,
+        2027: 334e9,
+        2028: 354e9,
+        2029: 374e9,
+    }
+
+    # Total annual repayments (UK, DfE/OBR forecasts)
+    SLC_TOTAL_REPAYMENTS = {
+        2023: 4.8e9,
+        2024: 5.2e9,
+        2025: 5.6e9,
+        2026: 6.0e9,
+        2027: 6.4e9,
+        2028: 6.8e9,
+        2029: 7.2e9,
+    }
+
+    # Number of borrowers with outstanding balance (~9.4m, growing)
+    SLC_BORROWER_COUNT = {
+        2023: 8.8e6,
+        2024: 9.1e6,
+        2025: 9.4e6,
+        2026: 9.7e6,
+        2027: 10.0e6,
+        2028: 10.3e6,
+        2029: 10.6e6,
+    }
+
+    # Student loan balance (if imputed)
+    if "student_loan_balance" in [
+        v.name for v in sim.tax_benefit_system.variables.values()
+    ]:
+        student_loan_balance = sim.calculate("student_loan_balance")
+        df["slc/student_loan_balance"] = household_from_person(
+            student_loan_balance
+        )
+        target_names.append("slc/student_loan_balance")
+        target_values.append(
+            SLC_TOTAL_BALANCE.get(int(time_period), 294e9)
+        )
+
+        # Borrower count
+        has_balance = student_loan_balance > 0
+        df["slc/student_loan_borrower_count"] = household_from_person(
+            has_balance
+        )
+        target_names.append("slc/student_loan_borrower_count")
+        target_values.append(
+            SLC_BORROWER_COUNT.get(int(time_period), 9.4e6)
+        )
+
+    # Student loan repayments (reported in FRS)
+    student_loan_repayments = sim.calculate("student_loan_repayments")
+    df["slc/student_loan_repayments"] = household_from_person(
+        student_loan_repayments
+    )
+    target_names.append("slc/student_loan_repayments")
+    target_values.append(
+        SLC_TOTAL_REPAYMENTS.get(int(time_period), 5.6e9)
+    )
+
+    # Count of people making repayments
+    has_repayments = student_loan_repayments > 0
+    df["slc/student_loan_repayer_count"] = household_from_person(
+        has_repayments
+    )
+    # Approximately 3.5m people make repayments annually
+    # (subset of 9.4m borrowers who are above threshold)
+    target_names.append("slc/student_loan_repayer_count")
+    target_values.append(3.5e6)
+
     combined_targets = pd.concat(
         [
             targets,
