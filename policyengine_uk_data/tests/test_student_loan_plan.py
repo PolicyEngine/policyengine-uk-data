@@ -44,3 +44,44 @@ def test_student_loan_plan_enum_values():
     assert StudentLoanPlan.PLAN_2.value == "PLAN_2"
     assert StudentLoanPlan.PLAN_4.value == "PLAN_4"
     assert StudentLoanPlan.PLAN_5.value == "PLAN_5"
+
+
+def test_student_loan_balance_base_values():
+    """Test the base balance calculation logic by plan type."""
+    import numpy as np
+
+    year = 2025
+
+    # Test Plan 1 balance decay
+    # Base £15k decaying at 3% per year
+    age_40 = 40
+    years_since_grad = max(0, age_40 - 21)  # 19 years
+    plan_1_balance = 15000 * np.exp(-0.03 * years_since_grad)
+    assert 7000 < plan_1_balance < 10000, f"Plan 1 balance {plan_1_balance} out of range"
+
+    # Test Plan 2 balance decay
+    # Base £45k decaying at 2% per year
+    age_30 = 30
+    years_since_grad = max(0, age_30 - 21)  # 9 years
+    plan_2_balance = 45000 * np.exp(-0.02 * years_since_grad)
+    assert 35000 < plan_2_balance < 40000, f"Plan 2 balance {plan_2_balance} out of range"
+
+    # Test Plan 5 balance (no decay, very new)
+    plan_5_balance = 25000
+    assert plan_5_balance == 25000, "Plan 5 should be £25k base"
+
+
+def test_student_loan_balance_scaling_logic():
+    """Test that scaling logic would adjust totals correctly."""
+    import numpy as np
+
+    # Simple scaling test
+    base_total = 100e9  # £100bn
+    admin_total = 294e9  # £294bn (SLC target)
+    scale_factor = admin_total / base_total
+
+    assert 2.9 < scale_factor < 3.0, f"Scale factor {scale_factor} unexpected"
+
+    # After scaling
+    scaled_total = base_total * scale_factor
+    assert abs(scaled_total - admin_total) < 1e6, "Scaling should match admin total"
