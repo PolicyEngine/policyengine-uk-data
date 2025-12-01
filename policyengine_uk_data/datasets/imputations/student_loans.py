@@ -11,8 +11,9 @@ This module imputes student loan variables:
 
 2. student_loan_balance: Outstanding loan balance imputed from WAS data
    - Uses household-level SLC debt from WAS Round 7
+   - Trained QRF model predicts balance based on household characteristics
    - Allocated to individuals based on who has student loan repayments
-   - Scaled to match SLC admin totals
+   - Calibration to admin totals happens in the main calibration step
 
 This enables policyengine-uk's student_loan_repayment variable to calculate
 repayments using official threshold parameters, and to cap repayments at
@@ -28,9 +29,27 @@ from policyengine_uk_data.storage import STORAGE_FOLDER
 # WAS Round 7 data location
 WAS_TAB_FOLDER = STORAGE_FOLDER / "was_2006_20"
 
-# SLC admin totals for scaling (March 2025, UK total)
-# Source: https://www.gov.uk/government/statistics/student-loans-in-england-2024-to-2025
-SLC_TOTAL_BALANCE_2025 = 294e9  # £294 billion
+# Predictor variables available in both WAS and FRS (household level)
+STUDENT_LOAN_PREDICTORS = [
+    "household_net_income",
+    "num_adults",
+    "num_children",
+]
+
+# Region mapping for WAS
+REGIONS = {
+    1: "NORTH_EAST",
+    2: "NORTH_WEST",
+    4: "YORKSHIRE",
+    5: "EAST_MIDLANDS",
+    6: "WEST_MIDLANDS",
+    7: "EAST_OF_ENGLAND",
+    8: "LONDON",
+    9: "SOUTH_EAST",
+    10: "SOUTH_WEST",
+    11: "WALES",
+    12: "SCOTLAND",
+}
 
 
 def impute_student_loan_plan(
@@ -104,16 +123,16 @@ def impute_student_loan_plan(
     return dataset
 
 
-def load_was_student_loan_data() -> pd.DataFrame:
+def generate_was_student_loan_table() -> pd.DataFrame:
     """
-    Load and process WAS data to extract household-level student loan debt.
+    Load and process WAS data for student loan balance imputation.
 
     WAS doesn't have a direct SLC debt variable, but we can derive it from:
     - Tot_LosR7_aggr: Total loans (all types)
     - Tot_los_exc_SLCR7_aggr: Total loans excluding SLC
 
     Returns:
-        DataFrame with household characteristics and SLC debt.
+        DataFrame with household characteristics and SLC debt for training.
     """
     was = pd.read_csv(
         WAS_TAB_FOLDER / "was_round_7_hhold_eul_march_2022.tab",
@@ -133,35 +152,73 @@ def load_was_student_loan_data() -> pd.DataFrame:
 
     # Get predictors that match FRS variables
     was["num_adults"] = was.get("numadultw7", was.get("numadultr7", 0))
+    was["num_children"] = was.get("numch18w7", was.get("numch18r7", 0))
     was["household_net_income"] = was.get(
         "dvtotinc_bhcr7", was.get("dvtotinc_bhcw7", 0)
     )
 
-    return was[["slc_debt", "household_weight", "num_adults", "household_net_income"]]
+    # Fill missing values
+    was = was.fillna(0)
+
+    return was[
+        ["slc_debt", "household_weight"]
+        + STUDENT_LOAN_PREDICTORS
+    ]
+
+
+def save_student_loan_model():
+    """
+    Train and save the student loan balance imputation model.
+
+    Returns:
+        Trained QRF model.
+    """
+    from policyengine_uk_data.utils.qrf import QRF
+
+    was = generate_was_student_loan_table()
+
+    model = QRF()
+    model.fit(
+        was[STUDENT_LOAN_PREDICTORS],
+        was[["slc_debt"]],
+    )
+    model.save(STORAGE_FOLDER / "student_loan_balance.pkl")
+    return model
+
+
+def create_student_loan_model(overwrite_existing: bool = False):
+    """
+    Create or load student loan balance imputation model.
+
+    Args:
+        overwrite_existing: Whether to retrain model if it exists.
+
+    Returns:
+        QRF model for student loan balance imputation.
+    """
+    from policyengine_uk_data.utils.qrf import QRF
+
+    model_path = STORAGE_FOLDER / "student_loan_balance.pkl"
+    if model_path.exists() and not overwrite_existing:
+        return QRF(file_path=model_path)
+    return save_student_loan_model()
 
 
 def impute_student_loan_balance(
     dataset: UKSingleYearDataset,
     year: int = 2025,
-    scale_to_admin: bool = True,
 ) -> UKSingleYearDataset:
     """
     Impute student loan balance for individuals with student loans.
 
-    The imputation uses a simple approach:
-    1. For each person with student loan repayments, estimate their balance
-       based on their plan type and years since graduation
-    2. Scale totals to match SLC admin statistics
-
-    Average balances by plan type (approximate, based on SLC data):
-    - Plan 1: Lower balances (older loans, more repaid) - mean ~£10k
-    - Plan 2: Higher balances (higher fees) - mean ~£45k
-    - Plan 5: New loans, near original amount - mean ~£25k (partial)
+    The imputation uses a QRF model trained on WAS household-level SLC debt:
+    1. Predict household-level SLC debt using household characteristics
+    2. Allocate to individuals within households who have student loans
+    3. Calibration to admin totals happens in the main calibration step
 
     Args:
         dataset: PolicyEngine UK dataset with student_loan_plan imputed.
-        year: Simulation year for calculating years since graduation.
-        scale_to_admin: Whether to scale totals to match SLC statistics.
+        year: Simulation year (currently unused, for future time adjustment).
 
     Returns:
         Dataset with student_loan_balance variable added.
@@ -169,60 +226,68 @@ def impute_student_loan_balance(
     dataset = dataset.copy()
     sim = Microsimulation(dataset=dataset)
 
-    # Get required variables
-    age = sim.calculate("age").values
-    plan = dataset.person.get("student_loan_plan", np.full(len(age), "NONE"))
-    weights = sim.calculate("person_weight").values
+    # Get the trained model
+    model = create_student_loan_model()
 
-    # Estimate years since graduation (assume graduated at 21)
-    years_since_grad = np.maximum(0, age - 21)
-
-    # Base balances by plan type (from SLC statistics)
-    # These are rough averages that will be scaled
-    base_balance = np.zeros(len(age))
-
-    # Plan 1: Older loans, lower original amounts, more repaid
-    # Average original ~£20k, many have paid down significantly
-    plan_1_mask = plan == "PLAN_1"
-    # Decay balance over time (rough model: 3% reduction per year from base of £15k)
-    base_balance[plan_1_mask] = 15000 * np.exp(
-        -0.03 * years_since_grad[plan_1_mask]
+    # Get household-level predictors
+    input_df = sim.calculate_dataframe(
+        STUDENT_LOAN_PREDICTORS, map_to="household"
     )
 
-    # Plan 2: Higher fees (£9k+), higher maintenance, average ~£45k original
-    plan_2_mask = plan == "PLAN_2"
-    # Recent grads have more, decay over time
-    base_balance[plan_2_mask] = 45000 * np.exp(
-        -0.02 * years_since_grad[plan_2_mask]
+    # Predict household-level SLC debt
+    household_slc_debt = model.predict(input_df)["slc_debt"].values
+
+    # Get person-level data for allocation
+    plan = dataset.person.get(
+        "student_loan_plan", np.full(len(dataset.person.person_id), "NONE")
+    )
+    has_student_loan = plan != "NONE"
+
+    # Get household membership
+    person_household_id = sim.calculate("household_id").values
+    household_ids = dataset.household.household_id.values
+
+    # Create person-to-household index mapping
+    household_id_to_idx = {hh_id: idx for idx, hh_id in enumerate(household_ids)}
+    person_household_idx = np.array(
+        [household_id_to_idx[hh_id] for hh_id in person_household_id]
     )
 
-    # Plan 5: Very new (2023+), near original amounts
-    plan_5_mask = plan == "PLAN_5"
-    # Just starting, assume ~£25k average (partial year borrowing)
-    base_balance[plan_5_mask] = 25000
+    # Allocate household debt to individuals with student loans
+    # First, count how many people with loans are in each household
+    loans_per_household = np.zeros(len(household_ids))
+    for person_idx, hh_idx in enumerate(person_household_idx):
+        if has_student_loan[person_idx]:
+            loans_per_household[hh_idx] += 1
 
-    # Scale to match admin totals if requested
-    if scale_to_admin:
-        current_total = (base_balance * weights).sum()
-        if current_total > 0:
-            scale_factor = SLC_TOTAL_BALANCE_2025 / current_total
-            base_balance = base_balance * scale_factor
-            print(f"Scaling student loan balances by {scale_factor:.2f}x")
+    # Allocate household debt equally among loan holders in that household
+    person_balance = np.zeros(len(plan))
+    for person_idx, hh_idx in enumerate(person_household_idx):
+        if has_student_loan[person_idx] and loans_per_household[hh_idx] > 0:
+            person_balance[person_idx] = (
+                household_slc_debt[hh_idx] / loans_per_household[hh_idx]
+            )
 
     # Store the balance
-    dataset.person["student_loan_balance"] = base_balance
+    dataset.person["student_loan_balance"] = person_balance
 
     # Report results
-    has_balance = base_balance > 0
-    total_balance = (base_balance * weights).sum()
-    mean_balance = (
-        (base_balance[has_balance] * weights[has_balance]).sum()
-        / weights[has_balance].sum()
-    )
+    weights = sim.calculate("person_weight").values
+    has_balance = person_balance > 0
+    total_balance = (person_balance * weights).sum()
+
+    if weights[has_balance].sum() > 0:
+        mean_balance = (
+            (person_balance[has_balance] * weights[has_balance]).sum()
+            / weights[has_balance].sum()
+        )
+    else:
+        mean_balance = 0
 
     print("Student loan balance imputation results:")
     print(f"  People with balance > 0: {weights[has_balance].sum() / 1e6:.2f}m")
     print(f"  Total balance: £{total_balance / 1e9:.1f}bn")
     print(f"  Mean balance (those with loans): £{mean_balance:,.0f}")
+    print("  Note: Calibration to admin totals happens in main calibration step")
 
     return dataset
