@@ -5,6 +5,66 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.25.0] - 2025-11-29 00:33:46
+
+### Added
+
+- Student loan plan imputation based on age and reported repayments
+
+## [1.24.2] - 2025-11-28 17:23:26
+
+### Fixed
+
+- Fix changelog encoding test to skip when changelog_entry.yaml is empty after versioning
+
+## [1.24.1] - 2025-11-28 16:14:35
+
+### Changed
+
+- Calibrate savings income from ONS National Accounts D.41g household interest data instead of SPI (fixes underestimation from ~3bn to ~55bn)
+
+## [1.24.0] - 2025-11-27 18:33:27
+
+### Added
+
+- rail_usage variable derived from rail_subsidy_spending / fare_index at survey year, enabling fare reforms to modify prices independently of usage quantity
+
+## [1.23.3] - 2025-11-27 17:11:09
+
+### Fixed
+
+- Updated personal allowance reform test expected value after calibration fix.
+
+## [1.23.2] - 2025-11-27 16:29:01
+
+### Added
+
+- SS HMRC calibration targets.
+
+## [1.23.1] - 2025-11-27 16:12:15
+
+### Fixed
+
+- Hallucinated calibration targets.
+
+## [1.23.0] - 2025-11-27 15:30:00
+
+### Added
+
+- Add salary sacrifice NI relief as calibration targets (employee £1.2bn, employer £2.9bn from SPP)
+
+## [1.22.0] - 2025-11-26 22:46:41
+
+### Added
+
+- Salary sacrifice imputation using FRS SALSAC routing question to impute ~30% employee participation per HMRC survey data.
+
+## [1.21.0] - 2025-11-20 13:08:22
+
+### Added
+
+- Add pension_contributions_via_salary_sacrifice variable from FRS SPNAMT field
+
 ## [1.20.0] - 2025-10-21 12:09:14
 
 ### Added
@@ -395,6 +455,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.25.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.24.2...1.25.0
+[1.24.2]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.24.1...1.24.2
+[1.24.1]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.24.0...1.24.1
+[1.24.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.23.3...1.24.0
+[1.23.3]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.23.2...1.23.3
+[1.23.2]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.23.1...1.23.2
+[1.23.1]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.23.0...1.23.1
+[1.23.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.22.0...1.23.0
+[1.22.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.21.0...1.22.0
+[1.21.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.20.0...1.21.0
 [1.20.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.19.6...1.20.0
 [1.19.6]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.19.5...1.19.6
 [1.19.5]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.19.4...1.19.5

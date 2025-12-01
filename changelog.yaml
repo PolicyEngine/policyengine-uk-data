@@ -332,3 +332,58 @@
     - Universal Credit calibration at national level by award amount and family type,
       and at constituency level in total.
   date: 2025-10-21 12:09:14
+- bump: minor
+  changes:
+    added:
+    - Add pension_contributions_via_salary_sacrifice variable from FRS SPNAMT field
+  date: 2025-11-20 13:08:22
+- bump: minor
+  changes:
+    added:
+    - Salary sacrifice imputation using FRS SALSAC routing question to impute ~30%
+      employee participation per HMRC survey data.
+  date: 2025-11-26 22:46:41
+- bump: minor
+  changes:
+    added:
+    - "Add salary sacrifice NI relief as calibration targets (employee \xA31.2bn,\
+      \ employer \xA32.9bn from SPP)"
+  date: 2025-11-27 15:30:00
+- bump: patch
+  changes:
+    fixed:
+    - Hallucinated calibration targets.
+  date: 2025-11-27 16:12:15
+- bump: patch
+  changes:
+    added:
+    - SS HMRC calibration targets.
+  date: 2025-11-27 16:29:01
+- bump: patch
+  changes:
+    fixed:
+    - Updated personal allowance reform test expected value after calibration fix.
+  date: 2025-11-27 17:11:09
+- bump: minor
+  changes:
+    added:
+    - rail_usage variable derived from rail_subsidy_spending / fare_index at survey
+      year, enabling fare reforms to modify prices independently of usage quantity
+  date: 2025-11-27 18:33:27
+- bump: patch
+  changes:
+    changed:
+    - Calibrate savings income from ONS National Accounts D.41g household interest
+      data instead of SPI (fixes underestimation from ~3bn to ~55bn)
+  date: 2025-11-28 16:14:35
+- bump: patch
+  changes:
+    fixed:
+    - Fix changelog encoding test to skip when changelog_entry.yaml is empty after
+      versioning
+  date: 2025-11-28 17:23:26
+- bump: minor
+  changes:
+    added:
+    - Student loan plan imputation based on age and reported repayments
+  date: 2025-11-29 00:33:46

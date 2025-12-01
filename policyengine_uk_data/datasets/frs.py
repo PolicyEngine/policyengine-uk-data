@@ -45,13 +45,26 @@ def create_frs(
         raise FileNotFoundError(f"Raw folder {raw_folder} does not exist.")
 
     frs = {}
+    # Store SALSAC values before numeric conversion (for salary sacrifice
+    # imputation)
+    job_salsac_raw = None
     for file in raw_folder.glob("*.tab"):
         table_name = file.stem
-        # Read and make numeric where possible
-        df = pd.read_csv(file, sep="\t").apply(pd.to_numeric, errors="coerce")
+        # Read raw data first
+        df_raw = pd.read_csv(file, sep="\t")
+        df_raw.columns = df_raw.columns.str.lower()
 
-        # Standardise column names to lower case
-        df.columns = df.columns.str.lower()
+        # Preserve SALSAC column from job table before numeric conversion
+        # SALSAC indicates salary sacrifice participation:
+        # '1' = Yes, '2' = No, ' ' or blank = skip/not asked
+        if table_name == "job" and "salsac" in df_raw.columns:
+            job_salsac_raw = df_raw["salsac"].copy()
+
+        # Make numeric where possible
+        df = df_raw.apply(pd.to_numeric, errors="coerce")
+
+        # Standardise column names to lower case (already done above)
+        # df.columns = df.columns.str.lower()
 
         # Edit ID variables for simplicity
         if "sernum" in df.columns:
@@ -86,6 +99,10 @@ def create_frs(
     oddjob = frs["oddjob"]
     account = frs["accounts"]
     job = frs["job"]
+    # Add raw SALSAC column to job table for salary sacrifice imputation
+    # SALSAC values: '1' = Yes (participates), '2' = No, ' '/blank = not asked
+    if job_salsac_raw is not None:
+        job["salsac_raw"] = job_salsac_raw.values
     benefits = frs["benefits"]
     maintenance = frs["maint"]
     pen_prov = frs["penprov"]
@@ -631,6 +648,56 @@ def create_frs(
     pe_person["employer_pension_contributions"] = (
         pe_person["employee_pension_contributions"] * 3
     )  # Rough estimate based on aggregates.
+    # Salary sacrifice pension contributions from FRS Job table (SPNAMT field)
+    # SPNAMT represents employer pension contributions made via salary sacrifice
+    # arrangements where employees forego salary in exchange for increased pension
+    # contributions. This is separate from regular employee pension contributions
+    # (deduc1) and provides tax advantages for both employer and employee.
+    # Uses same pattern as employee_pension_contributions (deduc1) without outlier
+    # clipping, as job-level data is generally cleaner than pension provider data.
+    # Source: https://datacatalogue.ukdataservice.ac.uk/datasets/dataset/630d4a8d-ba6a-82b3-f33d-c713c66efcb3
+    # Note: Values are annualized from weekly amounts reported in the survey.
+    pe_person["pension_contributions_via_salary_sacrifice"] = np.maximum(
+        0,
+        sum_to_entity(job.spnamt.fillna(0), job.person_id, person.person_id)
+        * WEEKS_IN_YEAR,
+    )
+
+    # Salary sacrifice participation indicator from SALSAC field
+    # Used for imputation: 1 = Yes, 0 = No, -1 = not asked (skip)
+    # This allows distinguishing between explicit No responses and
+    # respondents who were not asked the question (imputation candidates)
+    if "salsac_raw" in job.columns:
+        salsac_numeric = (
+            job["salsac_raw"]
+            .map({"1": 1, "2": 0, " ": -1})
+            .fillna(-1)
+            .astype(int)
+        )
+        # Aggregate to person level: take max (any job with SS = person has SS)
+        pe_person["salary_sacrifice_reported"] = np.clip(
+            sum_to_entity(
+                (salsac_numeric == 1).astype(int),
+                job.person_id,
+                person.person_id,
+            ),
+            0,
+            1,
+        )
+        # Track if person was asked about SS in any job (for imputation)
+        pe_person["salary_sacrifice_asked"] = np.clip(
+            sum_to_entity(
+                (salsac_numeric >= 0).astype(int),
+                job.person_id,
+                person.person_id,
+            ),
+            0,
+            1,
+        )
+    else:
+        # If SALSAC not available, mark all as not asked
+        pe_person["salary_sacrifice_reported"] = 0
+        pe_person["salary_sacrifice_asked"] = 0
 
     pe_household["housing_service_charges"] = (
         pd.DataFrame(

@@ -8,7 +8,7 @@ reforms:
   parameters:
     gov.hmrc.income_tax.rates.uk[1].rate: 0.42
 - name: Raise personal allowance by ~800GBP/year
-  expected_impact: 0.7
+  expected_impact: -4.2
   parameters:
     gov.hmrc.income_tax.allowances.personal_allowance.amount: 13000
 - name: Raise child benefit by 25GBP/week per additional child
