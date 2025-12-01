@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    fixed:
-    - LA calibration now consistent with constituency calibration.
