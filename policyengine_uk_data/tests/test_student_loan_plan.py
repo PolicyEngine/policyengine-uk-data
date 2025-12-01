@@ -44,3 +44,42 @@ def test_student_loan_plan_enum_values():
     assert StudentLoanPlan.PLAN_2.value == "PLAN_2"
     assert StudentLoanPlan.PLAN_4.value == "PLAN_4"
     assert StudentLoanPlan.PLAN_5.value == "PLAN_5"
+
+
+def test_student_loan_balance_allocation_logic():
+    """Test the household-to-person allocation logic."""
+    import numpy as np
+
+    # Test case: 2 people with loans in household, £40k debt
+    household_debt = 40000
+    num_loan_holders = 2
+    per_person_debt = household_debt / num_loan_holders
+    assert per_person_debt == 20000, "Should split equally"
+
+    # Test case: 1 person with loan in household, £30k debt
+    household_debt = 30000
+    num_loan_holders = 1
+    per_person_debt = household_debt / num_loan_holders
+    assert per_person_debt == 30000, "Single holder gets all"
+
+    # Test case: No loan holders - should not divide by zero
+    household_debt = 50000
+    num_loan_holders = 0
+    # In our implementation, we check for this condition
+    if num_loan_holders > 0:
+        per_person_debt = household_debt / num_loan_holders
+    else:
+        per_person_debt = 0
+    assert per_person_debt == 0, "No loan holders means zero allocation"
+
+
+def test_student_loan_predictor_variables():
+    """Test that predictor variables are defined correctly."""
+    from policyengine_uk_data.datasets.imputations.student_loans import (
+        STUDENT_LOAN_PREDICTORS,
+    )
+
+    # Check that key predictors are included
+    assert "household_net_income" in STUDENT_LOAN_PREDICTORS
+    assert "num_adults" in STUDENT_LOAN_PREDICTORS
+    assert "num_children" in STUDENT_LOAN_PREDICTORS

@@ -54,17 +54,20 @@ class QRF:
         self.model = self.model.fit(train_df, X_cols, y_cols)
         self.input_columns = X.columns
 
-    def predict(self, X):
+    def predict(self, X, mean_quantile: float = 0.5):
         """
         Predict using the trained model.
 
         Args:
             X: Feature variables DataFrame.
+            mean_quantile: The mean quantile for sampling from the conditional
+                distribution. Default 0.5 (median). Use higher values (e.g., 0.9)
+                to sample from the upper tail when data is known to be undercounted.
 
         Returns:
-            Predictions at the 0.5 quantile (median).
+            Predictions sampled from the conditional distribution.
         """
-        return self.model.predict(X)
+        return self.model.predict(X, mean_quantile=mean_quantile)
 
     def save(self, file_path: str):
         """
