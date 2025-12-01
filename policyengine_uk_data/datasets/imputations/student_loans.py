@@ -30,11 +30,29 @@ from policyengine_uk_data.storage import STORAGE_FOLDER
 WAS_TAB_FOLDER = STORAGE_FOLDER / "was_2006_20"
 
 # Predictor variables available in both WAS and FRS (household level)
+# Age is critical - student loans are highly concentrated in younger households
 STUDENT_LOAN_PREDICTORS = [
     "household_net_income",
     "num_adults",
     "num_children",
+    "hrp_age_band",  # HRP age band (2-8), critical for student loan prediction
 ]
+
+# WAS age band mapping (hrpdvage8r7)
+# Band 2: 16-24, Band 3: 25-34, Band 4: 35-44, Band 5: 45-54
+# Band 6: 55-64, Band 7: 65-74, Band 8: 75+
+AGE_BAND_BOUNDARIES = [0, 16, 25, 35, 45, 55, 65, 75, 200]
+
+
+def age_to_band(age: int) -> int:
+    """Convert age to WAS-style age band (2-8)."""
+    for i, (lower, upper) in enumerate(
+        zip(AGE_BAND_BOUNDARIES[:-1], AGE_BAND_BOUNDARIES[1:])
+    ):
+        if lower <= age < upper:
+            return max(2, i + 1)  # Bands start at 2
+    return 8  # Default to oldest band
+
 
 # Region mapping for WAS
 REGIONS = {
@@ -156,14 +174,68 @@ def generate_was_student_loan_table() -> pd.DataFrame:
     was["household_net_income"] = was.get(
         "dvtotinc_bhcr7", was.get("dvtotinc_bhcw7", 0)
     )
+    # HRP age band is critical - student loans concentrated in younger households
+    was["hrp_age_band"] = was["hrpdvage8r7"]
 
     # Fill missing values
     was = was.fillna(0)
 
-    return was[
-        ["slc_debt", "household_weight"]
-        + STUDENT_LOAN_PREDICTORS
-    ]
+    return was[["slc_debt", "household_weight"] + STUDENT_LOAN_PREDICTORS]
+
+
+def get_frs_predictors(sim: Microsimulation, year: int = 2025) -> pd.DataFrame:
+    """
+    Extract household-level predictor variables from FRS/PolicyEngine.
+
+    Args:
+        sim: PolicyEngine Microsimulation instance.
+        year: Simulation year.
+
+    Returns:
+        DataFrame with predictor variables at household level.
+    """
+    # Get person-level data
+    age = sim.calculate("age", year).values
+    person_hh_id = sim.calculate("household_id", map_to="person").values
+
+    # Create person-level DataFrame
+    person_df = pd.DataFrame(
+        {
+            "age": age,
+            "household_id": person_hh_id,
+            "is_adult": age >= 18,
+            "is_child": age < 18,
+        }
+    )
+
+    # Aggregate to household level
+    hh_agg = person_df.groupby("household_id").agg(
+        num_adults=("is_adult", "sum"),
+        num_children=("is_child", "sum"),
+        max_adult_age=(
+            "age",
+            lambda x: (
+                x[person_df.loc[x.index, "is_adult"]].max()
+                if person_df.loc[x.index, "is_adult"].any()
+                else 0
+            ),
+        ),
+    )
+
+    # Get household income
+    hh_ids = sim.calculate("household_id", year).values
+    hh_income = sim.calculate("household_net_income", year).values
+    hh_income_df = pd.DataFrame(
+        {"household_id": hh_ids, "household_net_income": hh_income}
+    )
+    hh_agg = hh_agg.join(hh_income_df.set_index("household_id"))
+
+    # Convert max adult age to WAS-style age band
+    hh_agg["hrp_age_band"] = hh_agg["max_adult_age"].apply(
+        lambda x: age_to_band(int(x)) if pd.notna(x) and x > 0 else 8
+    )
+
+    return hh_agg[STUDENT_LOAN_PREDICTORS].reset_index()
 
 
 def save_student_loan_model():
@@ -286,17 +358,20 @@ def impute_student_loan_balance(
 
     if weights[has_balance].sum() > 0:
         mean_balance = (
-            (person_balance[has_balance] * weights[has_balance]).sum()
-            / weights[has_balance].sum()
-        )
+            person_balance[has_balance] * weights[has_balance]
+        ).sum() / weights[has_balance].sum()
     else:
         mean_balance = 0
 
     print("Student loan balance imputation results:")
-    print(f"  People with balance > 0: {weights[has_balance].sum() / 1e6:.2f}m")
+    print(
+        f"  People with balance > 0: {weights[has_balance].sum() / 1e6:.2f}m"
+    )
     print(f"  Total balance: £{total_balance / 1e9:.1f}bn")
     print(f"  Mean balance (those with loans): £{mean_balance:,.0f}")
-    print("  Note: Calibration to admin totals happens in main calibration step")
+    print(
+        "  Note: Calibration to admin totals happens in main calibration step"
+    )
 
     dataset.validate()
     return dataset

@@ -597,9 +597,7 @@ def create_target_matrix(
             student_loan_balance
         )
         target_names.append("slc/student_loan_balance")
-        target_values.append(
-            SLC_TOTAL_BALANCE.get(int(time_period), 294e9)
-        )
+        target_values.append(SLC_TOTAL_BALANCE.get(int(time_period), 294e9))
 
         # Borrower count
         has_balance = student_loan_balance > 0
@@ -607,9 +605,7 @@ def create_target_matrix(
             has_balance
         )
         target_names.append("slc/student_loan_borrower_count")
-        target_values.append(
-            SLC_BORROWER_COUNT.get(int(time_period), 9.4e6)
-        )
+        target_values.append(SLC_BORROWER_COUNT.get(int(time_period), 9.4e6))
 
     # Student loan repayments (reported in FRS)
     student_loan_repayments = sim.calculate("student_loan_repayments")
@@ -617,9 +613,7 @@ def create_target_matrix(
         student_loan_repayments
     )
     target_names.append("slc/student_loan_repayments")
-    target_values.append(
-        SLC_TOTAL_REPAYMENTS.get(int(time_period), 5.6e9)
-    )
+    target_values.append(SLC_TOTAL_REPAYMENTS.get(int(time_period), 5.6e9))
 
     # Count of people making repayments
     has_repayments = student_loan_repayments > 0
