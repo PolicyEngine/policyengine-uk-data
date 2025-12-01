@@ -551,8 +551,8 @@ def create_target_matrix(
 
     # Vehicle ownership calibration targets
     # NTS 2024: 22% no car, 44% one car, 34% two+ cars
-    # https://www.gov.uk/government/statistics/national-travel-survey-2024
-    num_cars = pe("num_cars")
+    # https://www.gov.uk/government/statistics/national-travel-survey-2024/nts-2024-household-car-availability-and-trends-in-car-trips
+    num_cars = pe("num_vehicles")
     total_households = (
         df["ons/uk_population"].sum() / 2.4
     )  # avg household size

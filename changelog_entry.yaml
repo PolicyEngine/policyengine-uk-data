@@ -1,4 +1,4 @@
 - bump: minor
   changes:
     added:
-    - Add calibration for number of vehicles
+    - Add vehicle ownership calibration and imputation

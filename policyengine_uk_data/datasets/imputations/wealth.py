@@ -52,7 +52,7 @@ IMPUTE_VARIABLES = [
     "other_residential_property_value",
     "non_residential_property_value",
     "savings",
-    "num_cars",
+    "num_vehicles",
 ]
 
 
@@ -108,7 +108,7 @@ def generate_was_table(was: pd.DataFrame):
         "DVBlDValR7_sum": "non_residential_property_value",
         "DVTotinc_bhcR7": "household_net_income",
         "DVSaValR7_aggr": "savings",
-        "vcarnr7": "num_cars",
+        "vcarnr7": "num_vehicles",
     }
 
     RENAMES = {x.lower(): y for x, y in RENAMES.items()}

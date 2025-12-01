@@ -1,22 +1,39 @@
+# NTS 2024 household vehicle ownership targets (England)
+# Source: https://www.gov.uk/government/statistics/national-travel-survey-2024/nts-2024-household-car-availability-and-trends-in-car-trips
+NTS_NO_VEHICLE_RATE = 0.22
+NTS_ONE_VEHICLE_RATE = 0.44
+NTS_TWO_PLUS_VEHICLE_RATE = 0.34
+RELATIVE_TOLERANCE = 0.15
+
+
 def test_vehicle_ownership(baseline):
     """Test that vehicle ownership distribution matches NTS 2024 targets."""
-    num_cars = baseline.calculate("num_cars", map_to="household", period=2025)
+    num_vehicles = baseline.calculate(
+        "num_vehicles", map_to="household", period=2025
+    )
     weights = baseline.calculate("household_weight", period=2025)
 
     total_hh = weights.sum()
 
-    # NTS 2024 targets: 22% no car, 44% one car, 34% two+ cars
-    no_car_rate = ((num_cars == 0) * weights).sum() / total_hh
-    one_car_rate = ((num_cars == 1) * weights).sum() / total_hh
-    two_plus_rate = ((num_cars >= 2) * weights).sum() / total_hh
+    no_vehicle_rate = ((num_vehicles == 0) * weights).sum() / total_hh
+    one_vehicle_rate = ((num_vehicles == 1) * weights).sum() / total_hh
+    two_plus_rate = ((num_vehicles >= 2) * weights).sum() / total_hh
 
-    # Allow 15% relative tolerance
     assert (
-        abs(no_car_rate / 0.22 - 1) < 0.15
-    ), f"Expected 22% households with no car, got {no_car_rate:.0%}"
+        abs(no_vehicle_rate / NTS_NO_VEHICLE_RATE - 1) < RELATIVE_TOLERANCE
+    ), (
+        f"Expected {NTS_NO_VEHICLE_RATE:.0%} households with no vehicle, "
+        f"got {no_vehicle_rate:.0%}"
+    )
     assert (
-        abs(one_car_rate / 0.44 - 1) < 0.15
-    ), f"Expected 44% households with one car, got {one_car_rate:.0%}"
+        abs(one_vehicle_rate / NTS_ONE_VEHICLE_RATE - 1) < RELATIVE_TOLERANCE
+    ), (
+        f"Expected {NTS_ONE_VEHICLE_RATE:.0%} households with one vehicle, "
+        f"got {one_vehicle_rate:.0%}"
+    )
     assert (
-        abs(two_plus_rate / 0.34 - 1) < 0.15
-    ), f"Expected 34% households with two+ cars, got {two_plus_rate:.0%}"
+        abs(two_plus_rate / NTS_TWO_PLUS_VEHICLE_RATE - 1) < RELATIVE_TOLERANCE
+    ), (
+        f"Expected {NTS_TWO_PLUS_VEHICLE_RATE:.0%} households with two+ vehicles, "
+        f"got {two_plus_rate:.0%}"
+    )
