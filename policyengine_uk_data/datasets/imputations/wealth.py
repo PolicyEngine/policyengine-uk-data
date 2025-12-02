@@ -199,6 +199,7 @@ def impute_wealth(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
 
     Uses WAS-trained models to predict various wealth components for
     households based on income, demographics, and housing characteristics.
+    Vehicle ownership is calibrated to NTS 2024 targets.
 
     Args:
         dataset: PolicyEngine UK dataset to augment with wealth data.
@@ -206,7 +207,6 @@ def impute_wealth(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     Returns:
         Dataset with imputed wealth variables added to household table.
     """
-    # Impute wealth, assuming same time period as trained data
     dataset = dataset.copy()
 
     model = create_wealth_model()
