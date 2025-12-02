@@ -119,7 +119,7 @@ def main():
             )
 
             # Run calibration with verbose progress
-            frs_calibrated = calibrate_local_areas(
+            frs_calibrated_constituencies = calibrate_local_areas(
                 dataset=frs,
                 matrix_fn=create_constituency_target_matrix,
                 national_matrix_fn=create_national_target_matrix,
@@ -133,34 +133,31 @@ def main():
                 nested_progress=nested_progress,  # Pass the nested progress manager
             )
 
-            update_dataset("Calibrate constituency weights", "completed")
-
-            # Calibrate local authority weights
-            from policyengine_uk_data.datasets.local_areas.local_authorities.loss import (
+            from policyengine_uk_data.datasets.local_areas.local_authorities.calibrate import (
                 create_local_authority_target_matrix,
-                create_national_target_matrix as create_national_target_matrix_la,
             )
 
-            update_dataset("Calibrate local authority weights", "processing")
-
-            frs_calibrated = calibrate_local_areas(
-                dataset=frs_calibrated,
+            # Run calibration with verbose progress
+            frs_calibrated_las = calibrate_local_areas(
+                dataset=frs,
                 matrix_fn=create_local_authority_target_matrix,
-                national_matrix_fn=create_national_target_matrix_la,
+                national_matrix_fn=create_national_target_matrix,
                 area_count=360,
                 weight_file="local_authority_weights.h5",
                 excluded_training_targets=[],
-                log_csv=None,
-                verbose=True,
+                log_csv="calibration_log.csv",
+                verbose=True,  # Enable nested progress display
                 area_name="Local Authority",
-                nested_progress=nested_progress,
+                nested_progress=nested_progress,  # Pass the nested progress manager
             )
 
-            update_dataset("Calibrate local authority weights", "completed")
+            update_dataset("Calibrate dataset", "completed")
 
             # Downrate and save
             update_dataset("Downrate to 2023", "processing")
-            frs_calibrated = uprate_dataset(frs_calibrated, 2023)
+            frs_calibrated = uprate_dataset(
+                frs_calibrated_constituencies, 2023
+            )
             update_dataset("Downrate to 2023", "completed")
 
             update_dataset("Save final dataset", "processing")

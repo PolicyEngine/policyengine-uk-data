@@ -193,7 +193,7 @@ def calibrate_local_areas(
                     final_weights = (torch.exp(weights) * r).detach().numpy()
 
                     # Log performance if requested and get_performance function is available
-                    if log_csv:
+                    if log_csv and get_performance:
                         performance_step = get_performance(
                             final_weights,
                             m_c,
