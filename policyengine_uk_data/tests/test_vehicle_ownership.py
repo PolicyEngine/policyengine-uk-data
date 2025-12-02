@@ -1,8 +1,9 @@
-# NTS 2024 household vehicle ownership targets (England)
-# Source: https://www.gov.uk/government/statistics/national-travel-survey-2024/nts-2024-household-car-availability-and-trends-in-car-trips
-NTS_NO_VEHICLE_RATE = 0.22
-NTS_ONE_VEHICLE_RATE = 0.44
-NTS_TWO_PLUS_VEHICLE_RATE = 0.34
+from policyengine_uk_data.utils.loss import (
+    NTS_NO_VEHICLE_RATE,
+    NTS_ONE_VEHICLE_RATE,
+    NTS_TWO_PLUS_VEHICLE_RATE,
+)
+
 ABSOLUTE_TOLERANCE = 0.10
 
 

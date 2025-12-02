@@ -23,6 +23,12 @@ dfs = []
 MIN_YEAR = 2018
 MAX_YEAR = 2029
 
+# NTS 2024 vehicle ownership targets
+# https://www.gov.uk/government/statistics/national-travel-survey-2024
+NTS_NO_VEHICLE_RATE = 0.22
+NTS_ONE_VEHICLE_RATE = 0.44
+NTS_TWO_PLUS_VEHICLE_RATE = 0.34
+
 for time_period in range(MIN_YEAR, MAX_YEAR + 1):
     time_period_df = statistics[
         ["name", "unit", "reference", str(time_period)]
@@ -558,15 +564,15 @@ def create_target_matrix(
 
     df["nts/households_no_vehicle"] = (num_vehicles == 0).astype(float)
     target_names.append("nts/households_no_vehicle")
-    target_values.append(total_households * 0.22)
+    target_values.append(total_households * NTS_NO_VEHICLE_RATE)
 
     df["nts/households_one_vehicle"] = (num_vehicles == 1).astype(float)
     target_names.append("nts/households_one_vehicle")
-    target_values.append(total_households * 0.44)
+    target_values.append(total_households * NTS_ONE_VEHICLE_RATE)
 
     df["nts/households_two_plus_vehicles"] = (num_vehicles >= 2).astype(float)
     target_names.append("nts/households_two_plus_vehicles")
-    target_values.append(total_households * 0.34)
+    target_values.append(total_households * NTS_TWO_PLUS_VEHICLE_RATE)
 
     combined_targets = pd.concat(
         [
