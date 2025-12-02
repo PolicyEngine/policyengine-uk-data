@@ -3,7 +3,7 @@
 NTS_NO_VEHICLE_RATE = 0.22
 NTS_ONE_VEHICLE_RATE = 0.44
 NTS_TWO_PLUS_VEHICLE_RATE = 0.34
-RELATIVE_TOLERANCE = 0.15
+ABSOLUTE_TOLERANCE = 0.10
 
 
 def test_vehicle_ownership(baseline):
@@ -19,20 +19,16 @@ def test_vehicle_ownership(baseline):
     one_vehicle_rate = ((num_vehicles == 1) * weights).sum() / total_hh
     two_plus_rate = ((num_vehicles >= 2) * weights).sum() / total_hh
 
-    assert (
-        abs(no_vehicle_rate / NTS_NO_VEHICLE_RATE - 1) < RELATIVE_TOLERANCE
-    ), (
+    assert abs(no_vehicle_rate - NTS_NO_VEHICLE_RATE) < ABSOLUTE_TOLERANCE, (
         f"Expected {NTS_NO_VEHICLE_RATE:.0%} households with no vehicle, "
         f"got {no_vehicle_rate:.0%}"
     )
-    assert (
-        abs(one_vehicle_rate / NTS_ONE_VEHICLE_RATE - 1) < RELATIVE_TOLERANCE
-    ), (
+    assert abs(one_vehicle_rate - NTS_ONE_VEHICLE_RATE) < ABSOLUTE_TOLERANCE, (
         f"Expected {NTS_ONE_VEHICLE_RATE:.0%} households with one vehicle, "
         f"got {one_vehicle_rate:.0%}"
     )
     assert (
-        abs(two_plus_rate / NTS_TWO_PLUS_VEHICLE_RATE - 1) < RELATIVE_TOLERANCE
+        abs(two_plus_rate - NTS_TWO_PLUS_VEHICLE_RATE) < ABSOLUTE_TOLERANCE
     ), (
         f"Expected {NTS_TWO_PLUS_VEHICLE_RATE:.0%} households with two+ vehicles, "
         f"got {two_plus_rate:.0%}"
