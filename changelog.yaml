@@ -392,3 +392,8 @@
     fixed:
     - LA calibration now consistent with constituency calibration.
   date: 2025-12-01 11:20:56
+- bump: patch
+  changes:
+    fixed:
+    - Made sure LA calibration actually runs.
+  date: 2025-12-02 00:22:31

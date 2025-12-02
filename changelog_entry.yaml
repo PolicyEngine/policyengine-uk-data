@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Made sure LA calibration actually runs.
