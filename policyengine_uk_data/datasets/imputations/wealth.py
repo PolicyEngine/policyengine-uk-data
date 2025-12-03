@@ -52,6 +52,7 @@ IMPUTE_VARIABLES = [
     "other_residential_property_value",
     "non_residential_property_value",
     "savings",
+    "num_vehicles",
 ]
 
 
@@ -107,6 +108,7 @@ def generate_was_table(was: pd.DataFrame):
         "DVBlDValR7_sum": "non_residential_property_value",
         "DVTotinc_bhcR7": "household_net_income",
         "DVSaValR7_aggr": "savings",
+        "vcarnr7": "num_vehicles",
     }
 
     RENAMES = {x.lower(): y for x, y in RENAMES.items()}
@@ -197,6 +199,7 @@ def impute_wealth(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
 
     Uses WAS-trained models to predict various wealth components for
     households based on income, demographics, and housing characteristics.
+    Vehicle ownership is calibrated to NTS 2024 targets.
 
     Args:
         dataset: PolicyEngine UK dataset to augment with wealth data.
@@ -204,7 +207,6 @@ def impute_wealth(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     Returns:
         Dataset with imputed wealth variables added to household table.
     """
-    # Impute wealth, assuming same time period as trained data
     dataset = dataset.copy()
 
     model = create_wealth_model()
