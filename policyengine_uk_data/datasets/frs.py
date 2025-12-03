@@ -19,6 +19,7 @@ from policyengine_uk_data.utils.datasets import (
     fill_with_mean,
     STORAGE_FOLDER,
 )
+from policyengine_uk_data.parameters import load_take_up_rate, load_parameter
 
 
 def create_frs(
@@ -818,47 +819,95 @@ def create_frs(
         paragraph_3 | paragraph_4 | paragraph_5
     )
 
-    # Add random variables which are for now in policyengine-uk.
+    # Generate stochastic take-up decisions
+    # All randomness is generated here in the data package using take-up rates
+    # stored in YAML parameter files. This keeps the country package purely
+    # deterministic.
 
-    RANDOM_VARIABLES = [
-        "would_evade_tv_licence_fee",
-        "would_claim_pc",
-        "would_claim_uc",
-        "would_claim_child_benefit",
-        "main_residential_property_purchased_is_first_home",
-        "household_owns_tv",
-        "is_higher_earner",
-        "attends_private_school",
-    ]
+    generator = np.random.default_rng(seed=100)
 
-    for variable in RANDOM_VARIABLES:
-        value = sim.calculate(variable).values
-        entity = sim.tax_benefit_system.variables[variable].entity.key
-        if entity == "person":
-            pe_person[variable] = value
-        elif entity == "household":
-            pe_household[variable] = value
-        elif entity == "benunit":
-            pe_benunit[variable] = value
+    # Load take-up rates from parameter files
+    child_benefit_rate = load_take_up_rate("child_benefit", year)
+    pension_credit_rate = load_take_up_rate("pension_credit", year)
+    universal_credit_rate = load_take_up_rate("universal_credit", year)
+    marriage_allowance_rate = load_take_up_rate("marriage_allowance", year)
+    child_benefit_opts_out_rate = load_take_up_rate(
+        "child_benefit_opts_out_rate", year
+    )
+    tfc_rate = load_take_up_rate("tax_free_childcare", year)
+    extended_childcare_rate = load_take_up_rate("extended_childcare", year)
+    universal_childcare_rate = load_take_up_rate("universal_childcare", year)
+    targeted_childcare_rate = load_take_up_rate("targeted_childcare", year)
 
-    # Add Tax-Free Childcare assumptions
+    # Generate take-up decisions by comparing random draws to take-up rates
+    # Person-level
+    pe_person["would_claim_marriage_allowance"] = (
+        generator.random(len(pe_person)) < marriage_allowance_rate
+    )
 
-    count_benunits = len(pe_benunit)
+    # Benefit unit-level
+    pe_benunit["would_claim_child_benefit"] = (
+        generator.random(len(pe_benunit)) < child_benefit_rate
+    )
+    pe_benunit["child_benefit_opts_out"] = (
+        generator.random(len(pe_benunit)) < child_benefit_opts_out_rate
+    )
+    pe_benunit["would_claim_pc"] = (
+        generator.random(len(pe_benunit)) < pension_credit_rate
+    )
+    pe_benunit["would_claim_uc"] = (
+        generator.random(len(pe_benunit)) < universal_credit_rate
+    )
+    pe_benunit["would_claim_tfc"] = (
+        generator.random(len(pe_benunit)) < tfc_rate
+    )
+    pe_benunit["would_claim_extended_childcare"] = (
+        generator.random(len(pe_benunit)) < extended_childcare_rate
+    )
+    pe_benunit["would_claim_universal_childcare"] = (
+        generator.random(len(pe_benunit)) < universal_childcare_rate
+    )
+    pe_benunit["would_claim_targeted_childcare"] = (
+        generator.random(len(pe_benunit)) < targeted_childcare_rate
+    )
 
-    extended_would_claim = np.random.random(count_benunits) < 0.812
-    tfc_would_claim = np.random.random(count_benunits) < 0.586
-    universal_would_claim = np.random.random(count_benunits) < 0.563
-    targeted_would_claim = np.random.random(count_benunits) < 0.597
+    # Generate other stochastic variables using rates from parameter files
+    tv_ownership_rate = load_parameter("stochastic", "tv_ownership_rate", year)
+    tv_evasion_rate = load_parameter(
+        "stochastic", "tv_licence_evasion_rate", year
+    )
+    first_time_buyer_rate = load_parameter(
+        "stochastic", "first_time_buyer_rate", year
+    )
 
-    # Generate extended childcare hours usage values with mean 15.019 and sd 4.972
-    extended_hours_values = np.random.normal(15.019, 4.972, count_benunits)
+    # Household-level: TV ownership
+    pe_household["household_owns_tv"] = (
+        generator.random(len(pe_household)) < tv_ownership_rate
+    )
+
+    # Household-level: TV licence evasion
+    pe_household["would_evade_tv_licence_fee"] = (
+        generator.random(len(pe_household)) < tv_evasion_rate
+    )
+
+    # Household-level: First home purchase
+    pe_household["main_residential_property_purchased_is_first_home"] = (
+        generator.random(len(pe_household)) < first_time_buyer_rate
+    )
+
+    # Person-level: Tie-breaking for higher earner (uniform random)
+    pe_person["higher_earner_tie_break"] = generator.random(len(pe_person))
+
+    # Person-level: Private school attendance random draw
+    pe_person["attends_private_school_random_draw"] = generator.random(
+        len(pe_person)
+    )
+
+    # Generate extended childcare hours usage values with mean 15.019 and sd
+    # 4.972
+    extended_hours_values = generator.normal(15.019, 4.972, len(pe_benunit))
     # Clip values to be between 0 and 30 hours
     extended_hours_values = np.clip(extended_hours_values, 0, 30)
-
-    pe_benunit["would_claim_extended_childcare"] = extended_would_claim
-    pe_benunit["would_claim_tfc"] = tfc_would_claim
-    pe_benunit["would_claim_universal_childcare"] = universal_would_claim
-    pe_benunit["would_claim_targeted_childcare"] = targeted_would_claim
 
     # Add the maximum extended childcare hours usage
     pe_benunit["maximum_extended_childcare_hours_usage"] = (

@@ -1,0 +1,10 @@
+description: Percentage of households that own a functioning colour TV
+metadata:
+  unit: /1
+  label: TV ownership rate
+  reference:
+    - title: Ofcom - 95% of UK homes had at least one TV set in 2020
+      href: https://www.statista.com/statistics/269969/number-of-tv-households-in-the-uk/
+values:
+  2015-01-01: 0.96
+  2020-01-01: 0.95
