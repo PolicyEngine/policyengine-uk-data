@@ -10,6 +10,7 @@ project:
   toc:
     - file: intro.md
     - file: methodology.ipynb
+    - file: imputations.md
     - file: validation/index.md
       children:
         - file: validation/national.ipynb
