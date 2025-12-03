@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="http://localhost:3000/sitemap_style.xsl" ?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>http://localhost:3000</loc>
+  </url>
+  <url>
+    <loc>http://localhost:3000/methodology</loc>
+  </url>
+  <url>
+    <loc>http://localhost:3000/validation</loc>
+  </url>
+  <url>
+    <loc>http://localhost:3000/validation/national</loc>
+  </url>
+  <url>
+    <loc>http://localhost:3000/validation/constituencies</loc>
+  </url>
+  <url>
+    <loc>http://localhost:3000/validation/local-authorities</loc>
+  </url>
+  <url>
+    <loc>http://localhost:3000/pension-contributions</loc>
+  </url>
+  <url>
+    <loc>http://localhost:3000/constituency-methodology</loc>
+  </url>
+  <url>
+    <loc>http://localhost:3000/la-methodology</loc>
+  </url>
+</urlset>
