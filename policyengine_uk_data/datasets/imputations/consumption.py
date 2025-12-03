@@ -65,6 +65,7 @@ PREDICTOR_VARIABLES = [
     "self_employment_income",
     "private_pension_income",
     "household_net_income",
+    "num_vehicles",  # Imputed from WAS; improves fuel spending predictions
 ]
 
 IMPUTATIONS = [
@@ -86,6 +87,44 @@ IMPUTATIONS = [
 ]
 
 
+def impute_vehicles_to_lcfs(household: pd.DataFrame) -> pd.DataFrame:
+    """
+    Impute num_vehicles to LCFS households using the WAS-trained wealth model.
+
+    This allows us to use vehicle ownership as a predictor for fuel spending
+    imputation, even though LCFS doesn't directly collect vehicle counts.
+    """
+    from policyengine_uk_data.datasets.imputations.wealth import (
+        create_wealth_model,
+    )
+
+    model = create_wealth_model()
+
+    # Map LCFS predictor names to match WAS model expectations
+    # The wealth model uses num_adults/num_children, but LCFS has is_adult/is_child counts
+    input_df = pd.DataFrame(
+        {
+            "household_net_income": household["household_net_income"],
+            "num_adults": household["is_adult"],
+            "num_children": household["is_child"],
+            "private_pension_income": household["private_pension_income"],
+            "employment_income": household["employment_income"],
+            "self_employment_income": household["self_employment_income"],
+            "capital_income": 0,  # Not available in LCFS, use zero
+            "num_bedrooms": 3,  # Not available in LCFS, use median
+            "council_tax": 1500,  # Not available in LCFS, use median
+            "is_renting": False,  # Not available in LCFS, use mode
+            "region": household["region"],
+        }
+    )
+
+    # Predict all wealth variables, extract just num_vehicles
+    output_df = model.predict(input_df)
+    household["num_vehicles"] = output_df["num_vehicles"].values.clip(min=0)
+
+    return household
+
+
 def generate_lcfs_table(
     lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame
 ):
@@ -102,6 +141,10 @@ def generate_lcfs_table(
             person[variable].groupby(person.case).sum()[household.case] * 52
         )
     household.household_weight *= 1_000
+
+    # Impute num_vehicles from WAS model before selecting columns
+    household = impute_vehicles_to_lcfs(household)
+
     return household[
         PREDICTOR_VARIABLES + IMPUTATIONS + ["household_weight"]
     ].dropna()
@@ -163,7 +206,11 @@ def create_consumption_model(overwrite_existing: bool = False):
 
 
 def impute_consumption(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
-    # Impute wealth, assuming same time period as trained data
+    """
+    Impute consumption variables using LCFS-trained model.
+
+    Requires num_vehicles to be present in the dataset (from wealth imputation).
+    """
     dataset = dataset.copy()
 
     model = create_consumption_model()
