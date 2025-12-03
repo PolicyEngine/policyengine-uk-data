@@ -8,6 +8,9 @@
     <loc>http://localhost:3000/methodology</loc>
   </url>
   <url>
+    <loc>http://localhost:3000/imputations</loc>
+  </url>
+  <url>
     <loc>http://localhost:3000/validation</loc>
   </url>
   <url>
