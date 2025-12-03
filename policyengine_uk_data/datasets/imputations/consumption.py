@@ -1,3 +1,16 @@
+"""
+Consumption imputation using Living Costs and Food Survey data.
+
+This module imputes household consumption patterns (including fuel spending)
+using QRF models trained on LCFS data, with vehicle ownership information
+from the Wealth and Assets Survey to improve fuel spending predictions.
+
+Key innovation: We impute `has_fuel_consumption` to WAS based on vehicle
+ownership, then use this to bridge WAS and LCFS for fuel spending imputation.
+This addresses the issue that LCFS 2-week diaries undercount fuel purchases
+(58% have any fuel) vs actual vehicle ownership (78% per NTS 2024).
+"""
+
 import pandas as pd
 from pathlib import Path
 import numpy as np
@@ -8,6 +21,14 @@ from policyengine_uk import Microsimulation
 from policyengine_uk_data.utils.stack import stack_datasets
 
 LCFS_TAB_FOLDER = STORAGE_FOLDER / "lcfs_2021_22"
+
+# EV/ICE vehicle mix from NTS 2024
+# Source: https://www.gov.uk/government/statistics/national-travel-survey-2024
+# "Around 59% of cars people owned were petrol, 30% were diesel, 6% hybrid,
+#  4% battery electric and 2% plug-in hybrid."
+# ICE share = 59% + 30% = 89%, plus hybrids still use some fuel
+# We use 90% as the probability a vehicle owner buys petrol/diesel
+NTS_2024_ICE_VEHICLE_SHARE = 0.90
 
 REGIONS = {
     1: "NORTH_EAST",
@@ -65,6 +86,7 @@ PREDICTOR_VARIABLES = [
     "self_employment_income",
     "private_pension_income",
     "household_net_income",
+    "has_fuel_consumption",  # Imputed from WAS vehicle ownership
 ]
 
 IMPUTATIONS = [
@@ -86,9 +108,127 @@ IMPUTATIONS = [
 ]
 
 
+def create_has_fuel_model():
+    """
+    Train a model to predict has_fuel_consumption from demographics.
+
+    Uses WAS vehicle ownership to create has_fuel_consumption:
+    - Households with vehicles have ~90% chance of fuel consumption (ICE vehicles)
+    - Households without vehicles have ~0% chance
+
+    This bridges the gap between:
+    - LCFS: 58% of households recorded fuel in 2-week diary
+    - NTS 2024: 78% of households have vehicles
+
+    Sources:
+    - NTS 2024 vehicle ownership: https://www.gov.uk/government/statistics/
+      national-travel-survey-2024/nts-2024-household-car-availability-and-trends
+      "22% of households had no vehicle, 44% one vehicle, 34% two or more"
+    - NTS 2024 fuel type: "59% petrol, 30% diesel, 6% hybrid, 4% BEV, 2% PHEV"
+      So ~90% of vehicle owners use petrol/diesel (ICE + hybrids)
+
+    Returns:
+        QRF model predicting has_fuel_consumption from demographics.
+    """
+    from policyengine_uk_data.utils.qrf import QRF
+    from policyengine_uk_data.datasets.imputations.wealth import (
+        WAS_TAB_FOLDER,
+        REGIONS,
+    )
+
+    model_path = STORAGE_FOLDER / "has_fuel_model.pkl"
+    if model_path.exists():
+        return QRF(file_path=model_path)
+
+    # Load WAS with vehicle ownership
+    was = pd.read_csv(
+        WAS_TAB_FOLDER / "was_round_7_hhold_eul_march_2022.tab",
+        sep="\t",
+        low_memory=False,
+    )
+    was.columns = [c.lower() for c in was.columns]
+
+    # Create has_fuel_consumption from vehicle ownership
+    # Vehicle owners have 90% chance (ICE vehicles), non-owners have 0%
+    num_vehicles = was["vcarnr7"].fillna(0).clip(lower=0)
+    has_vehicle = num_vehicles > 0
+
+    # Randomly assign fuel consumption based on ICE share
+    # This simulates that ~10% of vehicle owners have EVs/PHEVs
+    np.random.seed(42)  # Reproducibility
+    is_ice_vehicle = np.random.random(len(was)) < NTS_2024_ICE_VEHICLE_SHARE
+    has_fuel = (has_vehicle & is_ice_vehicle).astype(float)
+
+    # Build training DataFrame with predictors available in LCFS
+    was_df = pd.DataFrame(
+        {
+            "household_net_income": was["dvtotinc_bhcr7"],
+            "num_adults": was["numadultr7"],
+            "num_children": was["numch18r7"],
+            "private_pension_income": was["dvgippenr7_aggr"],
+            "employment_income": was["dvgiempr7_aggr"],
+            "self_employment_income": was["dvgiser7_aggr"],
+            "region": was["gorr7"].map(REGIONS),
+            "has_fuel_consumption": has_fuel,
+        }
+    ).dropna()
+
+    predictors = [
+        "household_net_income",
+        "num_adults",
+        "num_children",
+        "private_pension_income",
+        "employment_income",
+        "self_employment_income",
+        "region",
+    ]
+
+    model = QRF()
+    model.fit(was_df[predictors], was_df[["has_fuel_consumption"]])
+    model.save(model_path)
+    return model
+
+
+def impute_has_fuel_to_lcfs(household: pd.DataFrame) -> pd.DataFrame:
+    """
+    Impute has_fuel_consumption to LCFS households using WAS-trained model.
+
+    This provides a consistent fuel consumption indicator based on vehicle
+    ownership patterns, rather than relying on the LCFS 2-week diary which
+    underestimates fuel purchasers (58% vs 78% vehicle ownership).
+    """
+    model = create_has_fuel_model()
+
+    input_df = pd.DataFrame(
+        {
+            "household_net_income": household["household_net_income"],
+            "num_adults": household["is_adult"],
+            "num_children": household["is_child"],
+            "private_pension_income": household["private_pension_income"],
+            "employment_income": household["employment_income"],
+            "self_employment_income": household["self_employment_income"],
+            "region": household["region"],
+        }
+    )
+
+    output_df = model.predict(input_df)
+    # Clip to [0, 1] as it's a probability
+    household["has_fuel_consumption"] = output_df[
+        "has_fuel_consumption"
+    ].values.clip(0, 1)
+
+    return household
+
+
 def generate_lcfs_table(
     lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame
 ):
+    """
+    Generate LCFS training table for consumption imputation.
+
+    Processes raw LCFS data and imputes has_fuel_consumption from WAS
+    vehicle ownership patterns to improve fuel spending predictions.
+    """
     person = lcfs_person.rename(columns=PERSON_LCF_RENAMES)
     household = lcfs_household.rename(columns=HOUSEHOLD_LCF_RENAMES)
     household["region"] = household["region"].map(REGIONS)
@@ -102,6 +242,11 @@ def generate_lcfs_table(
             person[variable].groupby(person.case).sum()[household.case] * 52
         )
     household.household_weight *= 1_000
+
+    # Impute has_fuel_consumption from WAS vehicle ownership model
+    # This bridges WAS (has vehicles) to LCFS (has fuel spending)
+    household = impute_has_fuel_to_lcfs(household)
+
     return household[
         PREDICTOR_VARIABLES + IMPUTATIONS + ["household_weight"]
     ].dropna()
@@ -163,14 +308,36 @@ def create_consumption_model(overwrite_existing: bool = False):
 
 
 def impute_consumption(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
-    # Impute wealth, assuming same time period as trained data
+    """
+    Impute consumption variables using LCFS-trained model.
+
+    Requires num_vehicles to be present in the dataset (from wealth imputation)
+    to compute has_fuel_consumption.
+    """
     dataset = dataset.copy()
 
-    model = create_consumption_model()
+    # First, compute has_fuel_consumption from num_vehicles
+    # This uses the same logic as the WAS training data:
+    # - Vehicle owners have 90% chance of fuel consumption (ICE vehicles)
+    # - Non-owners have 0% chance
     sim = Microsimulation(dataset=dataset)
+    num_vehicles = sim.calculate("num_vehicles", map_to="household").values
+
+    np.random.seed(42)  # Match training data randomness
+    has_vehicle = num_vehicles > 0
+    is_ice = np.random.random(len(num_vehicles)) < NTS_2024_ICE_VEHICLE_SHARE
+    has_fuel_consumption = (has_vehicle & is_ice).astype(float)
+    dataset.household["has_fuel_consumption"] = has_fuel_consumption
+
+    # Now run the consumption model with has_fuel_consumption as predictor
+    model = create_consumption_model()
     predictors = model.input_columns
 
-    input_df = sim.calculate_dataframe(predictors, map_to="household")
+    input_df = sim.calculate_dataframe(
+        [p for p in predictors if p != "has_fuel_consumption"],
+        map_to="household",
+    )
+    input_df["has_fuel_consumption"] = has_fuel_consumption
 
     output_df = model.predict(input_df)
 

@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    added:
+    - Use num_vehicles as predictor for fuel spending imputation

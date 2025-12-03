@@ -62,13 +62,15 @@ def main():
             )
 
             # Apply imputations with progress tracking
-            update_dataset("Impute consumption", "processing")
-            frs = impute_consumption(frs)
-            update_dataset("Impute consumption", "completed")
-
+            # Wealth must be imputed before consumption because consumption
+            # uses num_vehicles as a predictor for fuel spending
             update_dataset("Impute wealth", "processing")
             frs = impute_wealth(frs)
             update_dataset("Impute wealth", "completed")
+
+            update_dataset("Impute consumption", "processing")
+            frs = impute_consumption(frs)
+            update_dataset("Impute consumption", "completed")
 
             update_dataset("Impute VAT", "processing")
             frs = impute_vat(frs)
