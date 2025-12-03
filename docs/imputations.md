@@ -70,7 +70,7 @@ Imputes household spending patterns for indirect tax modeling.
 | `self_employment_income` | Self-employment income |
 | `private_pension_income` | Private pension income |
 | `household_net_income` | Total household income |
-| `num_vehicles` | Number of vehicles (from wealth imputation) |
+| `has_fuel_consumption` | Whether household buys petrol/diesel (from WAS) |
 
 ### Outputs
 | Variable | Description |
@@ -91,14 +91,22 @@ Imputes household spending patterns for indirect tax modeling.
 | `diesel_spending` | Diesel fuel spending |
 | `domestic_energy_consumption` | Home energy spending |
 
-### Note on Vehicle Imputation for LCFS
+### Bridging WAS Vehicle Ownership to LCFS Fuel Spending
 
-Since LCFS doesn't collect vehicle counts, we train a separate QRF model on WAS using only predictors available in both surveys:
-- `household_net_income`, `num_adults`, `num_children`
-- `private_pension_income`, `employment_income`, `self_employment_income`
-- `region`
+LCFS 2-week diaries undercount fuel purchasers (58%) compared to actual vehicle ownership (78% per NTS 2024). We bridge this gap using WAS vehicle data:
 
-This imputed vehicle count is then used as a predictor for fuel spending, improving correlation from ~0.03 (income only) to ~0.17.
+1. **In WAS**: Create `has_fuel_consumption` from vehicle ownership:
+   - `has_fuel = (num_vehicles > 0) AND (random < 0.90)`
+   - The 90% accounts for EVs/PHEVs that don't buy petrol/diesel
+   - Source: NTS 2024 shows 59% petrol + 30% diesel + ~1% hybrid fuel use
+
+2. **Train QRF**: Predict `has_fuel_consumption` from demographics (income, adults, children, region)
+
+3. **Apply to LCFS**: Impute `has_fuel_consumption` to LCFS households before training consumption model
+
+4. **At FRS imputation time**: Compute `has_fuel_consumption` directly from `num_vehicles` (already calibrated to NTS targets)
+
+This ensures fuel duty incidence aligns with actual vehicle ownership (~70% of households = 78% vehicles × 90% ICE) rather than LCFS diary randomness.
 
 ---
 
