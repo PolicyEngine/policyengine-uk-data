@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    changed:
-      - Updated Node.js from 22 to 24 LTS in docs workflow

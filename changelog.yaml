@@ -402,3 +402,8 @@
     added:
     - Add vehicle ownership calibration and imputation
   date: 2025-12-03 17:02:06
+- bump: patch
+  changes:
+    changed:
+    - Updated Node.js from 22 to 24 LTS in docs workflow
+  date: 2025-12-03 22:49:46
