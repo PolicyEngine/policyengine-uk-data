@@ -87,21 +87,72 @@ IMPUTATIONS = [
 ]
 
 
-def impute_vehicles_to_lcfs(household: pd.DataFrame) -> pd.DataFrame:
+def create_vehicle_model_for_lcfs():
     """
-    Impute num_vehicles to LCFS households using the WAS-trained wealth model.
+    Train a dedicated vehicle count model using only predictors available in LCFS.
 
-    This allows us to use vehicle ownership as a predictor for fuel spending
-    imputation, even though LCFS doesn't directly collect vehicle counts.
+    Uses WAS data but only the predictors that LCFS also has, avoiding the need
+    for hardcoded defaults that would bias predictions.
     """
+    from policyengine_uk_data.utils.qrf import QRF
     from policyengine_uk_data.datasets.imputations.wealth import (
-        create_wealth_model,
+        WAS_TAB_FOLDER,
+        REGIONS,
     )
 
-    model = create_wealth_model()
+    model_path = STORAGE_FOLDER / "vehicle_model_lcfs.pkl"
+    if model_path.exists():
+        return QRF(file_path=model_path)
 
-    # Map LCFS predictor names to match WAS model expectations
-    # The wealth model uses num_adults/num_children, but LCFS has is_adult/is_child counts
+    # Train on WAS with only LCFS-available predictors
+    was = pd.read_csv(
+        WAS_TAB_FOLDER / "was_round_7_hhold_eul_march_2022.tab",
+        sep="\t",
+        low_memory=False,
+    )
+    was.columns = [c.lower() for c in was.columns]
+
+    # Predictors available in both WAS and LCFS
+    was_df = pd.DataFrame(
+        {
+            "household_net_income": was["dvtotinc_bhcr7"],
+            "num_adults": was["numadultr7"],
+            "num_children": was["numch18r7"],
+            "private_pension_income": was["dvgippenr7_aggr"],
+            "employment_income": was["dvgiempr7_aggr"],
+            "self_employment_income": was["dvgiser7_aggr"],
+            "region": was["gorr7"].map(REGIONS),
+            "num_vehicles": was["vcarnr7"],
+        }
+    ).dropna()
+
+    # Filter out invalid vehicle counts
+    was_df = was_df[was_df["num_vehicles"] >= 0]
+
+    predictors = [
+        "household_net_income",
+        "num_adults",
+        "num_children",
+        "private_pension_income",
+        "employment_income",
+        "self_employment_income",
+        "region",
+    ]
+
+    model = QRF()
+    model.fit(was_df[predictors], was_df[["num_vehicles"]])
+    model.save(model_path)
+    return model
+
+
+def impute_vehicles_to_lcfs(household: pd.DataFrame) -> pd.DataFrame:
+    """
+    Impute num_vehicles to LCFS households using a dedicated vehicle model.
+
+    Uses only predictors available in LCFS to avoid hardcoded defaults.
+    """
+    model = create_vehicle_model_for_lcfs()
+
     input_df = pd.DataFrame(
         {
             "household_net_income": household["household_net_income"],
@@ -110,15 +161,10 @@ def impute_vehicles_to_lcfs(household: pd.DataFrame) -> pd.DataFrame:
             "private_pension_income": household["private_pension_income"],
             "employment_income": household["employment_income"],
             "self_employment_income": household["self_employment_income"],
-            "capital_income": 0,  # Not available in LCFS, use zero
-            "num_bedrooms": 3,  # Not available in LCFS, use median
-            "council_tax": 1500,  # Not available in LCFS, use median
-            "is_renting": False,  # Not available in LCFS, use mode
             "region": household["region"],
         }
     )
 
-    # Predict all wealth variables, extract just num_vehicles
     output_df = model.predict(input_df)
     household["num_vehicles"] = output_df["num_vehicles"].values.clip(min=0)
 
