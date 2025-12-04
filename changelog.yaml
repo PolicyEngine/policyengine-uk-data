@@ -412,3 +412,8 @@
     added:
     - Use num_vehicles as predictor for fuel spending imputation
   date: 2025-12-03 23:01:14
+- bump: minor
+  changes:
+    added:
+    - Housing cost calibration to LAs.
+  date: 2025-12-04 17:51:20

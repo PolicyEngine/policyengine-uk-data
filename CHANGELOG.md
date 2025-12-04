@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.29.0] - 2025-12-04 17:51:20
+
+### Added
+
+- Housing cost calibration to LAs.
+
 ## [1.28.0] - 2025-12-03 23:01:14
 
 ### Added
@@ -485,6 +491,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.29.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.28.0...1.29.0
 [1.28.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.27.1...1.28.0
 [1.27.1]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.27.0...1.27.1
 [1.27.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.26.1...1.27.0
