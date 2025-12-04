@@ -344,6 +344,12 @@ def impute_consumption(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     for column in output_df.columns:
         dataset.household[column] = output_df[column].values
 
+    # Zero out fuel spending for households without fuel consumption
+    # This ensures only ICE vehicle owners contribute to fuel duty
+    no_fuel = has_fuel_consumption == 0
+    dataset.household["petrol_spending"][no_fuel] = 0
+    dataset.household["diesel_spending"][no_fuel] = 0
+
     dataset.validate()
 
     return dataset
