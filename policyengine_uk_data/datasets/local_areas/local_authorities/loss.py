@@ -180,12 +180,17 @@ def create_local_authority_target_matrix(
         ons_income, left_on="code", right_on="la_code", how="left"
     ).merge(
         households_by_la[["la_code", "households"]],
-        left_on="code", right_on="la_code", how="left", suffixes=("", "_hh")
+        left_on="code",
+        right_on="la_code",
+        how="left",
+        suffixes=("", "_hh"),
     )
 
     # Calculate PE household income variables
     hbai_net_income = sim.calculate("equiv_hbai_household_net_income").values
-    hbai_net_income_ahc = sim.calculate("equiv_hbai_household_net_income_ahc").values
+    hbai_net_income_ahc = sim.calculate(
+        "equiv_hbai_household_net_income_ahc"
+    ).values
     housing_costs = hbai_net_income - hbai_net_income_ahc
 
     # Add to matrix (household-level values, will be summed with weights)
@@ -216,8 +221,7 @@ def create_local_authority_target_matrix(
     # For LAs without ONS data (or without household counts), use national
     # average scaled by LA household count
     has_ons_data = (
-        ons_merged["net_income_bhc"].notna()
-        & ons_merged["households"].notna()
+        ons_merged["net_income_bhc"].notna() & ons_merged["households"].notna()
     ).values
     # For LAs without household data, use equal share (1/360) as fallback
     total_households = ons_merged["households"].sum()
@@ -259,48 +263,67 @@ def create_local_authority_target_matrix(
         STORAGE_FOLDER / "la_tenure.xlsx", sheet_name="data download"
     )
     tenure_data.columns = [
-        "region_code", "region_name", "la_code", "la_name",
-        "owned_outright_pct", "owned_mortgage_pct",
-        "private_rent_pct", "social_rent_pct",
+        "region_code",
+        "region_name",
+        "la_code",
+        "la_name",
+        "owned_outright_pct",
+        "owned_mortgage_pct",
+        "private_rent_pct",
+        "social_rent_pct",
     ]
 
     # Merge with LA codes and households
     tenure_merged = la_codes.merge(
-        tenure_data[["la_code", "owned_outright_pct", "owned_mortgage_pct",
-                     "private_rent_pct", "social_rent_pct"]],
-        left_on="code", right_on="la_code", how="left"
+        tenure_data[
+            [
+                "la_code",
+                "owned_outright_pct",
+                "owned_mortgage_pct",
+                "private_rent_pct",
+                "social_rent_pct",
+            ]
+        ],
+        left_on="code",
+        right_on="la_code",
+        how="left",
     ).merge(
         households_by_la[["la_code", "households"]],
-        left_on="code", right_on="la_code", how="left", suffixes=("", "_hh")
+        left_on="code",
+        right_on="la_code",
+        how="left",
+        suffixes=("", "_hh"),
     )
 
     # Calculate household counts by tenure type
     tenure_type = sim.calculate("tenure_type").values
 
     # Matrix columns for tenure (1 if household has that tenure type)
-    matrix["tenure/owned_outright"] = (tenure_type == "OWNED_OUTRIGHT").astype(float)
-    matrix["tenure/owned_mortgage"] = (tenure_type == "OWNED_WITH_MORTGAGE").astype(float)
-    matrix["tenure/private_rent"] = (tenure_type == "RENT_PRIVATELY").astype(float)
+    matrix["tenure/owned_outright"] = (tenure_type == "OWNED_OUTRIGHT").astype(
+        float
+    )
+    matrix["tenure/owned_mortgage"] = (
+        tenure_type == "OWNED_WITH_MORTGAGE"
+    ).astype(float)
+    matrix["tenure/private_rent"] = (tenure_type == "RENT_PRIVATELY").astype(
+        float
+    )
     matrix["tenure/social_rent"] = (
         (tenure_type == "RENT_FROM_COUNCIL") | (tenure_type == "RENT_FROM_HA")
     ).astype(float)
 
     # Calculate targets: percentage * households
     tenure_merged["owned_outright_target"] = (
-        tenure_merged["owned_outright_pct"] / 100
-        * tenure_merged["households"]
+        tenure_merged["owned_outright_pct"] / 100 * tenure_merged["households"]
     )
     tenure_merged["owned_mortgage_target"] = (
-        tenure_merged["owned_mortgage_pct"] / 100
-        * tenure_merged["households"]
+        tenure_merged["owned_mortgage_pct"] / 100 * tenure_merged["households"]
     )
     tenure_merged["private_rent_target"] = (
-        tenure_merged["private_rent_pct"] / 100
-        * tenure_merged["households"]
+        tenure_merged["private_rent_pct"] / 100 * tenure_merged["households"]
     )
     tenure_merged["social_rent_target"] = (
-        tenure_merged["social_rent_pct"] / 100
-        * tenure_merged["households"]
+        tenure_merged["social_rent_pct"] / 100 * tenure_merged["households"]
     )
 
     # For LAs without tenure data (or without household counts), use national
@@ -311,10 +334,18 @@ def create_local_authority_target_matrix(
     ).values
 
     # National totals for each tenure type
-    national_owned_outright = (original_weights * matrix["tenure/owned_outright"].values).sum()
-    national_owned_mortgage = (original_weights * matrix["tenure/owned_mortgage"].values).sum()
-    national_private_rent = (original_weights * matrix["tenure/private_rent"].values).sum()
-    national_social_rent = (original_weights * matrix["tenure/social_rent"].values).sum()
+    national_owned_outright = (
+        original_weights * matrix["tenure/owned_outright"].values
+    ).sum()
+    national_owned_mortgage = (
+        original_weights * matrix["tenure/owned_mortgage"].values
+    ).sum()
+    national_private_rent = (
+        original_weights * matrix["tenure/private_rent"].values
+    ).sum()
+    national_social_rent = (
+        original_weights * matrix["tenure/social_rent"].values
+    ).sum()
 
     # Default targets = national total * LA's share of households
     default_owned_outright = national_owned_outright * la_household_share
@@ -350,8 +381,17 @@ def create_local_authority_target_matrix(
         header=5,
     )
     rent_data.columns = [
-        "col0", "la_code_old", "area_code", "area_name", "room", "studio",
-        "one_bed", "two_bed", "three_bed", "four_plus", "median_monthly_rent",
+        "col0",
+        "la_code_old",
+        "area_code",
+        "area_name",
+        "room",
+        "studio",
+        "one_bed",
+        "two_bed",
+        "three_bed",
+        "four_plus",
+        "median_monthly_rent",
     ]
     # Filter to LA rows and convert to numeric
     rent_data = rent_data[
@@ -366,7 +406,9 @@ def create_local_authority_target_matrix(
     # Add rent data to tenure_merged (which already has tenure pcts and households)
     tenure_merged = tenure_merged.merge(
         rent_data[["area_code", "median_annual_rent"]],
-        left_on="code", right_on="area_code", how="left"
+        left_on="code",
+        right_on="area_code",
+        how="left",
     )
 
     # Calculate private rent variable for matrix (rent for private renters, 0 otherwise)
@@ -381,7 +423,8 @@ def create_local_authority_target_matrix(
     # Number of private renters = households * private_rent_pct (from tenure data)
     tenure_merged["private_rent_target"] = (
         tenure_merged["median_annual_rent"]
-        * tenure_merged["private_rent_pct"] / 100
+        * tenure_merged["private_rent_pct"]
+        / 100
         * tenure_merged["households"]
     )
 
