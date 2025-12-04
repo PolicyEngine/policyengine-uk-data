@@ -75,17 +75,4 @@ def impute_student_loan_plan(
     # Store as the plan type
     dataset.person["student_loan_plan"] = plan
 
-    # Report imputation results
-    weights = sim.calculate("person_weight").values
-    total_with_loan = (has_student_loan * weights).sum()
-    plan_1_count = (plan_1_mask * weights).sum()
-    plan_2_count = (plan_2_mask * weights).sum()
-    plan_5_count = (plan_5_mask * weights).sum()
-
-    print("Student loan plan imputation results:")
-    print(f"  Total with student loan: {total_with_loan / 1e6:.2f}m")
-    print(f"  Plan 1 (pre-2012): {plan_1_count / 1e6:.2f}m")
-    print(f"  Plan 2 (2012-2023): {plan_2_count / 1e6:.2f}m")
-    print(f"  Plan 5 (2023+): {plan_5_count / 1e6:.2f}m")
-
     return dataset
