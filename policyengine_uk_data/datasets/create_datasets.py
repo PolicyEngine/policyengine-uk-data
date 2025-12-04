@@ -120,22 +120,25 @@ def main():
                 get_performance,
             )
 
-            # Run calibration with verbose progress
-            frs_calibrated_constituencies = calibrate_local_areas(
-                dataset=frs,
-                matrix_fn=create_constituency_target_matrix,
-                national_matrix_fn=create_national_target_matrix,
-                area_count=650,
-                weight_file="parliamentary_constituency_weights.h5",
-                excluded_training_targets=[],
-                log_csv="calibration_log.csv",
-                verbose=True,  # Enable nested progress display
-                area_name="Constituency",
-                get_performance=get_performance,
-                nested_progress=nested_progress,  # Pass the nested progress manager
-            )
+            # # Run calibration with verbose progress
+            # frs_calibrated_constituencies = calibrate_local_areas(
+            #     dataset=frs,
+            #     matrix_fn=create_constituency_target_matrix,
+            #     national_matrix_fn=create_national_target_matrix,
+            #     area_count=650,
+            #     weight_file="parliamentary_constituency_weights.h5",
+            #     excluded_training_targets=[],
+            #     log_csv="constituency_calibration_log.csv",
+            #     verbose=True,  # Enable nested progress display
+            #     area_name="Constituency",
+            #     get_performance=get_performance,
+            #     nested_progress=nested_progress,  # Pass the nested progress manager
+            # )
 
             from policyengine_uk_data.datasets.local_areas.local_authorities.calibrate import (
+                get_performance as get_la_performance,
+            )
+            from policyengine_uk_data.datasets.local_areas.local_authorities.loss import (
                 create_local_authority_target_matrix,
             )
 
@@ -147,9 +150,10 @@ def main():
                 area_count=360,
                 weight_file="local_authority_weights.h5",
                 excluded_training_targets=[],
-                log_csv="calibration_log.csv",
+                log_csv="la_calibration_log.csv",
                 verbose=True,  # Enable nested progress display
                 area_name="Local Authority",
+                get_performance=get_la_performance,
                 nested_progress=nested_progress,  # Pass the nested progress manager
             )
 

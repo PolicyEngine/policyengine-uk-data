@@ -12,6 +12,42 @@ from policyengine_uk_data.utils.uc_data import uc_la_households
 
 FOLDER = Path(__file__).parent
 
+# Placeholder uprating factors from FYE 2020 to 2025 (to be updated)
+UPRATING_TOTAL_INCOME_2020_TO_2025 = 1.3  # TODO: use OBR RHDI
+UPRATING_NET_INCOME_BHC_2020_TO_2025 = 1.3  # TODO: use OBR RHDI
+UPRATING_NET_INCOME_AHC_2020_TO_2025 = 1.3  # TODO: use OBR RHDI / house prices
+
+
+def load_ons_la_income_targets() -> pd.DataFrame:
+    """Load ONS income estimates by local authority.
+
+    Returns a DataFrame with columns: la_code, total_income, net_income_bhc, net_income_ahc
+    (mean income per household, FYE 2020)
+    """
+    xlsx = pd.ExcelFile(STORAGE_FOLDER / "local_authority_ons_income.xlsx")
+
+    def load_sheet(sheet_name: str, value_col: str) -> pd.DataFrame:
+        df = pd.read_excel(xlsx, sheet_name=sheet_name, header=3)
+        df.columns = [
+            "msoa_code", "msoa_name", "la_code", "la_name",
+            "region_code", "region_name", value_col,
+            "upper_ci", "lower_ci", "ci_width"
+        ]
+        df = df.iloc[1:].dropna(subset=["msoa_code"])
+        df[value_col] = pd.to_numeric(df[value_col])
+        return df[["la_code", value_col]]
+
+    total = load_sheet("Total annual income", "total_income")
+    bhc = load_sheet("Net income before housing costs", "net_income_bhc")
+    ahc = load_sheet("Net income after housing costs", "net_income_ahc")
+
+    # Group by LA to get mean income per household
+    la_total = total.groupby("la_code")["total_income"].mean().reset_index()
+    la_bhc = bhc.groupby("la_code")["net_income_bhc"].mean().reset_index()
+    la_ahc = ahc.groupby("la_code")["net_income_ahc"].mean().reset_index()
+
+    return la_total.merge(la_bhc, on="la_code").merge(la_ahc, on="la_code")
+
 
 def create_local_authority_target_matrix(
     dataset: UKSingleYearDataset,
@@ -118,6 +154,59 @@ def create_local_authority_target_matrix(
         "benunit",
         "household",
     )
+
+    # ONS income targets by local authority
+    # ONS definitions:
+    #   total_income (ONS) = household_market_income + household_benefits (PE)
+    #   net_income_bhc (ONS) = hbai_household_net_income (PE)
+    #   net_income_ahc (ONS) = hbai_household_net_income_ahc (PE)
+    ons_income = load_ons_la_income_targets()
+    households_by_la = pd.read_csv(STORAGE_FOLDER / "households_by_la_2025.csv")
+
+    # Merge ONS income with our LA codes to get targets aligned
+    ons_merged = la_codes.merge(
+        ons_income, left_on="code", right_on="la_code", how="left"
+    ).merge(
+        households_by_la[["code", "households_2025"]],
+        on="code",
+        how="left"
+    )
+
+    # Calculate PE household income variables
+    household_market_income = sim.calculate("household_market_income").values
+    household_benefits = sim.calculate("household_benefits").values
+    hbai_net_income = sim.calculate("hbai_household_net_income").values
+    hbai_net_income_ahc = sim.calculate("hbai_household_net_income_ahc").values
+
+    # PE total income = market income + benefits (to match ONS total income)
+    pe_total_income = household_market_income + household_benefits
+
+    # Add to matrix (household-level values, will be summed with weights)
+    matrix["ons/total_income"] = pe_total_income
+    matrix["ons/net_income_bhc"] = hbai_net_income
+    matrix["ons/net_income_ahc"] = hbai_net_income_ahc
+
+    # Calculate LA-level targets: mean income * households, uprated to 2025
+    # For LAs without ONS data (Scotland, NI, newer merged LAs), set target to 0
+    ons_merged["total_income_target"] = (
+        ons_merged["total_income"].fillna(0)
+        * ons_merged["households_2025"].fillna(0)
+        * UPRATING_TOTAL_INCOME_2020_TO_2025
+    )
+    ons_merged["net_income_bhc_target"] = (
+        ons_merged["net_income_bhc"].fillna(0)
+        * ons_merged["households_2025"].fillna(0)
+        * UPRATING_NET_INCOME_BHC_2020_TO_2025
+    )
+    ons_merged["net_income_ahc_target"] = (
+        ons_merged["net_income_ahc"].fillna(0)
+        * ons_merged["households_2025"].fillna(0)
+        * UPRATING_NET_INCOME_AHC_2020_TO_2025
+    )
+
+    y["ons/total_income"] = ons_merged["total_income_target"].values
+    y["ons/net_income_bhc"] = ons_merged["net_income_bhc_target"].values
+    y["ons/net_income_ahc"] = ons_merged["net_income_ahc_target"].values
 
     country_mask = create_country_mask(
         household_countries=sim.calculate("country").values,
