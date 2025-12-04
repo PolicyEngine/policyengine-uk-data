@@ -30,9 +30,16 @@ def load_ons_la_income_targets() -> pd.DataFrame:
     def load_sheet(sheet_name: str, value_col: str) -> pd.DataFrame:
         df = pd.read_excel(xlsx, sheet_name=sheet_name, header=3)
         df.columns = [
-            "msoa_code", "msoa_name", "la_code", "la_name",
-            "region_code", "region_name", value_col,
-            "upper_ci", "lower_ci", "ci_width"
+            "msoa_code",
+            "msoa_name",
+            "la_code",
+            "la_name",
+            "region_code",
+            "region_name",
+            value_col,
+            "upper_ci",
+            "lower_ci",
+            "ci_width",
         ]
         df = df.iloc[1:].dropna(subset=["msoa_code"])
         df[value_col] = pd.to_numeric(df[value_col])
@@ -163,40 +170,42 @@ def create_local_authority_target_matrix(
     #   net_income_bhc (ONS) = hbai_household_net_income (PE)
     #   net_income_ahc (ONS) = hbai_household_net_income_ahc (PE)
     ons_income = load_ons_la_income_targets()
-    households_by_la = pd.read_csv(STORAGE_FOLDER / "households_by_la_2025.csv")
+    households_by_la = pd.read_excel(
+        STORAGE_FOLDER / "la_count_households.xlsx", sheet_name="Dataset"
+    )
+    households_by_la.columns = ["la_code", "la_name", "households"]
 
     # Merge ONS income with our LA codes to get targets aligned
     ons_merged = la_codes.merge(
         ons_income, left_on="code", right_on="la_code", how="left"
     ).merge(
-        households_by_la[["code", "households_2025"]],
-        on="code",
-        how="left"
+        households_by_la[["la_code", "households"]],
+        left_on="code", right_on="la_code", how="left", suffixes=("", "_hh")
     )
 
     # Calculate PE household income variables
-    hbai_net_income = sim.calculate("hbai_household_net_income").values
-    hbai_net_income_ahc = sim.calculate("hbai_household_net_income_ahc").values
-    housing_costs = hbai_net_income_ahc - hbai_net_income
+    hbai_net_income = sim.calculate("equiv_hbai_household_net_income").values
+    hbai_net_income_ahc = sim.calculate("equiv_hbai_household_net_income_ahc").values
+    housing_costs = hbai_net_income - hbai_net_income_ahc
 
     # Add to matrix (household-level values, will be summed with weights)
-    matrix["ons/net_income_bhc"] = hbai_net_income
-    matrix["ons/net_income_ahc"] = hbai_net_income_ahc
-    matrix["ons/housing_costs"] = housing_costs
+    matrix["ons/equiv_net_income_bhc"] = hbai_net_income
+    matrix["ons/equiv_net_income_ahc"] = hbai_net_income_ahc
+    matrix["ons/equiv_housing_costs"] = housing_costs
 
     # Calculate LA-level targets: mean income * households, uprated to 2025
-    ons_merged["net_income_bhc_target"] = (
+    ons_merged["equiv_net_income_bhc_target"] = (
         ons_merged["net_income_bhc"]
-        * ons_merged["households_2025"]
+        * ons_merged["households"]
         * UPRATING_NET_INCOME_BHC_2020_TO_2025
     )
-    ons_merged["housing_costs_target"] = (
-        ons_merged["net_income_bhc_target"]
-        - ons_merged["net_income_ahc_target"]
+    ons_merged["equiv_housing_costs_target"] = (
+        ons_merged["net_income_bhc"] * ons_merged["households"]
+        - ons_merged["net_income_ahc"] * ons_merged["households"]
     ) * UPRATING_HOUSING_COSTS_2020_TO_2025
-    ons_merged["net_income_ahc_target"] = (
-        ons_merged["net_income_bhc_target"]
-        - ons_merged["housing_costs_target"]
+    ons_merged["equiv_net_income_ahc_target"] = (
+        ons_merged["equiv_net_income_bhc_target"]
+        - ons_merged["equiv_housing_costs_target"]
     )
 
     country_mask = create_country_mask(
@@ -204,28 +213,192 @@ def create_local_authority_target_matrix(
         codes=la_codes.code,
     )
 
-    # For LAs without ONS data (Scotland, NI, newer merged LAs), use model
-    # values at initial weights as targets (so calibration doesn't change them)
-    has_ons_data = ons_merged["net_income_bhc"].notna().values
-    initial_la_weights = (original_weights / 360) * country_mask
-    model_net_income_bhc = initial_la_weights @ hbai_net_income
-    model_net_income_ahc = initial_la_weights @ hbai_net_income_ahc
-    model_housing_costs = initial_la_weights @ housing_costs
+    # For LAs without ONS data (or without household counts), use national
+    # average scaled by LA household count
+    has_ons_data = (
+        ons_merged["net_income_bhc"].notna()
+        & ons_merged["households"].notna()
+    ).values
+    # For LAs without household data, use equal share (1/360) as fallback
+    total_households = ons_merged["households"].sum()
+    equal_share = 1 / len(la_codes)
+    la_household_share = np.where(
+        ons_merged["households"].notna(),
+        ons_merged["households"].values / total_households,
+        equal_share,
+    )
 
-    y["ons/net_income_bhc"] = np.where(
+    # National totals (weighted sum across all households)
+    national_net_income_bhc = (original_weights * hbai_net_income).sum()
+    national_net_income_ahc = (original_weights * hbai_net_income_ahc).sum()
+    national_housing_costs = (original_weights * housing_costs).sum()
+
+    # Default targets = national total * LA's share of households
+    default_net_income_bhc = national_net_income_bhc * la_household_share
+    default_net_income_ahc = national_net_income_ahc * la_household_share
+    default_housing_costs = national_housing_costs * la_household_share
+
+    y["ons/equiv_net_income_bhc"] = np.where(
         has_ons_data,
-        ons_merged["net_income_bhc_target"].values,
-        model_net_income_bhc,
+        ons_merged["equiv_net_income_bhc_target"].values,
+        default_net_income_bhc,
     )
-    y["ons/net_income_ahc"] = np.where(
+    y["ons/equiv_net_income_ahc"] = np.where(
         has_ons_data,
-        ons_merged["net_income_ahc_target"].values,
-        model_net_income_ahc,
+        ons_merged["equiv_net_income_ahc_target"].values,
+        default_net_income_ahc,
     )
-    y["ons/housing_costs"] = np.where(
+    y["ons/equiv_housing_costs"] = np.where(
         has_ons_data,
-        ons_merged["housing_costs_target"].values,
-        model_housing_costs,
+        ons_merged["equiv_housing_costs_target"].values,
+        default_housing_costs,
+    )
+
+    # Tenure type targets by local authority
+    tenure_data = pd.read_excel(
+        STORAGE_FOLDER / "la_tenure.xlsx", sheet_name="data download"
+    )
+    tenure_data.columns = [
+        "region_code", "region_name", "la_code", "la_name",
+        "owned_outright_pct", "owned_mortgage_pct",
+        "private_rent_pct", "social_rent_pct",
+    ]
+
+    # Merge with LA codes and households
+    tenure_merged = la_codes.merge(
+        tenure_data[["la_code", "owned_outright_pct", "owned_mortgage_pct",
+                     "private_rent_pct", "social_rent_pct"]],
+        left_on="code", right_on="la_code", how="left"
+    ).merge(
+        households_by_la[["la_code", "households"]],
+        left_on="code", right_on="la_code", how="left", suffixes=("", "_hh")
+    )
+
+    # Calculate household counts by tenure type
+    tenure_type = sim.calculate("tenure_type").values
+
+    # Matrix columns for tenure (1 if household has that tenure type)
+    matrix["tenure/owned_outright"] = (tenure_type == "OWNED_OUTRIGHT").astype(float)
+    matrix["tenure/owned_mortgage"] = (tenure_type == "OWNED_WITH_MORTGAGE").astype(float)
+    matrix["tenure/private_rent"] = (tenure_type == "RENT_PRIVATELY").astype(float)
+    matrix["tenure/social_rent"] = (
+        (tenure_type == "RENT_FROM_COUNCIL") | (tenure_type == "RENT_FROM_HA")
+    ).astype(float)
+
+    # Calculate targets: percentage * households
+    tenure_merged["owned_outright_target"] = (
+        tenure_merged["owned_outright_pct"] / 100
+        * tenure_merged["households"]
+    )
+    tenure_merged["owned_mortgage_target"] = (
+        tenure_merged["owned_mortgage_pct"] / 100
+        * tenure_merged["households"]
+    )
+    tenure_merged["private_rent_target"] = (
+        tenure_merged["private_rent_pct"] / 100
+        * tenure_merged["households"]
+    )
+    tenure_merged["social_rent_target"] = (
+        tenure_merged["social_rent_pct"] / 100
+        * tenure_merged["households"]
+    )
+
+    # For LAs without tenure data (or without household counts), use national
+    # average scaled by LA household count
+    has_tenure_data = (
+        tenure_merged["owned_outright_pct"].notna()
+        & tenure_merged["households"].notna()
+    ).values
+
+    # National totals for each tenure type
+    national_owned_outright = (original_weights * matrix["tenure/owned_outright"].values).sum()
+    national_owned_mortgage = (original_weights * matrix["tenure/owned_mortgage"].values).sum()
+    national_private_rent = (original_weights * matrix["tenure/private_rent"].values).sum()
+    national_social_rent = (original_weights * matrix["tenure/social_rent"].values).sum()
+
+    # Default targets = national total * LA's share of households
+    default_owned_outright = national_owned_outright * la_household_share
+    default_owned_mortgage = national_owned_mortgage * la_household_share
+    default_private_rent = national_private_rent * la_household_share
+    default_social_rent = national_social_rent * la_household_share
+
+    y["tenure/owned_outright"] = np.where(
+        has_tenure_data,
+        tenure_merged["owned_outright_target"].values,
+        default_owned_outright,
+    )
+    y["tenure/owned_mortgage"] = np.where(
+        has_tenure_data,
+        tenure_merged["owned_mortgage_target"].values,
+        default_owned_mortgage,
+    )
+    y["tenure/private_rent"] = np.where(
+        has_tenure_data,
+        tenure_merged["private_rent_target"].values,
+        default_private_rent,
+    )
+    y["tenure/social_rent"] = np.where(
+        has_tenure_data,
+        tenure_merged["social_rent_target"].values,
+        default_social_rent,
+    )
+
+    # Private rent amounts by local authority
+    rent_data = pd.read_excel(
+        STORAGE_FOLDER / "la_private_rents_median.xlsx",
+        sheet_name="Figure 3",
+        header=5,
+    )
+    rent_data.columns = [
+        "col0", "la_code_old", "area_code", "area_name", "room", "studio",
+        "one_bed", "two_bed", "three_bed", "four_plus", "median_monthly_rent",
+    ]
+    # Filter to LA rows and convert to numeric
+    rent_data = rent_data[
+        rent_data["area_code"].astype(str).str.match(r"^E0[6789]")
+    ]
+    rent_data["median_monthly_rent"] = pd.to_numeric(
+        rent_data["median_monthly_rent"], errors="coerce"
+    )
+    # Convert to annual rent
+    rent_data["median_annual_rent"] = rent_data["median_monthly_rent"] * 12
+
+    # Add rent data to tenure_merged (which already has tenure pcts and households)
+    tenure_merged = tenure_merged.merge(
+        rent_data[["area_code", "median_annual_rent"]],
+        left_on="code", right_on="area_code", how="left"
+    )
+
+    # Calculate private rent variable for matrix (rent for private renters, 0 otherwise)
+    is_private_renter = (tenure_type == "RENT_PRIVATELY").astype(float)
+    benunit_rent = sim.calculate("benunit_rent").values
+    household_rent = sim.map_result(benunit_rent, "benunit", "household")
+    private_rent_amount = household_rent * is_private_renter
+
+    matrix["rent/private_rent"] = private_rent_amount
+
+    # Target = median rent (assumed = mean) * number of private renting households
+    # Number of private renters = households * private_rent_pct (from tenure data)
+    tenure_merged["private_rent_target"] = (
+        tenure_merged["median_annual_rent"]
+        * tenure_merged["private_rent_pct"] / 100
+        * tenure_merged["households"]
+    )
+
+    # For LAs without rent data (need rent, tenure, and household data), use
+    # national average scaled by LA household share
+    has_rent_data = (
+        tenure_merged["median_annual_rent"].notna()
+        & tenure_merged["private_rent_pct"].notna()
+        & tenure_merged["households"].notna()
+    ).values
+    national_private_rent = (original_weights * private_rent_amount).sum()
+    default_private_rent_amount = national_private_rent * la_household_share
+
+    y["rent/private_rent"] = np.where(
+        has_rent_data,
+        tenure_merged["private_rent_target"].values,
+        default_private_rent_amount,
     )
 
     return matrix, y, country_mask

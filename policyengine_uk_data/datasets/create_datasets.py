@@ -145,6 +145,7 @@ def main():
             # Run calibration with verbose progress
             frs_calibrated_las = calibrate_local_areas(
                 dataset=frs,
+                epochs=512,
                 matrix_fn=create_local_authority_target_matrix,
                 national_matrix_fn=create_national_target_matrix,
                 area_count=360,
