@@ -12,10 +12,11 @@ from policyengine_uk_data.utils.uc_data import uc_la_households
 
 FOLDER = Path(__file__).parent
 
-# Placeholder uprating factors from FYE 2020 to 2025 (to be updated)
-UPRATING_TOTAL_INCOME_2020_TO_2025 = 1.3  # TODO: use OBR RHDI
-UPRATING_NET_INCOME_BHC_2020_TO_2025 = 1.3  # TODO: use OBR RHDI
-UPRATING_NET_INCOME_AHC_2020_TO_2025 = 1.3  # TODO: use OBR RHDI / house prices
+# Uprating factors from FYE 2020 to 2025 (OBR Nov 2025 EFO)
+# RHDI index: 1985.1 (2025-26) / 1467.6 (2020-21) = 1.352
+UPRATING_NET_INCOME_BHC_2020_TO_2025 = 1985.1 / 1467.6
+# House price index: 103.5 (2025-26) / 84.9 (2020-21) = 1.219
+UPRATING_HOUSING_COSTS_2020_TO_2025 = 103.5 / 84.9
 
 
 def load_ons_la_income_targets() -> pd.DataFrame:
@@ -61,6 +62,7 @@ def create_local_authority_target_matrix(
     la_codes = pd.read_csv(STORAGE_FOLDER / "local_authorities_2021.csv")
 
     sim = Microsimulation(dataset=dataset, reform=reform)
+    original_weights = sim.calculate("household_weight", 2025).values
     sim.default_calculation_period = time_period
 
     matrix = pd.DataFrame()
@@ -173,44 +175,57 @@ def create_local_authority_target_matrix(
     )
 
     # Calculate PE household income variables
-    household_market_income = sim.calculate("household_market_income").values
-    household_benefits = sim.calculate("household_benefits").values
     hbai_net_income = sim.calculate("hbai_household_net_income").values
     hbai_net_income_ahc = sim.calculate("hbai_household_net_income_ahc").values
-
-    # PE total income = market income + benefits (to match ONS total income)
-    pe_total_income = household_market_income + household_benefits
+    housing_costs = hbai_net_income_ahc - hbai_net_income
 
     # Add to matrix (household-level values, will be summed with weights)
-    matrix["ons/total_income"] = pe_total_income
     matrix["ons/net_income_bhc"] = hbai_net_income
     matrix["ons/net_income_ahc"] = hbai_net_income_ahc
+    matrix["ons/housing_costs"] = housing_costs
 
     # Calculate LA-level targets: mean income * households, uprated to 2025
-    # For LAs without ONS data (Scotland, NI, newer merged LAs), set target to 0
-    ons_merged["total_income_target"] = (
-        ons_merged["total_income"].fillna(0)
-        * ons_merged["households_2025"].fillna(0)
-        * UPRATING_TOTAL_INCOME_2020_TO_2025
-    )
     ons_merged["net_income_bhc_target"] = (
-        ons_merged["net_income_bhc"].fillna(0)
-        * ons_merged["households_2025"].fillna(0)
+        ons_merged["net_income_bhc"]
+        * ons_merged["households_2025"]
         * UPRATING_NET_INCOME_BHC_2020_TO_2025
     )
+    ons_merged["housing_costs_target"] = (
+        ons_merged["net_income_bhc_target"]
+        - ons_merged["net_income_ahc_target"]
+    ) * UPRATING_HOUSING_COSTS_2020_TO_2025
     ons_merged["net_income_ahc_target"] = (
-        ons_merged["net_income_ahc"].fillna(0)
-        * ons_merged["households_2025"].fillna(0)
-        * UPRATING_NET_INCOME_AHC_2020_TO_2025
+        ons_merged["net_income_bhc_target"]
+        - ons_merged["housing_costs_target"]
     )
-
-    y["ons/total_income"] = ons_merged["total_income_target"].values
-    y["ons/net_income_bhc"] = ons_merged["net_income_bhc_target"].values
-    y["ons/net_income_ahc"] = ons_merged["net_income_ahc_target"].values
 
     country_mask = create_country_mask(
         household_countries=sim.calculate("country").values,
         codes=la_codes.code,
+    )
+
+    # For LAs without ONS data (Scotland, NI, newer merged LAs), use model
+    # values at initial weights as targets (so calibration doesn't change them)
+    has_ons_data = ons_merged["net_income_bhc"].notna().values
+    initial_la_weights = (original_weights / 360) * country_mask
+    model_net_income_bhc = initial_la_weights @ hbai_net_income
+    model_net_income_ahc = initial_la_weights @ hbai_net_income_ahc
+    model_housing_costs = initial_la_weights @ housing_costs
+
+    y["ons/net_income_bhc"] = np.where(
+        has_ons_data,
+        ons_merged["net_income_bhc_target"].values,
+        model_net_income_bhc,
+    )
+    y["ons/net_income_ahc"] = np.where(
+        has_ons_data,
+        ons_merged["net_income_ahc_target"].values,
+        model_net_income_ahc,
+    )
+    y["ons/housing_costs"] = np.where(
+        has_ons_data,
+        ons_merged["housing_costs_target"].values,
+        model_housing_costs,
     )
 
     return matrix, y, country_mask
