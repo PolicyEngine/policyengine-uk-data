@@ -1,0 +1,14 @@
+description: Percentage of TV-owning households that evade the TV licence fee
+metadata:
+  unit: /1
+  label: TV licence evasion rate
+  reference:
+    - title: TV Licensing annual evader statistics
+      href: https://www.tvlicensing.co.uk/about/media-centre/news/tv-licensing-publishes-annual-evader-statistics-NEWS31
+    - title: House of Commons Library - TV licence fee statistics
+      href: https://commonslibrary.parliament.uk/research-briefings/cbp-8101/
+values:
+  2015-01-01: 0.05  # Historical low point
+  2018-01-01: 0.0657  # Official BBC estimate
+  2022-01-01: 0.1058  # Significant increase
+  2024-01-01: 0.1252  # Current BBC estimate

@@ -1,0 +1,12 @@
+description: Percentage of residential property purchases that are by first-time buyers
+metadata:
+  unit: /1
+  label: First-time buyer rate
+  reference:
+    - title: ONS First-time buyer mortgage sales by local authority
+      href: https://www.ons.gov.uk/releases/firsttimebuyermortgagesalesbylocalauthorityuk2006to2023
+    - title: Uswitch First-Time Buyer Statistics 2024
+      href: https://www.uswitch.com/mortgages/first-time-buyer-statistics/
+values:
+  2013-01-01: 0.280  # ONS data
+  2023-01-01: 0.384  # 38.4% of property sales were first-time buyers
