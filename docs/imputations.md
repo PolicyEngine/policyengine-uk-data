@@ -106,6 +106,8 @@ LCFS 2-week diaries undercount fuel purchasers (58%) compared to actual vehicle 
 
 4. **At FRS imputation time**: Compute `has_fuel_consumption` directly from `num_vehicles` (already calibrated to NTS targets)
 
+5. **Zero non-fuel households**: After imputation, set `petrol_spending` and `diesel_spending` to zero for households where `has_fuel_consumption = 0`
+
 This ensures fuel duty incidence aligns with actual vehicle ownership (~70% of households = 78% vehicles × 90% ICE) rather than LCFS diary randomness.
 
 ---
