@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Zero out fuel spending for households without fuel consumption
