@@ -29,10 +29,6 @@ def load_parameter(
     with open(yaml_path) as f:
         data = yaml.safe_load(f)
 
-    # Handle EITC special case (has rates_by_children instead of values)
-    if "rates_by_children" in data:
-        return data["rates_by_children"]  # Return the dict
-
     # Find the applicable value for the year
     values = data["values"]
     applicable_value = None
