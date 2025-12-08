@@ -441,8 +441,6 @@ def create_target_matrix(
     target_names.append("hmrc/salary_sacrifice_contributions")
     target_values.append(SS_CONTRIBUTIONS_2024 * uprating_factor)
 
-    print(target_names[-4:], target_values[-4:])
-
     # Add two-child limit targets.
     child_is_affected = (
         sim.map_result(
@@ -574,18 +572,9 @@ def create_target_matrix(
     target_names.append("nts/households_two_plus_vehicles")
     target_values.append(total_households * NTS_TWO_PLUS_VEHICLE_RATE)
 
-    GROSS_INCOME_ESTIMATE = {
-        "private_renter": 350e9,
-        "owner_mortgage": 690e9,
-        "council_renter": 76e9,
-        "ha_renter": 134e9,
-    }
-
-    HOUSING_COST_AS_INCOME_SHARE = {
-        "private_renter": 0.340,
-        "owner_mortgage": 0.191,
-        "council_renter": 0.276,
-        "ha_renter": 0.286,
+    RENT_ESTIMATE = {
+        "private_renter": 1_400 * 12 * 4.7e6, # https://www.ons.gov.uk/economy/inflationandpriceindices/bulletins/privaterentandhousepricesuk/january2025
+        "owner_mortgage": 1_100 * 12 * 7.5e6,
     }
 
     # Housing affordability targets
@@ -596,8 +585,7 @@ def create_target_matrix(
     df["housing/total_mortgage"] = total_mortgage
     target_names.append("housing/total_mortgage")
     target_values.append(
-        GROSS_INCOME_ESTIMATE["owner_mortgage"]
-        * HOUSING_COST_AS_INCOME_SHARE["owner_mortgage"]
+        RENT_ESTIMATE["owner_mortgage"]
     )
 
     # Total rent by tenure type
@@ -607,21 +595,7 @@ def create_target_matrix(
     df["housing/rent_private"] = rent * (tenure_type == "RENT_PRIVATELY")
     target_names.append("housing/rent_private")
     target_values.append(
-        GROSS_INCOME_ESTIMATE["private_renter"]
-        * HOUSING_COST_AS_INCOME_SHARE["private_renter"]
-    )
-
-    df["housing/rent_council"] = rent * (tenure_type == "RENT_FROM_COUNCIL")
-    target_names.append("housing/rent_council")
-    target_values.append(
-        GROSS_INCOME_ESTIMATE["council_renter"]
-        * HOUSING_COST_AS_INCOME_SHARE["council_renter"]
-    )
-    df["housing/rent_ha"] = rent * (tenure_type == "RENT_FROM_HA")
-    target_names.append("housing/rent_ha")
-    target_values.append(
-        GROSS_INCOME_ESTIMATE["ha_renter"]
-        * HOUSING_COST_AS_INCOME_SHARE["ha_renter"]
+        RENT_ESTIMATE["private_renter"]
     )
 
     combined_targets = pd.concat(
