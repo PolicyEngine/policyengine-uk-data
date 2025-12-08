@@ -422,3 +422,8 @@
     fixed:
     - Zero out fuel spending for households without fuel consumption
   date: 2025-12-07 09:17:37
+- bump: patch
+  changes:
+    fixed:
+    - Added mortgage and private rent targets.
+  date: 2025-12-08 17:47:38
