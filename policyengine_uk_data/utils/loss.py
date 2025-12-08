@@ -597,7 +597,7 @@ def create_target_matrix(
     target_names.append("housing/total_mortgage")
     target_values.append(
         GROSS_INCOME_ESTIMATE["owner_mortgage"]
-        / HOUSING_COST_AS_INCOME_SHARE["owner_mortgage"]
+        * HOUSING_COST_AS_INCOME_SHARE["owner_mortgage"]
     )
 
     # Total rent by tenure type
@@ -608,20 +608,20 @@ def create_target_matrix(
     target_names.append("housing/rent_private")
     target_values.append(
         GROSS_INCOME_ESTIMATE["private_renter"]
-        / HOUSING_COST_AS_INCOME_SHARE["private_renter"]
+        * HOUSING_COST_AS_INCOME_SHARE["private_renter"]
     )
 
     df["housing/rent_council"] = rent * (tenure_type == "RENT_FROM_COUNCIL")
     target_names.append("housing/rent_council")
     target_values.append(
         GROSS_INCOME_ESTIMATE["council_renter"]
-        / HOUSING_COST_AS_INCOME_SHARE["council_renter"]
+        * HOUSING_COST_AS_INCOME_SHARE["council_renter"]
     )
     df["housing/rent_ha"] = rent * (tenure_type == "RENT_FROM_HA")
     target_names.append("housing/rent_ha")
     target_values.append(
         GROSS_INCOME_ESTIMATE["ha_renter"]
-        / HOUSING_COST_AS_INCOME_SHARE["ha_renter"]
+        * HOUSING_COST_AS_INCOME_SHARE["ha_renter"]
     )
 
     combined_targets = pd.concat(
