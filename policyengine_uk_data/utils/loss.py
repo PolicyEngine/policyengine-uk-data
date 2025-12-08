@@ -573,7 +573,9 @@ def create_target_matrix(
     target_values.append(total_households * NTS_TWO_PLUS_VEHICLE_RATE)
 
     RENT_ESTIMATE = {
-        "private_renter": 1_400 * 12 * 4.7e6, # https://www.ons.gov.uk/economy/inflationandpriceindices/bulletins/privaterentandhousepricesuk/january2025
+        "private_renter": 1_400
+        * 12
+        * 4.7e6,  # https://www.ons.gov.uk/economy/inflationandpriceindices/bulletins/privaterentandhousepricesuk/january2025
         "owner_mortgage": 1_100 * 12 * 7.5e6,
     }
 
@@ -584,9 +586,7 @@ def create_target_matrix(
     total_mortgage = mortgage_capital + mortgage_interest
     df["housing/total_mortgage"] = total_mortgage
     target_names.append("housing/total_mortgage")
-    target_values.append(
-        RENT_ESTIMATE["owner_mortgage"]
-    )
+    target_values.append(RENT_ESTIMATE["owner_mortgage"])
 
     # Total rent by tenure type
     rent = pe("rent")
@@ -594,9 +594,7 @@ def create_target_matrix(
 
     df["housing/rent_private"] = rent * (tenure_type == "RENT_PRIVATELY")
     target_names.append("housing/rent_private")
-    target_values.append(
-        RENT_ESTIMATE["private_renter"]
-    )
+    target_values.append(RENT_ESTIMATE["private_renter"])
 
     combined_targets = pd.concat(
         [
