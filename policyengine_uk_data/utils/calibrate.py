@@ -15,7 +15,7 @@ def calibrate_local_areas(
     area_count: int,
     weight_file: str,
     dataset_key: str = "2025",
-    epochs: int = 256,
+    epochs: int = 512,
     excluded_training_targets=[],
     log_csv=None,
     verbose: bool = False,

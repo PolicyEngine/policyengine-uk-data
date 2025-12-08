@@ -153,13 +153,24 @@ def impute_over_incomes(
         DataFrame with imputed income components.
     """
     dataset = dataset.copy()
-    input_df = Microsimulation(dataset=dataset).calculate_dataframe(
-        ["age", "gender", "region"]
-    )
+    sim = Microsimulation(dataset=dataset)
+    input_df = sim.calculate_dataframe(["age", "gender", "region"])
+    original_income_total = dataset.person[IMPUTATIONS].copy().sum().sum()
     output_df = model.predict(input_df)
 
     for column in output_variables:
         dataset.person[column] = output_df[column].fillna(0).values
+
+    new_income_total = dataset.person[IMPUTATIONS].sum().sum()
+    adjustment_factor = new_income_total / original_income_total
+    # Adjust rent and mortgage interest and capital repayments proportionally
+    dataset.household["rent"] = dataset.household["rent"] * adjustment_factor
+    dataset.household["mortgage_interest_repayment"] = (
+        dataset.household["mortgage_interest_repayment"] * adjustment_factor
+    )
+    dataset.household["mortgage_capital_repayment"] = (
+        dataset.household["mortgage_capital_repayment"] * adjustment_factor
+    )
 
     return dataset
 
