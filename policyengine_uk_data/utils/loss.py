@@ -574,6 +574,56 @@ def create_target_matrix(
     target_names.append("nts/households_two_plus_vehicles")
     target_values.append(total_households * NTS_TWO_PLUS_VEHICLE_RATE)
 
+    GROSS_INCOME_ESTIMATE = {
+        "private_renter": 350e9,
+        "owner_mortgage": 690e9,
+        "council_renter": 76e9,
+        "ha_renter": 134e9,
+    }
+
+    HOUSING_COST_AS_INCOME_SHARE = {
+        "private_renter": 0.340,
+        "owner_mortgage": 0.191,
+        "council_renter": 0.276,
+        "ha_renter": 0.286,
+    }
+
+    # Housing affordability targets
+    # Total mortgage payments (capital + interest)
+    mortgage_capital = pe("mortgage_capital_repayment")
+    mortgage_interest = pe("mortgage_interest_repayment")
+    total_mortgage = mortgage_capital + mortgage_interest
+    df["housing/total_mortgage"] = total_mortgage
+    target_names.append("housing/total_mortgage")
+    target_values.append(
+        GROSS_INCOME_ESTIMATE["owner_mortgage"]
+        / HOUSING_COST_AS_INCOME_SHARE["owner_mortgage"]
+    )
+
+    # Total rent by tenure type
+    rent = pe("rent")
+    tenure_type = sim.calculate("tenure_type", map_to="household").values
+
+    df["housing/rent_private"] = rent * (tenure_type == "RENT_PRIVATELY")
+    target_names.append("housing/rent_private")
+    target_values.append(
+        GROSS_INCOME_ESTIMATE["private_renter"]
+        / HOUSING_COST_AS_INCOME_SHARE["private_renter"]
+    )
+
+    df["housing/rent_council"] = rent * (tenure_type == "RENT_FROM_COUNCIL")
+    target_names.append("housing/rent_council")
+    target_values.append(
+        GROSS_INCOME_ESTIMATE["council_renter"]
+        / HOUSING_COST_AS_INCOME_SHARE["council_renter"]
+    )
+    df["housing/rent_ha"] = rent * (tenure_type == "RENT_FROM_HA")
+    target_names.append("housing/rent_ha")
+    target_values.append(
+        GROSS_INCOME_ESTIMATE["ha_renter"]
+        / HOUSING_COST_AS_INCOME_SHARE["ha_renter"]
+    )
+
     combined_targets = pd.concat(
         [
             targets,
