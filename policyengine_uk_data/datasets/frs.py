@@ -774,7 +774,7 @@ def create_frs(
         {
             "brma": brma,
             "household_id": sim.populations["benunit"].household(
-                "household_id", 2023
+                "household_id", sim.dataset.time_period
             ),
         }
     )

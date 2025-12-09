@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - A bug hard-coded to 2023, which meant that custom FRS datasets defined after 2024 fail on BRMA imputation.
