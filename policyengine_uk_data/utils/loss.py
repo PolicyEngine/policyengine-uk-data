@@ -164,6 +164,24 @@ def create_target_matrix(
     # Not strictly from the OBR but from the 2024 Independent Schools Council census. OBR will be using that.
     df["obr/private_school_students"] = pe("attends_private_school")
 
+    # Student loan repayments from SLC statistics
+    # https://www.gov.uk/government/statistics/student-loans-in-england-2024-to-2025
+    # Total repayments: ~£5.6bn UK total, broken down by country
+    student_loan_repayment = pe("student_loan_repayment")
+    df["obr/student_loan_repayment"] = student_loan_repayment
+    df["obr/student_loan_repayment_england"] = student_loan_repayment * (
+        country == "ENGLAND"
+    )
+    df["obr/student_loan_repayment_scotland"] = student_loan_repayment * (
+        country == "SCOTLAND"
+    )
+    df["obr/student_loan_repayment_wales"] = student_loan_repayment * (
+        country == "WALES"
+    )
+    df["obr/student_loan_repayment_northern_ireland"] = student_loan_repayment * (
+        country == "NORTHERN_IRELAND"
+    )
+
     # Salary sacrifice NI relief - SPP estimates £4.1bn total (£1.2bn employee + £2.9bn employer)
     # Calculate relief via counterfactual: what additional NI would be paid if SS became income
     ss_contributions = sim.calculate(
