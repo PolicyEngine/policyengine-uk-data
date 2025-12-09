@@ -53,6 +53,7 @@ IMPUTE_VARIABLES = [
     "non_residential_property_value",
     "savings",
     "num_vehicles",
+    "student_loan_balance",
 ]
 
 
@@ -109,6 +110,8 @@ def generate_was_table(was: pd.DataFrame):
         "DVTotinc_bhcR7": "household_net_income",
         "DVSaValR7_aggr": "savings",
         "vcarnr7": "num_vehicles",
+        "Tot_LosR7_aggr": "total_loans",
+        "Tot_los_exc_SLCR7_aggr": "total_loans_exc_slc",
     }
 
     RENAMES = {x.lower(): y for x, y in RENAMES.items()}
@@ -146,6 +149,9 @@ def generate_was_table(was: pd.DataFrame):
             "unit_investment_trusts",
         ]
     ].sum(axis=1)
+    was["student_loan_balance"] = (
+        was["total_loans"] - was["total_loans_exc_slc"]
+    )
     was["region"] = was["region"].map(REGIONS)
     return was
 
