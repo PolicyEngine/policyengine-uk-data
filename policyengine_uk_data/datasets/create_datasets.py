@@ -1,6 +1,7 @@
 from policyengine_uk_data.datasets.frs import create_frs
 from policyengine_uk_data.storage import STORAGE_FOLDER
 import logging
+import os
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk_data.utils.uprating import uprate_dataset
 from policyengine_uk_data.utils.progress import (
@@ -15,6 +16,10 @@ logging.basicConfig(level=logging.INFO)
 def main():
     """Create enhanced FRS dataset with rich progress tracking."""
     try:
+        # Use reduced epochs and fidelity for testing
+        is_testing = os.environ.get("TESTING", "0") == "1"
+        epochs = 32 if is_testing else 512
+
         progress_tracker = ProcessingProgress()
 
         # Define dataset creation steps
@@ -123,6 +128,7 @@ def main():
             # Run calibration with verbose progress
             frs_calibrated_constituencies = calibrate_local_areas(
                 dataset=frs,
+                epochs=epochs,
                 matrix_fn=create_constituency_target_matrix,
                 national_matrix_fn=create_national_target_matrix,
                 area_count=650,
@@ -145,7 +151,7 @@ def main():
             # Run calibration with verbose progress
             frs_calibrated_las = calibrate_local_areas(
                 dataset=frs,
-                epochs=512,
+                epochs=epochs,
                 matrix_fn=create_local_authority_target_matrix,
                 national_matrix_fn=create_national_target_matrix,
                 area_count=360,

@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+      - Reduced test runtime by using 32 epochs instead of 512 when TESTING environment variable is set
