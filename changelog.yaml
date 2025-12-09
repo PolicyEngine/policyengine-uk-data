@@ -427,3 +427,9 @@
     fixed:
     - Added mortgage and private rent targets.
   date: 2025-12-08 17:47:38
+- bump: patch
+  changes:
+    fixed:
+    - A bug hard-coded to 2023, which meant that custom FRS datasets defined after
+      2024 fail on BRMA imputation.
+  date: 2025-12-09 10:06:31
