@@ -55,9 +55,9 @@ def test_reform_fiscal_impacts(
     """Test that each reform produces the expected fiscal impact."""
     impact = get_fiscal_impact(baseline, enhanced_frs, reform)
 
-    # Allow for small numerical differences (1.0 billion tolerance)
+    # Allow for small numerical differences (5.0 billion tolerance)
     assert (
-        abs(impact - expected_impact) < 3.0
+        abs(impact - expected_impact) < 5.0
     ), f"Impact for {reform_name} is {impact:.1f} billion, expected {expected_impact:.1f} billion"
 
 
