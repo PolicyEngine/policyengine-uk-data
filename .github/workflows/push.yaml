@@ -58,8 +58,6 @@ jobs:
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
       - name: Build datasets
         run: make data
-        env:
-          TESTING: "1"
       - name: Save calibration log (constituencies)
         uses: actions/upload-artifact@v4
         with:
