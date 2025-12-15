@@ -44,3 +44,8 @@ winter_fuel_allowance,gbp-bn,obr_march_2024_efo,2.0,2.0,2.0,2.0,2.0,2.0,0.3,0.3,
 private_school_students,person-k,obr_march_2024_efo,557,557,557,557,557,557,557,557,557,557,557,
 salary_sacrifice_employee_ni_relief,gbp-bn,spp_ni_relief_2023,,,,,,,1.2,1.24,1.28,1.32,1.36,1.40
 salary_sacrifice_employer_ni_relief,gbp-bn,spp_ni_relief_2023,,,,,,,2.9,3.0,3.1,3.2,3.3,3.4
+student_loan_repayment,gbp-bn,slc_2024_25,,,,,,,5.6,5.8,6.0,6.2,6.4,6.6
+student_loan_repayment_england,gbp-bn,slc_2024_25,,,,,,,5.0,5.2,5.4,5.6,5.8,6.0
+student_loan_repayment_scotland,gbp-bn,slc_2024_25,,,,,,,0.203,0.21,0.22,0.23,0.24,0.25
+student_loan_repayment_wales,gbp-bn,slc_2024_25,,,,,,,0.229,0.24,0.25,0.26,0.27,0.28
+student_loan_repayment_northern_ireland,gbp-bn,slc_2024_25,,,,,,,0.182,0.19,0.20,0.21,0.22,0.23
