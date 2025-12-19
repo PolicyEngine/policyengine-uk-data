@@ -1,0 +1,7 @@
+- bump: minor
+  changes:
+    fixed:
+    - Set property_purchased stochastically at 3.85% based on HMRC housing transaction data, fixing unrealistic SDLT charges that caused 224% tax rates in the first income decile.
+    added:
+    - Tests for property_purchased rate and SDLT total validation against official HMRC figures.
+    - Tests for low-income decile sanity checks to prevent negative net incomes and impossible tax rates.
