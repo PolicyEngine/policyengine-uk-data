@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Updated VAT reform expected fiscal impact to match production dataset calibration.
