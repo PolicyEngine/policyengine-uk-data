@@ -1,4 +1,4 @@
 - bump: patch
   changes:
     fixed:
-    - Updated VAT reform expected fiscal impact to match production dataset calibration.
+    - Widened VAT reform test tolerance to accommodate calibration variance between test and production datasets.

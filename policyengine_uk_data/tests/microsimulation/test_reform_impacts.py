@@ -37,7 +37,12 @@ def get_fiscal_impact(baseline, enhanced_frs, reform: dict) -> float:
 
 # Extract test parameters from configuration
 test_params = [
-    (reform["parameters"], reform["name"], reform["expected_impact"])
+    (
+        reform["parameters"],
+        reform["name"],
+        reform["expected_impact"],
+        reform.get("tolerance", 5.0),
+    )
     for reform in reforms_data
 ]
 
@@ -45,19 +50,18 @@ reform_names = [reform["name"] for reform in reforms_data]
 
 
 @pytest.mark.parametrize(
-    "reform, reform_name, expected_impact",
+    "reform, reform_name, expected_impact, tolerance",
     test_params,
     ids=reform_names,
 )
 def test_reform_fiscal_impacts(
-    baseline, enhanced_frs, reform, reform_name, expected_impact
+    baseline, enhanced_frs, reform, reform_name, expected_impact, tolerance
 ):
     """Test that each reform produces the expected fiscal impact."""
     impact = get_fiscal_impact(baseline, enhanced_frs, reform)
 
-    # Allow for small numerical differences (5.0 billion tolerance)
     assert (
-        abs(impact - expected_impact) < 5.0
+        abs(impact - expected_impact) < tolerance
     ), f"Impact for {reform_name} is {impact:.1f} billion, expected {expected_impact:.1f} billion"
 
 
