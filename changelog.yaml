@@ -439,3 +439,15 @@
     - Reduced test runtime by using 32 epochs instead of 512 when TESTING environment
       variable is set
   date: 2025-12-09 14:39:12
+- bump: minor
+  changes:
+    added:
+    - Tests for property_purchased rate and SDLT total validation against official
+      HMRC figures.
+    - Tests for low-income decile sanity checks to prevent negative net incomes and
+      impossible tax rates.
+    fixed:
+    - Set property_purchased stochastically at 3.85% based on HMRC housing transaction
+      data, fixing unrealistic SDLT charges that caused 224% tax rates in the first
+      income decile.
+  date: 2025-12-19 11:21:28
