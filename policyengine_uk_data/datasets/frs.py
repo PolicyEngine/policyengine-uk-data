@@ -869,6 +869,26 @@ def create_frs(
 
     pe_benunit["is_married"] = frs["benunit"].famtypb2.isin([5, 7])
 
+    # Stochastically set property_purchased based on UK housing transaction rate.
+    # Previously defaulted to True in policyengine-uk, causing all households
+    # to be charged SDLT as if they just bought their property (£370bn total).
+    #
+    # Sources:
+    # - Transactions: HMRC 2024 - 1.1m/year
+    #   https://www.gov.uk/government/statistics/monthly-property-transactions-completed-in-the-uk-with-value-40000-or-above
+    # - Households: ONS 2024 - 28.6m
+    #   https://www.ons.gov.uk/peoplepopulationandcommunity/birthsdeathsandmarriages/families/bulletins/familiesandhouseholds/2024
+    # - Rate: 1.1m / 28.6m = 3.85%
+    #
+    # Verification against official SDLT revenue (2024-25):
+    # - Official SDLT: £13.9bn (https://www.gov.uk/government/statistics/uk-stamp-tax-statistics)
+    # - With fix (3.85%): £15.7bn (close to official)
+    # - Without fix (100%): £370bn (26x too high)
+    PROPERTY_PURCHASE_RATE = 0.0385
+    pe_household["property_purchased"] = (
+        np.random.random(len(pe_household)) < PROPERTY_PURCHASE_RATE
+    )
+
     dataset = UKSingleYearDataset(
         person=pe_person,
         benunit=pe_benunit,
