@@ -7,37 +7,30 @@ property_purchased issue where incorrect defaults led to:
 - 224% tax rates in the first decile
 - Negative net incomes for low-income households
 
-These tests should prevent similar data quality issues in the future.
+These tests confirm the fix works and prevent similar issues in the future.
 """
 
 import pytest
+import pandas as pd
 
 
-def test_first_decile_tax_rate_reasonable():
+def test_first_decile_tax_rate_reasonable(baseline):
     """Test that first decile effective tax rate is below 100%.
 
-    Tax rate should never exceed 100% of market income - that would imply
-    households are paying more in tax than they earn, which is impossible
-    without the SDLT bug.
+    Without fix: 224% tax rate (impossible)
+    With fix: Should be well below 100%
     """
-    from policyengine_uk import Microsimulation
-    import pandas as pd
+    household_weight = baseline.calculate("household_weight", 2025).values
+    net_income = baseline.calculate("household_net_income", 2025).values
+    market_income = baseline.calculate("household_market_income", 2025).values
+    household_tax = baseline.calculate("household_tax", 2025).values
 
-    sim = Microsimulation()
-    household_weight = sim.calculate("household_weight", 2025).values
-    net_income = sim.calculate("household_net_income", 2025).values
-    market_income = sim.calculate("household_market_income", 2025).values
-    household_tax = sim.calculate("household_tax", 2025).values
-
-    # Assign deciles based on net income
     decile = pd.qcut(net_income, 10, labels=False, duplicates="drop")
 
-    # Get first decile (lowest income)
     d1_mask = decile == 0
     d1_tax = (household_tax[d1_mask] * household_weight[d1_mask]).sum()
     d1_market = (market_income[d1_mask] * household_weight[d1_mask]).sum()
 
-    # Handle edge case where market income is very low
     if d1_market > 0:
         d1_tax_rate = d1_tax / d1_market
         assert d1_tax_rate < 1.0, (
@@ -48,64 +41,49 @@ def test_first_decile_tax_rate_reasonable():
         )
 
 
-def test_first_decile_average_tax_reasonable():
+def test_first_decile_average_tax_reasonable(baseline):
     """Test that first decile average household tax is reasonable.
 
-    Low-income households should not pay more than £50,000 per year in tax
-    on average. The SDLT bug caused D1 tax to be ~£84,000 per household.
+    Without fix: £90,988 average tax (unrealistic)
+    With fix: Should be below £50,000
     """
-    from policyengine_uk import Microsimulation
-    import pandas as pd
+    household_weight = baseline.calculate("household_weight", 2025).values
+    net_income = baseline.calculate("household_net_income", 2025).values
+    household_tax = baseline.calculate("household_tax", 2025).values
 
-    sim = Microsimulation()
-    household_weight = sim.calculate("household_weight", 2025).values
-    net_income = sim.calculate("household_net_income", 2025).values
-    household_tax = sim.calculate("household_tax", 2025).values
-
-    # Assign deciles based on net income
     decile = pd.qcut(net_income, 10, labels=False, duplicates="drop")
 
-    # Get first decile average tax
     d1_mask = decile == 0
     d1_avg_tax = (
         household_tax[d1_mask] * household_weight[d1_mask]
     ).sum() / household_weight[d1_mask].sum()
 
-    max_reasonable_d1_tax = 50_000  # £50k max average tax for lowest decile
+    max_reasonable_d1_tax = 50_000
 
     assert d1_avg_tax < max_reasonable_d1_tax, (
         f"First decile average tax is £{d1_avg_tax:,.0f}, "
-        f"which exceeds the £{max_reasonable_d1_tax:,} threshold. "
+        f"which exceeds £{max_reasonable_d1_tax:,}. "
         "This likely indicates a bug in property_purchased or similar variable "
         "causing unrealistic stamp duty charges."
     )
 
 
-def test_first_decile_positive_net_income():
-    """Test that first decile weighted average net income is not negative.
+def test_first_decile_net_income_not_severely_negative(baseline):
+    """Test that first decile net income is not severely negative.
 
-    While individual low-income households can have negative net income,
-    the weighted average across the entire first decile should be positive
-    when benefits are included.
+    Without fix: -£37,452 average (due to massive SDLT)
+    With fix: Should be above -£10,000
     """
-    from policyengine_uk import Microsimulation
-    import pandas as pd
+    household_weight = baseline.calculate("household_weight", 2025).values
+    net_income = baseline.calculate("household_net_income", 2025).values
 
-    sim = Microsimulation()
-    household_weight = sim.calculate("household_weight", 2025).values
-    net_income = sim.calculate("household_net_income", 2025).values
-
-    # Assign deciles based on net income
     decile = pd.qcut(net_income, 10, labels=False, duplicates="drop")
 
-    # Get first decile average net income
     d1_mask = decile == 0
     d1_avg_net = (
         net_income[d1_mask] * household_weight[d1_mask]
     ).sum() / household_weight[d1_mask].sum()
 
-    # With the SDLT bug, D1 net income was -£40,000 on average
-    # After fix, it should be positive
     assert d1_avg_net > -10_000, (
         f"First decile average net income is £{d1_avg_net:,.0f}, "
         "which is significantly negative. This likely indicates a bug "
@@ -114,24 +92,18 @@ def test_first_decile_positive_net_income():
     )
 
 
-def test_decile_tax_ordering():
-    """Test that tax generally increases with income decile.
+def test_decile_tax_ordering(baseline):
+    """Test that higher deciles pay more tax than lower deciles.
 
-    Higher income deciles should generally pay more tax than lower deciles.
-    The SDLT bug caused D1 (£84k) to pay more than D10 (£79k).
+    Without fix: D1 (£90k) > D10 (£79k) - inverted!
+    With fix: D1 < D10 (correct ordering)
     """
-    from policyengine_uk import Microsimulation
-    import pandas as pd
+    household_weight = baseline.calculate("household_weight", 2025).values
+    net_income = baseline.calculate("household_net_income", 2025).values
+    household_tax = baseline.calculate("household_tax", 2025).values
 
-    sim = Microsimulation()
-    household_weight = sim.calculate("household_weight", 2025).values
-    net_income = sim.calculate("household_net_income", 2025).values
-    household_tax = sim.calculate("household_tax", 2025).values
-
-    # Assign deciles based on net income
     decile = pd.qcut(net_income, 10, labels=False, duplicates="drop")
 
-    # Calculate average tax by decile
     decile_taxes = []
     for d in range(10):
         mask = decile == d
@@ -140,7 +112,6 @@ def test_decile_tax_ordering():
         ).sum() / household_weight[mask].sum()
         decile_taxes.append(avg_tax)
 
-    # First decile should have lower tax than top decile
     d1_tax = decile_taxes[0]
     d10_tax = decile_taxes[9]
 
@@ -152,27 +123,24 @@ def test_decile_tax_ordering():
     )
 
 
-def test_no_excessive_negative_incomes():
-    """Test that there aren't too many households with severely negative income.
+def test_no_excessive_negative_incomes(baseline):
+    """Test that excessive negative incomes are limited.
 
-    While some households may have negative net income due to losses,
-    more than 1% having income below -£50k indicates a bug.
+    Without fix: 2.3% of households below -£50k
+    With fix: Should be below 1%
     """
-    from policyengine_uk import Microsimulation
-
-    sim = Microsimulation()
-    household_weight = sim.calculate("household_weight", 2025).values
-    net_income = sim.calculate("household_net_income", 2025).values
+    household_weight = baseline.calculate("household_weight", 2025).values
+    net_income = baseline.calculate("household_net_income", 2025).values
 
     total_households = household_weight.sum()
     severe_negative_mask = net_income < -50_000
     severe_negative_count = household_weight[severe_negative_mask].sum()
     severe_negative_pct = severe_negative_count / total_households
 
-    max_allowed_pct = 0.01  # 1% threshold
+    max_allowed_pct = 0.01
 
     assert severe_negative_pct < max_allowed_pct, (
-        f"{severe_negative_pct:.1%} of households have net income below -£50,000. "
-        f"This exceeds the {max_allowed_pct:.0%} threshold and indicates "
+        f"{severe_negative_pct:.1%} of households have net income "
+        f"below -£50,000. This exceeds {max_allowed_pct:.0%} and indicates "
         "a potential bug in tax calculations."
     )
