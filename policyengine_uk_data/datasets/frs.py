@@ -339,7 +339,9 @@ def create_frs(
 
     WEEKS_IN_YEAR = 365.25 / 7
 
-    pe_person["employment_income"] = person.inearns * WEEKS_IN_YEAR
+    pe_person["employment_income"] = (
+        np.maximum(0, person.inearns) * WEEKS_IN_YEAR
+    )
 
     pension_payment = sum_to_entity(
         pension.penpay * (pension.penpay > 0),
@@ -365,17 +367,20 @@ def create_frs(
         pension_payment + pension_tax_paid + pension_deductions_removed
     ) * WEEKS_IN_YEAR
 
-    pe_person["self_employment_income"] = person.seincam2 * WEEKS_IN_YEAR
+    pe_person["self_employment_income"] = (
+        np.maximum(0, person.seincam2) * WEEKS_IN_YEAR
+    )
 
     INVERTED_BASIC_RATE = 1.25
 
-    pe_person["tax_free_savings_income"] = (
+    pe_person["tax_free_savings_income"] = np.maximum(
+        0,
         sum_to_entity(
             account.accint * (account.account == 21),
             account.person_id,
             person.person_id,
         )
-        * WEEKS_IN_YEAR
+        * WEEKS_IN_YEAR,
     )
     taxable_savings_interest = (
         sum_to_entity(
@@ -389,10 +394,12 @@ def create_frs(
         )
         * WEEKS_IN_YEAR
     )
-    pe_person["savings_interest_income"] = (
-        taxable_savings_interest + pe_person["tax_free_savings_income"].values
+    pe_person["savings_interest_income"] = np.maximum(
+        0,
+        taxable_savings_interest + pe_person["tax_free_savings_income"].values,
     )
-    pe_person["dividend_income"] = (
+    pe_person["dividend_income"] = np.maximum(
+        0,
         sum_to_entity(
             (
                 account.accint
@@ -405,7 +412,7 @@ def create_frs(
             account.person_id,
             person.index,
         )
-        * 52
+        * 52,
     )
     is_head = person.hrpid == 1
     household_property_income = (
