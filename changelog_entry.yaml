@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Clip negative values to zero for employment, self-employment, savings interest, tax-free savings, and dividend income variables.
