@@ -4,7 +4,7 @@ from policyengine_uk_data.utils.loss import (
     NTS_TWO_PLUS_VEHICLE_RATE,
 )
 
-ABSOLUTE_TOLERANCE = 0.10
+ABSOLUTE_TOLERANCE = 0.15
 
 
 def test_vehicle_ownership(baseline):

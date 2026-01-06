@@ -11,7 +11,7 @@ from policyengine_uk.data import UKSingleYearDataset
 def calibrate(
     dataset: UKSingleYearDataset,
     excluded_training_targets=[],
-    log_csv="calibration_log.csv",
+    log_csv="constituency_calibration_log.csv",
     verbose: bool = False,
 ):
     return calibrate_local_areas(

@@ -1,14 +1,14 @@
 def fetch_version():
-    try:
-        import pkg_resources
+    """Fetch version from pyproject.toml."""
+    import re
+    from pathlib import Path
 
-        version = pkg_resources.get_distribution(
-            "policyengine_uk_data"
-        ).version
-        return version
-    except Exception as e:
-        print(f"Error fetching version: {e}")
-        return None
+    pyproject_path = Path(__file__).parent.parent / "pyproject.toml"
+    content = pyproject_path.read_text()
+    match = re.search(r'^version\s*=\s*"([^"]+)"', content, re.MULTILINE)
+    if match:
+        return match.group(1)
+    return None
 
 
 if __name__ == "__main__":

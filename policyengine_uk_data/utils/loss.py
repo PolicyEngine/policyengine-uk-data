@@ -441,8 +441,6 @@ def create_target_matrix(
     target_names.append("hmrc/salary_sacrifice_contributions")
     target_values.append(SS_CONTRIBUTIONS_2024 * uprating_factor)
 
-    print(target_names[-4:], target_values[-4:])
-
     # Add two-child limit targets.
     child_is_affected = (
         sim.map_result(
@@ -573,6 +571,30 @@ def create_target_matrix(
     df["nts/households_two_plus_vehicles"] = (num_vehicles >= 2).astype(float)
     target_names.append("nts/households_two_plus_vehicles")
     target_values.append(total_households * NTS_TWO_PLUS_VEHICLE_RATE)
+
+    RENT_ESTIMATE = {
+        "private_renter": 1_400
+        * 12
+        * 4.7e6,  # https://www.ons.gov.uk/economy/inflationandpriceindices/bulletins/privaterentandhousepricesuk/january2025
+        "owner_mortgage": 1_100 * 12 * 7.5e6,
+    }
+
+    # Housing affordability targets
+    # Total mortgage payments (capital + interest)
+    mortgage_capital = pe("mortgage_capital_repayment")
+    mortgage_interest = pe("mortgage_interest_repayment")
+    total_mortgage = mortgage_capital + mortgage_interest
+    df["housing/total_mortgage"] = total_mortgage
+    target_names.append("housing/total_mortgage")
+    target_values.append(RENT_ESTIMATE["owner_mortgage"])
+
+    # Total rent by tenure type
+    rent = pe("rent")
+    tenure_type = sim.calculate("tenure_type", map_to="household").values
+
+    df["housing/rent_private"] = rent * (tenure_type == "RENT_PRIVATELY")
+    target_names.append("housing/rent_private")
+    target_values.append(RENT_ESTIMATE["private_renter"])
 
     combined_targets = pd.concat(
         [

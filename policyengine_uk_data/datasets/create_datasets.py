@@ -1,6 +1,7 @@
 from policyengine_uk_data.datasets.frs import create_frs
 from policyengine_uk_data.storage import STORAGE_FOLDER
 import logging
+import os
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk_data.utils.uprating import uprate_dataset
 from policyengine_uk_data.utils.progress import (
@@ -15,6 +16,10 @@ logging.basicConfig(level=logging.INFO)
 def main():
     """Create enhanced FRS dataset with rich progress tracking."""
     try:
+        # Use reduced epochs and fidelity for testing
+        is_testing = os.environ.get("TESTING", "0") == "1"
+        epochs = 32 if is_testing else 512
+
         progress_tracker = ProcessingProgress()
 
         # Define dataset creation steps
@@ -62,13 +67,15 @@ def main():
             )
 
             # Apply imputations with progress tracking
-            update_dataset("Impute consumption", "processing")
-            frs = impute_consumption(frs)
-            update_dataset("Impute consumption", "completed")
-
+            # Wealth must be imputed before consumption because consumption
+            # uses num_vehicles as a predictor for fuel spending
             update_dataset("Impute wealth", "processing")
             frs = impute_wealth(frs)
             update_dataset("Impute wealth", "completed")
+
+            update_dataset("Impute consumption", "processing")
+            frs = impute_consumption(frs)
+            update_dataset("Impute consumption", "completed")
 
             update_dataset("Impute VAT", "processing")
             frs = impute_vat(frs)
@@ -121,12 +128,13 @@ def main():
             # Run calibration with verbose progress
             frs_calibrated_constituencies = calibrate_local_areas(
                 dataset=frs,
+                epochs=epochs,
                 matrix_fn=create_constituency_target_matrix,
                 national_matrix_fn=create_national_target_matrix,
                 area_count=650,
                 weight_file="parliamentary_constituency_weights.h5",
                 excluded_training_targets=[],
-                log_csv="calibration_log.csv",
+                log_csv="constituency_calibration_log.csv",
                 verbose=True,  # Enable nested progress display
                 area_name="Constituency",
                 get_performance=get_performance,
@@ -134,20 +142,25 @@ def main():
             )
 
             from policyengine_uk_data.datasets.local_areas.local_authorities.calibrate import (
+                get_performance as get_la_performance,
+            )
+            from policyengine_uk_data.datasets.local_areas.local_authorities.loss import (
                 create_local_authority_target_matrix,
             )
 
             # Run calibration with verbose progress
             frs_calibrated_las = calibrate_local_areas(
                 dataset=frs,
+                epochs=epochs,
                 matrix_fn=create_local_authority_target_matrix,
                 national_matrix_fn=create_national_target_matrix,
                 area_count=360,
                 weight_file="local_authority_weights.h5",
                 excluded_training_targets=[],
-                log_csv="calibration_log.csv",
+                log_csv="la_calibration_log.csv",
                 verbose=True,  # Enable nested progress display
                 area_name="Local Authority",
+                get_performance=get_la_performance,
                 nested_progress=nested_progress,  # Pass the nested progress manager
             )
 

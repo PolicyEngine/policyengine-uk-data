@@ -93,20 +93,6 @@ def save_salary_sacrifice_model():
         }
     )
 
-    n_participants = (
-        train_df["pension_contributions_via_salary_sacrifice"] > 0
-    ).sum()
-    print(f"Training salary sacrifice model on {len(train_df)} observations")
-    print(
-        f"  With SS contributions: {n_participants} "
-        f"({n_participants / len(train_df):.1%})"
-    )
-    mean_amount = train_df.loc[
-        train_df["pension_contributions_via_salary_sacrifice"] > 0,
-        "pension_contributions_via_salary_sacrifice",
-    ].mean()
-    print(f"  Mean SS amount (participants): £{mean_amount:,.0f}")
-
     # Train QRF model
     model = QRF()
     model.fit(train_df[PREDICTORS], train_df[IMPUTATIONS])
@@ -166,16 +152,9 @@ def impute_salary_sacrifice(
 
     # Get indicator for who was asked
     if "salary_sacrifice_asked" not in dataset.person.columns:
-        print(
-            "Warning: salary_sacrifice_asked not in dataset, "
-            "skipping imputation"
-        )
         return dataset
 
     ss_asked = dataset.person.salary_sacrifice_asked.values
-
-    # Identify imputation candidates: those not asked about SS
-    not_asked = ss_asked == 0
 
     # Create prediction DataFrame for all records
     pred_df = pd.DataFrame(
@@ -207,18 +186,5 @@ def impute_salary_sacrifice(
 
     # Update dataset
     dataset.person["pension_contributions_via_salary_sacrifice"] = final_ss
-
-    # Report results (no targeting - just descriptive)
-    weights = sim.calculate("person_weight").values
-    is_employee = employment_income > 0
-    total_ss = (final_ss * weights).sum()
-    participation_rate = ((final_ss > 0) * weights * is_employee).sum() / (
-        weights * is_employee
-    ).sum()
-
-    print("Salary sacrifice imputation results (pre-calibration):")
-    print(f"  Total SS contributions: £{total_ss / 1e9:.1f}bn")
-    print(f"  Employee participation rate: {participation_rate:.1%}")
-    print("  (Final totals depend on subsequent weight calibration)")
 
     return dataset

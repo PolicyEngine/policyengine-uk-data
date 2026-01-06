@@ -5,6 +5,71 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.30.2] - 2026-01-06 09:55:01
+
+### Fixed
+
+- Clip negative values to zero for employment, self-employment, savings interest, tax-free savings, and dividend income variables.
+
+## [1.30.1] - 2025-12-19 14:41:54
+
+### Fixed
+
+- Widened VAT reform test tolerance to accommodate calibration variance between test and production datasets.
+
+## [1.30.0] - 2025-12-19 11:21:28
+
+### Added
+
+- Tests for property_purchased rate and SDLT total validation against official HMRC figures.
+- Tests for low-income decile sanity checks to prevent negative net incomes and impossible tax rates.
+
+### Fixed
+
+- Set property_purchased stochastically at 3.85% based on HMRC housing transaction data, fixing unrealistic SDLT charges that caused 224% tax rates in the first income decile.
+
+## [1.29.4] - 2025-12-09 14:39:12
+
+### Changed
+
+- Reduced test runtime by using 32 epochs instead of 512 when TESTING environment variable is set
+
+## [1.29.3] - 2025-12-09 10:06:31
+
+### Fixed
+
+- A bug hard-coded to 2023, which meant that custom FRS datasets defined after 2024 fail on BRMA imputation.
+
+## [1.29.2] - 2025-12-08 17:47:38
+
+### Fixed
+
+- Added mortgage and private rent targets.
+
+## [1.29.1] - 2025-12-07 09:17:37
+
+### Fixed
+
+- Zero out fuel spending for households without fuel consumption
+
+## [1.29.0] - 2025-12-04 17:51:20
+
+### Added
+
+- Housing cost calibration to LAs.
+
+## [1.28.0] - 2025-12-03 23:01:14
+
+### Added
+
+- Use num_vehicles as predictor for fuel spending imputation
+
+## [1.27.1] - 2025-12-03 22:49:46
+
+### Changed
+
+- Updated Node.js from 22 to 24 LTS in docs workflow
+
 ## [1.27.0] - 2025-12-03 17:02:06
 
 ### Added
@@ -473,6 +538,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.30.2]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.30.1...1.30.2
+[1.30.1]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.30.0...1.30.1
+[1.30.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.29.4...1.30.0
+[1.29.4]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.29.3...1.29.4
+[1.29.3]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.29.2...1.29.3
+[1.29.2]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.29.1...1.29.2
+[1.29.1]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.29.0...1.29.1
+[1.29.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.28.0...1.29.0
+[1.28.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.27.1...1.28.0
+[1.27.1]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.27.0...1.27.1
 [1.27.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.26.1...1.27.0
 [1.26.1]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.26.0...1.26.1
 [1.26.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.25.0...1.26.0

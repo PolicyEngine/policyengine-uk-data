@@ -402,3 +402,64 @@
     added:
     - Add vehicle ownership calibration and imputation
   date: 2025-12-03 17:02:06
+- bump: patch
+  changes:
+    changed:
+    - Updated Node.js from 22 to 24 LTS in docs workflow
+  date: 2025-12-03 22:49:46
+- bump: minor
+  changes:
+    added:
+    - Use num_vehicles as predictor for fuel spending imputation
+  date: 2025-12-03 23:01:14
+- bump: minor
+  changes:
+    added:
+    - Housing cost calibration to LAs.
+  date: 2025-12-04 17:51:20
+- bump: patch
+  changes:
+    fixed:
+    - Zero out fuel spending for households without fuel consumption
+  date: 2025-12-07 09:17:37
+- bump: patch
+  changes:
+    fixed:
+    - Added mortgage and private rent targets.
+  date: 2025-12-08 17:47:38
+- bump: patch
+  changes:
+    fixed:
+    - A bug hard-coded to 2023, which meant that custom FRS datasets defined after
+      2024 fail on BRMA imputation.
+  date: 2025-12-09 10:06:31
+- bump: patch
+  changes:
+    changed:
+    - Reduced test runtime by using 32 epochs instead of 512 when TESTING environment
+      variable is set
+  date: 2025-12-09 14:39:12
+- bump: minor
+  changes:
+    added:
+    - Tests for property_purchased rate and SDLT total validation against official
+      HMRC figures.
+    - Tests for low-income decile sanity checks to prevent negative net incomes and
+      impossible tax rates.
+    fixed:
+    - Set property_purchased stochastically at 3.85% based on HMRC housing transaction
+      data, fixing unrealistic SDLT charges that caused 224% tax rates in the first
+      income decile.
+  date: 2025-12-19 11:21:28
+- bump: patch
+  changes:
+    fixed:
+    - Widened VAT reform test tolerance to accommodate calibration variance between
+      test and production datasets.
+  date: 2025-12-19 14:41:54
+- bump: patch
+  changes:
+    fixed:
+    - Clip negative values to zero for employment, self-employment, savings interest,
+      tax-free savings, and dividend income variables.
+  date: 2026-01-06 09:55:01

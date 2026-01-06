@@ -340,7 +340,9 @@ def create_frs(
 
     WEEKS_IN_YEAR = 365.25 / 7
 
-    pe_person["employment_income"] = person.inearns * WEEKS_IN_YEAR
+    pe_person["employment_income"] = (
+        np.maximum(0, person.inearns) * WEEKS_IN_YEAR
+    )
 
     pension_payment = sum_to_entity(
         pension.penpay * (pension.penpay > 0),
@@ -366,17 +368,20 @@ def create_frs(
         pension_payment + pension_tax_paid + pension_deductions_removed
     ) * WEEKS_IN_YEAR
 
-    pe_person["self_employment_income"] = person.seincam2 * WEEKS_IN_YEAR
+    pe_person["self_employment_income"] = (
+        np.maximum(0, person.seincam2) * WEEKS_IN_YEAR
+    )
 
     INVERTED_BASIC_RATE = 1.25
 
-    pe_person["tax_free_savings_income"] = (
+    pe_person["tax_free_savings_income"] = np.maximum(
+        0,
         sum_to_entity(
             account.accint * (account.account == 21),
             account.person_id,
             person.person_id,
         )
-        * WEEKS_IN_YEAR
+        * WEEKS_IN_YEAR,
     )
     taxable_savings_interest = (
         sum_to_entity(
@@ -390,10 +395,12 @@ def create_frs(
         )
         * WEEKS_IN_YEAR
     )
-    pe_person["savings_interest_income"] = (
-        taxable_savings_interest + pe_person["tax_free_savings_income"].values
+    pe_person["savings_interest_income"] = np.maximum(
+        0,
+        taxable_savings_interest + pe_person["tax_free_savings_income"].values,
     )
-    pe_person["dividend_income"] = (
+    pe_person["dividend_income"] = np.maximum(
+        0,
         sum_to_entity(
             (
                 account.accint
@@ -406,7 +413,7 @@ def create_frs(
             account.person_id,
             person.index,
         )
-        * 52
+        * 52,
     )
     is_head = person.hrpid == 1
     household_property_income = (
@@ -775,7 +782,7 @@ def create_frs(
         {
             "brma": brma,
             "household_id": sim.populations["benunit"].household(
-                "household_id", 2023
+                "household_id", sim.dataset.time_period
             ),
         }
     )
@@ -917,6 +924,26 @@ def create_frs(
     # Add marital status at the benefit unit level
 
     pe_benunit["is_married"] = frs["benunit"].famtypb2.isin([5, 7])
+
+    # Stochastically set property_purchased based on UK housing transaction rate.
+    # Previously defaulted to True in policyengine-uk, causing all households
+    # to be charged SDLT as if they just bought their property (£370bn total).
+    #
+    # Sources:
+    # - Transactions: HMRC 2024 - 1.1m/year
+    #   https://www.gov.uk/government/statistics/monthly-property-transactions-completed-in-the-uk-with-value-40000-or-above
+    # - Households: ONS 2024 - 28.6m
+    #   https://www.ons.gov.uk/peoplepopulationandcommunity/birthsdeathsandmarriages/families/bulletins/familiesandhouseholds/2024
+    # - Rate: 1.1m / 28.6m = 3.85%
+    #
+    # Verification against official SDLT revenue (2024-25):
+    # - Official SDLT: £13.9bn (https://www.gov.uk/government/statistics/uk-stamp-tax-statistics)
+    # - With fix (3.85%): £15.7bn (close to official)
+    # - Without fix (100%): £370bn (26x too high)
+    PROPERTY_PURCHASE_RATE = 0.0385
+    pe_household["property_purchased"] = (
+        np.random.random(len(pe_household)) < PROPERTY_PURCHASE_RATE
+    )
 
     dataset = UKSingleYearDataset(
         person=pe_person,
