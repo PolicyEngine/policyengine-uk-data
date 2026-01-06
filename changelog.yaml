@@ -457,3 +457,9 @@
     - Widened VAT reform test tolerance to accommodate calibration variance between
       test and production datasets.
   date: 2025-12-19 14:41:54
+- bump: patch
+  changes:
+    fixed:
+    - Clip negative values to zero for employment, self-employment, savings interest,
+      tax-free savings, and dividend income variables.
+  date: 2026-01-06 09:55:01
