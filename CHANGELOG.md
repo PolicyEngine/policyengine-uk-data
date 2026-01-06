@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.31.0] - 2026-01-06 10:13:56
+
+### Added
+
+- Move all randomness to data package for deterministic country package. Take-up decisions are now generated stochastically during dataset creation using take-up rates from YAML parameter files.
+
 ## [1.30.2] - 2026-01-06 09:55:01
 
 ### Fixed
@@ -538,6 +544,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.31.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.30.2...1.31.0
 [1.30.2]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.30.1...1.30.2
 [1.30.1]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.30.0...1.30.1
 [1.30.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.29.4...1.30.0

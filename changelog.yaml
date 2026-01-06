@@ -463,3 +463,10 @@
     - Clip negative values to zero for employment, self-employment, savings interest,
       tax-free savings, and dividend income variables.
   date: 2026-01-06 09:55:01
+- bump: minor
+  changes:
+    added:
+    - Move all randomness to data package for deterministic country package. Take-up
+      decisions are now generated stochastically during dataset creation using take-up
+      rates from YAML parameter files.
+  date: 2026-01-06 10:13:56

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "policyengine_uk_data"
-version = "1.30.2"
+version = "1.31.0"
 description = "A package to create representative microdata for the UK."
 readme = "README.md"
 authors = [
