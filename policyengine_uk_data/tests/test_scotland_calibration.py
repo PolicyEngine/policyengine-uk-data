@@ -14,7 +14,7 @@ def test_scotland_children_under_16(baseline):
     )
 
     assert (
-        abs(scotland_children_count / CHILDREN_TARGET - 1) < 0.55
+        abs(scotland_children_count / CHILDREN_TARGET - 1) < 0.15
     ), f"Expected {CHILDREN_TARGET/1e3:.0f}k children under 16 in Scotland, got {scotland_children_count/1e3:.0f}k."
 
 
@@ -33,5 +33,5 @@ def test_scotland_households_3plus_children(baseline):
     HOUSEHOLDS_TARGET = 82e3  # 82k households with 3+ children (Census 2022)
 
     assert (
-        abs(scotland_3plus_count / HOUSEHOLDS_TARGET - 1) < 0.60
+        abs(scotland_3plus_count / HOUSEHOLDS_TARGET - 1) < 0.20
     ), f"Expected {HOUSEHOLDS_TARGET/1e3:.0f}k households with 3+ children in Scotland, got {scotland_3plus_count/1e3:.0f}k."
