@@ -278,8 +278,8 @@ def create_target_matrix(
     scotland_3plus_children = (household_region == "SCOTLAND") & (
         children_per_household >= 3
     )
-    df["ons/scotland_households_3plus_children"] = scotland_3plus_children.astype(
-        float
+    df["ons/scotland_households_3plus_children"] = (
+        scotland_3plus_children.astype(float)
     )
 
     targets = (

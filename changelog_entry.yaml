@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    added:
+      - Scotland-specific calibration targets for children under 16 (NRS mid-year estimates) and households with 3+ children (Census 2022) to improve accuracy of Scottish policy analysis.

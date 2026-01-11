@@ -40,7 +40,9 @@ def test_scotland_households_3plus_children(baseline):
     scotland_3plus = (
         (region.values == "SCOTLAND") & (children_per_hh >= 3)
     ).astype(float)
-    scotland_3plus_count = (scotland_3plus * household_weight.values).sum() / 1e3
+    scotland_3plus_count = (
+        scotland_3plus * household_weight.values
+    ).sum() / 1e3
 
     HOUSEHOLDS_TARGET_K = 82  # 82k households with 3+ children in Scotland
     TOLERANCE = 0.20  # 20% tolerance
