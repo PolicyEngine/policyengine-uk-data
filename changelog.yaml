@@ -470,10 +470,3 @@
       decisions are now generated stochastically during dataset creation using take-up
       rates from YAML parameter files.
   date: 2026-01-06 10:13:56
-- bump: minor
-  changes:
-    added:
-    - Scotland-specific calibration targets for children under 16 (NRS mid-year estimates)
-      and households with 3+ children (Census 2022) to improve accuracy of Scottish
-      policy analysis.
-  date: 2026-01-11 00:00:00
