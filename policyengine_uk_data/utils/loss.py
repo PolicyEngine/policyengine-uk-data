@@ -263,6 +263,29 @@ def create_target_matrix(
 
     df["ons/uk_population"] = household_from_person(age >= 0)
 
+    # Scotland-specific calibration targets
+    # Children under 16 in Scotland
+    # Source: NRS mid-year population estimates
+    # https://www.nrscotland.gov.uk/statistics-and-data/statistics/statistics-by-theme/population/population-estimates/mid-year-population-estimates
+    scotland_children_under_16 = (region == "SCOTLAND") & (age < 16)
+    df["ons/scotland_children_under_16"] = household_from_person(
+        scotland_children_under_16
+    )
+
+    # Households with 3+ children in Scotland
+    # Source: Scotland Census 2022 - Household composition
+    # https://www.scotlandscensus.gov.uk/census-results/at-a-glance/household-composition/
+    # Count children per household, filter to Scotland households with 3+
+    is_child = sim.calculate("is_child").values
+    children_per_household = household_from_person(is_child)
+    household_region = sim.calculate("region", map_to="household").values
+    scotland_3plus_children = (household_region == "SCOTLAND") & (
+        children_per_household >= 3
+    )
+    df["ons/scotland_households_3plus_children"] = (
+        scotland_3plus_children.astype(float)
+    )
+
     targets = (
         statistics[statistics.time_period == int(time_period)]
         .set_index("name")
