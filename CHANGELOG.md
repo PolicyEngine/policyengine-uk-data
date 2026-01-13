@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.32.0] - 2026-01-13 14:24:26
+
+### Added
+
+- Scotland-specific calibration targets for children under 16 (NRS mid-year estimates) and households with 3+ children (Census 2022) to improve accuracy of Scottish policy analysis.
+
 ## [1.31.0] - 2026-01-06 10:13:56
 
 ### Added
@@ -544,6 +550,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.32.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.31.0...1.32.0
 [1.31.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.30.2...1.31.0
 [1.30.2]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.30.1...1.30.2
 [1.30.1]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.30.0...1.30.1
