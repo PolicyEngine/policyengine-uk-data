@@ -272,6 +272,15 @@ def create_target_matrix(
         scotland_children_under_16
     )
 
+    # Babies under 1 in Scotland
+    # Source: NRS Vital Events - births registered in Scotland
+    # https://www.nrscotland.gov.uk/publications/vital-events-reference-tables-2024/
+    # ~46,000 births per year (45,763 in 2024)
+    scotland_babies_under_1 = (region == "SCOTLAND") & (age < 1)
+    df["ons/scotland_babies_under_1"] = household_from_person(
+        scotland_babies_under_1
+    )
+
     # Households with 3+ children in Scotland
     # Source: Scotland Census 2022 - Household composition
     # https://www.scotlandscensus.gov.uk/census-results/at-a-glance/household-composition/

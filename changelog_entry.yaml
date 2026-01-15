@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    added:
+      - Add calibration target for babies under 1 in Scotland (~46k from NRS Vital Events)
