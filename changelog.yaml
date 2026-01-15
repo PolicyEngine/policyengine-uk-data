@@ -477,3 +477,8 @@
       and households with 3+ children (Census 2022) to improve accuracy of Scottish
       policy analysis.
   date: 2026-01-13 14:24:26
+- bump: minor
+  changes:
+    added:
+    - Add calibration target for babies under 1 in Scotland (~46k from NRS Vital Events)
+  date: 2026-01-15 16:03:56
