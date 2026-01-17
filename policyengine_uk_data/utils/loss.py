@@ -295,12 +295,6 @@ def create_target_matrix(
         scotland_3plus_children.astype(float)
     )
 
-    # Scottish Child Payment total spend
-    # Source: Scottish Budget 2026-27, Table 5.08
-    # https://www.gov.scot/publications/scottish-budget-2026-2027/pages/6/
-    scp = sim.calculate("scottish_child_payment")
-    df["sss/scottish_child_payment"] = household_from_family(scp)
-
     targets = (
         statistics[statistics.time_period == int(time_period)]
         .set_index("name")
@@ -528,6 +522,8 @@ def create_target_matrix(
     # Scottish Child Payment total spend
     # Source: Scottish Budget 2026-27, Table 5.08
     # https://www.gov.scot/publications/scottish-budget-2026-2027/pages/6/
+    scp = sim.calculate("scottish_child_payment")
+    df["sss/scottish_child_payment"] = household_from_person(scp)
     SCP_SPEND = {
         2024: 455.8e6,
         2025: 471.0e6,
