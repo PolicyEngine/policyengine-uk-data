@@ -493,3 +493,10 @@
     added:
     - Add Scottish Child Payment as a calibration target using Scottish Budget figures
   date: 2026-01-17 05:09:55
+- bump: patch
+  changes:
+    changed:
+    - Improved calibration weight initialization to use country-aware divisors. Households
+      now start with weights divided by the number of areas in their country rather
+      than total areas, improving convergence for devolved nation targets.
+  date: 2026-01-17 16:56:01
