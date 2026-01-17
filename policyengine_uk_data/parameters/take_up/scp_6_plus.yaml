@@ -2,7 +2,7 @@ description: Take-up rate for Scottish Child Payment among eligible families wit
 metadata:
   unit: /1
   reference:
-    - title: Scottish Child Payment High Level Statistics to 31 October 2024
-      href: https://www.socialsecurity.gov.scot/reporting/publications/scottish-child-payment-high-level-statistics-to-31-october-2024
+    - title: Take-up rates of Scottish benefits - November 2024, Section 3
+      href: https://www.gov.scot/publications/take-up-rates-scottish-benefits-2024/pages/3/
 values:
-  2021-02-15: 0.86
+  2021-02-15: 0.85
