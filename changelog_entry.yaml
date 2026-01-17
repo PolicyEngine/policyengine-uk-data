@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    changed:
+      - Improved calibration weight initialization to use country-aware divisors. Households now start with weights divided by the number of areas in their country rather than total areas, improving convergence for devolved nation targets.
