@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    added:
+      - Add would_claim_scp variable generation for Scottish Child Payment deterministic takeup

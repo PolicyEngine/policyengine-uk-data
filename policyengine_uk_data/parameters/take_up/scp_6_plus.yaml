@@ -1,0 +1,8 @@
+description: Take-up rate for Scottish Child Payment among eligible families with any children aged 6 or over
+metadata:
+  unit: /1
+  reference:
+    - title: Scottish Child Payment High Level Statistics to 31 October 2024
+      href: https://www.socialsecurity.gov.scot/reporting/publications/scottish-child-payment-high-level-statistics-to-31-october-2024
+values:
+  2021-02-15: 0.86

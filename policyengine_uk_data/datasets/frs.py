@@ -845,6 +845,8 @@ def create_frs(
     extended_childcare_rate = load_take_up_rate("extended_childcare", year)
     universal_childcare_rate = load_take_up_rate("universal_childcare", year)
     targeted_childcare_rate = load_take_up_rate("targeted_childcare", year)
+    scp_under_6_rate = load_take_up_rate("scp_under_6", year)
+    scp_6_plus_rate = load_take_up_rate("scp_6_plus", year)
 
     # Generate take-up decisions by comparing random draws to take-up rates
     # Person-level
@@ -876,6 +878,24 @@ def create_frs(
     )
     pe_benunit["would_claim_targeted_childcare"] = (
         generator.random(len(pe_benunit)) < targeted_childcare_rate
+    )
+
+    # Scottish Child Payment take-up depends on child ages:
+    # 97% for families with only children under 6, 86% for families with 6+
+    # Source: Social Security Scotland statistics
+    person_ages = pd.Series(pe_person["age"], index=person.benunit_id)
+    child_mask = person_ages < 16  # Only consider children
+    child_ages = person_ages.where(child_mask)
+    # For each benefit unit, check if any children are 6 or older
+    has_child_6_plus = child_ages.groupby(level=0).apply(
+        lambda x: (x >= 6).any()
+    )
+    has_child_6_plus = has_child_6_plus.reindex(
+        pe_benunit["benunit_id"]
+    ).fillna(False)
+    scp_rate = np.where(has_child_6_plus, scp_6_plus_rate, scp_under_6_rate)
+    pe_benunit["would_claim_scp"] = (
+        generator.random(len(pe_benunit)) < scp_rate
     )
 
     # Generate other stochastic variables using rates from parameter files
