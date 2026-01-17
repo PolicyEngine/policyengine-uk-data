@@ -488,3 +488,8 @@
     - Add would_claim_scp variable generation for Scottish Child Payment deterministic
       takeup
   date: 2026-01-17 02:11:31
+- bump: minor
+  changes:
+    added:
+    - Add Scottish Child Payment as a calibration target using Scottish Budget figures
+  date: 2026-01-17 05:09:55
