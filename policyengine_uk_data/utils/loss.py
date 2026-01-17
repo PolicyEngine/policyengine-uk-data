@@ -295,6 +295,12 @@ def create_target_matrix(
         scotland_3plus_children.astype(float)
     )
 
+    # Scottish Child Payment total spend
+    # Source: Scottish Budget 2026-27, Table 5.08
+    # https://www.gov.scot/publications/scottish-budget-2026-2027/pages/6/
+    scp = sim.calculate("scottish_child_payment")
+    df["sss/scottish_child_payment"] = household_from_family(scp)
+
     targets = (
         statistics[statistics.time_period == int(time_period)]
         .set_index("name")
@@ -518,6 +524,21 @@ def create_target_matrix(
     df["dwp/pip_dl_enhanced_claimants"] = on_enhanced
     target_names.append("dwp/pip_dl_enhanced_claimants")
     target_values.append(1_608_000)
+
+    # Scottish Child Payment total spend
+    # Source: Scottish Budget 2026-27, Table 5.08
+    # https://www.gov.scot/publications/scottish-budget-2026-2027/pages/6/
+    SCP_SPEND = {
+        2024: 455.8e6,
+        2025: 471.0e6,
+        2026: 484.8e6,
+    }
+    # Extrapolate for other years using 3% annual growth
+    scp_target = SCP_SPEND.get(
+        int(time_period), 471.0e6 * (1.03 ** (int(time_period) - 2025))
+    )
+    target_names.append("sss/scottish_child_payment")
+    target_values.append(scp_target)
 
     # Council Tax band counts
 
