@@ -880,26 +880,17 @@ def create_frs(
         generator.random(len(pe_benunit)) < targeted_childcare_rate
     )
 
-    # Scottish Child Payment take-up depends on child ages:
-    # 97% for families with only children under 6, 86% for families with 6+
-    # Source: Social Security Scotland statistics
-    person_data = pd.DataFrame(
-        {"benunit_id": person.benunit_id.values, "age": pe_person["age"]}
+    # Scottish Child Payment take-up at child level:
+    # 97% for children under 6, 85% for children 6-15
+    # Source: gov.scot take-up rates publication Nov 2024
+    ages = pe_person["age"]
+    scp_rate_per_person = np.where(
+        ages < 6,
+        scp_under_6_rate,
+        np.where(ages < 16, scp_6_plus_rate, 0),
     )
-    children = person_data[person_data["age"] < 16]
-    # For each benefit unit, check if any children are 6 or older
-    has_child_6_plus_df = children.groupby("benunit_id")["age"].apply(
-        lambda x: (x >= 6).any()
-    )
-    has_child_6_plus = (
-        pd.Series(pe_benunit["benunit_id"])
-        .map(has_child_6_plus_df)
-        .fillna(False)
-        .values
-    )
-    scp_rate = np.where(has_child_6_plus, scp_6_plus_rate, scp_under_6_rate)
-    pe_benunit["would_claim_scp"] = (
-        generator.random(len(pe_benunit)) < scp_rate
+    pe_person["would_claim_scp"] = (
+        generator.random(len(pe_person)) < scp_rate_per_person
     )
 
     # Generate other stochastic variables using rates from parameter files
