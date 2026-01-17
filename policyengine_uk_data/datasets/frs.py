@@ -881,14 +881,12 @@ def create_frs(
     )
 
     # Scottish Child Payment take-up at child level:
-    # 97% for children under 6, 85% for children 6-15
+    # 97% for children under 6, 85% for children 6+
     # Source: gov.scot take-up rates publication Nov 2024
+    # Note: We apply rates to all ages (not just <16) so that policy reforms
+    # extending the age limit will have reasonable takeup assumptions.
     ages = pe_person["age"]
-    scp_rate_per_person = np.where(
-        ages < 6,
-        scp_under_6_rate,
-        np.where(ages < 16, scp_6_plus_rate, 0),
-    )
+    scp_rate_per_person = np.where(ages < 6, scp_under_6_rate, scp_6_plus_rate)
     pe_person["would_claim_scp"] = (
         generator.random(len(pe_person)) < scp_rate_per_person
     )
