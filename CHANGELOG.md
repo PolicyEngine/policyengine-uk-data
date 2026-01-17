@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.34.0] - 2026-01-17 02:11:31
+
+### Added
+
+- Add would_claim_scp variable generation for Scottish Child Payment deterministic takeup
+
 ## [1.33.0] - 2026-01-15 16:03:56
 
 ### Added
@@ -556,6 +562,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.34.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.33.0...1.34.0
 [1.33.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.32.0...1.33.0
 [1.32.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.31.0...1.32.0
 [1.31.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.30.2...1.31.0

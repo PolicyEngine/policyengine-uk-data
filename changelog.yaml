@@ -482,3 +482,9 @@
     added:
     - Add calibration target for babies under 1 in Scotland (~46k from NRS Vital Events)
   date: 2026-01-15 16:03:56
+- bump: minor
+  changes:
+    added:
+    - Add would_claim_scp variable generation for Scottish Child Payment deterministic
+      takeup
+  date: 2026-01-17 02:11:31
