@@ -845,6 +845,8 @@ def create_frs(
     extended_childcare_rate = load_take_up_rate("extended_childcare", year)
     universal_childcare_rate = load_take_up_rate("universal_childcare", year)
     targeted_childcare_rate = load_take_up_rate("targeted_childcare", year)
+    scp_under_6_rate = load_take_up_rate("scp_under_6", year)
+    scp_6_plus_rate = load_take_up_rate("scp_6_plus", year)
 
     # Generate take-up decisions by comparing random draws to take-up rates
     # Person-level
@@ -876,6 +878,17 @@ def create_frs(
     )
     pe_benunit["would_claim_targeted_childcare"] = (
         generator.random(len(pe_benunit)) < targeted_childcare_rate
+    )
+
+    # Scottish Child Payment take-up at child level:
+    # 97% for children under 6, 85% for children 6+
+    # Source: gov.scot take-up rates publication Nov 2024
+    # Note: We apply rates to all ages (not just <16) so that policy reforms
+    # extending the age limit will have reasonable takeup assumptions.
+    ages = pe_person["age"]
+    scp_rate_per_person = np.where(ages < 6, scp_under_6_rate, scp_6_plus_rate)
+    pe_person["would_claim_scp"] = (
+        generator.random(len(pe_person)) < scp_rate_per_person
     )
 
     # Generate other stochastic variables using rates from parameter files

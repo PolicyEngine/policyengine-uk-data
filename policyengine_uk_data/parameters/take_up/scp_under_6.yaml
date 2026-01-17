@@ -1,0 +1,8 @@
+description: Take-up rate for Scottish Child Payment among eligible families with only children under 6
+metadata:
+  unit: /1
+  reference:
+    - title: Take-up rates of Scottish benefits - November 2024, Section 3
+      href: https://www.gov.scot/publications/take-up-rates-scottish-benefits-2024/pages/3/
+values:
+  2021-02-15: 0.97
