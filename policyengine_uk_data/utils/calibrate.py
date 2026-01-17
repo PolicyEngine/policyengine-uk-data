@@ -50,8 +50,12 @@ def calibrate_local_areas(
     # number of areas in its country, not the total area count. This ensures
     # households start at approximately correct weight for their country's targets.
     # The country_mask r[i,j]=1 iff household j is in same country as area i.
-    areas_per_household = r.sum(axis=0)  # number of areas each household can contribute to
-    areas_per_household = np.maximum(areas_per_household, 1)  # avoid division by zero
+    areas_per_household = r.sum(
+        axis=0
+    )  # number of areas each household can contribute to
+    areas_per_household = np.maximum(
+        areas_per_household, 1
+    )  # avoid division by zero
     original_weights = np.log(
         dataset.household.household_weight.values / areas_per_household
         + np.random.random(len(dataset.household.household_weight.values))
