@@ -23,7 +23,6 @@ from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk import Microsimulation
 
-
 PREDICTORS = [
     "age",
     "employment_income",

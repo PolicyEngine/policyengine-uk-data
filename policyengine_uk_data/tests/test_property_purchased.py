@@ -19,7 +19,6 @@ Verification against official SDLT revenue (2024-25):
 
 import pytest
 
-
 PROPERTY_PURCHASE_RATE = 0.0385
 
 

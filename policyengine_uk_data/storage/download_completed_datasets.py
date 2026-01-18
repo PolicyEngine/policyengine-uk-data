@@ -1,7 +1,6 @@
 from policyengine_uk_data.utils.huggingface import download, upload
 from pathlib import Path
 
-
 FOLDER = Path(__file__).parent
 
 FILES = [

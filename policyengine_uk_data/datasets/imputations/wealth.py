@@ -11,7 +11,6 @@ from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk import Microsimulation
 
-
 WAS_TAB_FOLDER = STORAGE_FOLDER / "was_2006_20"
 
 REGIONS = {
