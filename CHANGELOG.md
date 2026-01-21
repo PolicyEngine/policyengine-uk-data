@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.36.1] - 2026-01-21 15:14:09
+
+### Fixed
+
+- Fix black formatting for 5 files to comply with black 26.1.0
+
 ## [1.36.0] - 2026-01-21 14:22:42
 
 ### Added
@@ -580,6 +586,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.36.1]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.36.0...1.36.1
 [1.36.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.35.1...1.36.0
 [1.35.1]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.35.0...1.35.1
 [1.35.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.34.0...1.35.0

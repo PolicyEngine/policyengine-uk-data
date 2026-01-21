@@ -506,3 +506,8 @@
     - Add calibration target for UC households in Scotland with youngest child under
       1 (~14k from DWP Stat-Xplore)
   date: 2026-01-21 14:22:42
+- bump: patch
+  changes:
+    fixed:
+    - Fix black formatting for 5 files to comply with black 26.1.0
+  date: 2026-01-21 15:14:09

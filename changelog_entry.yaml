@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-      - Fix black formatting for 5 files to comply with black 26.1.0
