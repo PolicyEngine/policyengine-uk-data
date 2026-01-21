@@ -267,7 +267,7 @@ def create_target_matrix(
     # Children under 16 in Scotland
     # Source: NRS mid-year population estimates
     # https://www.nrscotland.gov.uk/statistics-and-data/statistics/statistics-by-theme/population/population-estimates/mid-year-population-estimates
-    scotland_children_under_16 = (region == "SCOTLAND") & (age < 16)
+    scotland_children_under_16 = (region.values == "SCOTLAND") & (age < 16)
     df["ons/scotland_children_under_16"] = household_from_person(
         scotland_children_under_16
     )
@@ -276,7 +276,7 @@ def create_target_matrix(
     # Source: NRS Vital Events - births registered in Scotland
     # https://www.nrscotland.gov.uk/publications/vital-events-reference-tables-2024/
     # ~46,000 births per year (45,763 in 2024)
-    scotland_babies_under_1 = (region == "SCOTLAND") & (age < 1)
+    scotland_babies_under_1 = (region.values == "SCOTLAND") & (age < 1)
     df["ons/scotland_babies_under_1"] = household_from_person(
         scotland_babies_under_1
     )
