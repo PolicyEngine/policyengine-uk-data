@@ -500,3 +500,9 @@
       now start with weights divided by the number of areas in their country rather
       than total areas, improving convergence for devolved nation targets.
   date: 2026-01-17 16:56:01
+- bump: minor
+  changes:
+    added:
+    - Add calibration target for UC households in Scotland with youngest child under
+      1 (~14k from DWP Stat-Xplore)
+  date: 2026-01-21 14:22:42
