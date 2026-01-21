@@ -511,3 +511,9 @@
     fixed:
     - Fix black formatting for 5 files to comply with black 26.1.0
   date: 2026-01-21 15:14:09
+- bump: patch
+  changes:
+    fixed:
+    - Use region.values for Scotland comparisons in loss function to ensure consistent
+      behavior with StringArray types
+  date: 2026-01-21 19:06:42
