@@ -10,7 +10,6 @@ from policyengine_uk import Microsimulation
 from policyengine_core.data import Dataset
 from policyengine_uk_data.storage import STORAGE_FOLDER
 
-
 # Load configuration from YAML file
 config_path = Path(__file__).parent / "reforms_config.yaml"
 with open(config_path, "r") as f:
