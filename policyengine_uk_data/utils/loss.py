@@ -536,6 +536,27 @@ def create_target_matrix(
     target_names.append("sss/scottish_child_payment")
     target_values.append(scp_target)
 
+    # UC households in Scotland with child under 1
+    # Source: DWP Stat-Xplore, UC Households dataset, November 2023
+    # https://stat-xplore.dwp.gov.uk/
+    # Filters: Scotland, Age of Youngest Child = 0
+    # ~14,000 households (13,992 in November 2023)
+    uc_amount = sim.calculate("universal_credit")
+    on_uc_family = uc_amount > 0
+    on_uc_household = household_from_family(on_uc_family) > 0
+
+    child_under_1 = is_child & (age < 1)
+    has_child_under_1 = household_from_person(child_under_1) > 0
+
+    scotland_uc_child_under_1 = (
+        (household_region == "SCOTLAND") & on_uc_household & has_child_under_1
+    )
+    df["dwp/scotland_uc_households_child_under_1"] = (
+        scotland_uc_child_under_1.astype(float)
+    )
+    target_names.append("dwp/scotland_uc_households_child_under_1")
+    target_values.append(14_000)  # 13,992 rounded, November 2023
+
     # Council Tax band counts
 
     ct_data = pd.read_csv(STORAGE_FOLDER / "council_tax_bands_2024.csv")
