@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+      - Use region.values for Scotland comparisons in loss function to ensure consistent behavior with StringArray types
