@@ -20,7 +20,7 @@ def test_scotland_uc_households_child_under_1(baseline):
     """
     region = baseline.calculate(
         "region", map_to="household", period=2025
-    ).values
+    )
     uc = baseline.calculate("universal_credit", period=2025).values
     household_weight = baseline.calculate(
         "household_weight", map_to="household", period=2025
@@ -38,7 +38,7 @@ def test_scotland_uc_households_child_under_1(baseline):
     )
 
     scotland_uc_child_under_1 = (
-        (region == "SCOTLAND") & (uc > 0) & has_child_under_1
+        (region.values == "SCOTLAND") & (uc > 0) & has_child_under_1
     )
     total = (household_weight * scotland_uc_child_under_1).sum()
 
