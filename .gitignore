@@ -6,13 +6,8 @@
 **/*.zip
 **/*.pkl
 **/*.tab
-!uprating_factors.csv
-!uprating_growth_factors.csv
-!incomes.csv
-!tax_benefit.csv
-!demographics.csv
-!incomes_projection.csv
-!policyengine_uk_data/datasets/local_areas/**/*.csv
 **/_build
-!policyengine_uk_data/storage/*.csv
 **/version.json
+
+# Local data bucket (Dagster)
+policyengine_uk_data/data/
