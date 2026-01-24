@@ -37,6 +37,9 @@ calibration:
 output:
 	dagster asset materialize --select "enhanced_frs" -m policyengine_uk_data.definitions
 
+targets:
+	dagster asset materialize --select "targets_db" -m policyengine_uk_data.definitions
+
 # Documentation
 documentation:
 	pip install --pre "jupyter-book>=2"
@@ -67,6 +70,7 @@ help:
 	@echo "  make imputations - Materialise imputation assets only"
 	@echo "  make calibration - Materialise calibration assets only"
 	@echo "  make output      - Materialise final enhanced_frs only"
+	@echo "  make targets     - Materialise targets database only"
 	@echo "  make test        - Run pytest"
 	@echo "  make format      - Format with black"
 	@echo "  make install     - Install package with dev deps"

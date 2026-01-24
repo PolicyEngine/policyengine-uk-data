@@ -24,6 +24,7 @@ from policyengine_uk_data.assets import (
     constituency_weights,
     la_weights,
     enhanced_frs,
+    targets_db,
 )
 from policyengine_uk_data.assets.checks import all_checks
 from policyengine_uk_data.resources.bucket import BucketResource
@@ -98,6 +99,8 @@ all_assets = [
     la_weights,
     # Final output
     enhanced_frs,
+    # Targets database
+    targets_db,
 ]
 
 defs = Definitions(

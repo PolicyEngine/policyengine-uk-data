@@ -24,6 +24,7 @@ from policyengine_uk_data.assets.calibration import (
     la_weights,
 )
 from policyengine_uk_data.assets.outputs import enhanced_frs
+from policyengine_uk_data.assets.targets import targets_db
 
 __all__ = [
     # Raw data
@@ -48,4 +49,6 @@ __all__ = [
     "la_weights",
     # Outputs
     "enhanced_frs",
+    # Targets
+    "targets_db",
 ]

@@ -1,6 +1,6 @@
 *.egg-info
 **/__pycache__
-**/.DS_STORE
+**/.DS_Store
 **/*.h5
 **/*.csv
 **/*.zip
@@ -9,5 +9,22 @@
 **/_build
 **/version.json
 
+# Databases
+**/*.db
+
 # Local data bucket (Dagster)
 policyengine_uk_data/data/
+
+# Dagster
+.tmp_dagster_home*
+storage/
+
+# Build artifacts
+dist/
+build/
+*.egg
+
+# IDE
+.idea/
+.vscode/
+*.swp
