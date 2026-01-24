@@ -48,16 +48,11 @@ dev = [
     "build",
 ]
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["policyengine_uk_data*"]
+
 [tool.setuptools]
-packages = [
-    "policyengine_uk_data",
-    "policyengine_uk_data.assets",
-    "policyengine_uk_data.resources",
-    "policyengine_uk_data.io_managers",
-    "policyengine_uk_data.transforms",
-    "policyengine_uk_data.models",
-    "policyengine_uk_data.targets",
-]
 include-package-data = true
 
 [tool.setuptools.package-data]

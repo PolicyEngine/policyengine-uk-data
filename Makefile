@@ -40,6 +40,13 @@ output:
 targets:
 	dagster asset materialize --select "targets_db" -m policyengine_uk_data.definitions
 
+# Explorer
+explorer:
+	docker compose -f policyengine_uk_data/explorer/docker-compose.yml up --build
+
+explorer-down:
+	docker compose -f policyengine_uk_data/explorer/docker-compose.yml down
+
 # Documentation
 documentation:
 	pip install --pre "jupyter-book>=2"
@@ -71,6 +78,8 @@ help:
 	@echo "  make calibration - Materialise calibration assets only"
 	@echo "  make output      - Materialise final enhanced_frs only"
 	@echo "  make targets     - Materialise targets database only"
+	@echo "  make explorer    - Start targets explorer via docker compose"
+	@echo "  make explorer-down - Stop explorer containers"
 	@echo "  make test        - Run pytest"
 	@echo "  make format      - Format with black"
 	@echo "  make install     - Install package with dev deps"

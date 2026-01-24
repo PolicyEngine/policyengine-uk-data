@@ -3,7 +3,7 @@
 import os
 from pathlib import Path
 
-from dagster import Definitions
+from dagster import Definitions, define_asset_job, AssetSelection
 
 from policyengine_uk_data.assets import (
     raw_frs,
@@ -24,6 +24,13 @@ from policyengine_uk_data.assets import (
     constituency_weights,
     la_weights,
     enhanced_frs,
+    targets_areas,
+    targets_metrics,
+    obr_receipts_observations,
+    dwp_benefit_observations,
+    ons_demographics_observations,
+    observations_from_official_stats,
+    observations_council_tax,
     targets_db,
 )
 from policyengine_uk_data.assets.checks import all_checks
@@ -100,11 +107,26 @@ all_assets = [
     # Final output
     enhanced_frs,
     # Targets database
+    targets_areas,
+    targets_metrics,
+    obr_receipts_observations,
+    dwp_benefit_observations,
+    ons_demographics_observations,
+    observations_from_official_stats,
+    observations_council_tax,
     targets_db,
 ]
+
+# Jobs for easy materialization from the UI
+targets_job = define_asset_job(
+    name="materialize_targets",
+    selection=AssetSelection.groups("targets"),
+    description="Materialize all calibration targets (OBR, DWP, ONS data)",
+)
 
 defs = Definitions(
     assets=all_assets,
     asset_checks=all_checks,
+    jobs=[targets_job],
     resources=resources,
 )

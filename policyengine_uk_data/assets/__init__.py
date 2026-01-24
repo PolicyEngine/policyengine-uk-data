@@ -24,7 +24,16 @@ from policyengine_uk_data.assets.calibration import (
     la_weights,
 )
 from policyengine_uk_data.assets.outputs import enhanced_frs
-from policyengine_uk_data.assets.targets import targets_db
+from policyengine_uk_data.assets.targets import (
+    targets_areas,
+    targets_metrics,
+    dwp_benefit_observations,
+    ons_demographics_observations,
+    observations_from_official_stats,
+    observations_council_tax,
+    targets_db,
+)
+from policyengine_uk_data.assets.sources import obr_receipts_observations
 
 __all__ = [
     # Raw data
@@ -50,5 +59,12 @@ __all__ = [
     # Outputs
     "enhanced_frs",
     # Targets
+    "targets_areas",
+    "targets_metrics",
+    "obr_receipts_observations",
+    "dwp_benefit_observations",
+    "ons_demographics_observations",
+    "observations_from_official_stats",
+    "observations_council_tax",
     "targets_db",
 ]
