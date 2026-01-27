@@ -414,6 +414,79 @@ def targets_metrics(context: AssetExecutionContext) -> list[dict]:
             "category": "dwp",
             "unit": "gbp",
         },
+        # DWP benefit caseloads (from Stat-Xplore)
+        {
+            "code": "state_pension_recipients",
+            "name": "State Pension recipients",
+            "category": "dwp",
+            "unit": "count",
+        },
+        {
+            "code": "universal_credit_people",
+            "name": "Universal Credit claimants (people)",
+            "category": "dwp",
+            "unit": "count",
+        },
+        {
+            "code": "universal_credit_households",
+            "name": "Universal Credit claimants (households)",
+            "category": "dwp",
+            "unit": "count",
+        },
+        {
+            "code": "pension_credit_claimants",
+            "name": "Pension Credit claimants",
+            "category": "dwp",
+            "unit": "count",
+        },
+        {
+            "code": "attendance_allowance_claimants",
+            "name": "Attendance Allowance claimants",
+            "category": "dwp",
+            "unit": "count",
+        },
+        {
+            "code": "jsa_claimants",
+            "name": "Jobseekers Allowance claimants",
+            "category": "dwp",
+            "unit": "count",
+        },
+        {
+            "code": "esa_claimants",
+            "name": "Employment and Support Allowance claimants",
+            "category": "dwp",
+            "unit": "count",
+        },
+        {
+            "code": "housing_benefit_claimants",
+            "name": "Housing Benefit claimants",
+            "category": "dwp",
+            "unit": "count",
+        },
+        {
+            "code": "dla_claimants",
+            "name": "Disability Living Allowance claimants",
+            "category": "dwp",
+            "unit": "count",
+        },
+        {
+            "code": "carers_allowance_claimants",
+            "name": "Carers Allowance claimants",
+            "category": "dwp",
+            "unit": "count",
+        },
+        {
+            "code": "income_support_claimants",
+            "name": "Income Support claimants",
+            "category": "dwp",
+            "unit": "count",
+        },
+        {
+            "code": "winter_fuel_payment_recipients",
+            "name": "Winter Fuel Payment recipients",
+            "category": "dwp",
+            "unit": "count",
+        },
         # Housing
         {
             "code": "rent_private",
@@ -663,33 +736,7 @@ def observations_from_official_stats(context: AssetExecutionContext) -> list[dic
             }
         )
 
-    # DWP PIP
-    dwp_pip = SOURCES["dwp_pip_stats"]
-    for year in range(2024, 2030):
-        observations.append(
-            {
-                "metric_code": "pip_dl_standard_claimants",
-                "area_code": "UK",
-                "valid_year": year,
-                "snapshot_date": dwp_pip["snapshot"].isoformat(),
-                "value": 1_283_000,
-                "source": "dwp_pip_stats",
-                "source_url": dwp_pip["url"],
-                "is_forecast": year > 2024,
-            }
-        )
-        observations.append(
-            {
-                "metric_code": "pip_dl_enhanced_claimants",
-                "area_code": "UK",
-                "valid_year": year,
-                "snapshot_date": dwp_pip["snapshot"].isoformat(),
-                "value": 1_608_000,
-                "source": "dwp_pip_stats",
-                "source_url": dwp_pip["url"],
-                "is_forecast": year > 2024,
-            }
-        )
+    # DWP PIP - now fetched from Stat-Xplore API via dwp_stat_xplore_observations asset
 
     # Scottish child payment
     scp = SOURCES["scottish_budget"]
@@ -725,33 +772,7 @@ def observations_from_official_stats(context: AssetExecutionContext) -> list[dic
             }
         )
 
-    # Benefit cap
-    dwp_bc = SOURCES["dwp_benefit_cap"]
-    for year in range(2024, 2030):
-        observations.append(
-            {
-                "metric_code": "benefit_capped_households",
-                "area_code": "UK",
-                "valid_year": year,
-                "snapshot_date": dwp_bc["snapshot"].isoformat(),
-                "value": 115_000,
-                "source": "dwp_benefit_cap",
-                "source_url": dwp_bc["url"],
-                "is_forecast": year > 2025,
-            }
-        )
-        observations.append(
-            {
-                "metric_code": "benefit_cap_total_reduction",
-                "area_code": "UK",
-                "valid_year": year,
-                "snapshot_date": dwp_bc["snapshot"].isoformat(),
-                "value": 60 * 52 * 115_000,
-                "source": "dwp_benefit_cap",
-                "source_url": dwp_bc["url"],
-                "is_forecast": year > 2025,
-            }
-        )
+    # Benefit cap - now fetched from Stat-Xplore API via dwp_stat_xplore_observations asset
 
     # Housing
     ons_rent = SOURCES["ons_private_rent"]
@@ -881,6 +902,7 @@ def observations_council_tax(context: AssetExecutionContext) -> list[dict]:
         "metrics": AssetIn("targets_metrics"),
         "obr_data": AssetIn("obr_receipts_observations"),
         "dwp_benefits": AssetIn("dwp_benefit_observations"),
+        "dwp_stat_xplore": AssetIn("dwp_stat_xplore_observations"),
         "ons_demographics": AssetIn("ons_demographics_observations"),
         "other_stats": AssetIn("observations_from_official_stats"),
         "council_tax": AssetIn("observations_council_tax"),
@@ -892,6 +914,7 @@ def targets_db(
     metrics: list[dict],
     obr_data: list[dict],
     dwp_benefits: list[dict],
+    dwp_stat_xplore: list[dict],
     ons_demographics: list[dict],
     other_stats: list[dict],
     council_tax: list[dict],
@@ -910,7 +933,9 @@ def targets_db(
 
     # Load all observations
     all_obs = []
-    all_sources = obr_data + dwp_benefits + ons_demographics + other_stats + council_tax
+    all_sources = (
+        obr_data + dwp_benefits + dwp_stat_xplore + ons_demographics + other_stats + council_tax
+    )
     for obs_dict in all_sources:
         obs_dict["snapshot_date"] = date.fromisoformat(obs_dict["snapshot_date"])
         all_obs.append(Observation(**obs_dict))

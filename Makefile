@@ -40,19 +40,6 @@ output:
 targets:
 	dagster asset materialize --select "targets_db" -m policyengine_uk_data.definitions
 
-# Explorer
-explorer:
-	docker compose -f policyengine_uk_data/explorer/docker-compose.yml up --build
-
-explorer-down:
-	docker compose -f policyengine_uk_data/explorer/docker-compose.yml down
-
-# Documentation
-documentation:
-	pip install --pre "jupyter-book>=2"
-	jb clean docs && jb build docs
-	python docs/add_plotly_to_book.py docs
-
 build:
 	python -m build
 
@@ -66,6 +53,28 @@ changelog:
 	rm changelog_entry.yaml || true
 	touch changelog_entry.yaml
 
+# Dashboard commands (local - faster)
+dashboard:
+	@echo "Starting dashboard locally..."
+	@cd dashboard/api && DATABASE_PATH=../../policyengine_uk_data/targets/targets.db CORS_ORIGINS=http://localhost:3000 uvicorn main:app --host 0.0.0.0 --port 8000 > /tmp/api.log 2>&1 & \
+	cd dashboard/frontend && bun dev > /tmp/frontend.log 2>&1 & \
+	sleep 3 && \
+	echo "✓ Frontend: http://localhost:3000" && \
+	echo "✓ API: http://localhost:8000" && \
+	echo "✓ API Docs: http://localhost:8000/docs"
+
+dashboard-stop:
+	@lsof -ti:8000 | xargs kill -9 2>/dev/null || true
+	@lsof -ti:3000 | xargs kill -9 2>/dev/null || true
+	@echo "Dashboard stopped"
+
+# Dashboard commands (Docker - slower but isolated)
+dashboard-docker:
+	cd dashboard && docker-compose up --build
+
+dashboard-docker-down:
+	cd dashboard && docker-compose down
+
 # Help
 help:
 	@echo "Available targets:"
@@ -78,8 +87,9 @@ help:
 	@echo "  make calibration - Materialise calibration assets only"
 	@echo "  make output      - Materialise final enhanced_frs only"
 	@echo "  make targets     - Materialise targets database only"
-	@echo "  make explorer    - Start targets explorer via docker compose"
-	@echo "  make explorer-down - Stop explorer containers"
+	@echo "  make dashboard         - Start dashboard locally (fast)"
+	@echo "  make dashboard-stop    - Stop dashboard"
+	@echo "  make dashboard-docker  - Start dashboard with Docker (slower)"
 	@echo "  make test        - Run pytest"
 	@echo "  make format      - Format with black"
 	@echo "  make install     - Install package with dev deps"
