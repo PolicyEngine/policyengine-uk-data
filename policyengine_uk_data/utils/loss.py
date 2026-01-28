@@ -522,19 +522,22 @@ def create_target_matrix(
     # Scottish Child Payment total spend
     # Source: Scottish Budget 2026-27, Table 5.08
     # https://www.gov.scot/publications/scottish-budget-2026-2027/pages/6/
-    scp = sim.calculate("scottish_child_payment")
-    df["sss/scottish_child_payment"] = household_from_person(scp)
-    SCP_SPEND = {
-        2024: 455.8e6,
-        2025: 471.0e6,
-        2026: 484.8e6,
-    }
-    # Extrapolate for other years using 3% annual growth
-    scp_target = SCP_SPEND.get(
-        int(time_period), 471.0e6 * (1.03 ** (int(time_period) - 2025))
-    )
-    target_names.append("sss/scottish_child_payment")
-    target_values.append(scp_target)
+    try:
+        scp = sim.calculate("scottish_child_payment")
+        df["sss/scottish_child_payment"] = household_from_person(scp)
+        SCP_SPEND = {
+            2024: 455.8e6,
+            2025: 471.0e6,
+            2026: 484.8e6,
+        }
+        # Extrapolate for other years using 3% annual growth
+        scp_target = SCP_SPEND.get(
+            int(time_period), 471.0e6 * (1.03 ** (int(time_period) - 2025))
+        )
+        target_names.append("sss/scottish_child_payment")
+        target_values.append(scp_target)
+    except ValueError:
+        pass  # Variable not available in this policyengine-uk version
 
     # UC households in Scotland with child under 1
     # Source: DWP Stat-Xplore, UC Households dataset, November 2023
