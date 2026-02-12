@@ -473,6 +473,41 @@ def create_target_matrix(
     target_names.append("hmrc/salary_sacrifice_contributions")
     target_values.append(SS_CONTRIBUTIONS_2024 * uprating_factor)
 
+    # Salary sacrifice headcount targets
+    # Source: HMRC, "Salary sacrifice reform for pension contributions"
+    # https://www.gov.uk/government/publications/salary-sacrifice-reform-for-pension-contributions-effective-from-6-april-2029
+    # 7.7mn total SS users (3.3mn above £2k cap, 4.3mn below £2k cap)
+    ss_has_contributions = ss_contributions > 0
+    ss_below_cap = ss_has_contributions & (ss_contributions <= 2000)
+    ss_above_cap = ss_has_contributions & (ss_contributions > 2000)
+
+    df["obr/salary_sacrifice_users_total"] = household_from_person(
+        ss_has_contributions
+    )
+    df["obr/salary_sacrifice_users_below_cap"] = household_from_person(
+        ss_below_cap
+    )
+    df["obr/salary_sacrifice_users_above_cap"] = household_from_person(
+        ss_above_cap
+    )
+
+    # HMRC/ASHE 2024 baseline headcounts
+    SS_TOTAL_USERS_2024 = 7_700_000
+    SS_BELOW_CAP_USERS_2024 = 4_300_000
+    SS_ABOVE_CAP_USERS_2024 = 3_300_000
+    # OBR (5 Feb 2026, para 1.7): SS population grows 0.9% faster than
+    # total employee numbers. With ~1.5% employment growth, ~2.4%/year.
+    ss_headcount_factor = 1.024 ** max(0, int(time_period) - 2024)
+
+    target_names.append("obr/salary_sacrifice_users_total")
+    target_values.append(SS_TOTAL_USERS_2024 * ss_headcount_factor)
+
+    target_names.append("obr/salary_sacrifice_users_below_cap")
+    target_values.append(SS_BELOW_CAP_USERS_2024 * ss_headcount_factor)
+
+    target_names.append("obr/salary_sacrifice_users_above_cap")
+    target_values.append(SS_ABOVE_CAP_USERS_2024 * ss_headcount_factor)
+
     # Add two-child limit targets.
     child_is_affected = (
         sim.map_result(
