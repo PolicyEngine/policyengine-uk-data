@@ -2,7 +2,9 @@ import pandas as pd
 from policyengine_uk_data.utils.calibrate import calibrate_local_areas
 from policyengine_uk_data.datasets.local_areas.constituencies.loss import (
     create_constituency_target_matrix,
-    create_national_target_matrix,
+)
+from policyengine_uk_data.targets.build_loss_matrix import (
+    create_target_matrix as create_national_target_matrix,
 )
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset

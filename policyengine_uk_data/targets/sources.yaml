@@ -1,0 +1,43 @@
+# Official source URLs for calibration targets.
+# Update these when new vintages are published.
+
+obr:
+  efo_receipts: "https://obr.uk/download/november-2025-economic-and-fiscal-outlook-detailed-forecast-tables-receipts/"
+  efo_expenditure: "https://obr.uk/download/november-2025-economic-and-fiscal-outlook-detailed-forecast-tables-expenditure/"
+  vintage: "november_2025"
+
+hmrc:
+  spi_collated: "https://assets.publishing.service.gov.uk/media/67cabb37ade26736dbf9ffe5/Collated_Tables_3_1_to_3_17_2223.ods"
+  spi_geography: "https://assets.publishing.service.gov.uk/media/67cabb7f8c1076c796a45bec/Collated_Tables_3_12_to_3_15a_2223.ods"
+  income_tax_liabilities: "https://www.gov.uk/government/statistics/income-tax-liabilities-statistics-tax-year-2022-to-2023-to-tax-year-2025-to-2026"
+  salary_sacrifice_table_6: "https://assets.publishing.service.gov.uk/media/687a294e312ee8a5f0806b6d/Tables_6_1_and_6_2.csv"
+
+dwp:
+  stat_xplore_api: "https://stat-xplore.dwp.gov.uk/webapi/rest/v1"
+  two_child_limit: "https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024"
+  benefit_cap: "https://www.gov.uk/government/statistics/benefit-cap-number-of-households-capped-to-february-2025"
+  uc_national_payment_dist: "https://stat-xplore.dwp.gov.uk"
+  uc_pc_households: "https://stat-xplore.dwp.gov.uk"
+  uc_la_households: "https://stat-xplore.dwp.gov.uk"
+  ni_uc_stats: "https://www.communities-ni.gov.uk/publications/universal-credit-statistics"
+
+ons:
+  population_projections: "https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/populationprojections/datasets/z1zippedpopulationprojectionsdatafilesuk"
+  savings_interest: "https://www.ons.gov.uk/economy/grossdomesticproductgdp/timeseries/haxv/ukea"
+  households: "https://www.ons.gov.uk/peoplepopulationandcommunity/birthsdeathsandmarriages/families/datasets/familiesandhouseholdsfamiliesandhouseholds"
+  la_income: "https://www.ons.gov.uk/employmentandlabourmarket/peopleinwork/earningsandworkinghours/datasets/smallareaincomeestimatesformiddlelayersuperoutputareasenglandandwales"
+
+voa:
+  council_tax: "https://www.gov.uk/government/statistics/council-tax-stock-of-properties-2024"
+
+nts:
+  vehicle_ownership: "https://www.gov.uk/government/statistics/national-travel-survey-2024"
+
+nrs:
+  population_estimates: "https://www.nrscotland.gov.uk/statistics-and-data/statistics/statistics-by-theme/population/population-estimates/mid-year-population-estimates"
+
+scottish_government:
+  budget: "https://www.gov.scot/publications/scottish-budget-2026-2027/pages/6/"
+
+nomis:
+  earnings_by_constituency: "https://www.nomisweb.co.uk/api/v01/"

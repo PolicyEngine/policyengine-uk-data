@@ -119,7 +119,9 @@ def main():
             )
             from policyengine_uk_data.datasets.local_areas.constituencies.loss import (
                 create_constituency_target_matrix,
-                create_national_target_matrix,
+            )
+            from policyengine_uk_data.targets.build_loss_matrix import (
+                create_target_matrix as create_national_target_matrix,
             )
             from policyengine_uk_data.datasets.local_areas.constituencies.calibrate import (
                 get_performance,
