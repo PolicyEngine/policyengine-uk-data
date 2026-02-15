@@ -24,7 +24,6 @@ from pathlib import Path
 
 import pandas as pd
 import requests
-import yaml
 
 from policyengine_uk_data.targets.schema import (
     GeographicLevel,
@@ -39,8 +38,7 @@ _STORAGE = Path(__file__).parents[2] / "storage"
 
 _HEADERS = {
     "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36"
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
     ),
 }
 
@@ -89,9 +87,7 @@ _GENDER_BANDS = [
 @lru_cache(maxsize=1)
 def _download_uk_projection() -> pd.DataFrame:
     """Download and parse the UK principal population projection."""
-    r = requests.get(
-        _UK_ZIP_URL, headers=_HEADERS, allow_redirects=True, timeout=120
-    )
+    r = requests.get(_UK_ZIP_URL, headers=_HEADERS, allow_redirects=True, timeout=120)
     r.raise_for_status()
     z = zipfile.ZipFile(io.BytesIO(r.content))
     with z.open("uk/uk_ppp_machine_readable.xlsx") as f:
@@ -193,9 +189,7 @@ def _parse_regional_from_csv() -> list[Target]:
 
     for _, row in demographics.iterrows():
         name = row["name"]
-        if name in _SKIP_NAMES or any(
-            name.startswith(p) for p in _SKIP_PREFIXES
-        ):
+        if name in _SKIP_NAMES or any(name.startswith(p) for p in _SKIP_PREFIXES):
             continue
         values = {}
         for y in _YEARS:

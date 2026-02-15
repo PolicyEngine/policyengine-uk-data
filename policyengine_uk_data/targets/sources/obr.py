@@ -38,8 +38,7 @@ _FY_COL_TO_YEAR = {
 
 _HEADERS = {
     "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36"
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
     ),
 }
 
@@ -57,9 +56,7 @@ def _download_workbook(url: str) -> openpyxl.Workbook:
     return openpyxl.load_workbook(io.BytesIO(r.content), data_only=False)
 
 
-def _read_row_values(
-    ws, row_num: int, col_letters: list[str]
-) -> dict[int, float]:
+def _read_row_values(ws, row_num: int, col_letters: list[str]) -> dict[int, float]:
     """Read numeric values from a row, mapped to calendar years."""
     result = {}
     for col in col_letters:
@@ -117,7 +114,9 @@ def _parse_receipts(wb: openpyxl.Workbook) -> list[Target]:
     # Income tax from Table 3.4 (accrued basis)
     try:
         ws34 = wb["3.4"]
-        row_num = _find_row(ws34, "Income tax (gross of tax credits)", col="B", max_row=30)
+        row_num = _find_row(
+            ws34, "Income tax (gross of tax credits)", col="B", max_row=30
+        )
         values = _read_row_values(ws34, row_num, cols_34)
         if values:
             targets.append(
@@ -359,15 +358,11 @@ def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
     # Universal credit outside cap (row 43) is jobseekers UC
     try:
         # UC outside cap = predominantly JSA-conditionality UC
-        uc_outside_row = _find_row(
-            ws, "Universal credit", col="B", max_row=55
-        )
+        uc_outside_row = _find_row(ws, "Universal credit", col="B", max_row=55)
         # Find the second UC row (outside cap section)
         for row in range(uc_outside_row + 1, 55):
             cell_val = ws[f"B{row}"].value
-            if cell_val and str(cell_val).strip().startswith(
-                "Universal credit"
-            ):
+            if cell_val and str(cell_val).strip().startswith("Universal credit"):
                 values = read_49(row)
                 if values:
                     targets.append(
@@ -439,12 +434,8 @@ def _parse_tv_licence(wb: openpyxl.Workbook) -> list[Target]:
 _PRIVATE_SCHOOL = {y: 557_000 for y in range(2018, 2032)}
 
 # SPP Review: salary sacrifice NI relief (uprated 3% pa from 2024 base)
-_SS_EMPLOYEE_NI = {
-    y: 1.2e9 * 1.03 ** max(0, y - 2024) for y in range(2024, 2032)
-}
-_SS_EMPLOYER_NI = {
-    y: 2.9e9 * 1.03 ** max(0, y - 2024) for y in range(2024, 2032)
-}
+_SS_EMPLOYEE_NI = {y: 1.2e9 * 1.03 ** max(0, y - 2024) for y in range(2024, 2032)}
+_SS_EMPLOYER_NI = {y: 2.9e9 * 1.03 ** max(0, y - 2024) for y in range(2024, 2032)}
 
 
 def get_targets() -> list[Target]:
@@ -459,9 +450,7 @@ def get_targets() -> list[Target]:
         logger.error("Failed to download/parse OBR receipts: %s", e)
 
     try:
-        expenditure_wb = _download_workbook(
-            config["obr"]["efo_expenditure"]
-        )
+        expenditure_wb = _download_workbook(config["obr"]["efo_expenditure"])
         targets.extend(_parse_council_tax(expenditure_wb))
         targets.extend(_parse_welfare(expenditure_wb))
         targets.extend(_parse_tv_licence(expenditure_wb))

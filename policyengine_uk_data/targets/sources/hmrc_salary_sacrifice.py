@@ -21,8 +21,7 @@ logger = logging.getLogger(__name__)
 _SOURCES_YAML = Path(__file__).parent.parent / "sources.yaml"
 _HEADERS = {
     "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36"
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
     ),
 }
 
@@ -52,9 +51,7 @@ def get_targets() -> list[Target]:
     targets = []
 
     try:
-        r = requests.get(
-            ref, headers=_HEADERS, allow_redirects=True, timeout=30
-        )
+        r = requests.get(ref, headers=_HEADERS, allow_redirects=True, timeout=30)
         r.raise_for_status()
         df = pd.read_csv(io.StringIO(r.content.decode("utf-8-sig")))
 
@@ -128,8 +125,6 @@ def get_targets() -> list[Target]:
             )
 
     except Exception as e:
-        logger.error(
-            "Failed to download/parse HMRC salary sacrifice CSV: %s", e
-        )
+        logger.error("Failed to download/parse HMRC salary sacrifice CSV: %s", e)
 
     return targets

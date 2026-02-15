@@ -24,12 +24,8 @@ def discover_source_modules() -> list:
     """Import all modules under targets.sources."""
     modules = []
     package_path = Path(sources_pkg.__file__).parent
-    for importer, modname, ispkg in pkgutil.iter_modules(
-        [str(package_path)]
-    ):
-        mod = importlib.import_module(
-            f"policyengine_uk_data.targets.sources.{modname}"
-        )
+    for importer, modname, ispkg in pkgutil.iter_modules([str(package_path)]):
+        mod = importlib.import_module(f"policyengine_uk_data.targets.sources.{modname}")
         if hasattr(mod, "get_targets"):
             modules.append(mod)
     return modules

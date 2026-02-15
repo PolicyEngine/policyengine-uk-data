@@ -14,7 +14,6 @@ Sources:
 import logging
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -53,9 +52,16 @@ def load_ons_la_income() -> pd.DataFrame:
     def load_sheet(sheet_name: str, value_col: str) -> pd.DataFrame:
         df = pd.read_excel(xlsx, sheet_name=sheet_name, header=3)
         df.columns = [
-            "msoa_code", "msoa_name", "la_code", "la_name",
-            "region_code", "region_name", value_col,
-            "upper_ci", "lower_ci", "ci_width",
+            "msoa_code",
+            "msoa_name",
+            "la_code",
+            "la_name",
+            "region_code",
+            "region_name",
+            value_col,
+            "upper_ci",
+            "lower_ci",
+            "ci_width",
         ]
         df = df.iloc[1:].dropna(subset=["msoa_code"])
         df[value_col] = pd.to_numeric(df[value_col])
@@ -98,12 +104,24 @@ def load_tenure_data() -> pd.DataFrame:
         return pd.DataFrame()
     df = pd.read_excel(path, sheet_name="data download")
     df.columns = [
-        "region_code", "region_name", "la_code", "la_name",
-        "owned_outright_pct", "owned_mortgage_pct",
-        "private_rent_pct", "social_rent_pct",
+        "region_code",
+        "region_name",
+        "la_code",
+        "la_name",
+        "owned_outright_pct",
+        "owned_mortgage_pct",
+        "private_rent_pct",
+        "social_rent_pct",
     ]
-    return df[["la_code", "owned_outright_pct", "owned_mortgage_pct",
-               "private_rent_pct", "social_rent_pct"]]
+    return df[
+        [
+            "la_code",
+            "owned_outright_pct",
+            "owned_mortgage_pct",
+            "private_rent_pct",
+            "social_rent_pct",
+        ]
+    ]
 
 
 def load_private_rents() -> pd.DataFrame:
@@ -117,8 +135,16 @@ def load_private_rents() -> pd.DataFrame:
         return pd.DataFrame()
     df = pd.read_excel(path, sheet_name="Figure 3", header=5)
     df.columns = [
-        "col0", "la_code_old", "area_code", "area_name", "room",
-        "studio", "one_bed", "two_bed", "three_bed", "four_plus",
+        "col0",
+        "la_code_old",
+        "area_code",
+        "area_name",
+        "room",
+        "studio",
+        "one_bed",
+        "two_bed",
+        "three_bed",
+        "four_plus",
         "median_monthly_rent",
     ]
     df = df[df["area_code"].astype(str).str.match(r"^E0[6789]")]

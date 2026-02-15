@@ -4,7 +4,6 @@ Delegates to the targets registry and build_loss_matrix module
 for all target definitions and simulation column construction.
 """
 
-import numpy as np
 import pandas as pd
 
 from policyengine_uk_data.targets.build_loss_matrix import (
@@ -12,9 +11,7 @@ from policyengine_uk_data.targets.build_loss_matrix import (
 )
 
 
-def get_loss_results(
-    dataset, time_period, reform=None, household_weights=None
-):
+def get_loss_results(dataset, time_period, reform=None, household_weights=None):
     """Calculate loss metrics comparing model outputs to targets.
 
     Args:

@@ -18,12 +18,8 @@ def calibrate(
 ):
     return calibrate_local_areas(
         dataset=dataset,
-        matrix_fn=lambda ds: create_local_authority_target_matrix(
-            ds, ds.time_period
-        ),
-        national_matrix_fn=lambda ds: create_national_target_matrix(
-            ds, ds.time_period
-        ),
+        matrix_fn=lambda ds: create_local_authority_target_matrix(ds, ds.time_period),
+        national_matrix_fn=lambda ds: create_national_target_matrix(ds, ds.time_period),
         area_count=360,
         weight_file="local_authority_weights.h5",
         excluded_training_targets=excluded_training_targets,
@@ -37,9 +33,7 @@ def calibrate(
 def get_performance(weights, m_c, y_c, m_n, y_n, excluded_targets):
     la_target_matrix, la_actuals = m_c, y_c
     national_target_matrix, national_actuals = m_n, y_n
-    local_authorities = pd.read_csv(
-        STORAGE_FOLDER / "local_authorities_2021.csv"
-    )
+    local_authorities = pd.read_csv(STORAGE_FOLDER / "local_authorities_2021.csv")
     la_wide = weights @ la_target_matrix
     la_wide.index = local_authorities.code.values
     la_wide["name"] = local_authorities.name.values
@@ -93,15 +87,11 @@ def get_performance(weights, m_c, y_c, m_n, y_n, excluded_targets):
     national_target_validation["target"] = national_actuals.values
 
     national_target_validation["error"] = (
-        national_target_validation["estimate"]
-        - national_target_validation["target"]
+        national_target_validation["estimate"] - national_target_validation["target"]
     )
-    national_target_validation["abs_error"] = national_target_validation[
-        "error"
-    ].abs()
+    national_target_validation["abs_error"] = national_target_validation["error"].abs()
     national_target_validation["rel_abs_error"] = (
-        national_target_validation["abs_error"]
-        / national_target_validation["target"]
+        national_target_validation["abs_error"] / national_target_validation["target"]
     )
 
     df = pd.concat(

@@ -10,7 +10,6 @@ Sources:
 - DWP two-child limit: https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024
 """
 
-import pandas as pd
 from pathlib import Path
 
 from policyengine_uk_data.targets.schema import Target, Unit
@@ -118,9 +117,7 @@ def get_targets() -> list[Target]:
                 variable="universal_credit",
                 source="dwp",
                 unit=Unit.COUNT,
-                values={
-                    2025: count_k * (1 + undercount_relative) * 1e3
-                },
+                values={2025: count_k * (1 + undercount_relative) * 1e3},
                 is_count=True,
                 reference_url="https://stat-xplore.dwp.gov.uk/",
             )
@@ -193,44 +190,46 @@ def get_targets() -> list[Target]:
         )
 
     # Two-child limit by disability
-    targets.extend([
-        Target(
-            name="dwp/uc/two_child_limit/adult_pip_households",
-            variable="pip",
-            source="dwp",
-            unit=Unit.COUNT,
-            values={2026: 62_260},
-            is_count=True,
-            reference_url="https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024",
-        ),
-        Target(
-            name="dwp/uc/two_child_limit/adult_pip_children",
-            variable="is_child",
-            source="dwp",
-            unit=Unit.COUNT,
-            values={2026: 225_320},
-            is_count=True,
-            reference_url="https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024",
-        ),
-        Target(
-            name="dwp/uc/two_child_limit/disabled_child_element_households",
-            variable="uc_individual_disabled_child_element",
-            source="dwp",
-            unit=Unit.COUNT,
-            values={2026: 124_560},
-            is_count=True,
-            reference_url="https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024",
-        ),
-        Target(
-            name="dwp/uc/two_child_limit/disabled_child_element_children",
-            variable="is_child",
-            source="dwp",
-            unit=Unit.COUNT,
-            values={2026: 462_660},
-            is_count=True,
-            reference_url="https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024",
-        ),
-    ])
+    targets.extend(
+        [
+            Target(
+                name="dwp/uc/two_child_limit/adult_pip_households",
+                variable="pip",
+                source="dwp",
+                unit=Unit.COUNT,
+                values={2026: 62_260},
+                is_count=True,
+                reference_url="https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024",
+            ),
+            Target(
+                name="dwp/uc/two_child_limit/adult_pip_children",
+                variable="is_child",
+                source="dwp",
+                unit=Unit.COUNT,
+                values={2026: 225_320},
+                is_count=True,
+                reference_url="https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024",
+            ),
+            Target(
+                name="dwp/uc/two_child_limit/disabled_child_element_households",
+                variable="uc_individual_disabled_child_element",
+                source="dwp",
+                unit=Unit.COUNT,
+                values={2026: 124_560},
+                is_count=True,
+                reference_url="https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024",
+            ),
+            Target(
+                name="dwp/uc/two_child_limit/disabled_child_element_children",
+                variable="is_child",
+                source="dwp",
+                unit=Unit.COUNT,
+                values={2026: 462_660},
+                is_count=True,
+                reference_url="https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024",
+            ),
+        ]
+    )
 
     # UC national payment distribution from xlsx
     targets.extend(_uc_payment_distribution_targets())

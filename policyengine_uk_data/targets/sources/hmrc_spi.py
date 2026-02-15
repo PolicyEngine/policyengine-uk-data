@@ -29,8 +29,7 @@ _STORAGE = Path(__file__).parents[2] / "storage"
 
 _HEADERS = {
     "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36"
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
     ),
 }
 
@@ -171,9 +170,7 @@ def get_targets() -> list[Target]:
 
         for idx, row in merged.iterrows():
             lower = int(row["lower_bound"])
-            upper = (
-                _BAND_UPPER[idx] if idx < len(_BAND_UPPER) else float("inf")
-            )
+            upper = _BAND_UPPER[idx] if idx < len(_BAND_UPPER) else float("inf")
             band_label = f"{lower:_}_to_{upper:_}"
 
             for variable in INCOME_VARIABLES:
@@ -188,9 +185,7 @@ def get_targets() -> list[Target]:
                             variable=variable,
                             source="hmrc_spi",
                             unit=Unit.GBP,
-                            values={
-                                _SPI_YEAR: float(row[amount_col]) * 1e6
-                            },
+                            values={_SPI_YEAR: float(row[amount_col]) * 1e6},
                             breakdown_variable="total_income",
                             lower_bound=float(lower),
                             upper_bound=float(upper),
@@ -201,16 +196,11 @@ def get_targets() -> list[Target]:
                 if count_col in row.index and row[count_col] > 0:
                     targets.append(
                         Target(
-                            name=(
-                                f"hmrc/{variable}_count_income_band"
-                                f"_{band_label}"
-                            ),
+                            name=(f"hmrc/{variable}_count_income_band_{band_label}"),
                             variable=variable,
                             source="hmrc_spi",
                             unit=Unit.COUNT,
-                            values={
-                                _SPI_YEAR: float(row[count_col]) * 1e3
-                            },
+                            values={_SPI_YEAR: float(row[count_col]) * 1e3},
                             is_count=True,
                             breakdown_variable="total_income",
                             lower_bound=float(lower),
@@ -230,9 +220,7 @@ def get_targets() -> list[Target]:
     return targets
 
 
-def _read_projection_csv(
-    csv_path: Path, ref: str
-) -> list[Target]:
+def _read_projection_csv(csv_path: Path, ref: str) -> list[Target]:
     """Read projected future year targets from incomes_projection.csv."""
     incomes = pd.read_csv(csv_path)
     targets = []
@@ -268,9 +256,7 @@ def _read_projection_csv(
                     )
 
                 if count_col in row.index and pd.notna(row[count_col]):
-                    name = (
-                        f"hmrc/{variable}_count_income_band_{band_label}"
-                    )
+                    name = f"hmrc/{variable}_count_income_band_{band_label}"
                     targets.append(
                         Target(
                             name=name,
