@@ -151,8 +151,7 @@ def create_local_authority_target_matrix(
     )
 
     has_ons_data = (
-        ons_merged["net_income_bhc"].notna()
-        & ons_merged["households"].notna()
+        ons_merged["net_income_bhc"].notna() & ons_merged["households"].notna()
     ).values
     total_households = ons_merged["households"].sum()
     la_household_share = np.where(
@@ -195,18 +194,17 @@ def create_local_authority_target_matrix(
     )
 
     tenure_type = sim.calculate("tenure_type").values
-    matrix["tenure/owned_outright"] = (
-        tenure_type == "OWNED_OUTRIGHT"
-    ).astype(float)
+    matrix["tenure/owned_outright"] = (tenure_type == "OWNED_OUTRIGHT").astype(
+        float
+    )
     matrix["tenure/owned_mortgage"] = (
         tenure_type == "OWNED_WITH_MORTGAGE"
     ).astype(float)
-    matrix["tenure/private_rent"] = (
-        tenure_type == "RENT_PRIVATELY"
-    ).astype(float)
+    matrix["tenure/private_rent"] = (tenure_type == "RENT_PRIVATELY").astype(
+        float
+    )
     matrix["tenure/social_rent"] = (
-        (tenure_type == "RENT_FROM_COUNCIL")
-        | (tenure_type == "RENT_FROM_HA")
+        (tenure_type == "RENT_FROM_COUNCIL") | (tenure_type == "RENT_FROM_HA")
     ).astype(float)
 
     has_tenure = (
@@ -220,9 +218,7 @@ def create_local_authority_target_matrix(
         ("private_rent", "private_rent_pct"),
         ("social_rent", "social_rent_pct"),
     ]:
-        targets = (
-            tenure_merged[pct_col] / 100 * tenure_merged["households"]
-        )
+        targets = tenure_merged[pct_col] / 100 * tenure_merged["households"]
         national = (
             original_weights * matrix[f"tenure/{tenure_key}"].values
         ).sum()
@@ -246,7 +242,8 @@ def create_local_authority_target_matrix(
 
     tenure_merged["private_rent_target"] = (
         tenure_merged["median_annual_rent"]
-        * tenure_merged["private_rent_pct"] / 100
+        * tenure_merged["private_rent_pct"]
+        / 100
         * tenure_merged["households"]
     )
 

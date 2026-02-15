@@ -11,7 +11,9 @@ from policyengine_uk_data.targets.build_loss_matrix import (
 )
 
 
-def get_loss_results(dataset, time_period, reform=None, household_weights=None):
+def get_loss_results(
+    dataset, time_period, reform=None, household_weights=None
+):
     """Calculate loss metrics comparing model outputs to targets.
 
     Args:

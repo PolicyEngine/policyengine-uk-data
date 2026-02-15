@@ -52,9 +52,9 @@ def test_hmrc_spi_targets_exist():
     targets = get_all_targets(year=2025)
     spi_targets = [t for t in targets if t.source == "hmrc_spi"]
     # 13 bands × 6 income types × 2 (count + amount) = 156 per year
-    assert len(spi_targets) >= 100, (
-        f"Expected 100+ SPI targets, got {len(spi_targets)}"
-    )
+    assert (
+        len(spi_targets) >= 100
+    ), f"Expected 100+ SPI targets, got {len(spi_targets)}"
 
 
 def test_dwp_pip_targets():
@@ -76,9 +76,9 @@ def test_voa_council_tax_targets():
 def test_core_target_count():
     """Total target count should be substantial."""
     targets = get_all_targets(year=2025)
-    assert len(targets) >= 200, (
-        f"Expected 200+ targets for 2025, got {len(targets)}"
-    )
+    assert (
+        len(targets) >= 200
+    ), f"Expected 200+ targets for 2025, got {len(targets)}"
 
 
 def test_two_child_limit_targets():

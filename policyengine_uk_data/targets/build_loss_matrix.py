@@ -114,7 +114,9 @@ class _SimContext:
         """Calculate variable mapped to household level."""
         key = ("pe", variable)
         if key not in self._cache:
-            self._cache[key] = self.sim.calculate(variable, map_to="household").values
+            self._cache[key] = self.sim.calculate(
+                variable, map_to="household"
+            ).values
         return self._cache[key]
 
     def pe_person(self, variable: str):
@@ -145,7 +147,9 @@ class _SimContext:
     @property
     def region(self):
         if "region" not in self._cache:
-            self._cache["region"] = self.sim.calculate("region", map_to="person")
+            self._cache["region"] = self.sim.calculate(
+                "region", map_to="person"
+            )
         return self._cache["region"]
 
     @property
@@ -174,7 +178,9 @@ class _SimContext:
         if "counterfactual_sim" not in self._cache:
             from policyengine_uk import Microsimulation
 
-            ss = self.sim.calculate("pension_contributions_via_salary_sacrifice")
+            ss = self.sim.calculate(
+                "pension_contributions_via_salary_sacrifice"
+            )
             emp = self.sim.calculate("employment_income")
             cf_sim = Microsimulation(dataset=self.dataset, reform=self.reform)
             cf_sim.set_input(
@@ -214,7 +220,9 @@ _REGION_INV = {v: k for k, v in _REGION_MAP.items()}
 # ── Column computation dispatch ──────────────────────────────────────
 
 
-def _compute_column(target: Target, ctx: _SimContext, year: int) -> np.ndarray | None:
+def _compute_column(
+    target: Target, ctx: _SimContext, year: int
+) -> np.ndarray | None:
     """Compute the household-level column for a target.
 
     Returns None if the target can't be computed (e.g. missing
@@ -255,9 +263,9 @@ def _compute_column(target: Target, ctx: _SimContext, year: int) -> np.ndarray |
     if name == "ons/scotland_households_3plus_children":
         is_child = ctx.pe_person("is_child")
         children_per_hh = ctx.household_from_person(is_child)
-        return ((ctx.household_region == "SCOTLAND") & (children_per_hh >= 3)).astype(
-            float
-        )
+        return (
+            (ctx.household_region == "SCOTLAND") & (children_per_hh >= 3)
+        ).astype(float)
 
     # ── Household type targets ────────────────────────────────────
     if target.variable == "family_type" and target.is_count:
@@ -327,9 +335,9 @@ def _compute_column(target: Target, ctx: _SimContext, year: int) -> np.ndarray |
         on_uc = ctx.household_from_family(uc > 0) > 0
         child_u1 = ctx.pe_person("is_child") & (ctx.age < 1)
         has_child_u1 = ctx.household_from_person(child_u1) > 0
-        return ((ctx.household_region == "SCOTLAND") & on_uc & has_child_u1).astype(
-            float
-        )
+        return (
+            (ctx.household_region == "SCOTLAND") & on_uc & has_child_u1
+        ).astype(float)
 
     # ── UC claimants by number of children ─────────────────────────
     if name.startswith("dwp/uc/claimants_with_") and "_children" in name:
@@ -355,14 +363,18 @@ def _compute_column(target: Target, ctx: _SimContext, year: int) -> np.ndarray |
         "obr/salary_sacrifice_employee_ni_relief",
     ):
         ni_base = ctx.sim.calculate("ni_employee")
-        ni_cf = ctx.counterfactual_sim.calculate("ni_employee", ctx.time_period)
+        ni_cf = ctx.counterfactual_sim.calculate(
+            "ni_employee", ctx.time_period
+        )
         return ctx.household_from_person(ni_cf - ni_base)
     if name in (
         "hmrc/salary_sacrifice_employer_nics_relief",
         "obr/salary_sacrifice_employer_ni_relief",
     ):
         ni_base = ctx.sim.calculate("ni_employer")
-        ni_cf = ctx.counterfactual_sim.calculate("ni_employer", ctx.time_period)
+        ni_cf = ctx.counterfactual_sim.calculate(
+            "ni_employer", ctx.time_period
+        )
         return ctx.household_from_person(ni_cf - ni_base)
 
     # ── UC jobseeker / non-jobseeker splits ───────────────────────
@@ -444,7 +456,9 @@ def _compute_regional_age(target: Target, ctx: _SimContext) -> np.ndarray:
         return None
 
     person_match = (
-        (ctx.region.values == pe_region) & (ctx.age >= lower) & (ctx.age <= upper)
+        (ctx.region.values == pe_region)
+        & (ctx.age >= lower)
+        & (ctx.age <= upper)
     )
     return ctx.household_from_person(person_match)
 
@@ -464,7 +478,9 @@ def _compute_gender_age(target: Target, ctx: _SimContext) -> np.ndarray:
     return ctx.household_from_person(sex_match & age_match)
 
 
-def _compute_household_type(target: Target, ctx: _SimContext) -> np.ndarray | None:
+def _compute_household_type(
+    target: Target, ctx: _SimContext
+) -> np.ndarray | None:
     """Compute household type count from ONS families & households categories.
 
     Maps ONS household categories to PE family_type enum values and
@@ -482,18 +498,18 @@ def _compute_household_type(target: Target, ctx: _SimContext) -> np.ndarray | No
         return ctx.household_from_family(ft == value) > 0
 
     if name == "lone_households_under_65":
-        return (ft_hh("SINGLE") & (children_per_hh == 0) & (age_hh_head < 65)).astype(
-            float
-        )
+        return (
+            ft_hh("SINGLE") & (children_per_hh == 0) & (age_hh_head < 65)
+        ).astype(float)
     if name == "lone_households_over_65":
-        return (ft_hh("SINGLE") & (children_per_hh == 0) & (age_hh_head >= 65)).astype(
-            float
-        )
+        return (
+            ft_hh("SINGLE") & (children_per_hh == 0) & (age_hh_head >= 65)
+        ).astype(float)
     if name == "unrelated_adult_households":
         people_per_hh = ctx.household_from_person(np.ones_like(is_child))
-        return (ft_hh("SINGLE") & (children_per_hh == 0) & (people_per_hh > 1)).astype(
-            float
-        )
+        return (
+            ft_hh("SINGLE") & (children_per_hh == 0) & (people_per_hh > 1)
+        ).astype(float)
     if name == "couple_no_children_households":
         return ft_hh("COUPLE_NO_CHILDREN").astype(float)
     if name == "couple_under_3_children_households":
@@ -503,10 +519,14 @@ def _compute_household_type(target: Target, ctx: _SimContext) -> np.ndarray | No
             & (children_per_hh <= 2)
         ).astype(float)
     if name == "couple_3_plus_children_households":
-        return (ft_hh("COUPLE_WITH_CHILDREN") & (children_per_hh >= 3)).astype(float)
+        return (ft_hh("COUPLE_WITH_CHILDREN") & (children_per_hh >= 3)).astype(
+            float
+        )
     if name == "couple_non_dependent_children_only_households":
         people_per_hh = ctx.household_from_person(np.ones_like(is_child))
-        return (ft_hh("COUPLE_NO_CHILDREN") & (people_per_hh > 2)).astype(float)
+        return (ft_hh("COUPLE_NO_CHILDREN") & (people_per_hh > 2)).astype(
+            float
+        )
     if name == "lone_parent_dependent_children_households":
         return (ft_hh("LONE_PARENT") & (children_per_hh > 0)).astype(float)
     if name == "lone_parent_non_dependent_children_households":
@@ -560,7 +580,9 @@ def _compute_income_band(target: Target, ctx: _SimContext) -> np.ndarray:
     upper = target.upper_bound
 
     income_df = ctx.sim.calculate_dataframe(["total_income", variable])
-    in_band = (income_df.total_income >= lower) & (income_df.total_income < upper)
+    in_band = (income_df.total_income >= lower) & (
+        income_df.total_income < upper
+    )
 
     if target.is_count:
         return ctx.household_from_person((income_df[variable] > 0) * in_band)
@@ -605,7 +627,9 @@ def _compute_uc_jobseeker(target: Target, ctx: _SimContext) -> np.ndarray:
     family = ctx.sim.populations["benunit"]
     uc = ctx.sim.calculate("universal_credit")
     on_uc = uc > 0
-    unemployed = family.any(ctx.sim.calculate("employment_status") == "UNEMPLOYED")
+    unemployed = family.any(
+        ctx.sim.calculate("employment_status") == "UNEMPLOYED"
+    )
 
     if "non_jobseekers" in target.name:
         mask = on_uc * ~unemployed
@@ -628,11 +652,15 @@ def _compute_uc_payment_dist(target: Target, ctx: _SimContext) -> np.ndarray:
     lower = target.lower_bound
     upper = target.upper_bound
 
-    uc_payments = ctx.sim.calculate("universal_credit", map_to="benunit").values
+    uc_payments = ctx.sim.calculate(
+        "universal_credit", map_to="benunit"
+    ).values
     uc_family_type = ctx.sim.calculate("family_type", map_to="benunit").values
 
     in_band = (
-        (uc_payments >= lower) & (uc_payments < upper) & (uc_family_type == family_type)
+        (uc_payments >= lower)
+        & (uc_payments < upper)
+        & (uc_family_type == family_type)
     )
     return ctx.household_from_family(in_band)
 
@@ -654,7 +682,9 @@ def _compute_ss_it_relief(target: Target, ctx: _SimContext) -> np.ndarray:
 
     name = target.name
     if "basic" in name:
-        mask = (adj_net_income_cf > basic_thresh) & (adj_net_income_cf <= higher_thresh)
+        mask = (adj_net_income_cf > basic_thresh) & (
+            adj_net_income_cf <= higher_thresh
+        )
     elif "higher" in name:
         mask = (adj_net_income_cf > higher_thresh) & (
             adj_net_income_cf <= additional_thresh
@@ -668,7 +698,9 @@ def _compute_ss_it_relief(target: Target, ctx: _SimContext) -> np.ndarray:
     return ctx.household_from_person(it_relief * mask)
 
 
-def _compute_two_child_limit(target: Target, ctx: _SimContext) -> np.ndarray | None:
+def _compute_two_child_limit(
+    target: Target, ctx: _SimContext
+) -> np.ndarray | None:
     """Compute two-child limit targets.
 
     These involve cross-tabulations of UC eligibility, child count,
@@ -699,14 +731,18 @@ def _compute_two_child_limit(target: Target, ctx: _SimContext) -> np.ndarray | N
         return children_in_capped
     if name == "dwp/uc/two_child_limit/children_in_affected_households":
         # Total children (not just affected ones) in capped households
-        total_children = sim.map_result(is_child * child_in_uc, "person", "household")
+        total_children = sim.map_result(
+            is_child * child_in_uc, "person", "household"
+        )
         return total_children * capped_hh
 
     # By number of children: "dwp/uc/two_child_limit/{n}_children_households"
     if "_children_households_total_children" in name:
         n = int(name.split("/")[-1].split("_")[0])
         children_count = sim.map_result(is_child, "person", "household")
-        return (capped_hh * (children_count == n) * children_count).astype(float)
+        return (capped_hh * (children_count == n) * children_count).astype(
+            float
+        )
     if "_children_households" in name and "total" not in name:
         n = int(name.split("/")[-1].split("_")[0])
         children_count = sim.map_result(is_child, "person", "household")
@@ -778,7 +814,9 @@ def _compute_uc_by_family_type(target: Target, ctx: _SimContext) -> np.ndarray:
     if ft_str == "single_no_children":
         match = ft_hh("SINGLE") & (children_per_hh == 0)
     elif ft_str == "single_with_children":
-        match = (ft_hh("SINGLE") | ft_hh("LONE_PARENT")) & (children_per_hh > 0)
+        match = (ft_hh("SINGLE") | ft_hh("LONE_PARENT")) & (
+            children_per_hh > 0
+        )
     elif ft_str == "couple_no_children":
         match = ft_hh("COUPLE_NO_CHILDREN")
     elif ft_str == "couple_with_children":

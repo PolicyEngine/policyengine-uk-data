@@ -73,9 +73,9 @@ def get_performance(weights, m_c, y_c, m_n, y_n, excluded_targets):
         constituency_target_validation["estimate"]
         - constituency_target_validation["target"]
     )
-    constituency_target_validation["abs_error"] = constituency_target_validation[
-        "error"
-    ].abs()
+    constituency_target_validation["abs_error"] = (
+        constituency_target_validation["error"].abs()
+    )
     constituency_target_validation["rel_abs_error"] = (
         constituency_target_validation["abs_error"]
         / constituency_target_validation["target"]
@@ -91,11 +91,15 @@ def get_performance(weights, m_c, y_c, m_n, y_n, excluded_targets):
     national_target_validation["target"] = national_actuals.values
 
     national_target_validation["error"] = (
-        national_target_validation["estimate"] - national_target_validation["target"]
+        national_target_validation["estimate"]
+        - national_target_validation["target"]
     )
-    national_target_validation["abs_error"] = national_target_validation["error"].abs()
+    national_target_validation["abs_error"] = national_target_validation[
+        "error"
+    ].abs()
     national_target_validation["rel_abs_error"] = (
-        national_target_validation["abs_error"] / national_target_validation["target"]
+        national_target_validation["abs_error"]
+        / national_target_validation["target"]
     )
 
     df = pd.concat(

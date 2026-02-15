@@ -29,7 +29,9 @@ _REF_ONS_INCOME = (
     "earningsandworkinghours/datasets/"
     "smallareaincomeestimatesformiddlelayersuperoutputareasenglandandwales"
 )
-_REF_TENURE = "https://www.gov.uk/government/statistics/english-housing-survey-2023"
+_REF_TENURE = (
+    "https://www.gov.uk/government/statistics/english-housing-survey-2023"
+)
 _REF_RENT = (
     "https://www.ons.gov.uk/peoplepopulationandcommunity/housing/datasets/"
     "privaterentalmarketsummarystatisticsinengland"
