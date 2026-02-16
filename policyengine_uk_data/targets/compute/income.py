@@ -74,6 +74,19 @@ def compute_ss_ni_relief(target, ctx) -> np.ndarray:
     return ctx.household_from_person(ni_cf - ni_base)
 
 
+def compute_ss_headcount(target, ctx) -> np.ndarray:
+    """Compute salary sacrifice user headcounts."""
+    ss = ctx.sim.calculate("pension_contributions_via_salary_sacrifice")
+    name = target.name
+    if "below_cap" in name:
+        mask = (ss > 0) & (ss <= 2000)
+    elif "above_cap" in name:
+        mask = ss > 2000
+    else:
+        mask = ss > 0
+    return ctx.household_from_person(mask)
+
+
 def compute_esa(target, ctx) -> np.ndarray:
     """Compute ESA (combined income-related + contributory)."""
     return ctx.household_from_person(

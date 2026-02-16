@@ -29,6 +29,7 @@ from policyengine_uk_data.targets.compute.income import (
     compute_esa,
     compute_income_band,
     compute_ss_contributions,
+    compute_ss_headcount,
     compute_ss_it_relief,
     compute_ss_ni_relief,
 )
@@ -55,6 +56,7 @@ __all__ = [
     "compute_scotland_uc_child",
     "compute_scottish_child_payment",
     "compute_ss_contributions",
+    "compute_ss_headcount",
     "compute_ss_it_relief",
     "compute_ss_ni_relief",
     "compute_tenure",

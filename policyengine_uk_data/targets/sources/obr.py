@@ -434,6 +434,22 @@ _SS_EMPLOYER_NI = {
     y: 2.9e9 * 1.03 ** max(0, y - 2024) for y in range(2024, 2032)
 }
 
+# Salary sacrifice headcount: 7.7m total (3.3m above £2k, 4.3m below)
+# OBR para 1.7: SS population grows 0.9% faster than employees (~2.4%/yr)
+_SS_HEADCOUNT_GROWTH = 1.024
+_SS_TOTAL_USERS = {
+    y: 7_700_000 * _SS_HEADCOUNT_GROWTH ** max(0, y - 2024)
+    for y in range(2024, 2032)
+}
+_SS_BELOW_CAP_USERS = {
+    y: 4_300_000 * _SS_HEADCOUNT_GROWTH ** max(0, y - 2024)
+    for y in range(2024, 2032)
+}
+_SS_ABOVE_CAP_USERS = {
+    y: 3_300_000 * _SS_HEADCOUNT_GROWTH ** max(0, y - 2024)
+    for y in range(2024, 2032)
+}
+
 
 def get_targets() -> list[Target]:
     config = load_config()
@@ -484,6 +500,46 @@ def get_targets() -> list[Target]:
             unit=Unit.GBP,
             values=_SS_EMPLOYER_NI,
             reference_url="https://assets.publishing.service.gov.uk/media/67ce0e7c08e764d17a5d3c21/2025_SPP_Review.pdf",
+        )
+    )
+
+    # Salary sacrifice headcount targets
+    _SS_REF = (
+        "https://www.gov.uk/government/publications/"
+        "salary-sacrifice-reform-for-pension-contributions"
+        "-effective-from-6-april-2029"
+    )
+    targets.append(
+        Target(
+            name="obr/salary_sacrifice_users_total",
+            variable="pension_contributions_via_salary_sacrifice",
+            source="obr",
+            unit=Unit.COUNT,
+            values=_SS_TOTAL_USERS,
+            is_count=True,
+            reference_url=_SS_REF,
+        )
+    )
+    targets.append(
+        Target(
+            name="obr/salary_sacrifice_users_below_cap",
+            variable="pension_contributions_via_salary_sacrifice",
+            source="obr",
+            unit=Unit.COUNT,
+            values=_SS_BELOW_CAP_USERS,
+            is_count=True,
+            reference_url=_SS_REF,
+        )
+    )
+    targets.append(
+        Target(
+            name="obr/salary_sacrifice_users_above_cap",
+            variable="pension_contributions_via_salary_sacrifice",
+            source="obr",
+            unit=Unit.COUNT,
+            values=_SS_ABOVE_CAP_USERS,
+            is_count=True,
+            reference_url=_SS_REF,
         )
     )
 

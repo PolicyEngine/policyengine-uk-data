@@ -38,6 +38,7 @@ from policyengine_uk_data.targets.compute import (
     compute_scotland_uc_child,
     compute_scottish_child_payment,
     compute_ss_contributions,
+    compute_ss_headcount,
     compute_ss_it_relief,
     compute_ss_ni_relief,
     compute_tenure,
@@ -340,6 +341,10 @@ def _compute_column(
     # Salary sacrifice contributions
     if name == "hmrc/salary_sacrifice_contributions":
         return compute_ss_contributions(target, ctx)
+
+    # Salary sacrifice headcount
+    if name.startswith("obr/salary_sacrifice_users_"):
+        return compute_ss_headcount(target, ctx)
 
     # Salary sacrifice NI relief
     if name in (
