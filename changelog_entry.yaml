@@ -1,0 +1,7 @@
+- bump: minor
+  changes:
+    added:
+    - Calibrate salary sacrifice population to HMRC/ASHE headcount targets (7.7mn
+      total, 3.3mn above 2k cap, 4.3mn below 2k cap). Two-stage imputation in
+      salary_sacrifice.py converts pension contributors to below-cap SS users, and
+      three new headcount calibration targets in loss.py.

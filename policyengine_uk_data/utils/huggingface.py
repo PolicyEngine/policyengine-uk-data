@@ -1,6 +1,5 @@
 from huggingface_hub import hf_hub_download, login, HfApi
 import os
-import pkg_resources
 
 
 def download(

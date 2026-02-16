@@ -1,20 +1,19 @@
 """
 Salary sacrifice imputation for pension contributions.
 
-This module imputes salary sacrifice pension amounts using QRF trained on
-FRS respondents who were asked the SALSAC question. The model predicts
-the continuous amount (pension_contributions_via_salary_sacrifice), with
-non-participants naturally having 0.
+Two-stage imputation:
 
-Training data (FRS 2023-24):
-- SALSAC='1' (Yes): ~224 jobs with reported SPNAMT amounts
-- SALSAC='2' (No): ~3,803 jobs with SPNAMT=0
+1. QRF trained on FRS respondents who were asked SALSAC (~224 yes,
+   ~3,803 no). Predicts SS amounts for ~13,265 jobs where SALSAC was
+   not asked.
 
-Imputation candidates:
-- SALSAC=' ' (skip/not asked): ~13,265 jobs
+2. Headcount-targeted imputation: converts a fraction of pension
+   contributors without SS into below-cap (≤£2,000) SS users, moving
+   employee pension contributions to salary sacrifice. Targets the
+   OBR/ASHE estimate of ~4.3mn below-cap SS users.
 
-Targeting to HMRC totals (~24bn SS contributions) happens via weight
-calibration, not in this imputation step.
+Exact monetary totals (~£24bn SS contributions) and final headcount
+calibration happen via weight optimisation in a subsequent step.
 """
 
 import pandas as pd
@@ -124,13 +123,10 @@ def impute_salary_sacrifice(
     """
     Impute salary sacrifice pension amounts for FRS non-respondents.
 
-    For respondents not asked about salary sacrifice (SALSAC=' '), uses
-    a QRF model trained on those who were asked to predict the SS pension
-    contribution amount directly. The model naturally predicts 0 for
-    non-participants and positive amounts for likely participants.
-
-    Note: This imputation does NOT target any specific total. Targeting
-    to HMRC figures happens via weight calibration in a subsequent step.
+    Stage 1: QRF predicts SS amounts for respondents not asked SALSAC.
+    Stage 2: Converts a fraction of pension contributors to below-cap
+    SS users, targeting ~4.3mn (OBR/ASHE). Moves employee pension
+    contributions to salary sacrifice to keep total pension consistent.
 
     Args:
         dataset: PolicyEngine UK dataset with salary_sacrifice_asked
@@ -183,7 +179,46 @@ def impute_salary_sacrifice(
         imputed_ss,  # Use imputed for non-respondents
     )
 
-    # Update dataset
+    # Stage 2: Headcount-targeted imputation for below-cap SS users.
+    # ASHE data shows many more SS users than the FRS captures due to
+    # self-reporting bias in auto-enrolment. Impute additional SS users
+    # from pension contributors to create enough records for calibration
+    # to hit OBR headcount targets (7.7mn total, 4.3mn below £2,000).
+    person_weight = sim.calculate("person_weight").values
+    employee_pension = dataset.person[
+        "employee_pension_contributions"
+    ].values.copy()
+    has_ss = final_ss > 0
+    below_cap_ss = has_ss & (final_ss <= 2000)
+
+    # Donor pool: employed pension contributors not already SS users
+    is_donor = (employee_pension > 0) & ~has_ss & (employment_income > 0)
+
+    # Target ~4.3mn below-cap SS users (HMRC/ASHE estimate)
+    TARGET_BELOW_CAP = 4_300_000
+    current_below_cap = (person_weight * below_cap_ss).sum()
+    shortfall = max(0, TARGET_BELOW_CAP - current_below_cap)
+
+    if shortfall > 0:
+        donor_weighted = (person_weight * is_donor).sum()
+        if donor_weighted > 0:
+            imputation_rate = min(0.8, shortfall / donor_weighted)
+            rng = np.random.default_rng(seed=2024)
+            newly_imputed = is_donor & (
+                rng.random(len(final_ss)) < imputation_rate
+            )
+
+            # Move up to £2,000 of employee pension to SS
+            ss_new = np.minimum(employee_pension, 2000.0)
+            final_ss = np.where(newly_imputed, ss_new, final_ss)
+
+            # Reduce employee pension correspondingly
+            dataset.person["employee_pension_contributions"] = np.where(
+                newly_imputed,
+                employee_pension - ss_new,
+                employee_pension,
+            )
+
     dataset.person["pension_contributions_via_salary_sacrifice"] = final_ss
 
     return dataset
