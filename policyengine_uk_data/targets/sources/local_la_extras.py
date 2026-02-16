@@ -12,13 +12,12 @@ Sources:
 """
 
 import logging
-from pathlib import Path
 
 import pandas as pd
 
-logger = logging.getLogger(__name__)
+from policyengine_uk_data.targets.sources._common import STORAGE
 
-_STORAGE = Path(__file__).parents[2] / "storage"
+logger = logging.getLogger(__name__)
 
 # Uprating factors from FYE 2020 to 2025 (OBR Nov 2025 EFO)
 UPRATING_NET_INCOME_BHC_2020_TO_2025 = 1985.1 / 1467.6
@@ -44,7 +43,7 @@ def load_ons_la_income() -> pd.DataFrame:
     Returns DataFrame with columns: la_code, total_income, net_income_bhc,
     net_income_ahc (mean income per household, FYE 2020).
     """
-    xlsx_path = _STORAGE / "local_authority_ons_income.xlsx"
+    xlsx_path = STORAGE / "local_authority_ons_income.xlsx"
     if not xlsx_path.exists():
         logger.warning("ONS LA income file not found: %s", xlsx_path)
         return pd.DataFrame()
@@ -85,7 +84,7 @@ def load_household_counts() -> pd.DataFrame:
 
     Returns DataFrame with columns: la_code, households.
     """
-    path = _STORAGE / "la_count_households.xlsx"
+    path = STORAGE / "la_count_households.xlsx"
     if not path.exists():
         logger.warning("LA household count file not found: %s", path)
         return pd.DataFrame()
@@ -100,7 +99,7 @@ def load_tenure_data() -> pd.DataFrame:
     Returns DataFrame with columns: la_code, owned_outright_pct,
     owned_mortgage_pct, private_rent_pct, social_rent_pct.
     """
-    path = _STORAGE / "la_tenure.xlsx"
+    path = STORAGE / "la_tenure.xlsx"
     if not path.exists():
         logger.warning("LA tenure file not found: %s", path)
         return pd.DataFrame()
@@ -131,7 +130,7 @@ def load_private_rents() -> pd.DataFrame:
 
     Returns DataFrame with columns: area_code, median_annual_rent.
     """
-    path = _STORAGE / "la_private_rents_median.xlsx"
+    path = STORAGE / "la_private_rents_median.xlsx"
     if not path.exists():
         logger.warning("LA private rent file not found: %s", path)
         return pd.DataFrame()

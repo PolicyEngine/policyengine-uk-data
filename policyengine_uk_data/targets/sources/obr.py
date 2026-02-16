@@ -12,17 +12,17 @@ Sources:
 import io
 import logging
 from functools import lru_cache
-from pathlib import Path
 
 import openpyxl
 import requests
-import yaml
 
 from policyengine_uk_data.targets.schema import Target, Unit
+from policyengine_uk_data.targets.sources._common import (
+    HEADERS,
+    load_config,
+)
 
 logger = logging.getLogger(__name__)
-
-_SOURCES_YAML = Path(__file__).parent.parent / "sources.yaml"
 
 # Financial year columns in OBR tables: C=2024-25, D=2025-26, ..., I=2030-31
 # PolicyEngine convention: FY 2025-26 → calendar year 2025 (first year)
@@ -36,22 +36,11 @@ _FY_COL_TO_YEAR = {
     "I": 2030,
 }
 
-_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
-    ),
-}
-
-
-def _load_config():
-    with open(_SOURCES_YAML) as f:
-        return yaml.safe_load(f)
-
 
 @lru_cache(maxsize=1)
 def _download_workbook(url: str) -> openpyxl.Workbook:
     """Download an xlsx from OBR and return an openpyxl workbook."""
-    r = requests.get(url, headers=_HEADERS, allow_redirects=True, timeout=60)
+    r = requests.get(url, headers=HEADERS, allow_redirects=True, timeout=60)
     r.raise_for_status()
     return openpyxl.load_workbook(io.BytesIO(r.content), data_only=False)
 
@@ -85,7 +74,7 @@ def _parse_receipts(wb: openpyxl.Workbook) -> list[Target]:
     the standard fiscal forecasting convention. Other receipts use
     Table 3.9 (cash basis) since they only appear there.
     """
-    config = _load_config()
+    config = load_config()
     vintage = config["obr"]["vintage"]
     ref = config["obr"]["efo_receipts"]
     cols_34 = list(_FY_COL_TO_YEAR.keys())
@@ -169,7 +158,7 @@ def _parse_receipts(wb: openpyxl.Workbook) -> list[Target]:
 
 def _parse_council_tax(wb: openpyxl.Workbook) -> list[Target]:
     """Parse Table 4.1 (council tax receipts) from expenditure xlsx."""
-    config = _load_config()
+    config = load_config()
     vintage = config["obr"]["vintage"]
     ref = config["obr"]["efo_expenditure"]
     ws = wb["4.1"]
@@ -233,7 +222,7 @@ def _parse_council_tax(wb: openpyxl.Workbook) -> list[Target]:
 
 def _parse_nics(wb: openpyxl.Workbook) -> list[Target]:
     """Parse Table 3.4 (income tax and NICs detail) for employee/employer."""
-    config = _load_config()
+    config = load_config()
     vintage = config["obr"]["vintage"]
     ref = config["obr"]["efo_receipts"]
     ws = wb["3.4"]
@@ -275,7 +264,7 @@ def _parse_nics(wb: openpyxl.Workbook) -> list[Target]:
 
 def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
     """Parse Table 4.9 (welfare spending) from expenditure xlsx."""
-    config = _load_config()
+    config = load_config()
     vintage = config["obr"]["vintage"]
     ref = config["obr"]["efo_expenditure"]
     ws = wb["4.9"]
@@ -389,7 +378,7 @@ def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
 
 def _parse_tv_licence(wb: openpyxl.Workbook) -> list[Target]:
     """Parse Table 4.19 (BBC) from expenditure xlsx."""
-    config = _load_config()
+    config = load_config()
     vintage = config["obr"]["vintage"]
     ref = config["obr"]["efo_expenditure"]
 
@@ -447,7 +436,7 @@ _SS_EMPLOYER_NI = {
 
 
 def get_targets() -> list[Target]:
-    config = _load_config()
+    config = load_config()
     targets = []
 
     try:

@@ -19,6 +19,7 @@ from policyengine_uk_data.targets.schema import (
     Target,
     Unit,
 )
+from policyengine_uk_data.targets.sources._common import HEADERS
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +32,6 @@ _REF = (
     "https://www.ons.gov.uk/peoplepopulationandcommunity/"
     "housing/datasets/subnationaldwellingstockbytenureestimates"
 )
-_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
-    ),
-}
 
 # Tenure categories in the xlsx header → target name suffix
 _TENURE_COLS = {
@@ -49,7 +45,7 @@ _TENURE_COLS = {
 
 @lru_cache(maxsize=1)
 def _download_workbook() -> openpyxl.Workbook:
-    r = requests.get(_URL, headers=_HEADERS, allow_redirects=True, timeout=60)
+    r = requests.get(_URL, headers=HEADERS, allow_redirects=True, timeout=60)
     r.raise_for_status()
     return openpyxl.load_workbook(io.BytesIO(r.content), data_only=True)
 

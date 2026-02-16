@@ -8,21 +8,20 @@ Scotland: https://www.gov.scot/publications/council-tax-datasets/
 """
 
 import pandas as pd
-from pathlib import Path
 
 from policyengine_uk_data.targets.schema import (
     GeographicLevel,
     Target,
     Unit,
 )
+from policyengine_uk_data.targets.sources._common import STORAGE
 
-_STORAGE = Path(__file__).parents[2] / "storage"
 _REF = "https://www.gov.uk/government/statistics/council-tax-stock-of-properties-2024"
 
 
 def get_targets() -> list[Target]:
     """Build council tax band targets from the CSV."""
-    csv_path = _STORAGE / "council_tax_bands_2024.csv"
+    csv_path = STORAGE / "council_tax_bands_2024.csv"
     if not csv_path.exists():
         return []
 

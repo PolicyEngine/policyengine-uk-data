@@ -10,11 +10,7 @@ Sources:
 - DWP two-child limit: https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024
 """
 
-from pathlib import Path
-
 from policyengine_uk_data.targets.schema import Target, Unit
-
-_STORAGE = Path(__file__).parents[2] / "storage"
 
 
 def get_targets() -> list[Target]:

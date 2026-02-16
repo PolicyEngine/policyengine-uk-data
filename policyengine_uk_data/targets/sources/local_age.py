@@ -13,23 +13,20 @@ from pathlib import Path
 
 import pandas as pd
 
+from policyengine_uk_data.targets.sources._common import STORAGE
+
 logger = logging.getLogger(__name__)
 
 _CONST_DIR = (
-    Path(__file__).parents[2]
-    / "datasets"
-    / "local_areas"
-    / "constituencies"
-    / "targets"
+    STORAGE.parent / "datasets" / "local_areas" / "constituencies" / "targets"
 )
 _LA_DIR = (
-    Path(__file__).parents[2]
+    STORAGE.parent
     / "datasets"
     / "local_areas"
     / "local_authorities"
     / "targets"
 )
-_STORAGE = Path(__file__).parents[2] / "storage"
 
 _REF = (
     "https://www.ons.gov.uk/peoplepopulationandcommunity/"
@@ -85,7 +82,7 @@ def get_la_age_targets() -> pd.DataFrame:
 
 def get_uk_total_population(year: int) -> float:
     """UK total population from demographics.csv (in persons, not thousands)."""
-    csv_path = _STORAGE / "demographics.csv"
+    csv_path = STORAGE / "demographics.csv"
     if not csv_path.exists():
         return 69.9e6  # fallback
     demographics = pd.read_csv(csv_path)

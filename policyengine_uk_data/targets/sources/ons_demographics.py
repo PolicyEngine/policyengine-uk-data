@@ -20,7 +20,6 @@ import io
 import logging
 import zipfile
 from functools import lru_cache
-from pathlib import Path
 
 import pandas as pd
 import requests
@@ -30,17 +29,9 @@ from policyengine_uk_data.targets.schema import (
     Target,
     Unit,
 )
+from policyengine_uk_data.targets.sources._common import HEADERS, STORAGE
 
 logger = logging.getLogger(__name__)
-
-_SOURCES_YAML = Path(__file__).parent.parent / "sources.yaml"
-_STORAGE = Path(__file__).parents[2] / "storage"
-
-_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
-    ),
-}
 
 _UK_ZIP_URL = (
     "https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/"
@@ -88,7 +79,7 @@ _GENDER_BANDS = [
 def _download_uk_projection() -> pd.DataFrame:
     """Download and parse the UK principal population projection."""
     r = requests.get(
-        _UK_ZIP_URL, headers=_HEADERS, allow_redirects=True, timeout=120
+        _UK_ZIP_URL, headers=HEADERS, allow_redirects=True, timeout=120
     )
     r.raise_for_status()
     z = zipfile.ZipFile(io.BytesIO(r.content))
@@ -165,7 +156,7 @@ def _parse_regional_from_csv() -> list[Target]:
     This CSV was extracted from ONS subnational projections which
     lack a stable machine-readable download URL.
     """
-    csv_path = _STORAGE / "demographics.csv"
+    csv_path = STORAGE / "demographics.csv"
     if not csv_path.exists():
         logger.warning("demographics.csv not found, skipping regional")
         return []

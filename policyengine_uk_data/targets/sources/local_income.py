@@ -15,23 +15,20 @@ from pathlib import Path
 
 import pandas as pd
 
+from policyengine_uk_data.targets.sources._common import STORAGE
+
 logger = logging.getLogger(__name__)
 
 _CONST_DIR = (
-    Path(__file__).parents[2]
-    / "datasets"
-    / "local_areas"
-    / "constituencies"
-    / "targets"
+    STORAGE.parent / "datasets" / "local_areas" / "constituencies" / "targets"
 )
 _LA_DIR = (
-    Path(__file__).parents[2]
+    STORAGE.parent
     / "datasets"
     / "local_areas"
     / "local_authorities"
     / "targets"
 )
-_STORAGE = Path(__file__).parents[2] / "storage"
 
 _REF = (
     "https://www.gov.uk/government/statistics/"
@@ -84,7 +81,7 @@ def get_national_income_projections(year: int) -> pd.DataFrame:
     Returns the incomes_projection.csv rows for the requested year,
     filtered to the above-personal-allowance band (12570+).
     """
-    path = _STORAGE / "incomes_projection.csv"
+    path = STORAGE / "incomes_projection.csv"
     if not path.exists():
         return pd.DataFrame()
     df = pd.read_csv(path)

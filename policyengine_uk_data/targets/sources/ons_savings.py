@@ -14,22 +14,18 @@ import logging
 import requests
 
 from policyengine_uk_data.targets.schema import Target, Unit
+from policyengine_uk_data.targets.sources._common import HEADERS
 
 logger = logging.getLogger(__name__)
 
 _API_URL = "https://www.ons.gov.uk/economy/grossdomesticproductgdp/timeseries/haxv/ukea/data"
 _REF = "https://www.ons.gov.uk/economy/grossdomesticproductgdp/timeseries/haxv/ukea"
-_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
-    ),
-}
 
 
 def get_targets() -> list[Target]:
     try:
         r = requests.get(
-            _API_URL, headers=_HEADERS, allow_redirects=True, timeout=30
+            _API_URL, headers=HEADERS, allow_redirects=True, timeout=30
         )
         r.raise_for_status()
         data = r.json()
