@@ -194,15 +194,19 @@ def impute_salary_sacrifice(
     # Donor pool: employed pension contributors not already SS users
     is_donor = (employee_pension > 0) & ~has_ss & (employment_income > 0)
 
-    # Target ~4.3mn below-cap SS users (HMRC/ASHE estimate)
-    TARGET_BELOW_CAP = 4_300_000
+    # Create enough below-cap SS records for the calibrator to work
+    # with. The final 4.3mn target is hit by weight optimisation in
+    # loss.py; here we just need a plausible pool of records. Target
+    # ~70% of the final headcount so the calibrator can gently
+    # upweight rather than fight a large overshoot.
+    TARGET_BELOW_CAP = 3_000_000
     current_below_cap = (person_weight * below_cap_ss).sum()
     shortfall = max(0, TARGET_BELOW_CAP - current_below_cap)
 
     if shortfall > 0:
         donor_weighted = (person_weight * is_donor).sum()
         if donor_weighted > 0:
-            imputation_rate = min(0.8, shortfall / donor_weighted)
+            imputation_rate = min(0.5, shortfall / donor_weighted)
             rng = np.random.default_rng(seed=2024)
             newly_imputed = is_donor & (
                 rng.random(len(final_ss)) < imputation_rate

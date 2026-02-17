@@ -5,14 +5,9 @@ https://www.gov.uk/government/publications/salary-sacrifice-reform-for-pension-c
 7.7mn total SS users (3.3mn above 2k cap, 4.3mn below 2k cap)
 """
 
-import pytest
-
 TOLERANCE = 0.15  # 15% relative tolerance
 
 
-@pytest.mark.xfail(
-    reason="Will pass after recalibration with new headcount targets"
-)
 def test_salary_sacrifice_total_users(baseline):
     """Test that total SS user count is close to 7.7mn."""
     ss = baseline.calculate(
@@ -33,9 +28,6 @@ def test_salary_sacrifice_total_users(baseline):
     )
 
 
-@pytest.mark.xfail(
-    reason="Will pass after recalibration with new headcount targets"
-)
 def test_salary_sacrifice_below_cap_users(baseline):
     """Test that below-cap (<=2k) SS users are close to 4.3mn."""
     ss = baseline.calculate(
@@ -57,9 +49,6 @@ def test_salary_sacrifice_below_cap_users(baseline):
     )
 
 
-@pytest.mark.xfail(
-    reason="Will pass after recalibration with new headcount targets"
-)
 def test_salary_sacrifice_above_cap_users(baseline):
     """Test that above-cap (>2k) SS users are close to 3.3mn."""
     ss = baseline.calculate(
