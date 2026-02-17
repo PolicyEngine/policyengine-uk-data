@@ -179,43 +179,47 @@ def impute_salary_sacrifice(
         imputed_ss,  # Use imputed for non-respondents
     )
 
-    # Stage 2: Headcount-targeted imputation for below-cap SS users.
+    # Stage 2: Headcount-targeted imputation for SS users.
     # ASHE data shows many more SS users than the FRS captures due to
     # self-reporting bias in auto-enrolment. Impute additional SS users
     # from pension contributors to create enough records for calibration
-    # to hit OBR headcount targets (7.7mn total, 4.3mn below £2,000).
+    # to hit OBR headcount targets (7.7mn total, 3.3mn above 2k,
+    # 4.3mn below 2k). Donors keep their full employee pension amount
+    # so those above 2k become above-cap records and the rest below-cap.
     person_weight = sim.calculate("person_weight").values
     employee_pension = dataset.person[
         "employee_pension_contributions"
     ].values.copy()
     has_ss = final_ss > 0
-    below_cap_ss = has_ss & (final_ss <= 2000)
 
     # Donor pool: employed pension contributors not already SS users
     is_donor = (employee_pension > 0) & ~has_ss & (employment_income > 0)
 
-    # Target ~4.3mn below-cap SS users (HMRC/ASHE estimate)
-    TARGET_BELOW_CAP = 4_300_000
-    current_below_cap = (person_weight * below_cap_ss).sum()
-    shortfall = max(0, TARGET_BELOW_CAP - current_below_cap)
+    # Create enough SS records for the calibrator to work with.
+    # Target ~70% of the 7.7mn total so the calibrator can gently
+    # upweight rather than fight a large overshoot.
+    TARGET_TOTAL = 5_400_000
+    current_total = (person_weight * has_ss).sum()
+    shortfall = max(0, TARGET_TOTAL - current_total)
 
     if shortfall > 0:
         donor_weighted = (person_weight * is_donor).sum()
         if donor_weighted > 0:
-            imputation_rate = min(0.8, shortfall / donor_weighted)
+            imputation_rate = min(0.5, shortfall / donor_weighted)
             rng = np.random.default_rng(seed=2024)
             newly_imputed = is_donor & (
                 rng.random(len(final_ss)) < imputation_rate
             )
 
-            # Move up to £2,000 of employee pension to SS
-            ss_new = np.minimum(employee_pension, 2000.0)
+            # Move full employee pension to SS so the above/below
+            # 2k split reflects the natural pension distribution
+            ss_new = employee_pension.copy()
             final_ss = np.where(newly_imputed, ss_new, final_ss)
 
             # Reduce employee pension correspondingly
             dataset.person["employee_pension_contributions"] = np.where(
                 newly_imputed,
-                employee_pension - ss_new,
+                0.0,
                 employee_pension,
             )
 

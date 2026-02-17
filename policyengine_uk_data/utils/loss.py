@@ -477,9 +477,25 @@ def create_target_matrix(
     # Source: HMRC, "Salary sacrifice reform for pension contributions"
     # https://www.gov.uk/government/publications/salary-sacrifice-reform-for-pension-contributions-effective-from-6-april-2029
     # 7.7mn total SS users (3.3mn above £2k cap, 4.3mn below £2k cap)
-    ss_has_contributions = ss_contributions > 0
-    ss_below_cap = ss_has_contributions & (ss_contributions <= 2000)
-    ss_above_cap = ss_has_contributions & (ss_contributions > 2000)
+    # The £2,000 cap is defined at 2023-24 FRS prices. The dataset is
+    # uprated to 2025 for calibration then downrated back to 2023 for
+    # saving. To keep the above/below classification consistent across
+    # price years, evaluate SS amounts at 2023-24 base-year prices.
+    ss_uprating_factors = pd.read_csv(
+        STORAGE_FOLDER / "uprating_factors.csv"
+    ).set_index("Variable")
+    ss_price_adjustment = (
+        ss_uprating_factors.loc[
+            "pension_contributions_via_salary_sacrifice", "2023"
+        ]
+        / ss_uprating_factors.loc[
+            "pension_contributions_via_salary_sacrifice", str(time_period)
+        ]
+    )
+    ss_at_base_prices = ss_contributions * ss_price_adjustment
+    ss_has_contributions = ss_at_base_prices > 0
+    ss_below_cap = ss_has_contributions & (ss_at_base_prices <= 2000)
+    ss_above_cap = ss_has_contributions & (ss_at_base_prices > 2000)
 
     df["obr/salary_sacrifice_users_total"] = household_from_person(
         ss_has_contributions
