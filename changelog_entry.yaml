@@ -5,6 +5,7 @@
       calibrator classified records above/below the 2k cap at uprated 2025 prices,
       but the saved dataset stores values at 2023 prices where the classification
       differs. Now evaluates SS amounts at base-year prices before applying the
-      threshold, so calibration matches what end-users see. Also reduces Stage 2
-      imputation target to let the calibrator upweight gently rather than overshoot.
+      threshold, so calibration matches what end-users see. Stage 2 imputation now
+      moves the full employee pension amount to SS (instead of capping at 2k) so
+      both above-cap and below-cap records are created for the calibrator.
     - Remove xfail markers from salary sacrifice headcount tests.
