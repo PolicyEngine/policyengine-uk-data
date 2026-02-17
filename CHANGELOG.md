@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.37.1] - 2026-02-17 16:05:41
+
+### Fixed
+
+- Fix salary sacrifice headcount regression caused by uprating mismatch. The calibrator classified records above/below the 2k cap at uprated 2025 prices, but the saved dataset stores values at 2023 prices where the classification differs. Now evaluates SS amounts at base-year prices before applying the threshold, so calibration matches what end-users see. Stage 2 imputation now moves the full employee pension amount to SS (instead of capping at 2k) so both above-cap and below-cap records are created for the calibrator.
+- Remove xfail markers from salary sacrifice headcount tests.
+
 ## [1.37.0] - 2026-02-16 10:16:06
 
 ### Added
@@ -598,6 +605,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.37.1]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.37.0...1.37.1
 [1.37.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.36.2...1.37.0
 [1.36.2]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.36.1...1.36.2
 [1.36.1]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.36.0...1.36.1
