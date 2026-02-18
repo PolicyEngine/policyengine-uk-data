@@ -66,17 +66,21 @@ def uprate_values(values, variable_name, start_year=2020, end_year=2034):
 # post-2023 cohort. Figures from 2030 are extrapolated from DfE trend.
 _PLAN_TARGETS = {
     # year: (plan_2_millions, plan_5_millions)
+    # Plan 2 derived from DfE forecast (England) scaled to GB (÷0.84) and FRS
+    # coverage (55.9%). Plan 2 write-off is 40 years so no significant decline
+    # within this window; post-2030 extrapolated as very gently declining.
+    # Plan 5 post-2030 extrapolated at +1.1M England/yr (growth decelerating).
     2024: (5.950, 0.007),
-    2025: (6.462, 0.153),
-    2026: (6.895, 0.419),
-    2027: (7.065, 0.918),
-    2028: (7.055, 1.571),
-    2029: (7.005, 2.263),
-    2030: (6.955, 2.995),
-    2031: (6.855, 3.627),
-    2032: (6.705, 4.160),
-    2033: (6.506, 4.592),
-    2034: (6.256, 4.992),
+    2025: (5.949, 0.153),
+    2026: (6.462, 0.419),
+    2027: (6.894, 0.918),
+    2028: (7.064, 1.571),
+    2029: (7.054, 2.263),
+    2030: (7.004, 2.995),
+    2031: (6.954, 3.727),
+    2032: (6.904, 4.459),
+    2033: (6.854, 5.191),
+    2034: (6.804, 5.923),
 }
 
 # Plan 1 write-off cutoff by year: loan term is 25 years post-graduation.
