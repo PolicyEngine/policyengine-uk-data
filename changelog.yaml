@@ -537,3 +537,8 @@
       are created for the calibrator.
     - Remove xfail markers from salary sacrifice headcount tests.
   date: 2026-02-17 16:05:41
+- bump: minor
+  changes:
+    changed:
+    - Replaced ad-hoc calibration targets with structured registry and source modules.
+  date: 2026-02-18 14:08:40

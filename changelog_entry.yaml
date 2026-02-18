@@ -1,4 +1,0 @@
-- bump: minor
-  changes:
-    changed:
-    - Replaced ad-hoc calibration targets with structured registry and source modules.
