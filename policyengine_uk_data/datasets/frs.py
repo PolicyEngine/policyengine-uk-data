@@ -207,6 +207,50 @@ def create_frs(
         index=pe_person.index,
     )
 
+    # Add highest education from EDUCQUAL (highest qualification achieved)
+    # Codes from FRS ADT_324X classification; unmapped codes default to UPPER_SECONDARY
+    EDUCQUAL_MAP = {
+        1: "NOT_COMPLETED_PRIMARY",
+        2: "LOWER_SECONDARY",   # GCSE D-G / CSE 2-5
+        3: "LOWER_SECONDARY",   # GCSE A-C / O-level A-C
+        4: "UPPER_SECONDARY",   # AS-level
+        5: "UPPER_SECONDARY",   # A-level (1 subject)
+        6: "UPPER_SECONDARY",   # A-level (2 subjects)
+        7: "UPPER_SECONDARY",   # A-level (3+ subjects)
+        8: "LOWER_SECONDARY",   # Scottish Standard/Ordinary Grade
+        9: "UPPER_SECONDARY",   # Scottish Higher Grade
+        10: "UPPER_SECONDARY",  # Scottish 6th Year Studies
+        11: "POST_SECONDARY",   # HNC/HND
+        12: "POST_SECONDARY",   # City & Guilds advanced / BTEC National
+        13: "UPPER_SECONDARY",  # City & Guilds craft / BTEC General
+        14: "POST_SECONDARY",   # ONC/OND / BTEC National (lower)
+        15: "UPPER_SECONDARY",  # City & Guilds foundation
+        16: "POST_SECONDARY",   # RSA advanced
+        17: "TERTIARY",         # First/foundation degree
+        18: "TERTIARY",         # Second degree
+        19: "TERTIARY",         # Higher degree (Masters/PhD)
+        20: "TERTIARY",         # PGCE / teaching qualification
+        21: "TERTIARY",         # Nursing/paramedical qualification
+        66: "UPPER_SECONDARY",  # NVQ/SVQ Level 1
+        67: "UPPER_SECONDARY",  # NVQ/SVQ Level 2
+        68: "UPPER_SECONDARY",  # NVQ/SVQ Level 3
+        69: "POST_SECONDARY",   # NVQ/SVQ Level 4
+        70: "TERTIARY",         # NVQ/SVQ Level 5
+    }
+    # Codes 22-65 and 71-85 are further vocational/professional qualifications;
+    # treat as POST_SECONDARY. Codes 86-87 are catch-alls; treat as UPPER_SECONDARY.
+    for code in range(22, 66):
+        EDUCQUAL_MAP[code] = "POST_SECONDARY"
+    for code in range(71, 86):
+        EDUCQUAL_MAP[code] = "POST_SECONDARY"
+    EDUCQUAL_MAP[86] = "UPPER_SECONDARY"
+    EDUCQUAL_MAP[87] = "UPPER_SECONDARY"
+
+    educqual = pd.to_numeric(person.educqual, errors="coerce")
+    pe_person["highest_education"] = (
+        educqual.map(EDUCQUAL_MAP).fillna("UPPER_SECONDARY")
+    )
+
     # Add employment status
     EMPLOYMENTS = [
         "CHILD",
