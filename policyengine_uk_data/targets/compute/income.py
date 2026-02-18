@@ -86,13 +86,12 @@ def compute_ss_headcount(target, ctx) -> np.ndarray:
     prices before applying the threshold.
     """
     ss = ctx.sim.calculate("pension_contributions_via_salary_sacrifice")
-    uprating = pd.read_csv(
-        STORAGE_FOLDER / "uprating_factors.csv"
-    ).set_index("Variable")
+    uprating = pd.read_csv(STORAGE_FOLDER / "uprating_factors.csv").set_index(
+        "Variable"
+    )
     row = "pension_contributions_via_salary_sacrifice"
     price_adj = (
-        uprating.loc[row, "2023"]
-        / uprating.loc[row, str(ctx.time_period)]
+        uprating.loc[row, "2023"] / uprating.loc[row, str(ctx.time_period)]
     )
     ss_base = ss * price_adj
 
