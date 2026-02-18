@@ -2,7 +2,6 @@ from policyengine_uk_data.datasets.frs import create_frs
 from policyengine_uk_data.storage import STORAGE_FOLDER
 import logging
 import os
-from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk_data.utils.uprating import uprate_dataset
 from policyengine_uk_data.utils.progress import (
     ProcessingProgress,
@@ -44,7 +43,6 @@ def main():
             update_dataset,
             nested_progress,
         ):
-
             # Create base FRS dataset
             update_dataset("Create base FRS dataset", "processing")
             frs = create_frs(
@@ -107,9 +105,6 @@ def main():
             update_dataset("Uprate to 2025", "completed")
 
             # Calibrate constituency weights with nested progress
-            from policyengine_uk_data.datasets.local_areas.constituencies.calibrate import (
-                calibrate,
-            )
 
             update_dataset("Calibrate constituency weights", "processing")
 
@@ -119,7 +114,9 @@ def main():
             )
             from policyengine_uk_data.datasets.local_areas.constituencies.loss import (
                 create_constituency_target_matrix,
-                create_national_target_matrix,
+            )
+            from policyengine_uk_data.targets.build_loss_matrix import (
+                create_target_matrix as create_national_target_matrix,
             )
             from policyengine_uk_data.datasets.local_areas.constituencies.calibrate import (
                 get_performance,
@@ -149,7 +146,7 @@ def main():
             )
 
             # Run calibration with verbose progress
-            frs_calibrated_las = calibrate_local_areas(
+            calibrate_local_areas(
                 dataset=frs,
                 epochs=epochs,
                 matrix_fn=create_local_authority_target_matrix,

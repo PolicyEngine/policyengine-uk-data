@@ -1,4 +1,4 @@
-from policyengine_uk_data.utils.loss import (
+from policyengine_uk_data.targets.sources.nts_vehicles import (
     NTS_NO_VEHICLE_RATE,
     NTS_ONE_VEHICLE_RATE,
     NTS_TWO_PLUS_VEHICLE_RATE,
