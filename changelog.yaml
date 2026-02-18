@@ -525,3 +525,15 @@
       converts pension contributors to below-cap SS users, and three new headcount
       calibration targets in loss.py.
   date: 2026-02-16 10:16:06
+- bump: patch
+  changes:
+    fixed:
+    - Fix salary sacrifice headcount regression caused by uprating mismatch. The calibrator
+      classified records above/below the 2k cap at uprated 2025 prices, but the saved
+      dataset stores values at 2023 prices where the classification differs. Now evaluates
+      SS amounts at base-year prices before applying the threshold, so calibration
+      matches what end-users see. Stage 2 imputation now moves the full employee pension
+      amount to SS (instead of capping at 2k) so both above-cap and below-cap records
+      are created for the calibrator.
+    - Remove xfail markers from salary sacrifice headcount tests.
+  date: 2026-02-17 16:05:41

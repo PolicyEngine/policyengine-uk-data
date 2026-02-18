@@ -1,6 +1,8 @@
 """Income and salary sacrifice compute functions."""
 
 import numpy as np
+import pandas as pd
+from policyengine_uk_data.storage import STORAGE_FOLDER
 
 
 def compute_income_band(target, ctx) -> np.ndarray:
@@ -75,15 +77,32 @@ def compute_ss_ni_relief(target, ctx) -> np.ndarray:
 
 
 def compute_ss_headcount(target, ctx) -> np.ndarray:
-    """Compute salary sacrifice user headcounts."""
+    """Compute salary sacrifice user headcounts.
+
+    The 2k cap is defined at 2023-24 FRS base-year prices. The dataset
+    is uprated to 2025 for calibration then downrated to 2023 for
+    saving, but PE does not uprate SS when loading. To keep the
+    above/below classification consistent, deflate SS to base-year
+    prices before applying the threshold.
+    """
     ss = ctx.sim.calculate("pension_contributions_via_salary_sacrifice")
+    uprating = pd.read_csv(
+        STORAGE_FOLDER / "uprating_factors.csv"
+    ).set_index("Variable")
+    row = "pension_contributions_via_salary_sacrifice"
+    price_adj = (
+        uprating.loc[row, "2023"]
+        / uprating.loc[row, str(ctx.time_period)]
+    )
+    ss_base = ss * price_adj
+
     name = target.name
     if "below_cap" in name:
-        mask = (ss > 0) & (ss <= 2000)
+        mask = (ss_base > 0) & (ss_base <= 2000)
     elif "above_cap" in name:
-        mask = ss > 2000
+        mask = ss_base > 2000
     else:
-        mask = ss > 0
+        mask = ss_base > 0
     return ctx.household_from_person(mask)
 
 
