@@ -58,6 +58,8 @@ def uprate_values(values, variable_name, start_year=2020, end_year=2034):
 
 
 def uprate_dataset(dataset: UKSingleYearDataset, target_year=2034):
+    import numpy as np
+
     dataset = dataset.copy()
     uprating_factors = pd.read_csv(STORAGE_FOLDER / "uprating_factors.csv")
     uprating_factors = uprating_factors.set_index("Variable")
@@ -73,6 +75,19 @@ def uprate_dataset(dataset: UKSingleYearDataset, target_year=2034):
                 table[variable] *= factor
 
     dataset.time_period = target_year
+
+    # Re-derive Plan 1/2/5 from age at the target year.
+    # Plan 4 (Scotland) and Postgraduate are left unchanged.
+    if "age" in dataset.person.columns and "student_loan_plan" in dataset.person.columns:
+        age = dataset.person["age"][:]
+        existing = dataset.person["student_loan_plan"][:]
+        mask = np.isin(existing, ["PLAN_1", "PLAN_2", "PLAN_5"])
+        start = target_year - age + 18
+        plan = existing.copy()
+        plan[mask & (start < 2012)] = "PLAN_1"
+        plan[mask & (start >= 2012) & (start < 2023)] = "PLAN_2"
+        plan[mask & (start >= 2023)] = "PLAN_5"
+        dataset.person["student_loan_plan"] = plan
 
     return dataset
 
