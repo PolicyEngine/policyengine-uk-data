@@ -20,7 +20,7 @@ def test_slc_plan2_values():
     p2 = targets["slc/plan_2_borrowers_above_threshold"]
     assert p2.values[2025] == 3_985_000
     assert p2.values[2026] == 4_460_000
-    assert p2.values[2029] == 5_160_000
+    assert p2.values[2029] == 5_155_000
 
 
 def test_slc_plan5_values():
@@ -31,4 +31,4 @@ def test_slc_plan5_values():
     p5 = targets["slc/plan_5_borrowers_above_threshold"]
     assert 2025 not in p5.values  # no Plan 5 borrowers yet in 2024-25
     assert p5.values[2026] == 35_000
-    assert p5.values[2029] == 770_000
+    assert p5.values[2029] == 765_000
