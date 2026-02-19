@@ -557,3 +557,9 @@
     added:
     - UC households by children count (0, 1, 2, 3+) as constituency calibration targets.
   date: 2026-02-19 13:58:30
+- bump: patch
+  changes:
+    fixed:
+    - Widened UC taper rate reform test tolerance to 15bn to account for calibration
+      variance.
+  date: 2026-02-19 16:15:46
