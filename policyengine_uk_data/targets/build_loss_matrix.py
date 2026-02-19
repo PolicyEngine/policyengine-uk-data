@@ -37,6 +37,7 @@ from policyengine_uk_data.targets.compute import (
     compute_scotland_demographics,
     compute_scotland_uc_child,
     compute_scottish_child_payment,
+    compute_student_loan_plan,
     compute_ss_contributions,
     compute_ss_headcount,
     compute_ss_it_relief,
@@ -301,6 +302,10 @@ def _compute_column(
     # Scottish child payment
     if name == "sss/scottish_child_payment":
         return compute_scottish_child_payment(target, ctx)
+
+    # Student loan plan borrower counts (SLC)
+    if name.startswith("slc/plan_"):
+        return compute_student_loan_plan(target, ctx)
 
     # PIP claimants
     if name in (
