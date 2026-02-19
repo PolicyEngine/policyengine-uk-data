@@ -110,9 +110,7 @@ def create_constituency_target_matrix(
     matrix["uc_hh_0_children"] = (on_uc_hh & (children_per_hh == 0)).astype(
         float
     )
-    matrix["uc_hh_1_child"] = (on_uc_hh & (children_per_hh == 1)).astype(
-        float
-    )
+    matrix["uc_hh_1_child"] = (on_uc_hh & (children_per_hh == 1)).astype(float)
     matrix["uc_hh_2_children"] = (on_uc_hh & (children_per_hh == 2)).astype(
         float
     )
