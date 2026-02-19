@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - Test for highest_education in enhanced FRS dataset.
