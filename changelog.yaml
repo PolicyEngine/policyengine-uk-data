@@ -542,3 +542,8 @@
     changed:
     - Replaced ad-hoc calibration targets with structured registry and source modules.
   date: 2026-02-18 14:08:40
+- bump: minor
+  changes:
+    added:
+    - highest_education variable derived from FRS EDUCQUAL field.
+  date: 2026-02-19 08:39:08
