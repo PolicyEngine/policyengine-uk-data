@@ -30,6 +30,7 @@ from policyengine_uk_data.targets.sources.local_income import (
 )
 from policyengine_uk_data.targets.sources.local_uc import (
     get_constituency_uc_targets,
+    get_constituency_uc_by_children_targets,
 )
 
 
@@ -96,11 +97,30 @@ def create_constituency_target_matrix(
 
     # ── UC targets ─────────────────────────────────────────────────
     y["uc_households"] = get_constituency_uc_targets().values
-    matrix["uc_households"] = sim.map_result(
-        (sim.calculate("universal_credit").values > 0).astype(int),
-        "benunit",
-        "household",
+    on_uc = (sim.calculate("universal_credit").values > 0).astype(int)
+    matrix["uc_households"] = sim.map_result(on_uc, "benunit", "household")
+
+    # UC households split by number of children — forces the reweighting
+    # to match the family-size distribution within each constituency,
+    # preventing under-representation of larger families (see #274).
+    is_child = sim.calculate("is_child").values
+    children_per_hh = sim.map_result(is_child, "person", "household")
+    on_uc_hh = sim.map_result(on_uc, "benunit", "household") > 0
+
+    matrix["uc_hh_0_children"] = (on_uc_hh & (children_per_hh == 0)).astype(
+        float
     )
+    matrix["uc_hh_1_child"] = (on_uc_hh & (children_per_hh == 1)).astype(float)
+    matrix["uc_hh_2_children"] = (on_uc_hh & (children_per_hh == 2)).astype(
+        float
+    )
+    matrix["uc_hh_3plus_children"] = (
+        on_uc_hh & (children_per_hh >= 3)
+    ).astype(float)
+
+    uc_by_children = get_constituency_uc_by_children_targets()
+    for col in uc_by_children.columns:
+        y[col] = uc_by_children[col].values
 
     # ── Boundary mapping (2010 → 2024) ────────────────────────────
     const_2024 = pd.read_csv(STORAGE_FOLDER / "constituencies_2024.csv")

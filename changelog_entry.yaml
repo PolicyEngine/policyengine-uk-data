@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    added:
+    - UC households by children count (0, 1, 2, 3+) as constituency calibration targets.
