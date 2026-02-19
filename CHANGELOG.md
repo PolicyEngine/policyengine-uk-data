@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.39.3] - 2026-02-19 16:15:46
+
+### Fixed
+
+- Widened UC taper rate reform test tolerance to 15bn to account for calibration variance.
+
+## [1.39.2] - 2026-02-19 13:58:30
+
+### Added
+
+- UC households by children count (0, 1, 2, 3+) as constituency calibration targets.
+
+## [1.39.1] - 2026-02-19 11:54:03
+
+### Added
+
+- Test for highest_education in enhanced FRS dataset.
+
 ## [1.39.0] - 2026-02-19 08:39:08
 
 ### Added
@@ -617,6 +635,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.39.3]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.39.2...1.39.3
+[1.39.2]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.39.1...1.39.2
+[1.39.1]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.39.0...1.39.1
 [1.39.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.38.0...1.39.0
 [1.38.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.37.1...1.38.0
 [1.37.1]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.37.0...1.37.1
