@@ -552,3 +552,8 @@
     added:
     - Test for highest_education in enhanced FRS dataset.
   date: 2026-02-19 11:54:03
+- bump: patch
+  changes:
+    added:
+    - UC households by children count (0, 1, 2, 3+) as constituency calibration targets.
+  date: 2026-02-19 13:58:30
