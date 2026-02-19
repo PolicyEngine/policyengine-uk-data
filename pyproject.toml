@@ -21,7 +21,7 @@ dependencies = [
     "policyengine",
     "google-cloud-storage",
     "google-auth",
-    "policyengine-uk>=2.43.5",
+    "policyengine-uk @ git+https://github.com/PolicyEngine/policyengine-uk.git@fix/student-loan-uprating-guard",
     "microcalibrate>=0.18.0",
     "microimpute>=1.0.1",
     "black>=25.1.0",
