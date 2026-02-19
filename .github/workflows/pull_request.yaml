@@ -53,6 +53,9 @@ jobs:
         run: make data
         env:
           TESTING: "1"
+          MODAL_CALIBRATE: "1"
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
       - name: Save calibration log (constituencies)
         uses: actions/upload-artifact@v4
         with:
