@@ -107,6 +107,6 @@ def compute_ss_headcount(target, ctx) -> np.ndarray:
 
 def compute_esa(target, ctx) -> np.ndarray:
     """Compute ESA (combined income-related + contributory)."""
-    return ctx.household_from_person(
+    return ctx.household_from_family(
         ctx.sim.calculate("esa_income")
     ) + ctx.household_from_person(ctx.sim.calculate("esa_contrib"))
