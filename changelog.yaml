@@ -547,8 +547,3 @@
     added:
     - highest_education variable derived from FRS EDUCQUAL field.
   date: 2026-02-19 08:39:08
-- bump: patch
-  changes:
-    added:
-    - Test for highest_education in enhanced FRS dataset.
-  date: 2026-02-19 09:00:00
