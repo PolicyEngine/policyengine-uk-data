@@ -1,5 +1,6 @@
 from policyengine_uk_data.datasets.frs import create_frs
 from policyengine_uk_data.storage import STORAGE_FOLDER
+import gc
 import logging
 import os
 import io
@@ -53,37 +54,49 @@ def _run_modal_calibrations(
         return x.values if hasattr(x, "values") else x
 
     with app.run():
-        # Build constituency arrays, spawn immediately, then free before LA
+        # Constituency: build national matrix first, serialise, free its sim
         frs_copy = frs.copy()
-        matrix_c, y_c, r_c = create_constituency_target_matrix(frs_copy)
         m_nat_c, y_nat_c = create_national_target_matrix(frs_copy)
+        b_m_nat_c = _dump(_arr(m_nat_c))
+        b_y_nat_c = _dump(_arr(y_nat_c))
+        del m_nat_c, y_nat_c
+        gc.collect()
+
+        matrix_c, y_c, r_c = create_constituency_target_matrix(frs_copy)
         wi_c = _build_weights_init(frs_copy, 650, r_c)
         fut_c = run_calibration.spawn(
             _dump(_arr(matrix_c)),
             _dump(_arr(y_c)),
             _dump(r_c),
-            _dump(_arr(m_nat_c)),
-            _dump(_arr(y_nat_c)),
+            b_m_nat_c,
+            b_y_nat_c,
             _dump(wi_c),
             epochs,
         )
-        del matrix_c, y_c, r_c, m_nat_c, y_nat_c, wi_c, frs_copy
+        del matrix_c, y_c, r_c, wi_c, b_m_nat_c, b_y_nat_c, frs_copy
+        gc.collect()
 
-        # Build LA arrays, spawn, then free
+        # LA: same pattern
         frs_copy = frs.copy()
-        matrix_la, y_la, r_la = create_local_authority_target_matrix(frs_copy)
         m_nat_la, y_nat_la = create_national_target_matrix(frs_copy)
+        b_m_nat_la = _dump(_arr(m_nat_la))
+        b_y_nat_la = _dump(_arr(y_nat_la))
+        del m_nat_la, y_nat_la
+        gc.collect()
+
+        matrix_la, y_la, r_la = create_local_authority_target_matrix(frs_copy)
         wi_la = _build_weights_init(frs_copy, 360, r_la)
         fut_la = run_calibration.spawn(
             _dump(_arr(matrix_la)),
             _dump(_arr(y_la)),
             _dump(r_la),
-            _dump(_arr(m_nat_la)),
-            _dump(_arr(y_nat_la)),
+            b_m_nat_la,
+            b_y_nat_la,
             _dump(wi_la),
             epochs,
         )
-        del matrix_la, y_la, r_la, m_nat_la, y_nat_la, wi_la, frs_copy
+        del matrix_la, y_la, r_la, wi_la, b_m_nat_la, b_y_nat_la, frs_copy
+        gc.collect()
 
         weights_c = np.load(io.BytesIO(fut_c.get()))
         weights_la = np.load(io.BytesIO(fut_la.get()))
