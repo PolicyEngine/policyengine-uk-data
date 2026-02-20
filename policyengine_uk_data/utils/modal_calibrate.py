@@ -21,8 +21,8 @@ image_cpu = (
 
 
 @app.function(
-    cpu=8,
-    memory=16384,
+    cpu=16,
+    memory=32768,
     image=image_cpu,
     timeout=3600,
     serialized=True,
@@ -70,7 +70,7 @@ def run_imputation(frs_bytes: bytes, year: int = 2023) -> bytes:
     return open(out_path, "rb").read()
 
 
-@app.function(gpu="T4", image=image_gpu, timeout=3600, serialized=True)
+@app.function(gpu="A10G", image=image_gpu, timeout=3600, serialized=True)
 def run_calibration(
     matrix: bytes,
     y: bytes,
