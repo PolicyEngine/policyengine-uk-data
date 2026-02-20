@@ -81,16 +81,19 @@ def run_calibration(
         return w2
 
     optimizer = torch.optim.Adam([weights], lr=1e-1)
+    checkpoints = []
 
-    for _ in range(epochs):
+    for epoch in range(epochs):
         optimizer.zero_grad()
         weights_ = torch.exp(dropout_weights(weights, 0.05)) * r_t
         l = loss_fn(weights_)
         l.backward()
         optimizer.step()
 
-    final_weights = (torch.exp(weights) * r_t).detach().cpu().numpy()
+        if epoch % 10 == 0:
+            w = (torch.exp(weights) * r_t).detach().cpu().numpy()
+            buf = io.BytesIO()
+            np.save(buf, w)
+            checkpoints.append((epoch, buf.getvalue()))
 
-    buf = io.BytesIO()
-    np.save(buf, final_weights)
-    return buf.getvalue()
+    return checkpoints

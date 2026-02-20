@@ -34,16 +34,37 @@ def _build_weights_init(dataset, area_count, r):
     return np.ones((area_count, len(original_weights))) * original_weights
 
 
+def _build_log(checkpoints, get_performance, m_c, y_c, m_n, y_n, log_csv):
+    import pandas as pd
+
+    performance = pd.DataFrame()
+    for epoch, w_bytes in checkpoints:
+        w = np.load(io.BytesIO(w_bytes))
+        perf = get_performance(w, m_c, y_c, m_n, y_n, [])
+        perf["epoch"] = epoch
+        perf["loss"] = perf.rel_abs_error**2
+        perf["target_name"] = [
+            f"{a}/{m}" for a, m in zip(perf.name, perf.metric)
+        ]
+        performance = pd.concat([performance, perf], ignore_index=True)
+    performance.to_csv(log_csv, index=False)
+    final_epoch, final_bytes = checkpoints[-1]
+    return np.load(io.BytesIO(final_bytes))
+
+
 def _run_modal_calibrations(
     frs,
     epochs,
     create_constituency_target_matrix,
     create_local_authority_target_matrix,
     create_national_target_matrix,
+    get_constituency_performance,
+    get_la_performance,
 ):
     """
     Dispatch both calibrations concurrently to Modal GPU containers.
-    Returns (constituency_weights, la_weights) as numpy arrays.
+    Returns (constituency_weights, la_weights) as numpy arrays and
+    writes constituency_calibration_log.csv / la_calibration_log.csv.
     """
     from policyengine_uk_data.utils.modal_calibrate import (
         app,
@@ -53,15 +74,13 @@ def _run_modal_calibrations(
     def _arr(x):
         return x.values if hasattr(x, "values") else x
 
-    # Build national matrix once and reuse for both calibrations
+    # Build national matrix once; keep in memory for log generation
     m_nat, y_nat = create_national_target_matrix(frs.copy())
     b_m_nat = _dump(_arr(m_nat))
     b_y_nat = _dump(_arr(y_nat))
-    del m_nat, y_nat
-    gc.collect()
 
     with app.run():
-        # Constituency: build local matrix, spawn, free before LA
+        # Constituency: build, spawn, keep matrices for log, free before LA
         frs_copy = frs.copy()
         matrix_c, y_c, r_c = create_constituency_target_matrix(frs_copy)
         wi_c = _build_weights_init(frs_copy, 650, r_c)
@@ -74,10 +93,10 @@ def _run_modal_calibrations(
             _dump(wi_c),
             epochs,
         )
-        del matrix_c, y_c, r_c, wi_c, frs_copy
+        del wi_c, r_c, frs_copy
         gc.collect()
 
-        # LA: build local matrix, spawn, free
+        # LA: build, spawn, keep matrices for log
         frs_copy = frs.copy()
         matrix_la, y_la, r_la = create_local_authority_target_matrix(frs_copy)
         wi_la = _build_weights_init(frs_copy, 360, r_la)
@@ -90,11 +109,30 @@ def _run_modal_calibrations(
             _dump(wi_la),
             epochs,
         )
-        del matrix_la, y_la, r_la, wi_la, frs_copy
+        del wi_la, r_la, frs_copy
         gc.collect()
 
-        weights_c = np.load(io.BytesIO(fut_c.get()))
-        weights_la = np.load(io.BytesIO(fut_la.get()))
+        checkpoints_c = fut_c.get()
+        checkpoints_la = fut_la.get()
+
+    weights_c = _build_log(
+        checkpoints_c,
+        get_constituency_performance,
+        matrix_c,
+        y_c,
+        m_nat,
+        y_nat,
+        "constituency_calibration_log.csv",
+    )
+    weights_la = _build_log(
+        checkpoints_la,
+        get_la_performance,
+        matrix_la,
+        y_la,
+        m_nat,
+        y_nat,
+        "la_calibration_log.csv",
+    )
 
     return weights_c, weights_la
 
@@ -211,6 +249,8 @@ def main():
                     create_constituency_target_matrix,
                     create_local_authority_target_matrix,
                     create_national_target_matrix,
+                    get_performance,
+                    get_la_performance,
                 )
 
                 with h5py.File(
