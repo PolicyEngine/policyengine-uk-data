@@ -16,7 +16,7 @@ image_cpu = (
         "uv pip install --system torch --index-url https://download.pytorch.org/whl/cpu",
         "uv pip install --system policyengine-uk tables microimpute",
     )
-    .copy_local_dir("policyengine_uk_data", "/root/policyengine_uk_data")
+    .add_local_dir("policyengine_uk_data", "/root/policyengine_uk_data")
 )
 
 
