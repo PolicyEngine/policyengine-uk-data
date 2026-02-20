@@ -9,7 +9,7 @@ image = modal.Image.debian_slim().pip_install(
 )
 
 
-@app.function(gpu="T4", image=image, timeout=3600)
+@app.function(gpu="T4", image=image, timeout=3600, serialized=True)
 def run_calibration(
     matrix: bytes,
     y: bytes,
