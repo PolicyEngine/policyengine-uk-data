@@ -8,9 +8,10 @@ image_gpu = modal.Image.debian_slim().pip_install(
     "torch", "numpy", "h5py", "pandas"
 )
 
-image_cpu = modal.Image.debian_slim().pip_install(
-    "policyengine-uk-data>=1.39.3",
-    "tables",
+image_cpu = (
+    modal.Image.debian_slim()
+    .apt_install("libhdf5-dev", "pkg-config", "gcc")
+    .pip_install("policyengine-uk-data>=1.40.0")
 )
 
 
