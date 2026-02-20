@@ -66,6 +66,7 @@ def _run_modal_calibrations(
     Returns (constituency_weights, la_weights) as numpy arrays and
     writes constituency_calibration_log.csv / la_calibration_log.csv.
     """
+    import pandas as pd
     from policyengine_uk_data.utils.modal_calibrate import (
         app,
         run_calibration,
@@ -74,63 +75,84 @@ def _run_modal_calibrations(
     def _arr(x):
         return x.values if hasattr(x, "values") else x
 
-    # Build national matrix once; keep in memory for log generation
+    # Build matrices one at a time; serialise immediately and free the
+    # DataFrames (keeping only column/index metadata for log reconstruction).
+
     m_nat, y_nat = create_national_target_matrix(frs.copy())
-    b_m_nat = _dump(_arr(m_nat))
-    b_y_nat = _dump(_arr(y_nat))
+    m_nat_np = _arr(m_nat)
+    y_nat_np = _arr(y_nat)
+    m_nat_cols = list(m_nat.columns)
+    y_nat_index = list(y_nat.index)
+    b_m_nat = _dump(m_nat_np)
+    b_y_nat = _dump(y_nat_np)
+    del m_nat, y_nat
+    gc.collect()
+
+    frs_copy = frs.copy()
+    matrix_c, y_c, r_c = create_constituency_target_matrix(frs_copy)
+    matrix_c_np = _arr(matrix_c)
+    y_c_np = _arr(y_c)
+    matrix_c_cols = list(matrix_c.columns)
+    y_c_cols = list(y_c.columns)
+    wi_c = _build_weights_init(frs_copy, 650, r_c)
+    b_matrix_c = _dump(matrix_c_np)
+    b_y_c = _dump(y_c_np)
+    b_wi_c = _dump(wi_c)
+    b_r_c = _dump(r_c)
+    del matrix_c, y_c, wi_c, r_c, frs_copy
+    gc.collect()
+
+    frs_copy = frs.copy()
+    matrix_la, y_la, r_la = create_local_authority_target_matrix(frs_copy)
+    matrix_la_np = _arr(matrix_la)
+    y_la_np = _arr(y_la)
+    matrix_la_cols = list(matrix_la.columns)
+    y_la_cols = list(y_la.columns)
+    wi_la = _build_weights_init(frs_copy, 360, r_la)
+    b_matrix_la = _dump(matrix_la_np)
+    b_y_la = _dump(y_la_np)
+    b_wi_la = _dump(wi_la)
+    b_r_la = _dump(r_la)
+    del matrix_la, y_la, wi_la, r_la, frs_copy
+    gc.collect()
 
     with app.run():
-        # Constituency: build, spawn, keep matrices for log, free before LA
-        frs_copy = frs.copy()
-        matrix_c, y_c, r_c = create_constituency_target_matrix(frs_copy)
-        wi_c = _build_weights_init(frs_copy, 650, r_c)
         fut_c = run_calibration.spawn(
-            _dump(_arr(matrix_c)),
-            _dump(_arr(y_c)),
-            _dump(r_c),
-            b_m_nat,
-            b_y_nat,
-            _dump(wi_c),
-            epochs,
+            b_matrix_c, b_y_c, b_r_c, b_m_nat, b_y_nat, b_wi_c, epochs
         )
-        del wi_c, r_c, frs_copy
-        gc.collect()
-
-        # LA: build, spawn, keep matrices for log
-        frs_copy = frs.copy()
-        matrix_la, y_la, r_la = create_local_authority_target_matrix(frs_copy)
-        wi_la = _build_weights_init(frs_copy, 360, r_la)
         fut_la = run_calibration.spawn(
-            _dump(_arr(matrix_la)),
-            _dump(_arr(y_la)),
-            _dump(r_la),
-            b_m_nat,
-            b_y_nat,
-            _dump(wi_la),
-            epochs,
+            b_matrix_la, b_y_la, b_r_la, b_m_nat, b_y_nat, b_wi_la, epochs
         )
-        del wi_la, r_la, frs_copy
+        del b_r_c, b_wi_c, b_r_la, b_wi_la
         gc.collect()
 
         checkpoints_c = fut_c.get()
         checkpoints_la = fut_la.get()
 
+    # Reconstruct DataFrames with correct labels for get_performance
+    matrix_c_df = pd.DataFrame(matrix_c_np, columns=matrix_c_cols)
+    y_c_df = pd.DataFrame(y_c_np, columns=y_c_cols)
+    m_nat_df = pd.DataFrame(m_nat_np, columns=m_nat_cols)
+    y_nat_df = pd.Series(y_nat_np, index=y_nat_index)
+    matrix_la_df = pd.DataFrame(matrix_la_np, columns=matrix_la_cols)
+    y_la_df = pd.DataFrame(y_la_np, columns=y_la_cols)
+
     weights_c = _build_log(
         checkpoints_c,
         get_constituency_performance,
-        matrix_c,
-        y_c,
-        m_nat,
-        y_nat,
+        matrix_c_df,
+        y_c_df,
+        m_nat_df,
+        y_nat_df,
         "constituency_calibration_log.csv",
     )
     weights_la = _build_log(
         checkpoints_la,
         get_la_performance,
-        matrix_la,
-        y_la,
-        m_nat,
-        y_nat,
+        matrix_la_df,
+        y_la_df,
+        m_nat_df,
+        y_nat_df,
         "la_calibration_log.csv",
     )
 
