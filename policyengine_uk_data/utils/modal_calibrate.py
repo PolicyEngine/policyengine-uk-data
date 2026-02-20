@@ -8,67 +8,6 @@ image_gpu = modal.Image.debian_slim().pip_install(
     "torch", "numpy", "h5py", "pandas"
 )
 
-image_cpu = (
-    modal.Image.debian_slim(python_version="3.13")
-    .apt_install("libhdf5-dev", "pkg-config", "gcc")
-    .run_commands("pip install uv")
-    .run_commands(
-        "uv pip install --system torch --index-url https://download.pytorch.org/whl/cpu",
-        "uv pip install --system policyengine-uk tables microimpute",
-    )
-    .add_local_dir("policyengine_uk_data", "/root/policyengine_uk_data")
-)
-
-
-@app.function(
-    cpu=16,
-    memory=32768,
-    image=image_cpu,
-    timeout=3600,
-    serialized=True,
-)
-def run_imputation(frs_bytes: bytes, year: int = 2023) -> bytes:
-    """
-    Run the full imputation pipeline on a high-CPU container.
-
-    Accepts and returns the FRS dataset serialised as h5 bytes.
-    """
-    import io
-    import tempfile
-    from policyengine_uk.data import UKSingleYearDataset
-    from policyengine_uk_data.datasets.imputations import (
-        impute_consumption,
-        impute_wealth,
-        impute_vat,
-        impute_income,
-        impute_capital_gains,
-        impute_services,
-        impute_salary_sacrifice,
-        impute_student_loan_plan,
-    )
-    from policyengine_uk_data.utils.uprating import uprate_dataset
-
-    with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as f:
-        f.write(frs_bytes)
-        frs_path = f.name
-
-    frs = UKSingleYearDataset(file_path=frs_path)
-
-    frs = impute_wealth(frs)
-    frs = impute_consumption(frs)
-    frs = impute_vat(frs)
-    frs = impute_services(frs)
-    frs = impute_income(frs)
-    frs = impute_capital_gains(frs)
-    frs = impute_salary_sacrifice(frs)
-    frs = impute_student_loan_plan(frs, year=2025)
-    frs = uprate_dataset(frs, 2025)
-
-    with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as f:
-        out_path = f.name
-    frs.save(out_path)
-    return open(out_path, "rb").read()
-
 
 @app.function(gpu="A10G", image=image_gpu, timeout=3600, serialized=True)
 def run_calibration(
@@ -84,14 +23,11 @@ def run_calibration(
     Run the Adam calibration loop on a GPU container. All arrays are
     serialised with ``np.save`` / deserialised with ``np.load``.
 
-    Returns the final weights (area_count × n_households) as np.save bytes.
+    Returns checkpoints as [(epoch, weights_bytes), ...] every 10 epochs.
     """
     import io
     import numpy as np
     import torch
-
-    # Inline _run_optimisation to keep the Modal image dependency-free
-    # (no policyengine_uk_data import needed inside the container).
 
     def load(b):
         return np.load(io.BytesIO(b))
