@@ -54,7 +54,7 @@ def _run_modal_calibrations(
         return x.values if hasattr(x, "values") else x
 
     # Build national matrix once and reuse for both calibrations
-    m_nat, y_nat = create_national_target_matrix(frs)
+    m_nat, y_nat = create_national_target_matrix(frs.copy())
     b_m_nat = _dump(_arr(m_nat))
     b_y_nat = _dump(_arr(y_nat))
     del m_nat, y_nat
