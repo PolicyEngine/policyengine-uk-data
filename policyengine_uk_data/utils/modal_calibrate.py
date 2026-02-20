@@ -9,9 +9,9 @@ image_gpu = modal.Image.debian_slim().pip_install(
 )
 
 image_cpu = (
-    modal.Image.debian_slim()
+    modal.Image.debian_slim(python_version="3.13")
     .apt_install("libhdf5-dev", "pkg-config", "gcc")
-    .pip_install("policyengine-uk-data>=1.40.0")
+    .pip_install("policyengine-uk-data>=1.40.0", "tables")
 )
 
 
