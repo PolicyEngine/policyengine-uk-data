@@ -197,12 +197,15 @@ def main():
             update_dataset("Create base FRS dataset", "completed")
 
             if USE_MODAL:
+                import modal
                 from policyengine_uk_data.utils.modal_calibrate import (
                     app,
                     run_imputation,
                 )
                 from policyengine_uk.data import UKSingleYearDataset
                 import tempfile
+
+                modal.enable_output()
 
                 for step in [
                     "Impute consumption",
