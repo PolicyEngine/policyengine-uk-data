@@ -131,6 +131,8 @@ def _resolve_value(target: Target, year: int) -> float | None:
     closest = min(available, key=lambda y: abs(y - year))
     if abs(closest - year) > 3:
         return None
+    if closest > year:
+        return None
     base_value = target.values[closest]
     # VOA council tax counts scale with population
     if target.source == "voa" and year != closest:
