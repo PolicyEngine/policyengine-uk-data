@@ -1,6 +1,19 @@
-"""Miscellaneous compute functions (vehicles, housing, savings, SCP)."""
+"""Miscellaneous compute functions (vehicles, housing, savings, SCP,
+student loans)."""
 
 import numpy as np
+
+_ENGLAND_REGIONS = {
+    "NORTH_EAST",
+    "NORTH_WEST",
+    "YORKSHIRE",
+    "EAST_MIDLANDS",
+    "WEST_MIDLANDS",
+    "EAST_OF_ENGLAND",
+    "LONDON",
+    "SOUTH_EAST",
+    "SOUTH_WEST",
+}
 
 
 def compute_vehicles(target, ctx) -> np.ndarray:
@@ -34,3 +47,25 @@ def compute_scottish_child_payment(target, ctx) -> np.ndarray:
     """Compute Scottish child payment spend."""
     scp = ctx.sim.calculate("scottish_child_payment")
     return ctx.household_from_person(scp)
+
+
+def compute_student_loan_plan(target, ctx) -> np.ndarray:
+    """Count England borrowers on a given plan with repayments > 0.
+
+    SLC targets cover borrowers liable to repay AND earning above threshold
+    in England only — matching exactly what the FRS captures via PAYE.
+    """
+    plan_name = target.name  # e.g. "slc/plan_2_borrowers_above_threshold"
+    if "plan_2" in plan_name:
+        plan_value = "PLAN_2"
+    elif "plan_5" in plan_name:
+        plan_value = "PLAN_5"
+    else:
+        return None
+
+    plan = ctx.sim.calculate("student_loan_plan").values
+    region = ctx.sim.calculate("region", map_to="person").values
+    is_england = np.isin(region, list(_ENGLAND_REGIONS))
+    on_plan = (plan == plan_value) & is_england
+
+    return ctx.household_from_person(on_plan.astype(float))

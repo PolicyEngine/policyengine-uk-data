@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    added:
+      - SLC student loan calibration targets for Plan 2 and Plan 5 England borrowers earning above repayment threshold (2025-2030), fetched live from Explore Education Statistics.

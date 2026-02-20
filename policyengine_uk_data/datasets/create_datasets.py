@@ -96,7 +96,7 @@ def main():
             update_dataset("Impute salary sacrifice", "completed")
 
             update_dataset("Impute student loan plan", "processing")
-            frs = impute_student_loan_plan(frs, year=2023)
+            frs = impute_student_loan_plan(frs, year=2025)
             update_dataset("Impute student loan plan", "completed")
 
             # Uprate dataset
