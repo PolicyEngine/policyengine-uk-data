@@ -174,52 +174,100 @@ def main():
             frs.save(STORAGE_FOLDER / "frs_2023_24.h5")
             update_dataset("Create base FRS dataset", "completed")
 
-            from policyengine_uk_data.datasets.imputations import (
-                impute_consumption,
-                impute_wealth,
-                impute_vat,
-                impute_income,
-                impute_capital_gains,
-                impute_services,
-                impute_salary_sacrifice,
-                impute_student_loan_plan,
-            )
+            if USE_MODAL:
+                from policyengine_uk_data.utils.modal_calibrate import (
+                    app,
+                    run_imputation,
+                )
+                from policyengine_uk.data import UKSingleYearDataset
+                import tempfile
 
-            update_dataset("Impute wealth", "processing")
-            frs = impute_wealth(frs)
-            update_dataset("Impute wealth", "completed")
+                for step in [
+                    "Impute consumption",
+                    "Impute wealth",
+                    "Impute VAT",
+                    "Impute public service usage",
+                    "Impute income",
+                    "Impute capital gains",
+                    "Impute salary sacrifice",
+                    "Impute student loan plan",
+                    "Uprate to 2025",
+                ]:
+                    update_dataset(step, "processing")
 
-            update_dataset("Impute consumption", "processing")
-            frs = impute_consumption(frs)
-            update_dataset("Impute consumption", "completed")
+                with app.run():
+                    frs_bytes = open(
+                        STORAGE_FOLDER / "frs_2023_24.h5", "rb"
+                    ).read()
+                    frs_bytes_out = run_imputation.remote(frs_bytes, year=2023)
 
-            update_dataset("Impute VAT", "processing")
-            frs = impute_vat(frs)
-            update_dataset("Impute VAT", "completed")
+                with tempfile.NamedTemporaryFile(
+                    suffix=".h5", delete=False
+                ) as f:
+                    f.write(frs_bytes_out)
+                    frs_path = f.name
+                frs = UKSingleYearDataset(file_path=frs_path)
 
-            update_dataset("Impute public service usage", "processing")
-            frs = impute_services(frs)
-            update_dataset("Impute public service usage", "completed")
+                for step in [
+                    "Impute consumption",
+                    "Impute wealth",
+                    "Impute VAT",
+                    "Impute public service usage",
+                    "Impute income",
+                    "Impute capital gains",
+                    "Impute salary sacrifice",
+                    "Impute student loan plan",
+                    "Uprate to 2025",
+                ]:
+                    update_dataset(step, "completed")
+            else:
+                from policyengine_uk_data.datasets.imputations import (
+                    impute_consumption,
+                    impute_wealth,
+                    impute_vat,
+                    impute_income,
+                    impute_capital_gains,
+                    impute_services,
+                    impute_salary_sacrifice,
+                    impute_student_loan_plan,
+                )
 
-            update_dataset("Impute income", "processing")
-            frs = impute_income(frs)
-            update_dataset("Impute income", "completed")
+                update_dataset("Impute wealth", "processing")
+                frs = impute_wealth(frs)
+                update_dataset("Impute wealth", "completed")
 
-            update_dataset("Impute capital gains", "processing")
-            frs = impute_capital_gains(frs)
-            update_dataset("Impute capital gains", "completed")
+                update_dataset("Impute consumption", "processing")
+                frs = impute_consumption(frs)
+                update_dataset("Impute consumption", "completed")
 
-            update_dataset("Impute salary sacrifice", "processing")
-            frs = impute_salary_sacrifice(frs)
-            update_dataset("Impute salary sacrifice", "completed")
+                update_dataset("Impute VAT", "processing")
+                frs = impute_vat(frs)
+                update_dataset("Impute VAT", "completed")
 
-            update_dataset("Impute student loan plan", "processing")
-            frs = impute_student_loan_plan(frs, year=2025)
-            update_dataset("Impute student loan plan", "completed")
+                update_dataset("Impute public service usage", "processing")
+                frs = impute_services(frs)
+                update_dataset("Impute public service usage", "completed")
 
-            update_dataset("Uprate to 2025", "processing")
-            frs = uprate_dataset(frs, 2025)
-            update_dataset("Uprate to 2025", "completed")
+                update_dataset("Impute income", "processing")
+                frs = impute_income(frs)
+                update_dataset("Impute income", "completed")
+
+                update_dataset("Impute capital gains", "processing")
+                frs = impute_capital_gains(frs)
+                update_dataset("Impute capital gains", "completed")
+
+                update_dataset("Impute salary sacrifice", "processing")
+                frs = impute_salary_sacrifice(frs)
+                update_dataset("Impute salary sacrifice", "completed")
+
+                update_dataset("Impute student loan plan", "processing")
+                frs = impute_student_loan_plan(frs, year=2025)
+                update_dataset("Impute student loan plan", "completed")
+
+            if not USE_MODAL:
+                update_dataset("Uprate to 2025", "processing")
+                frs = uprate_dataset(frs, 2025)
+                update_dataset("Uprate to 2025", "completed")
 
             from policyengine_uk_data.datasets.local_areas.constituencies.loss import (
                 create_constituency_target_matrix,

@@ -4,12 +4,66 @@ import numpy as np
 
 app = modal.App("policyengine-uk-calibration")
 
-image = modal.Image.debian_slim().pip_install(
+image_gpu = modal.Image.debian_slim().pip_install(
     "torch", "numpy", "h5py", "pandas"
 )
 
+image_cpu = modal.Image.debian_slim().pip_install(
+    "policyengine-uk-data>=1.39.3",
+    "tables",
+)
 
-@app.function(gpu="T4", image=image, timeout=3600, serialized=True)
+
+@app.function(
+    cpu=8,
+    memory=16384,
+    image=image_cpu,
+    timeout=3600,
+)
+def run_imputation(frs_bytes: bytes, year: int = 2023) -> bytes:
+    """
+    Run the full imputation pipeline on a high-CPU container.
+
+    Accepts and returns the FRS dataset serialised as h5 bytes.
+    """
+    import io
+    import tempfile
+    from policyengine_uk.data import UKSingleYearDataset
+    from policyengine_uk_data.datasets.imputations import (
+        impute_consumption,
+        impute_wealth,
+        impute_vat,
+        impute_income,
+        impute_capital_gains,
+        impute_services,
+        impute_salary_sacrifice,
+        impute_student_loan_plan,
+    )
+    from policyengine_uk_data.utils.uprating import uprate_dataset
+
+    with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as f:
+        f.write(frs_bytes)
+        frs_path = f.name
+
+    frs = UKSingleYearDataset(file_path=frs_path)
+
+    frs = impute_wealth(frs)
+    frs = impute_consumption(frs)
+    frs = impute_vat(frs)
+    frs = impute_services(frs)
+    frs = impute_income(frs)
+    frs = impute_capital_gains(frs)
+    frs = impute_salary_sacrifice(frs)
+    frs = impute_student_loan_plan(frs, year=2025)
+    frs = uprate_dataset(frs, 2025)
+
+    with tempfile.NamedTemporaryFile(suffix=".h5", delete=False) as f:
+        out_path = f.name
+    frs.save(out_path)
+    return open(out_path, "rb").read()
+
+
+@app.function(gpu="T4", image=image_gpu, timeout=3600, serialized=True)
 def run_calibration(
     matrix: bytes,
     y: bytes,
