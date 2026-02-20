@@ -27,9 +27,7 @@ def _build_weights_init(dataset, area_count, r):
     areas_per_household = np.maximum(r.sum(axis=0), 1)
     original_weights = np.log(
         dataset.household.household_weight.values / areas_per_household
-        + np.random.random(
-            len(dataset.household.household_weight.values)
-        )
+        + np.random.random(len(dataset.household.household_weight.values))
         * 0.01
     )
     return np.ones((area_count, len(original_weights))) * original_weights
@@ -51,15 +49,18 @@ def _run_modal_calibrations(
         run_calibration,
     )
 
+    frs_c = frs.copy()
+    frs_la = frs.copy()
+
     # Build arrays for constituencies
-    matrix_c, y_c, r_c = create_constituency_target_matrix(frs)
-    m_nat_c, y_nat_c = create_national_target_matrix(frs)
-    wi_c = _build_weights_init(frs, 650, r_c)
+    matrix_c, y_c, r_c = create_constituency_target_matrix(frs_c)
+    m_nat_c, y_nat_c = create_national_target_matrix(frs_c)
+    wi_c = _build_weights_init(frs_c, 650, r_c)
 
     # Build arrays for local authorities
-    matrix_la, y_la, r_la = create_local_authority_target_matrix(frs)
-    m_nat_la, y_nat_la = create_national_target_matrix(frs)
-    wi_la = _build_weights_init(frs, 360, r_la)
+    matrix_la, y_la, r_la = create_local_authority_target_matrix(frs_la)
+    m_nat_la, y_nat_la = create_national_target_matrix(frs_la)
+    wi_la = _build_weights_init(frs_la, 360, r_la)
 
     def _arr(x):
         return x.values if hasattr(x, "values") else x
@@ -220,9 +221,7 @@ def main():
                     weights_c.sum(axis=0)
                 )
 
-                update_dataset(
-                    "Calibrate constituency weights", "completed"
-                )
+                update_dataset("Calibrate constituency weights", "completed")
                 update_dataset(
                     "Calibrate local authority weights", "completed"
                 )
@@ -246,9 +245,7 @@ def main():
                     get_performance=get_performance,
                     nested_progress=nested_progress,
                 )
-                update_dataset(
-                    "Calibrate constituency weights", "completed"
-                )
+                update_dataset("Calibrate constituency weights", "completed")
 
                 update_dataset(
                     "Calibrate local authority weights", "processing"
@@ -272,7 +269,9 @@ def main():
                 )
 
             update_dataset("Downrate to 2023", "processing")
-            frs_calibrated = uprate_dataset(frs_calibrated_constituencies, 2023)
+            frs_calibrated = uprate_dataset(
+                frs_calibrated_constituencies, 2023
+            )
             update_dataset("Downrate to 2023", "completed")
 
             update_dataset("Save final dataset", "processing")

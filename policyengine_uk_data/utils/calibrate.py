@@ -80,19 +80,14 @@ def _run_optimisation(
             mse_local = torch.mean(sre(pred_local, y))
 
         pred_national = (w.sum(axis=0) * matrix_national.T).sum(axis=1)
-        if (
-            dropout_targets
-            and excluded_training_targets_national is not None
-        ):
+        if dropout_targets and excluded_training_targets_national is not None:
             mask = (
                 excluded_training_targets_national
                 if validation
                 else ~excluded_training_targets_national
             )
             pred_national = pred_national[mask]
-            mse_national = torch.mean(
-                sre(pred_national, y_national[mask])
-            )
+            mse_national = torch.mean(sre(pred_national, y_national[mask]))
         else:
             mse_national = torch.mean(sre(pred_national, y_national))
 
@@ -102,9 +97,7 @@ def _run_optimisation(
         numerator = 0
         denominator = 0
         if local:
-            pred_local = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(
-                dim=1
-            )
+            pred_local = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
             numerator += torch.sum(
                 torch.abs((pred_local / (1 + y) - 1)) < t
             ).item()
@@ -156,21 +149,16 @@ def _run_optimisation(
                 perf["epoch"] = epoch
                 perf["loss"] = perf.rel_abs_error**2
                 perf["target_name"] = [
-                    f"{a}/{m}"
-                    for a, m in zip(perf.name, perf.metric)
+                    f"{a}/{m}" for a, m in zip(perf.name, perf.metric)
                 ]
-                performance = pd.concat(
-                    [performance, perf], ignore_index=True
-                )
+                performance = pd.concat([performance, perf], ignore_index=True)
                 performance.to_csv(log_csv, index=False)
 
             if weight_file:
                 with h5py.File(STORAGE_FOLDER / weight_file, "w") as f:
                     f.create_dataset(dataset_key, data=final_weights)
             if dataset is not None:
-                dataset.household.household_weight = final_weights.sum(
-                    axis=0
-                )
+                dataset.household.household_weight = final_weights.sum(axis=0)
 
         return l, local_close, national_close
 
@@ -182,9 +170,7 @@ def _run_optimisation(
                 update_calibration(epoch + 1, calculating_loss=True)
                 l, _, _ = _epoch_step(epoch)
                 if dropout_targets:
-                    weights_ = torch.exp(
-                        dropout_weights(weights, 0.05)
-                    ) * r
+                    weights_ = torch.exp(dropout_weights(weights, 0.05)) * r
                     val_loss = loss_fn(weights_, validation=True)
                     update_calibration(
                         epoch + 1,
@@ -235,7 +221,9 @@ def calibrate_local_areas(
         + np.random.random(len(dataset.household.household_weight.values))
         * 0.01
     )
-    weights_init = np.ones((area_count, len(original_weights))) * original_weights
+    weights_init = (
+        np.ones((area_count, len(original_weights))) * original_weights
+    )
 
     validation_targets_local = (
         matrix.columns.isin(excluded_training_targets)
@@ -254,12 +242,12 @@ def calibrate_local_areas(
         matrix_np=matrix.values if hasattr(matrix, "values") else matrix,
         y_np=y.values if hasattr(y, "values") else y,
         r_np=r,
-        matrix_national_np=m_national.values
-        if hasattr(m_national, "values")
-        else m_national,
-        y_national_np=y_national.values
-        if hasattr(y_national, "values")
-        else y_national,
+        matrix_national_np=(
+            m_national.values if hasattr(m_national, "values") else m_national
+        ),
+        y_national_np=(
+            y_national.values if hasattr(y_national, "values") else y_national
+        ),
         weights_init_np=weights_init,
         epochs=epochs,
         device=torch.device("cpu"),

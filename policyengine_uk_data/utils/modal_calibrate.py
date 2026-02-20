@@ -4,7 +4,9 @@ import numpy as np
 
 app = modal.App("policyengine-uk-calibration")
 
-image = modal.Image.debian_slim().pip_install("torch", "numpy", "h5py", "pandas")
+image = modal.Image.debian_slim().pip_install(
+    "torch", "numpy", "h5py", "pandas"
+)
 
 
 @app.function(gpu="T4", image=image, timeout=3600)
