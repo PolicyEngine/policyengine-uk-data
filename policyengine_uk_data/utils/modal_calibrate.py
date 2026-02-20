@@ -13,7 +13,7 @@ image_cpu = (
     .apt_install("libhdf5-dev", "pkg-config", "gcc")
     .run_commands(
         "pip install torch --index-url https://download.pytorch.org/whl/cpu",
-        "pip install policyengine-uk-data>=1.40.0 policyengine-uk tables",
+        "pip install policyengine-uk policyengine-uk-data>=1.40.0 tables microimpute",
     )
 )
 
@@ -23,6 +23,7 @@ image_cpu = (
     memory=16384,
     image=image_cpu,
     timeout=3600,
+    serialized=True,
 )
 def run_imputation(frs_bytes: bytes, year: int = 2023) -> bytes:
     """
