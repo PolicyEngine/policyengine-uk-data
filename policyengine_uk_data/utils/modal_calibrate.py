@@ -11,9 +11,10 @@ image_gpu = modal.Image.debian_slim().pip_install(
 image_cpu = (
     modal.Image.debian_slim(python_version="3.13")
     .apt_install("libhdf5-dev", "pkg-config", "gcc")
+    .run_commands("pip install uv")
     .run_commands(
-        "pip install torch --index-url https://download.pytorch.org/whl/cpu",
-        "pip install policyengine-uk policyengine-uk-data>=1.40.0 tables microimpute",
+        "uv pip install --system torch --index-url https://download.pytorch.org/whl/cpu",
+        "uv pip install --system policyengine-uk policyengine-uk-data>=1.40.0 tables",
     )
 )
 
