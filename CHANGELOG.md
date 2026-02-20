@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.40.0] - 2026-02-20 13:50:59
+
+### Added
+
+- SLC student loan calibration targets for Plan 2 and Plan 5 England borrowers earning above repayment threshold (2025-2030), fetched live from Explore Education Statistics.
+
 ## [1.39.3] - 2026-02-19 16:15:46
 
 ### Fixed
@@ -635,6 +641,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.40.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.39.3...1.40.0
 [1.39.3]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.39.2...1.39.3
 [1.39.2]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.39.1...1.39.2
 [1.39.1]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.39.0...1.39.1
