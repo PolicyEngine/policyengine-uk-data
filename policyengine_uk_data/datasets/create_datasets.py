@@ -66,6 +66,7 @@ def _run_modal_calibrations(
     Returns (constituency_weights, la_weights) as numpy arrays and
     writes constituency_calibration_log.csv / la_calibration_log.csv.
     """
+    import modal
     import pandas as pd
     from policyengine_uk_data.utils.modal_calibrate import (
         app,
@@ -116,7 +117,7 @@ def _run_modal_calibrations(
     del matrix_la, y_la, wi_la, r_la, frs_copy
     gc.collect()
 
-    with app.run():
+    with modal.enable_output(), app.run():
         fut_c = run_calibration.spawn(
             b_matrix_c, b_y_c, b_r_c, b_m_nat, b_y_nat, b_wi_c, epochs
         )
@@ -205,8 +206,6 @@ def main():
                 from policyengine_uk.data import UKSingleYearDataset
                 import tempfile
 
-                modal.enable_output()
-
                 for step in [
                     "Impute consumption",
                     "Impute wealth",
@@ -220,7 +219,7 @@ def main():
                 ]:
                     update_dataset(step, "processing")
 
-                with app.run():
+                with modal.enable_output(), app.run():
                     frs_bytes = open(
                         STORAGE_FOLDER / "frs_2023_24.h5", "rb"
                     ).read()

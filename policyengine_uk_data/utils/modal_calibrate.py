@@ -13,7 +13,8 @@ image_cpu = (
     .apt_install("libhdf5-dev", "pkg-config", "gcc")
     .uv_pip_install(
         "torch",
-        extra_options="--index-url https://download.pytorch.org/whl/cpu",
+        index_url="https://download.pytorch.org/whl/cpu",
+        extra_index_url="https://pypi.org/simple/",
     )
     .uv_pip_install("policyengine-uk-data>=1.40.0", "tables")
 )
