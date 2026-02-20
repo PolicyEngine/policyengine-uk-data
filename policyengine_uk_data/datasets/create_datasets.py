@@ -49,42 +49,44 @@ def _run_modal_calibrations(
         run_calibration,
     )
 
-    frs_c = frs.copy()
-    frs_la = frs.copy()
-
-    # Build arrays for constituencies
-    matrix_c, y_c, r_c = create_constituency_target_matrix(frs_c)
-    m_nat_c, y_nat_c = create_national_target_matrix(frs_c)
-    wi_c = _build_weights_init(frs_c, 650, r_c)
-
-    # Build arrays for local authorities
-    matrix_la, y_la, r_la = create_local_authority_target_matrix(frs_la)
-    m_nat_la, y_nat_la = create_national_target_matrix(frs_la)
-    wi_la = _build_weights_init(frs_la, 360, r_la)
-
     def _arr(x):
         return x.values if hasattr(x, "values") else x
 
+    # Build and serialise constituency arrays, then free before building LA
+    frs_copy = frs.copy()
+    matrix_c, y_c, r_c = create_constituency_target_matrix(frs_copy)
+    m_nat_c, y_nat_c = create_national_target_matrix(frs_copy)
+    wi_c = _build_weights_init(frs_copy, 650, r_c)
+    args_c = (
+        _dump(_arr(matrix_c)),
+        _dump(_arr(y_c)),
+        _dump(r_c),
+        _dump(_arr(m_nat_c)),
+        _dump(_arr(y_nat_c)),
+        _dump(wi_c),
+        epochs,
+    )
+    del matrix_c, y_c, r_c, m_nat_c, y_nat_c, wi_c, frs_copy
+
+    frs_copy = frs.copy()
+    matrix_la, y_la, r_la = create_local_authority_target_matrix(frs_copy)
+    m_nat_la, y_nat_la = create_national_target_matrix(frs_copy)
+    wi_la = _build_weights_init(frs_copy, 360, r_la)
+    args_la = (
+        _dump(_arr(matrix_la)),
+        _dump(_arr(y_la)),
+        _dump(r_la),
+        _dump(_arr(m_nat_la)),
+        _dump(_arr(y_nat_la)),
+        _dump(wi_la),
+        epochs,
+    )
+    del matrix_la, y_la, r_la, m_nat_la, y_nat_la, wi_la, frs_copy
+
     # Submit both jobs before waiting on either; Modal runs them in parallel
     with app.run():
-        fut_c = run_calibration.spawn(
-            _dump(_arr(matrix_c)),
-            _dump(_arr(y_c)),
-            _dump(r_c),
-            _dump(_arr(m_nat_c)),
-            _dump(_arr(y_nat_c)),
-            _dump(wi_c),
-            epochs,
-        )
-        fut_la = run_calibration.spawn(
-            _dump(_arr(matrix_la)),
-            _dump(_arr(y_la)),
-            _dump(r_la),
-            _dump(_arr(m_nat_la)),
-            _dump(_arr(y_nat_la)),
-            _dump(wi_la),
-            epochs,
-        )
+        fut_c = run_calibration.spawn(*args_c)
+        fut_la = run_calibration.spawn(*args_la)
         weights_c = np.load(io.BytesIO(fut_c.get()))
         weights_la = np.load(io.BytesIO(fut_la.get()))
 
