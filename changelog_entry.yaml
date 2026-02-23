@@ -1,0 +1,4 @@
+- bump: minor
+  changes:
+    added:
+    - Modal GPU calibration support to speed up CI runs

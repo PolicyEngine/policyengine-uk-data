@@ -8,6 +8,188 @@ from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk_data.utils.progress import ProcessingProgress
 
 
+def _run_optimisation(
+    matrix_np: np.ndarray,
+    y_np: np.ndarray,
+    r_np: np.ndarray,
+    matrix_national_np: np.ndarray,
+    y_national_np: np.ndarray,
+    weights_init_np: np.ndarray,
+    epochs: int,
+    device: torch.device,
+    excluded_training_targets_local: np.ndarray | None = None,
+    excluded_training_targets_national: np.ndarray | None = None,
+    verbose: bool = False,
+    area_name: str = "area",
+    progress_tracker=None,
+    nested_progress=None,
+    log_csv: str | None = None,
+    get_performance=None,
+    m_c_orig=None,
+    y_c_orig=None,
+    m_n_orig=None,
+    y_n_orig=None,
+    weight_file: str | None = None,
+    dataset_key: str = "2025",
+    dataset=None,
+) -> np.ndarray:
+    """
+    Pure optimisation loop (Adam, PyTorch). Device-agnostic — pass
+    ``device=torch.device("cuda")`` for GPU or ``"cpu"`` for CPU.
+
+    Returns the final weights array (area_count × n_households).
+    """
+    metrics = torch.tensor(matrix_np, dtype=torch.float32, device=device)
+    y = torch.tensor(y_np, dtype=torch.float32, device=device)
+    matrix_national = torch.tensor(
+        matrix_national_np, dtype=torch.float32, device=device
+    )
+    y_national = torch.tensor(
+        y_national_np, dtype=torch.float32, device=device
+    )
+    r = torch.tensor(r_np, dtype=torch.float32, device=device)
+
+    weights = torch.tensor(
+        weights_init_np,
+        dtype=torch.float32,
+        device=device,
+        requires_grad=True,
+    )
+
+    dropout_targets = (
+        excluded_training_targets_local is not None
+        and excluded_training_targets_local.any()
+    )
+
+    def sre(x, y_t):
+        one_way = ((1 + x) / (1 + y_t) - 1) ** 2
+        other_way = ((1 + y_t) / (1 + x) - 1) ** 2
+        return torch.min(one_way, other_way)
+
+    def loss_fn(w, validation: bool = False):
+        pred_local = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
+        if dropout_targets and excluded_training_targets_local is not None:
+            mask = (
+                excluded_training_targets_local
+                if validation
+                else ~excluded_training_targets_local
+            )
+            pred_local = pred_local[:, mask]
+            mse_local = torch.mean(sre(pred_local, y[:, mask]))
+        else:
+            mse_local = torch.mean(sre(pred_local, y))
+
+        pred_national = (w.sum(axis=0) * matrix_national.T).sum(axis=1)
+        if dropout_targets and excluded_training_targets_national is not None:
+            mask = (
+                excluded_training_targets_national
+                if validation
+                else ~excluded_training_targets_national
+            )
+            pred_national = pred_national[mask]
+            mse_national = torch.mean(sre(pred_national, y_national[mask]))
+        else:
+            mse_national = torch.mean(sre(pred_national, y_national))
+
+        return mse_local + mse_national
+
+    def pct_close(w, t=0.1, local=True, national=True):
+        numerator = 0
+        denominator = 0
+        if local:
+            pred_local = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
+            numerator += torch.sum(
+                torch.abs((pred_local / (1 + y) - 1)) < t
+            ).item()
+            denominator += pred_local.shape[0] * pred_local.shape[1]
+        if national:
+            pred_national = (w.sum(axis=0) * matrix_national.T).sum(axis=1)
+            numerator += torch.sum(
+                torch.abs((pred_national / (1 + y_national) - 1)) < t
+            ).item()
+            denominator += pred_national.shape[0]
+        return numerator / denominator
+
+    def dropout_weights(w, p):
+        if p == 0:
+            return w
+        mask = torch.rand_like(w) < p
+        mean = w[~mask].mean()
+        w2 = w.clone()
+        w2[mask] = mean
+        return w2
+
+    optimizer = torch.optim.Adam([weights], lr=1e-1)
+    final_weights = (torch.exp(weights) * r).detach().cpu().numpy()
+    performance = pd.DataFrame()
+
+    def _epoch_step(epoch):
+        nonlocal final_weights, performance
+        optimizer.zero_grad()
+        weights_ = torch.exp(dropout_weights(weights, 0.05)) * r
+        l = loss_fn(weights_)
+        l.backward()
+        optimizer.step()
+
+        local_close = pct_close(weights_, local=True, national=False)
+        national_close = pct_close(weights_, local=False, national=True)
+
+        if epoch % 10 == 0:
+            final_weights = (torch.exp(weights) * r).detach().cpu().numpy()
+
+            if log_csv and get_performance and m_c_orig is not None:
+                perf = get_performance(
+                    final_weights,
+                    m_c_orig,
+                    y_c_orig,
+                    m_n_orig,
+                    y_n_orig,
+                    [],
+                )
+                perf["epoch"] = epoch
+                perf["loss"] = perf.rel_abs_error**2
+                perf["target_name"] = [
+                    f"{a}/{m}" for a, m in zip(perf.name, perf.metric)
+                ]
+                performance = pd.concat([performance, perf], ignore_index=True)
+                performance.to_csv(log_csv, index=False)
+
+            if weight_file:
+                with h5py.File(STORAGE_FOLDER / weight_file, "w") as f:
+                    f.create_dataset(dataset_key, data=final_weights)
+            if dataset is not None:
+                dataset.household.household_weight = final_weights.sum(axis=0)
+
+        return l, local_close, national_close
+
+    if verbose and progress_tracker is not None:
+        with progress_tracker.track_calibration(
+            epochs, nested_progress
+        ) as update_calibration:
+            for epoch in range(epochs):
+                update_calibration(epoch + 1, calculating_loss=True)
+                l, _, _ = _epoch_step(epoch)
+                if dropout_targets:
+                    weights_ = torch.exp(dropout_weights(weights, 0.05)) * r
+                    val_loss = loss_fn(weights_, validation=True)
+                    update_calibration(
+                        epoch + 1,
+                        loss_value=val_loss.item(),
+                        calculating_loss=False,
+                    )
+                else:
+                    update_calibration(
+                        epoch + 1,
+                        loss_value=l.item(),
+                        calculating_loss=False,
+                    )
+    else:
+        for epoch in range(epochs):
+            _epoch_step(epoch)
+
+    return final_weights
+
+
 def calibrate_local_areas(
     dataset: UKSingleYearDataset,
     matrix_fn,
@@ -22,22 +204,9 @@ def calibrate_local_areas(
     area_name: str = "area",
     get_performance=None,
     nested_progress=None,
-):
+) -> UKSingleYearDataset:
     """
-    Generic calibration function for local areas (constituencies, local authorities, etc.)
-
-    Args:
-        dataset: The dataset to calibrate
-        matrix_fn: Function that returns (matrix, targets, mask) for the local areas
-        national_matrix_fn: Function that returns (matrix, targets) for national totals
-        area_count: Number of areas (e.g., 650 for constituencies, 360 for local authorities)
-        weight_file: Name of the h5 file to save weights to
-        dataset_key: Key to use in the h5 file
-        epochs: Number of training epochs
-        excluded_training_targets: List of targets to exclude from training (for validation)
-        log_csv: CSV file to log performance to
-        verbose: Whether to print progress
-        area_name: Name of the area type for logging
+    Calibrate local-area weights on CPU using the extracted optimisation loop.
     """
     dataset = dataset.copy()
     matrix, y, r = matrix_fn(dataset)
@@ -45,29 +214,17 @@ def calibrate_local_areas(
     m_national, y_national = national_matrix_fn(dataset)
     m_n, y_n = m_national.copy(), y_national.copy()
 
-    # Weights - area_count x num_households
-    # Use country-aware initialization: divide each household's weight by the
-    # number of areas in its country, not the total area count. This ensures
-    # households start at approximately correct weight for their country's targets.
-    # The country_mask r[i,j]=1 iff household j is in same country as area i.
-    areas_per_household = r.sum(
-        axis=0
-    )  # number of areas each household can contribute to
-    areas_per_household = np.maximum(
-        areas_per_household, 1
-    )  # avoid division by zero
+    areas_per_household = r.sum(axis=0)
+    areas_per_household = np.maximum(areas_per_household, 1)
     original_weights = np.log(
         dataset.household.household_weight.values / areas_per_household
         + np.random.random(len(dataset.household.household_weight.values))
         * 0.01
     )
-    weights = torch.tensor(
-        np.ones((area_count, len(original_weights))) * original_weights,
-        dtype=torch.float32,
-        requires_grad=True,
+    weights_init = (
+        np.ones((area_count, len(original_weights))) * original_weights
     )
 
-    # Set up validation targets if specified
     validation_targets_local = (
         matrix.columns.isin(excluded_training_targets)
         if hasattr(matrix, "columns")
@@ -78,215 +235,38 @@ def calibrate_local_areas(
         if hasattr(m_national, "columns")
         else None
     )
-    dropout_targets = len(excluded_training_targets) > 0
-
-    # Convert to tensors
-    metrics = torch.tensor(
-        matrix.values if hasattr(matrix, "values") else matrix,
-        dtype=torch.float32,
-    )
-    y = torch.tensor(
-        y.values if hasattr(y, "values") else y, dtype=torch.float32
-    )
-    matrix_national = torch.tensor(
-        m_national.values if hasattr(m_national, "values") else m_national,
-        dtype=torch.float32,
-    )
-    y_national = torch.tensor(
-        y_national.values if hasattr(y_national, "values") else y_national,
-        dtype=torch.float32,
-    )
-    r = torch.tensor(r, dtype=torch.float32)
-
-    def sre(x, y):
-        one_way = ((1 + x) / (1 + y) - 1) ** 2
-        other_way = ((1 + y) / (1 + x) - 1) ** 2
-        return torch.min(one_way, other_way)
-
-    def loss(w, validation: bool = False):
-        pred_local = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
-        if dropout_targets and validation_targets_local is not None:
-            if validation:
-                mask = validation_targets_local
-            else:
-                mask = ~validation_targets_local
-            pred_local = pred_local[:, mask]
-            mse_local = torch.mean(sre(pred_local, y[:, mask]))
-        else:
-            mse_local = torch.mean(sre(pred_local, y))
-
-        pred_national = (w.sum(axis=0) * matrix_national.T).sum(axis=1)
-        if dropout_targets and validation_targets_national is not None:
-            if validation:
-                mask = validation_targets_national
-            else:
-                mask = ~validation_targets_national
-            pred_national = pred_national[mask]
-            mse_national = torch.mean(sre(pred_national, y_national[mask]))
-        else:
-            mse_national = torch.mean(sre(pred_national, y_national))
-
-        return mse_local + mse_national
-
-    def pct_close(w, t=0.1, local=True, national=True):
-        """Return the percentage of metrics that are within t% of the target"""
-        numerator = 0
-        denominator = 0
-
-        if local:
-            pred_local = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
-            e_local = torch.sum(
-                torch.abs((pred_local / (1 + y) - 1)) < t
-            ).item()
-            c_local = pred_local.shape[0] * pred_local.shape[1]
-            numerator += e_local
-            denominator += c_local
-
-        if national:
-            pred_national = (w.sum(axis=0) * matrix_national.T).sum(axis=1)
-            e_national = torch.sum(
-                torch.abs((pred_national / (1 + y_national) - 1)) < t
-            ).item()
-            c_national = pred_national.shape[0]
-            numerator += e_national
-            denominator += c_national
-
-        return numerator / denominator
-
-    def dropout_weights(weights, p):
-        if p == 0:
-            return weights
-        # Replace p% of the weights with the mean value of the rest of them
-        mask = torch.rand_like(weights) < p
-        mean = weights[~mask].mean()
-        masked_weights = weights.clone()
-        masked_weights[mask] = mean
-        return masked_weights
-
-    optimizer = torch.optim.Adam([weights], lr=1e-1)
-    final_weights = (torch.exp(weights) * r).detach().numpy()
-    performance = pd.DataFrame()
 
     progress_tracker = ProcessingProgress() if verbose else None
 
-    if verbose and progress_tracker:
-        with progress_tracker.track_calibration(
-            epochs, nested_progress
-        ) as update_calibration:
-            for epoch in range(epochs):
-                update_calibration(epoch + 1, calculating_loss=True)
+    final_weights = _run_optimisation(
+        matrix_np=matrix.values if hasattr(matrix, "values") else matrix,
+        y_np=y.values if hasattr(y, "values") else y,
+        r_np=r,
+        matrix_national_np=(
+            m_national.values if hasattr(m_national, "values") else m_national
+        ),
+        y_national_np=(
+            y_national.values if hasattr(y_national, "values") else y_national
+        ),
+        weights_init_np=weights_init,
+        epochs=epochs,
+        device=torch.device("cpu"),
+        excluded_training_targets_local=validation_targets_local,
+        excluded_training_targets_national=validation_targets_national,
+        verbose=verbose,
+        area_name=area_name,
+        progress_tracker=progress_tracker,
+        nested_progress=nested_progress,
+        log_csv=log_csv,
+        get_performance=get_performance,
+        m_c_orig=m_c,
+        y_c_orig=y_c,
+        m_n_orig=m_n,
+        y_n_orig=y_n,
+        weight_file=weight_file,
+        dataset_key=dataset_key,
+        dataset=dataset,
+    )
 
-                optimizer.zero_grad()
-                weights_ = torch.exp(dropout_weights(weights, 0.05)) * r
-                l = loss(weights_)
-                l.backward()
-                optimizer.step()
-
-                local_close = pct_close(weights_, local=True, national=False)
-                national_close = pct_close(
-                    weights_, local=False, national=True
-                )
-
-                if dropout_targets:
-                    validation_loss = loss(weights_, validation=True)
-                    update_calibration(
-                        epoch + 1,
-                        loss_value=validation_loss.item(),
-                        calculating_loss=False,
-                    )
-                else:
-                    update_calibration(
-                        epoch + 1, loss_value=l.item(), calculating_loss=False
-                    )
-
-                if epoch % 10 == 0:
-                    final_weights = (torch.exp(weights) * r).detach().numpy()
-
-                    # Log performance if requested and get_performance function is available
-                    if log_csv and get_performance:
-                        performance_step = get_performance(
-                            final_weights,
-                            m_c,
-                            y_c,
-                            m_n,
-                            y_n,
-                            excluded_training_targets,
-                        )
-                        performance_step["epoch"] = epoch
-                        performance_step["loss"] = (
-                            performance_step.rel_abs_error**2
-                        )
-                        performance_step["target_name"] = [
-                            f"{area}/{metric}"
-                            for area, metric in zip(
-                                performance_step.name, performance_step.metric
-                            )
-                        ]
-                        performance = pd.concat(
-                            [performance, performance_step], ignore_index=True
-                        )
-                        performance.to_csv(log_csv, index=False)
-
-                    # Save weights
-                    with h5py.File(STORAGE_FOLDER / weight_file, "w") as f:
-                        f.create_dataset(dataset_key, data=final_weights)
-
-                    dataset.household.household_weight = final_weights.sum(
-                        axis=0
-                    )
-    else:
-        for epoch in range(epochs):
-            optimizer.zero_grad()
-            weights_ = torch.exp(dropout_weights(weights, 0.05)) * r
-            l = loss(weights_)
-            l.backward()
-            optimizer.step()
-
-            local_close = pct_close(weights_, local=True, national=False)
-            national_close = pct_close(weights_, local=False, national=True)
-
-            if verbose and (epoch % 1 == 0):
-                if dropout_targets:
-                    validation_loss = loss(weights_, validation=True)
-                    print(
-                        f"Training loss: {l.item():,.3f}, Validation loss: {validation_loss.item():,.3f}, Epoch: {epoch}, "
-                        f"{area_name}<10%: {local_close:.1%}, National<10%: {national_close:.1%}"
-                    )
-                else:
-                    print(
-                        f"Loss: {l.item()}, Epoch: {epoch}, {area_name}<10%: {local_close:.1%}, National<10%: {national_close:.1%}"
-                    )
-
-        if epoch % 10 == 0:
-            final_weights = (torch.exp(weights) * r).detach().numpy()
-
-            # Log performance if requested and get_performance function is available
-            if log_csv:
-                performance_step = get_performance(
-                    final_weights,
-                    m_c,
-                    y_c,
-                    m_n,
-                    y_n,
-                    excluded_training_targets,
-                )
-                performance_step["epoch"] = epoch
-                performance_step["loss"] = performance_step.rel_abs_error**2
-                performance_step["target_name"] = [
-                    f"{area}/{metric}"
-                    for area, metric in zip(
-                        performance_step.name, performance_step.metric
-                    )
-                ]
-                performance = pd.concat(
-                    [performance, performance_step], ignore_index=True
-                )
-                performance.to_csv(log_csv, index=False)
-
-            # Save weights
-            with h5py.File(STORAGE_FOLDER / weight_file, "w") as f:
-                f.create_dataset(dataset_key, data=final_weights)
-
-            dataset.household.household_weight = final_weights.sum(axis=0)
-
+    dataset.household.household_weight = final_weights.sum(axis=0)
     return dataset
