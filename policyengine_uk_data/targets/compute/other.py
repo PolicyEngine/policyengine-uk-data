@@ -52,8 +52,8 @@ def compute_scottish_child_payment(target, ctx) -> np.ndarray:
 def compute_student_loan_plan(target, ctx) -> np.ndarray:
     """Count England borrowers on a given plan with repayments > 0.
 
-    SLC targets cover borrowers liable to repay AND earning above threshold
-    in England only — matching exactly what the FRS captures via PAYE.
+    SLC "above_threshold" targets cover borrowers liable to repay AND earning
+    above threshold in England only — matching what the FRS captures via PAYE.
     """
     plan_name = target.name  # e.g. "slc/plan_2_borrowers_above_threshold"
     if "plan_2" in plan_name:
@@ -65,6 +65,32 @@ def compute_student_loan_plan(target, ctx) -> np.ndarray:
 
     plan = ctx.sim.calculate("student_loan_plan").values
     region = ctx.sim.calculate("region", map_to="person").values
+    repayments = ctx.sim.calculate("student_loan_repayments").values
+
+    is_england = np.isin(region, list(_ENGLAND_REGIONS))
+    # Only count those with repayments > 0 (above threshold)
+    on_plan = (plan == plan_value) & is_england & (repayments > 0)
+
+    return ctx.household_from_person(on_plan.astype(float))
+
+
+def compute_student_loan_plan_liable(target, ctx) -> np.ndarray:
+    """Count ALL England borrowers on a given plan (including below-threshold).
+
+    SLC "liable" targets cover all borrowers liable to repay, regardless of
+    whether they earn above the repayment threshold.
+    """
+    plan_name = target.name  # e.g. "slc/plan_2_borrowers_liable"
+    if "plan_2" in plan_name:
+        plan_value = "PLAN_2"
+    elif "plan_5" in plan_name:
+        plan_value = "PLAN_5"
+    else:
+        return None
+
+    plan = ctx.sim.calculate("student_loan_plan").values
+    region = ctx.sim.calculate("region", map_to="person").values
+
     is_england = np.isin(region, list(_ENGLAND_REGIONS))
     on_plan = (plan == plan_value) & is_england
 

@@ -38,6 +38,7 @@ from policyengine_uk_data.targets.compute.other import (
     compute_savings_interest,
     compute_scottish_child_payment,
     compute_student_loan_plan,
+    compute_student_loan_plan_liable,
     compute_vehicles,
 )
 
@@ -57,6 +58,7 @@ __all__ = [
     "compute_scotland_uc_child",
     "compute_scottish_child_payment",
     "compute_student_loan_plan",
+    "compute_student_loan_plan_liable",
     "compute_ss_contributions",
     "compute_ss_headcount",
     "compute_ss_it_relief",
