@@ -570,3 +570,9 @@
       earning above repayment threshold (2025-2030), fetched live from Explore Education
       Statistics.
   date: 2026-02-20 13:50:59
+- bump: patch
+  changes:
+    fixed:
+    - Upload datasets to public HuggingFace repo (policyengine/policyengine-uk-data)
+      in addition to private repo, so policyengine-uk gets the latest data.
+  date: 2026-02-23 13:26:29

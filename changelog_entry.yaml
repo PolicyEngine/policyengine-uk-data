@@ -1,4 +1,0 @@
-- bump: patch
-  changes:
-    fixed:
-    - Upload datasets to public HuggingFace repo (policyengine/policyengine-uk-data) in addition to private repo, so policyengine-uk gets the latest data.
