@@ -119,14 +119,13 @@ def impute_student_loan_plan(
     # Estimate university start year (assume started at 18)
     uni_start_year = year - age + 18
 
-    # Age bands for plausible loan holders (graduates typically 21+)
+    # Age bands for plausible loan holders
     # Plan 1: 32+ (started before 2012, graduated 21+ by 2015)
-    # Plan 2: 21+ and cohort 2012-2022
-    # Plan 5: 21+ and cohort 2023+ (but in early years, recent grads are 18-22)
+    # Plan 2: 21-45 (allows for late starters, postgrads, career changers)
+    # Plan 5: 18-25 (recent starters only - cohort 2023+)
     plan_1_age_mask = age >= 32
-    plan_2_age_mask = age >= 21
-    # Plan 5: use cohort constraint only since graduates are very young in early years
-    plan_5_age_mask = age >= 18  # Anyone 18+ who started 2023+ could have a loan
+    plan_2_age_mask = (age >= 21) & (age <= 45)
+    plan_5_age_mask = (age >= 18) & (age <= 25)
 
     # Cohort masks based on university start year
     plan_1_cohort = uni_start_year < 2012
@@ -136,8 +135,11 @@ def impute_student_loan_plan(
     plan = np.full(len(age), "NONE", dtype=object)
 
     # Step 1: Assign plans to people with reported repayments
+    # Plan 1: use cohort (started before 2012)
+    # Plan 2: use age mask (21-45) since many late starters and postgrads exist
+    # Plan 5: use cohort (started 2023+)
     plan[has_repayments & plan_1_cohort] = "PLAN_1"
-    plan[has_repayments & plan_2_cohort] = "PLAN_2"
+    plan[has_repayments & plan_2_age_mask & ~plan_1_cohort] = "PLAN_2"
     plan[has_repayments & plan_5_cohort] = "PLAN_5"
 
     # Step 2: Probabilistically assign below-threshold borrowers
@@ -153,12 +155,9 @@ def impute_student_loan_plan(
     )
 
     # Plan 2 below-threshold assignment
+    # Use age mask only (not cohort) since many borrowers started late or did postgrad
     plan_2_eligible = (
-        no_repayments
-        & is_tertiary
-        & is_england
-        & plan_2_age_mask
-        & plan_2_cohort
+        no_repayments & is_tertiary & is_england & plan_2_age_mask
     )
     if plan_2_below > 0 and plan_2_eligible.sum() > 0:
         eligible_weight = (weights * plan_2_eligible).sum()
