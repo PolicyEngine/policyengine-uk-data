@@ -119,13 +119,14 @@ def impute_student_loan_plan(
     # Estimate university start year (assume started at 18)
     uni_start_year = year - age + 18
 
-    # Age bands for plausible loan holders
-    # Plan 1: 32-55 (started before 2012, still repaying)
-    # Plan 2: 21-33 (started 2012-2022)
-    # Plan 5: 21-24 (started 2023+)
-    plan_1_age_mask = (age >= 32) & (age <= 55)
-    plan_2_age_mask = (age >= 21) & (age <= 33)
-    plan_5_age_mask = (age >= 21) & (age <= 24)
+    # Age bands for plausible loan holders (graduates typically 21+)
+    # Plan 1: 32+ (started before 2012, graduated 21+ by 2015)
+    # Plan 2: 21+ and cohort 2012-2022
+    # Plan 5: 21+ and cohort 2023+ (but in early years, recent grads are 18-22)
+    plan_1_age_mask = age >= 32
+    plan_2_age_mask = age >= 21
+    # Plan 5: use cohort constraint only since graduates are very young in early years
+    plan_5_age_mask = age >= 18  # Anyone 18+ who started 2023+ could have a loan
 
     # Cohort masks based on university start year
     plan_1_cohort = uni_start_year < 2012
