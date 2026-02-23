@@ -1,0 +1,4 @@
+- bump: patch
+  changes:
+    fixed:
+    - Revert public HuggingFace upload that would have violated UK Data Service licence terms.
