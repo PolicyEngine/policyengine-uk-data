@@ -1,3 +1,5 @@
+from importlib import metadata
+
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk_data.utils.data_upload import (
     upload_data_files,
@@ -17,6 +19,8 @@ def upload_datasets():
         if not file_path.exists():
             raise ValueError(f"File {file_path} does not exist.")
 
+    version = metadata.version("policyengine-uk-data")
+
     upload_data_files(
         files=dataset_files,
         hf_repo_name="policyengine/policyengine-uk-data-private",
@@ -27,6 +31,7 @@ def upload_datasets():
     # Also upload to the public repo consumed by policyengine-uk
     upload_files_to_hf(
         files=dataset_files,
+        version=version,
         hf_repo_name="policyengine/policyengine-uk-data",
     )
 
