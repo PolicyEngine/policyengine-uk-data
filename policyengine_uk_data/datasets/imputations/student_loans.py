@@ -14,9 +14,9 @@ The imputation assigns plan types according to when the loan system changed:
 
 The FRS only records active repayers (via PAYE). SLC data shows many borrowers
 earn below repayment thresholds (~55% of Plan 2 holders). This imputation
-fills that gap by probabilistically assigning plans to people in the relevant
-age cohort without reported repayments, based on SLC "liable to repay" minus
-"above threshold" counts.
+fills that gap by probabilistically assigning plans to tertiary-educated
+people in the relevant age cohort without reported repayments, based on SLC
+"liable to repay" minus "above threshold" counts.
 """
 
 import numpy as np
@@ -110,8 +110,10 @@ def impute_student_loan_plan(
     repayments = sim.calculate("student_loan_repayments").values
     region = sim.calculate("region", map_to="person").values
     weights = sim.calculate("person_weight").values
+    education = sim.calculate("highest_education").values
 
     is_england = np.isin(region, list(_ENGLAND_REGIONS))
+    is_tertiary = education == "TERTIARY"
     has_repayments = repayments > 0
 
     # Estimate university start year (assume started at 18)
@@ -151,9 +153,9 @@ def impute_student_loan_plan(
     )
 
     # Plan 2 below-threshold assignment
-    # No tertiary filter - SLC data shows ~94% of cohort has loans
     plan_2_eligible = (
         no_repayments
+        & is_tertiary
         & is_england
         & plan_2_age_mask
         & plan_2_cohort
@@ -168,6 +170,7 @@ def impute_student_loan_plan(
     # Plan 5 below-threshold assignment
     plan_5_eligible = (
         no_repayments
+        & is_tertiary
         & is_england
         & plan_5_age_mask
         & plan_5_cohort
