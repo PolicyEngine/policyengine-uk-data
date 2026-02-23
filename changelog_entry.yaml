@@ -1,0 +1,7 @@
+- bump: minor
+  changes:
+    added:
+    - SLC "liable to repay" targets for Plan 2 and Plan 5, covering all borrowers
+      including those below repayment threshold.
+    - Probabilistic imputation of below-threshold student loan borrowers based on
+      tertiary education, age, and SLC forecast data.

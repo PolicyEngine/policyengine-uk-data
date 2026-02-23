@@ -1,8 +1,11 @@
 """Student Loans Company (SLC) calibration targets.
 
-Borrower counts for England only: Plan 2 and Plan 5, restricted to
-borrowers liable to repay and earning above the repayment threshold.
-This matches the FRS coverage (PAYE deductions only).
+Borrower counts for England only: Plan 2 and Plan 5.
+
+Two types of targets are provided:
+1. "above threshold" - borrowers liable to repay AND earning above threshold
+   (matches FRS coverage via PAYE deductions)
+2. "liable" - total borrowers liable to repay (includes below-threshold)
 
 Source: Explore Education Statistics — Student loan forecasts for England,
 Table 6a: Forecast number of student borrowers liable to repay and number
@@ -33,13 +36,16 @@ def _fetch_slc_data() -> dict:
     """Fetch and parse SLC Table 6a data from Explore Education Statistics.
 
     Returns:
-        Dict with keys 'plan_2' and 'plan_5', each containing a dict
-        mapping calendar year (int) to borrower count above threshold (int).
+        Dict with nested structure:
+        {
+            'plan_2': {'above_threshold': {...}, 'liable': {...}},
+            'plan_5': {'above_threshold': {...}, 'liable': {...}}
+        }
+        Each inner dict maps calendar year (int) to borrower count (int).
     """
     response = requests.get(_PERMALINK_URL, timeout=30)
     response.raise_for_status()
 
-    # Extract JSON data from __NEXT_DATA__ script tag
     match = re.search(
         r'<script id="__NEXT_DATA__" type="application/json">(.+?)</script>',
         response.text,
@@ -50,63 +56,74 @@ def _fetch_slc_data() -> dict:
     next_data = json.loads(match.group(1))
     table_json = next_data["props"]["pageProps"]["data"]["table"]["json"]
 
-    # Parse header row to get years - columns go newest to oldest
+    # Parse header row to get years (columns go newest to oldest)
     # Structure: Plan 2 (6 years), Plan 5 (6 years), Plan 3 (5 years)
     header_row = table_json["thead"][1]
 
-    # Get Plan 2 years (first 6 columns)
     plan_2_years = []
     for i in range(6):
         year_text = header_row[i]["text"]  # e.g., "2029-30"
         start_year = int(year_text.split("-")[0])
-        calendar_year = start_year + 1  # 2029-30 → 2030
-        plan_2_years.append(calendar_year)
+        plan_2_years.append(start_year + 1)  # 2029-30 → 2030
 
-    # Get Plan 5 years (next 6 columns)
     plan_5_years = []
     for i in range(6, 12):
         year_text = header_row[i]["text"]
         start_year = int(year_text.split("-")[0])
-        calendar_year = start_year + 1
-        plan_5_years.append(calendar_year)
+        plan_5_years.append(start_year + 1)
 
-    # Find the "Higher education total" / "earning above threshold" row
-    # This is the row following "Higher education total" with "liable to repay"
     tbody = table_json["tbody"]
 
-    # Row 11 contains: header + 6 Plan 2 values + 6 Plan 5 values + 5 Plan 3
-    target_row = None
-    for row in tbody:
+    # Find "Higher education total" rows
+    # Row 10: [0]="Higher education total", [1]="Number of borrowers liable...",
+    #         [2-7]=Plan 2 data, [8-13]=Plan 5 data
+    # Row 11: [0]="Number of borrowers...earning above...",
+    #         [1-6]=Plan 2 data, [7-12]=Plan 5 data
+    liable_row = None
+    above_threshold_row = None
+
+    for i, row in enumerate(tbody):
         header_text = row[0].get("text", "")
-        if "earning above repayment threshold" in header_text:
-            # Check if previous context was "Higher education total"
-            # Actually, row 11 is after HE total row 10, and starts with
-            # the "earning above" header (no group header due to rowSpan)
-            target_row = row
+        if header_text == "Higher education total":
+            # This row contains liable-to-repay data
+            liable_row = row
+            # Next row should be above-threshold data
+            if i + 1 < len(tbody):
+                next_row = tbody[i + 1]
+                next_header = next_row[0].get("text", "")
+                if "earning above" in next_header:
+                    above_threshold_row = next_row
             break
 
-    if target_row is None:
+    if above_threshold_row is None:
         raise ValueError("Could not find 'earning above threshold' row")
+    if liable_row is None:
+        raise ValueError("Could not find 'Higher education total' row")
 
-    # Parse Plan 2 data (cells 1-6, mapping to plan_2_years)
-    plan_2_data = {}
-    for i, year in enumerate(plan_2_years):
-        cell_idx = 1 + i  # Skip header cell
-        value_text = target_row[cell_idx].get("text", "")
-        if value_text and value_text not in ("no data", "0"):
-            value = int(value_text.replace(",", ""))
-            plan_2_data[year] = value
+    def parse_values(row, start_idx, years):
+        """Parse numeric values from row starting at start_idx."""
+        data = {}
+        for i, year in enumerate(years):
+            cell_idx = start_idx + i
+            if cell_idx >= len(row):
+                continue
+            value_text = row[cell_idx].get("text", "")
+            if value_text and value_text not in ("no data", "0"):
+                data[year] = int(value_text.replace(",", ""))
+        return data
 
-    # Parse Plan 5 data (cells 7-12, mapping to plan_5_years)
-    plan_5_data = {}
-    for i, year in enumerate(plan_5_years):
-        cell_idx = 7 + i  # Skip header + Plan 2 cells
-        value_text = target_row[cell_idx].get("text", "")
-        if value_text and value_text not in ("no data", "0"):
-            value = int(value_text.replace(",", ""))
-            plan_5_data[year] = value
+    # Liable row: data starts at index 2 (after header and subheader)
+    p2_liable = parse_values(liable_row, 2, plan_2_years)
+    p5_liable = parse_values(liable_row, 8, plan_5_years)
 
-    return {"plan_2": plan_2_data, "plan_5": plan_5_data}
+    # Above threshold row: data starts at index 1 (after header only)
+    p2_above = parse_values(above_threshold_row, 1, plan_2_years)
+    p5_above = parse_values(above_threshold_row, 7, plan_5_years)
+
+    return {
+        "plan_2": {"above_threshold": p2_above, "liable": p2_liable},
+        "plan_5": {"above_threshold": p5_above, "liable": p5_liable},
+    }
 
 
 def get_targets() -> list[Target]:
@@ -115,6 +132,7 @@ def get_targets() -> list[Target]:
 
     targets = []
 
+    # Above-threshold targets (borrowers with PAYE deductions)
     targets.append(
         Target(
             name="slc/plan_2_borrowers_above_threshold",
@@ -122,11 +140,10 @@ def get_targets() -> list[Target]:
             source="slc",
             unit=Unit.COUNT,
             is_count=True,
-            values=slc_data["plan_2"],
+            values=slc_data["plan_2"]["above_threshold"],
             reference_url=_PERMALINK_URL,
         )
     )
-
     targets.append(
         Target(
             name="slc/plan_5_borrowers_above_threshold",
@@ -134,7 +151,31 @@ def get_targets() -> list[Target]:
             source="slc",
             unit=Unit.COUNT,
             is_count=True,
-            values=slc_data["plan_5"],
+            values=slc_data["plan_5"]["above_threshold"],
+            reference_url=_PERMALINK_URL,
+        )
+    )
+
+    # Liable-to-repay targets (all borrowers including below-threshold)
+    targets.append(
+        Target(
+            name="slc/plan_2_borrowers_liable",
+            variable="student_loan_plan",
+            source="slc",
+            unit=Unit.COUNT,
+            is_count=True,
+            values=slc_data["plan_2"]["liable"],
+            reference_url=_PERMALINK_URL,
+        )
+    )
+    targets.append(
+        Target(
+            name="slc/plan_5_borrowers_liable",
+            variable="student_loan_plan",
+            source="slc",
+            unit=Unit.COUNT,
+            is_count=True,
+            values=slc_data["plan_5"]["liable"],
             reference_url=_PERMALINK_URL,
         )
     )

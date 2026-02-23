@@ -208,43 +208,101 @@ def create_frs(
     )
 
     # Add highest education from EDUCQUAL (highest qualification achieved)
-    # Codes from FRS ADT_324X classification; unmapped codes default to UPPER_SECONDARY
+    # Based on FRS 2022-23 documentation (SPSS value labels)
     EDUCQUAL_MAP = {
-        1: "NOT_COMPLETED_PRIMARY",
-        2: "LOWER_SECONDARY",  # GCSE D-G / CSE 2-5
-        3: "LOWER_SECONDARY",  # GCSE A-C / O-level A-C
-        4: "UPPER_SECONDARY",  # AS-level
-        5: "UPPER_SECONDARY",  # A-level (1 subject)
-        6: "UPPER_SECONDARY",  # A-level (2 subjects)
-        7: "UPPER_SECONDARY",  # A-level (3+ subjects)
-        8: "LOWER_SECONDARY",  # Scottish Standard/Ordinary Grade
-        9: "UPPER_SECONDARY",  # Scottish Higher Grade
-        10: "UPPER_SECONDARY",  # Scottish 6th Year Studies
+        # Degree level and above (TERTIARY)
+        1: "TERTIARY",  # Doctorate or MPhil
+        2: "TERTIARY",  # Masters, PGCE or other postgrad
+        3: "TERTIARY",  # Degree inc foundation degree
+        4: "TERTIARY",  # Teaching qualification (excl PGCE)
+        5: "TERTIARY",  # Foreign qualification at degree level
+        6: "TERTIARY",  # Other work-related qual at degree level
+        7: "TERTIARY",  # Other professional qual at degree level
+        # Higher education below degree (POST_SECONDARY)
+        8: "POST_SECONDARY",  # Other HE qualification below degree
+        9: "POST_SECONDARY",  # Nursing or other medical
+        10: "POST_SECONDARY",  # Diploma in higher education
         11: "POST_SECONDARY",  # HNC/HND
-        12: "POST_SECONDARY",  # City & Guilds advanced / BTEC National
-        13: "UPPER_SECONDARY",  # City & Guilds craft / BTEC General
-        14: "POST_SECONDARY",  # ONC/OND / BTEC National (lower)
-        15: "UPPER_SECONDARY",  # City & Guilds foundation
-        16: "POST_SECONDARY",  # RSA advanced
-        17: "TERTIARY",  # First/foundation degree
-        18: "TERTIARY",  # Second degree
-        19: "TERTIARY",  # Higher degree (Masters/PhD)
-        20: "TERTIARY",  # PGCE / teaching qualification
-        21: "TERTIARY",  # Nursing/paramedical qualification
-        66: "UPPER_SECONDARY",  # NVQ/SVQ Level 1
-        67: "UPPER_SECONDARY",  # NVQ/SVQ Level 2
-        68: "UPPER_SECONDARY",  # NVQ/SVQ Level 3
-        69: "POST_SECONDARY",  # NVQ/SVQ Level 4
-        70: "TERTIARY",  # NVQ/SVQ Level 5
+        12: "POST_SECONDARY",  # BTEC higher level
+        13: "POST_SECONDARY",  # SCOTVEC higher level
+        14: "POST_SECONDARY",  # NVQ/SVQ Level 4
+        15: "POST_SECONDARY",  # NVQ/SVQ Level 5
+        16: "POST_SECONDARY",  # RSA higher diploma / OCR Level 4
+        # A-level equivalent (UPPER_SECONDARY)
+        17: "UPPER_SECONDARY",  # A-Level or equivalent
+        18: "UPPER_SECONDARY",  # Welsh Baccalaureate Advanced
+        19: "UPPER_SECONDARY",  # Scottish Baccalaureate
+        20: "UPPER_SECONDARY",  # International Baccalaureate
+        21: "UPPER_SECONDARY",  # AS-level or equivalent
+        22: "UPPER_SECONDARY",  # Certificate of 6th Year Studies
+        23: "UPPER_SECONDARY",  # Access to Higher Education
+        24: "UPPER_SECONDARY",  # Scottish Higher/Intermediate
+        25: "UPPER_SECONDARY",  # Skills for work Higher
+        26: "POST_SECONDARY",  # ONC/OND
+        27: "POST_SECONDARY",  # BTEC National level
+        28: "POST_SECONDARY",  # SCOTVEC National level
+        29: "UPPER_SECONDARY",  # New Diploma Advanced
+        30: "UPPER_SECONDARY",  # New Diploma Progression
+        31: "UPPER_SECONDARY",  # NVQ/SVQ Level 3
+        32: "UPPER_SECONDARY",  # GNVQ Advanced
+        33: "UPPER_SECONDARY",  # RSA advanced diploma / OCR Level 3
+        34: "UPPER_SECONDARY",  # City and Guilds advanced craft
+        35: "UPPER_SECONDARY",  # Welsh Baccalaureate Intermediate
+        # GCSE/O-level equivalent (LOWER_SECONDARY)
+        36: "LOWER_SECONDARY",  # O-Level (5+)
+        37: "LOWER_SECONDARY",  # Scottish Standard Grade (5+)
+        38: "LOWER_SECONDARY",  # GCSE (5+)
+        39: "LOWER_SECONDARY",  # CSE (5+)
+        40: "LOWER_SECONDARY",  # Scottish National level 5
+        41: "LOWER_SECONDARY",  # Skills for work National 5
+        42: "LOWER_SECONDARY",  # BTEC first diploma
+        43: "LOWER_SECONDARY",  # SCOTVEC first diploma
+        44: "LOWER_SECONDARY",  # New Diploma Higher (level 2)
+        45: "LOWER_SECONDARY",  # NVQ/SVQ Level 2
+        46: "LOWER_SECONDARY",  # GNVQ Intermediate
+        47: "LOWER_SECONDARY",  # RSA diploma / OCR Level 2
+        48: "LOWER_SECONDARY",  # City and Guilds craft
+        49: "LOWER_SECONDARY",  # Other high school leavers qual
+        # Below GCSE / basic qualifications
+        50: "LOWER_SECONDARY",  # BTEC (unspecified)
+        51: "LOWER_SECONDARY",  # BTEC first cert
+        52: "LOWER_SECONDARY",  # SCOTVEC (unspecified)
+        53: "LOWER_SECONDARY",  # SCOTVEC first cert
+        54: "LOWER_SECONDARY",  # SCOTVEC modules
+        55: "LOWER_SECONDARY",  # New Diploma (unspecified)
+        56: "LOWER_SECONDARY",  # New Diploma Foundation
+        57: "LOWER_SECONDARY",  # Welsh Baccalaureate (unspecified)
+        58: "LOWER_SECONDARY",  # Welsh Baccalaureate Foundation
+        59: "LOWER_SECONDARY",  # NVQ/SVQ (unspecified)
+        60: "LOWER_SECONDARY",  # NVQ/SVQ Level 1
+        61: "LOWER_SECONDARY",  # GNVQ (unspecified)
+        62: "LOWER_SECONDARY",  # GNVQ Part One Intermediate
+        63: "LOWER_SECONDARY",  # GNVQ Full Foundation
+        64: "LOWER_SECONDARY",  # GNVQ Part One Foundation
+        65: "LOWER_SECONDARY",  # O-Level (unspecified)
+        66: "LOWER_SECONDARY",  # O-Level (fewer than 5)
+        67: "LOWER_SECONDARY",  # Scottish Standard Grade (unspecified)
+        68: "LOWER_SECONDARY",  # Scottish Standard Grade (fewer than 5)
+        69: "LOWER_SECONDARY",  # GCSE (unspecified)
+        70: "LOWER_SECONDARY",  # GCSE (fewer than 5)
+        71: "LOWER_SECONDARY",  # Scottish National 1-4
+        72: "LOWER_SECONDARY",  # Scottish National (unspecified)
+        73: "LOWER_SECONDARY",  # Skills for work National 3-4
+        74: "LOWER_SECONDARY",  # Skills for work (unspecified)
+        75: "LOWER_SECONDARY",  # CSE (unspecified)
+        76: "LOWER_SECONDARY",  # CSE (fewer than 5)
+        77: "LOWER_SECONDARY",  # RSA/OCR (unspecified)
+        78: "LOWER_SECONDARY",  # RSA other / OCR Level 1
+        79: "LOWER_SECONDARY",  # City and Guilds (unspecified)
+        80: "LOWER_SECONDARY",  # City and Guilds foundation
+        81: "LOWER_SECONDARY",  # YT Certificate
+        82: "LOWER_SECONDARY",  # Key Skills / Core Skills
+        83: "NOT_COMPLETED_PRIMARY",  # Basic Skills (literacy/numeracy)
+        84: "NOT_COMPLETED_PRIMARY",  # Entry Level Qualifications
+        85: "NOT_COMPLETED_PRIMARY",  # Award/Certificate at entry level
+        86: "LOWER_SECONDARY",  # Other professional/vocational/foreign
     }
-    # Codes 22-65 and 71-85 are further vocational/professional qualifications;
-    # treat as POST_SECONDARY. Codes 86-87 are catch-alls; treat as UPPER_SECONDARY.
-    for code in range(22, 66):
-        EDUCQUAL_MAP[code] = "POST_SECONDARY"
-    for code in range(71, 86):
-        EDUCQUAL_MAP[code] = "POST_SECONDARY"
-    EDUCQUAL_MAP[86] = "UPPER_SECONDARY"
-    EDUCQUAL_MAP[87] = "UPPER_SECONDARY"
+    # Code 87 is missing - means no qualification data; default to UPPER_SECONDARY
 
     educqual = pd.to_numeric(person.educqual, errors="coerce")
     pe_person["highest_education"] = educqual.map(EDUCQUAL_MAP).fillna(
