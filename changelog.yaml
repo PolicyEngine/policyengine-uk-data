@@ -576,3 +576,9 @@
     - Upload datasets to public HuggingFace repo (policyengine/policyengine-uk-data)
       in addition to private repo, so policyengine-uk gets the latest data.
   date: 2026-02-23 13:26:29
+- bump: patch
+  changes:
+    fixed:
+    - Revert public HuggingFace upload that would have violated UK Data Service licence
+      terms.
+  date: 2026-02-23 17:00:30

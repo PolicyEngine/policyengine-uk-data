@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), 
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.40.2] - 2026-02-23 17:00:30
+
+### Fixed
+
+- Revert public HuggingFace upload that would have violated UK Data Service licence terms.
+
 ## [1.40.1] - 2026-02-23 13:26:29
 
 ### Fixed
@@ -647,6 +653,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+[1.40.2]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.40.1...1.40.2
 [1.40.1]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.40.0...1.40.1
 [1.40.0]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.39.3...1.40.0
 [1.39.3]: https://github.com/PolicyEngine/policyengine-us-data/compare/1.39.2...1.39.3
