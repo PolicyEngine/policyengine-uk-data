@@ -1,5 +1,8 @@
 from policyengine_uk_data.storage import STORAGE_FOLDER
-from policyengine_uk_data.utils.data_upload import upload_data_files
+from policyengine_uk_data.utils.data_upload import (
+    upload_data_files,
+    upload_files_to_hf,
+)
 
 
 def upload_datasets():
@@ -19,6 +22,12 @@ def upload_datasets():
         hf_repo_name="policyengine/policyengine-uk-data-private",
         hf_repo_type="model",
         gcs_bucket_name="policyengine-uk-data-private",
+    )
+
+    # Also upload to the public repo consumed by policyengine-uk
+    upload_files_to_hf(
+        files=dataset_files,
+        hf_repo_name="policyengine/policyengine-uk-data",
     )
 
 
