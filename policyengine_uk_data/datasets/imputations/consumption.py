@@ -231,34 +231,26 @@ NEED_REGION_ELEC = {
 
 # Pre-computed NEED spend targets (£/yr) — kWh × unit rate, keyed by energy type.
 # Used in the raking loop of impute_consumption(); avoids recomputing each call.
-_NEED_SPEND = {}
-for _energy, _rate, _tenure_kwh, _accomm_kwh, _region_kwh, _gas_idx, _elec_idx in [
-    (
-        "electricity",
-        OFGEM_Q4_2023_ELEC_RATE,
-        NEED_TENURE_ELEC,
-        NEED_ACCOMM_ELEC,
-        NEED_REGION_ELEC,
-        None,
-        4,
-    ),
-    (
-        "gas",
-        OFGEM_Q4_2023_GAS_RATE,
-        NEED_TENURE_GAS,
-        NEED_ACCOMM_GAS,
-        NEED_REGION_GAS,
-        3,
-        None,
-    ),
-]:
-    _idx = _elec_idx if _elec_idx is not None else _gas_idx
-    _NEED_SPEND[_energy] = {
-        "income": [(lo, hi, band[_idx] * _rate) for lo, hi, *band in NEED_INCOME_BANDS],
-        "tenure": {k: v * _rate for k, v in _tenure_kwh.items()},
-        "accomm": {k: v * _rate for k, v in _accomm_kwh.items()},
-        "region": {k: v * _rate for k, v in _region_kwh.items()},
-    }
+_NEED_SPEND = {
+    "electricity": {
+        "income": [
+            (lo, hi, elec_kwh * OFGEM_Q4_2023_ELEC_RATE)
+            for lo, hi, _, _, elec_kwh in NEED_INCOME_BANDS
+        ],
+        "tenure": {k: v * OFGEM_Q4_2023_ELEC_RATE for k, v in NEED_TENURE_ELEC.items()},
+        "accomm": {k: v * OFGEM_Q4_2023_ELEC_RATE for k, v in NEED_ACCOMM_ELEC.items()},
+        "region": {k: v * OFGEM_Q4_2023_ELEC_RATE for k, v in NEED_REGION_ELEC.items()},
+    },
+    "gas": {
+        "income": [
+            (lo, hi, gas_kwh * OFGEM_Q4_2023_GAS_RATE)
+            for lo, hi, _, gas_kwh, _ in NEED_INCOME_BANDS
+        ],
+        "tenure": {k: v * OFGEM_Q4_2023_GAS_RATE for k, v in NEED_TENURE_GAS.items()},
+        "accomm": {k: v * OFGEM_Q4_2023_GAS_RATE for k, v in NEED_ACCOMM_GAS.items()},
+        "region": {k: v * OFGEM_Q4_2023_GAS_RATE for k, v in NEED_REGION_GAS.items()},
+    },
+}
 
 
 def _need_targets(income: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
