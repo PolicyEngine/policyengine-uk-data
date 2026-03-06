@@ -1,3 +1,10 @@
+## [1.41.0] - 2026-03-06
+
+### Added
+
+- Improve electricity and gas imputations to match NEED 2023 admin data across income, tenure, accommodation type, and region using iterative raking calibration.
+
+
 ## [1.40.4] - 2026-03-06
 
 ### Changed
