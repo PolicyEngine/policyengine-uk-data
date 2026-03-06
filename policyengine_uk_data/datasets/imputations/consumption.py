@@ -48,7 +48,7 @@ LCFS_TENURE_MAP = {
     1: "RENT_FROM_COUNCIL",
     2: "RENT_FROM_HA",
     3: "RENT_PRIVATELY",
-    4: "RENT_PRIVATELY",   # rent-free → private for simplicity
+    4: "RENT_PRIVATELY",  # rent-free → private for simplicity
     5: "OWNED_WITH_MORTGAGE",
     6: "OWNED_WITH_MORTGAGE",  # shared ownership
     7: "OWNED_OUTRIGHT",
@@ -143,20 +143,20 @@ IMPUTATIONS = [
 # 2023 is used rather than 2022 because 2022 was an extreme energy-price crisis year.
 # Standing charges excluded to keep to unit-rate spend consistent with LCFS recording.
 OFGEM_Q4_2023_ELEC_RATE = 27.35 / 100  # £/kWh (Oct 2023 price cap)
-OFGEM_Q4_2023_GAS_RATE  = 6.89  / 100  # £/kWh (Oct 2023 price cap)
+OFGEM_Q4_2023_GAS_RATE = 6.89 / 100  # £/kWh (Oct 2023 price cap)
 
 # NEED 2023 mean kWh by income band (Table 11b gas, Table 12b electricity)
 NEED_INCOME_BANDS = [
-    (0,       15_000,  "under_15k",   7_755,  2_412),  # gas kWh, elec kWh
-    (15_000,  20_000,  "15k_20k",     9_196,  2_700),
-    (20_000,  30_000,  "20k_30k",     9_886,  2_915),
-    (30_000,  40_000,  "30k_40k",    10_697,  3_114),
-    (40_000,  50_000,  "40k_50k",    11_230,  3_276),
-    (50_000,  60_000,  "50k_60k",    11_721,  3_410),
-    (60_000,  70_000,  "60k_70k",    12_200,  3_548),
-    (70_000, 100_000,  "70k_100k",   13_244,  3_872),
-    (100_000, 150_000, "100k_150k",  15_727,  4_598),
-    (150_000, np.inf,  "over_150k",  20_359,  5_944),
+    (0, 15_000, "under_15k", 7_755, 2_412),  # gas kWh, elec kWh
+    (15_000, 20_000, "15k_20k", 9_196, 2_700),
+    (20_000, 30_000, "20k_30k", 9_886, 2_915),
+    (30_000, 40_000, "30k_40k", 10_697, 3_114),
+    (40_000, 50_000, "40k_50k", 11_230, 3_276),
+    (50_000, 60_000, "50k_60k", 11_721, 3_410),
+    (60_000, 70_000, "60k_70k", 12_200, 3_548),
+    (70_000, 100_000, "70k_100k", 13_244, 3_872),
+    (100_000, 150_000, "100k_150k", 15_727, 4_598),
+    (150_000, np.inf, "over_150k", 20_359, 5_944),
 ]
 
 # NEED 2023 mean kWh by tenure (Table 9b gas, Table 10b electricity)
@@ -164,62 +164,92 @@ NEED_INCOME_BANDS = [
 # FRS tenure_type values: OWNED_OUTRIGHT, OWNED_WITH_MORTGAGE → owner-occupied
 #                         RENT_PRIVATELY → private rented
 #                         RENT_FROM_COUNCIL, RENT_FROM_HA → social
-NEED_TENURE_GAS  = {"owner": 12_339, "private_rent": 10_183, "social": 8_357}
-NEED_TENURE_ELEC = {"owner":  3_465, "private_rent":  3_261, "social": 2_896}
+NEED_TENURE_GAS = {"owner": 12_339, "private_rent": 10_183, "social": 8_357}
+NEED_TENURE_ELEC = {"owner": 3_465, "private_rent": 3_261, "social": 2_896}
 
 TENURE_TO_NEED = {
-    "OWNED_OUTRIGHT":       "owner",
-    "OWNED_WITH_MORTGAGE":  "owner",
-    "RENT_PRIVATELY":       "private_rent",
-    "RENT_FROM_COUNCIL":    "social",
-    "RENT_FROM_HA":         "social",
+    "OWNED_OUTRIGHT": "owner",
+    "OWNED_WITH_MORTGAGE": "owner",
+    "RENT_PRIVATELY": "private_rent",
+    "RENT_FROM_COUNCIL": "social",
+    "RENT_FROM_HA": "social",
 }
 
 # NEED 2023 mean kWh by property type (Table 5b gas, Table 6b electricity)
 # NEED types: Detached, Semi-detached, End/Mid terrace, Bungalow, Converted flat, Purpose-built flat
 # FRS accommodation_type: HOUSE_DETACHED, HOUSE_SEMI_DETACHED, HOUSE_TERRACED, FLAT, MOBILE, OTHER
-NEED_ACCOMM_GAS  = {"detached": 15_518, "semi": 11_715, "terraced": 10_365, "flat": 7_058, "other": 11_303}
-NEED_ACCOMM_ELEC = {"detached":  4_346, "semi":  3_338, "terraced":  3_096, "flat": 2_896, "other":  3_327}
+NEED_ACCOMM_GAS = {
+    "detached": 15_518,
+    "semi": 11_715,
+    "terraced": 10_365,
+    "flat": 7_058,
+    "other": 11_303,
+}
+NEED_ACCOMM_ELEC = {
+    "detached": 4_346,
+    "semi": 3_338,
+    "terraced": 3_096,
+    "flat": 2_896,
+    "other": 3_327,
+}
 
 ACCOMM_TO_NEED = {
-    "HOUSE_DETACHED":       "detached",
-    "HOUSE_SEMI_DETACHED":  "semi",
-    "HOUSE_TERRACED":       "terraced",
-    "FLAT":                 "flat",
-    "MOBILE":               "other",
+    "HOUSE_DETACHED": "detached",
+    "HOUSE_SEMI_DETACHED": "semi",
+    "HOUSE_TERRACED": "terraced",
+    "FLAT": "flat",
+    "MOBILE": "other",
     # OTHER is a small FRS catch-all with no clear NEED equivalent; excluded from raking
 }
 
 # NEED 2023 mean kWh by region (Table 15b gas, Table 16b electricity)
 # Region strings match FRS/LCFS REGIONS dict values
 NEED_REGION_GAS = {
-    "NORTH_EAST":       11_278, "NORTH_WEST":      11_111,
-    "YORKSHIRE":        11_552, "EAST_MIDLANDS":   11_234,
-    "WEST_MIDLANDS":    11_485, "EAST_OF_ENGLAND": 11_334,
-    "LONDON":           12_335, "SOUTH_EAST":      11_555,
-    "SOUTH_WEST":        9_811, "WALES":           10_558,
+    "NORTH_EAST": 11_278,
+    "NORTH_WEST": 11_111,
+    "YORKSHIRE": 11_552,
+    "EAST_MIDLANDS": 11_234,
+    "WEST_MIDLANDS": 11_485,
+    "EAST_OF_ENGLAND": 11_334,
+    "LONDON": 12_335,
+    "SOUTH_EAST": 11_555,
+    "SOUTH_WEST": 9_811,
+    "WALES": 10_558,
 }
 NEED_REGION_ELEC = {
-    "NORTH_EAST":        2_822, "NORTH_WEST":       3_211,
-    "YORKSHIRE":         3_114, "EAST_MIDLANDS":    3_266,
-    "WEST_MIDLANDS":     3_332, "EAST_OF_ENGLAND":  3_543,
-    "LONDON":            3_275, "SOUTH_EAST":       3_568,
-    "SOUTH_WEST":        3_537, "WALES":            3_151,
+    "NORTH_EAST": 2_822,
+    "NORTH_WEST": 3_211,
+    "YORKSHIRE": 3_114,
+    "EAST_MIDLANDS": 3_266,
+    "WEST_MIDLANDS": 3_332,
+    "EAST_OF_ENGLAND": 3_543,
+    "LONDON": 3_275,
+    "SOUTH_EAST": 3_568,
+    "SOUTH_WEST": 3_537,
+    "WALES": 3_151,
 }
 
 
 def _need_targets(income: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Return NEED-implied annual gas and electricity spend (£) for each household."""
-    gas_spend  = np.full(len(income), np.nan)
+    gas_spend = np.full(len(income), np.nan)
     elec_spend = np.full(len(income), np.nan)
     for lo, hi, _, gas_kwh, elec_kwh in NEED_INCOME_BANDS:
         mask = (income >= lo) & (income < hi)
-        gas_spend[mask]  = gas_kwh  * OFGEM_Q4_2023_GAS_RATE
+        gas_spend[mask] = gas_kwh * OFGEM_Q4_2023_GAS_RATE
         elec_spend[mask] = elec_kwh * OFGEM_Q4_2023_ELEC_RATE
     # Fill any missing with overall means
-    overall_gas  = sum(g for *_, g, _ in NEED_INCOME_BANDS) / len(NEED_INCOME_BANDS) * OFGEM_Q4_2023_GAS_RATE
-    overall_elec = sum(e for *_, e in NEED_INCOME_BANDS)    / len(NEED_INCOME_BANDS) * OFGEM_Q4_2023_ELEC_RATE
-    gas_spend  = np.where(np.isnan(gas_spend),  overall_gas,  gas_spend)
+    overall_gas = (
+        sum(g for *_, g, _ in NEED_INCOME_BANDS)
+        / len(NEED_INCOME_BANDS)
+        * OFGEM_Q4_2023_GAS_RATE
+    )
+    overall_elec = (
+        sum(e for *_, e in NEED_INCOME_BANDS)
+        / len(NEED_INCOME_BANDS)
+        * OFGEM_Q4_2023_ELEC_RATE
+    )
+    gas_spend = np.where(np.isnan(gas_spend), overall_gas, gas_spend)
     elec_spend = np.where(np.isnan(elec_spend), overall_elec, elec_spend)
     return gas_spend, elec_spend
 
@@ -255,31 +285,31 @@ def _derive_energy_from_lcfs(household: pd.DataFrame) -> pd.DataFrame:
         mean_elec_share = 0.52  # ONS fallback: 714/(714+654)
 
     electricity = np.zeros(len(household))
-    gas         = np.zeros(len(household))
+    gas = np.zeros(len(household))
 
     # Case 1: electricity billed separately via DD/quarterly (B226 > 0)
     mask1 = b226 > 0
     electricity[mask1] = b226[mask1]
-    gas[mask1]         = np.maximum(p537[mask1] - b226[mask1], 0)
+    gas[mask1] = np.maximum(p537[mask1] - b226[mask1], 0)
 
     # Case 2: both fuels on PPM meters (B489 total, B490 gas portion)
     mask2 = (~mask1) & (b489 > 0) & (b490 > 0)
     electricity[mask2] = np.maximum(b489[mask2] - b490[mask2], 0)
-    gas[mask2]         = b490[mask2]
+    gas[mask2] = b490[mask2]
 
     # Case 3: electricity PPM only (B489 > 0, B490 = 0)
     mask3 = (~mask1) & (b489 > 0) & (b490 == 0)
     electricity[mask3] = b489[mask3] * mean_elec_share
-    gas[mask3]         = b489[mask3] * (1 - mean_elec_share)
+    gas[mask3] = b489[mask3] * (1 - mean_elec_share)
 
     # Case 4: no bill variables available — split P537 by mean share
     mask4 = (~mask1) & (b489 == 0)
     electricity[mask4] = p537[mask4] * mean_elec_share
-    gas[mask4]         = p537[mask4] * (1 - mean_elec_share)
+    gas[mask4] = p537[mask4] * (1 - mean_elec_share)
 
     household = household.copy()
     household["electricity_consumption"] = electricity
-    household["gas_consumption"]         = gas
+    household["gas_consumption"] = gas
     return household
 
 
@@ -301,15 +331,19 @@ def _calibrate_energy_to_need(
         mask = (income >= lo) & (income < hi)
         if mask.sum() == 0:
             continue
-        lcfs_gas_mean  = household["gas_consumption"][mask].mean()
+        lcfs_gas_mean = household["gas_consumption"][mask].mean()
         lcfs_elec_mean = household["electricity_consumption"][mask].mean()
-        need_gas_mean  = gas_target[mask].mean()
+        need_gas_mean = gas_target[mask].mean()
         need_elec_mean = elec_target[mask].mean()
 
         if lcfs_gas_mean > 0:
-            household.loc[mask, "gas_consumption"] *= need_gas_mean / lcfs_gas_mean
+            household.loc[mask, "gas_consumption"] *= (
+                need_gas_mean / lcfs_gas_mean
+            )
         if lcfs_elec_mean > 0:
-            household.loc[mask, "electricity_consumption"] *= need_elec_mean / lcfs_elec_mean
+            household.loc[mask, "electricity_consumption"] *= (
+                need_elec_mean / lcfs_elec_mean
+            )
 
     return household
 
@@ -338,26 +372,33 @@ def create_has_fuel_model():
     was.columns = [c.lower() for c in was.columns]
 
     num_vehicles = was["vcarnr7"].fillna(0).clip(lower=0)
-    has_vehicle  = num_vehicles > 0
+    has_vehicle = num_vehicles > 0
     np.random.seed(42)
-    has_fuel = (has_vehicle & (np.random.random(len(was)) < NTS_2024_ICE_VEHICLE_SHARE)).astype(float)
+    has_fuel = (
+        has_vehicle & (np.random.random(len(was)) < NTS_2024_ICE_VEHICLE_SHARE)
+    ).astype(float)
 
     was_df = pd.DataFrame(
         {
-            "household_net_income":   was["dvtotinc_bhcr7"],
-            "num_adults":             was["numadultr7"],
-            "num_children":           was["numch18r7"],
+            "household_net_income": was["dvtotinc_bhcr7"],
+            "num_adults": was["numadultr7"],
+            "num_children": was["numch18r7"],
             "private_pension_income": was["dvgippenr7_aggr"],
-            "employment_income":      was["dvgiempr7_aggr"],
+            "employment_income": was["dvgiempr7_aggr"],
             "self_employment_income": was["dvgiser7_aggr"],
-            "region":                 was["gorr7"].map(REGIONS),
-            "has_fuel_consumption":   has_fuel,
+            "region": was["gorr7"].map(REGIONS),
+            "has_fuel_consumption": has_fuel,
         }
     ).dropna()
 
     predictors = [
-        "household_net_income", "num_adults", "num_children",
-        "private_pension_income", "employment_income", "self_employment_income", "region",
+        "household_net_income",
+        "num_adults",
+        "num_children",
+        "private_pension_income",
+        "employment_income",
+        "self_employment_income",
+        "region",
     ]
     model = QRF()
     model.fit(was_df[predictors], was_df[["has_fuel_consumption"]])
@@ -369,13 +410,13 @@ def impute_has_fuel_to_lcfs(household: pd.DataFrame) -> pd.DataFrame:
     model = create_has_fuel_model()
     input_df = pd.DataFrame(
         {
-            "household_net_income":   household["hbai_household_net_income"],
-            "num_adults":             household["is_adult"],
-            "num_children":           household["is_child"],
+            "household_net_income": household["hbai_household_net_income"],
+            "num_adults": household["is_adult"],
+            "num_children": household["is_child"],
             "private_pension_income": household["private_pension_income"],
-            "employment_income":      household["employment_income"],
+            "employment_income": household["employment_income"],
             "self_employment_income": household["self_employment_income"],
-            "region":                 household["region"],
+            "region": household["region"],
         }
     )
     output_df = model.predict(input_df)
@@ -386,7 +427,9 @@ def impute_has_fuel_to_lcfs(household: pd.DataFrame) -> pd.DataFrame:
     return household
 
 
-def generate_lcfs_table(lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame):
+def generate_lcfs_table(
+    lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame
+):
     """
     Build the LCFS training table for consumption imputation.
 
@@ -394,13 +437,15 @@ def generate_lcfs_table(lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame)
     calibrates to NEED 2022 income-band targets, and includes housing predictors
     (tenure_type, accommodation_type) alongside the existing income/demographic ones.
     """
-    person    = lcfs_person.rename(columns=PERSON_LCF_RENAMES)
+    person = lcfs_person.rename(columns=PERSON_LCF_RENAMES)
     household = lcfs_household.rename(columns=HOUSEHOLD_LCF_RENAMES)
     household["region"] = household["region"].map(REGIONS)
 
     # Housing predictors — map LCFS codes to FRS enum strings
-    household["tenure_type"]       = lcfs_household["A122"].map(LCFS_TENURE_MAP)
-    household["accommodation_type"] = lcfs_household["A121"].map(LCFS_ACCOMM_MAP)
+    household["tenure_type"] = lcfs_household["A122"].map(LCFS_TENURE_MAP)
+    household["accommodation_type"] = lcfs_household["A121"].map(
+        LCFS_ACCOMM_MAP
+    )
 
     # Derive gas and electricity before renaming/annualising P537
     household = _derive_energy_from_lcfs(household)
@@ -409,7 +454,9 @@ def generate_lcfs_table(lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame)
 
     # Annualise weekly LCFS values (× 52)
     annualise = list(CONSUMPTION_VARIABLE_RENAMES.values()) + [
-        "hbai_household_net_income", "electricity_consumption", "gas_consumption"
+        "hbai_household_net_income",
+        "electricity_consumption",
+        "gas_consumption",
     ]
     for variable in annualise:
         household[variable] = household[variable] * 52
@@ -428,7 +475,9 @@ def generate_lcfs_table(lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame)
     return household[PREDICTOR_VARIABLES + IMPUTATIONS + ["household_weight"]].dropna()
 
 
-def uprate_lcfs_table(household: pd.DataFrame, time_period: str) -> pd.DataFrame:
+def uprate_lcfs_table(
+    household: pd.DataFrame, time_period: str
+) -> pd.DataFrame:
     from policyengine_uk.system import system
 
     start_period = 2021
@@ -436,16 +485,29 @@ def uprate_lcfs_table(household: pd.DataFrame, time_period: str) -> pd.DataFrame
     household["petrol_spending"] *= fuel_uprating
     household["diesel_spending"] *= fuel_uprating
 
-    cpi = system.parameters.gov.economic_assumptions.indices.obr.consumer_price_index
+    cpi = (
+        system.parameters.gov.economic_assumptions.indices.obr.consumer_price_index
+    )
     cpi_uprating = cpi(time_period) / cpi(start_period)
 
-    energy_vars = {"electricity_consumption", "gas_consumption", "domestic_energy_consumption"}
+    energy_vars = {
+        "electricity_consumption",
+        "gas_consumption",
+        "domestic_energy_consumption",
+    }
     for variable in IMPUTATIONS:
-        if variable not in ["petrol_spending", "diesel_spending"] and variable not in energy_vars:
+        if (
+            variable not in ["petrol_spending", "diesel_spending"]
+            and variable not in energy_vars
+        ):
             household[variable] *= cpi_uprating
     # Uprate income predictor so training distribution matches FRS target year
-    for col in ["hbai_household_net_income", "employment_income",
-                "self_employment_income", "private_pension_income"]:
+    for col in [
+        "hbai_household_net_income",
+        "employment_income",
+        "self_employment_income",
+        "private_pension_income",
+    ]:
         if col in household.columns:
             household[col] *= cpi_uprating
     return household
@@ -473,7 +535,9 @@ def save_imputation_models():
 def create_consumption_model(overwrite_existing: bool = False):
     from policyengine_uk_data.utils.qrf import QRF
 
-    if (STORAGE_FOLDER / "consumption.pkl").exists() and not overwrite_existing:
+    if (
+        STORAGE_FOLDER / "consumption.pkl"
+    ).exists() and not overwrite_existing:
         return QRF(file_path=STORAGE_FOLDER / "consumption.pkl")
     return save_imputation_models()
 
@@ -489,15 +553,17 @@ def impute_consumption(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     num_vehicles = sim.calculate("num_vehicles", map_to="household").values
 
     np.random.seed(42)
-    has_vehicle       = num_vehicles > 0
-    is_ice            = np.random.random(len(num_vehicles)) < NTS_2024_ICE_VEHICLE_SHARE
+    has_vehicle = num_vehicles > 0
+    is_ice = np.random.random(len(num_vehicles)) < NTS_2024_ICE_VEHICLE_SHARE
     has_fuel_consumption = (has_vehicle & is_ice).astype(float)
     dataset.household["has_fuel_consumption"] = has_fuel_consumption
 
     model = create_consumption_model()
     predictors = model.input_columns
 
-    non_fuel_predictors = [p for p in predictors if p != "has_fuel_consumption"]
+    non_fuel_predictors = [
+        p for p in predictors if p != "has_fuel_consumption"
+    ]
     input_df = sim.calculate_dataframe(non_fuel_predictors, map_to="household")
     input_df["has_fuel_consumption"] = has_fuel_consumption
 
@@ -507,22 +573,52 @@ def impute_consumption(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
 
     # Re-calibrate electricity and gas to NEED 2023 targets using iterative raking
     # over income band, tenure, accommodation type, and region.
-    income  = input_df["hbai_household_net_income"].values
-    tenure  = sim.calculate("tenure_type",        map_to="household").values
-    accomm  = sim.calculate("accommodation_type", map_to="household").values
-    region  = sim.calculate("region",             map_to="household").values
+    income = input_df["hbai_household_net_income"].values
+    tenure = sim.calculate("tenure_type", map_to="household").values
+    accomm = sim.calculate("accommodation_type", map_to="household").values
+    region = sim.calculate("region", map_to="household").values
 
     for col, rate, need_income, need_tenure, need_accomm, need_region in [
-        ("electricity_consumption", OFGEM_Q4_2023_ELEC_RATE,
-         [(lo, hi, e * OFGEM_Q4_2023_ELEC_RATE) for lo, hi, _, _, e in NEED_INCOME_BANDS],
-         {k: v * OFGEM_Q4_2023_ELEC_RATE for k, v in NEED_TENURE_ELEC.items()},
-         {k: v * OFGEM_Q4_2023_ELEC_RATE for k, v in NEED_ACCOMM_ELEC.items()},
-         {k: v * OFGEM_Q4_2023_ELEC_RATE for k, v in NEED_REGION_ELEC.items()}),
-        ("gas_consumption", OFGEM_Q4_2023_GAS_RATE,
-         [(lo, hi, g * OFGEM_Q4_2023_GAS_RATE) for lo, hi, _, g, _ in NEED_INCOME_BANDS],
-         {k: v * OFGEM_Q4_2023_GAS_RATE for k, v in NEED_TENURE_GAS.items()},
-         {k: v * OFGEM_Q4_2023_GAS_RATE for k, v in NEED_ACCOMM_GAS.items()},
-         {k: v * OFGEM_Q4_2023_GAS_RATE for k, v in NEED_REGION_GAS.items()}),
+        (
+            "electricity_consumption",
+            OFGEM_Q4_2023_ELEC_RATE,
+            [
+                (lo, hi, e * OFGEM_Q4_2023_ELEC_RATE)
+                for lo, hi, _, _, e in NEED_INCOME_BANDS
+            ],
+            {
+                k: v * OFGEM_Q4_2023_ELEC_RATE
+                for k, v in NEED_TENURE_ELEC.items()
+            },
+            {
+                k: v * OFGEM_Q4_2023_ELEC_RATE
+                for k, v in NEED_ACCOMM_ELEC.items()
+            },
+            {
+                k: v * OFGEM_Q4_2023_ELEC_RATE
+                for k, v in NEED_REGION_ELEC.items()
+            },
+        ),
+        (
+            "gas_consumption",
+            OFGEM_Q4_2023_GAS_RATE,
+            [
+                (lo, hi, g * OFGEM_Q4_2023_GAS_RATE)
+                for lo, hi, _, g, _ in NEED_INCOME_BANDS
+            ],
+            {
+                k: v * OFGEM_Q4_2023_GAS_RATE
+                for k, v in NEED_TENURE_GAS.items()
+            },
+            {
+                k: v * OFGEM_Q4_2023_GAS_RATE
+                for k, v in NEED_ACCOMM_GAS.items()
+            },
+            {
+                k: v * OFGEM_Q4_2023_GAS_RATE
+                for k, v in NEED_REGION_GAS.items()
+            },
+        ),
     ]:
         arr = dataset.household[col].values.copy()
         for _ in range(20):  # iterative raking — converges in ~10 passes
