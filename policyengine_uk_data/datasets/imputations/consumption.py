@@ -7,7 +7,7 @@ and Assets Survey for fuel spending and housing characteristics for energy.
 
 Key features:
 - Gas and electricity are imputed separately using LCFS interview variables
-  (B226=electricity DD, B489=electricity PPM, B231=total energy DD, B490=gas PPM)
+  (B226=electricity DD, B489=electricity PPM, B490=gas PPM)
   rather than just the aggregate P537 domestic-energy total.
 - Housing predictors (tenure_type, accommodation_type) added alongside income
   and demographics, matching the strong drivers in NEED admin data.
@@ -262,7 +262,6 @@ def _derive_energy_from_lcfs(household: pd.DataFrame) -> pd.DataFrame:
     - B226: electricity direct-debit / quarterly-bill payment (weekly equivalent £)
     - B489: total energy PPM payment — when B490 also present, contains electricity+gas
     - B490: gas PPM payment (weekly equivalent £, always ≤ P537)
-    - B231: total domestic energy direct-debit (≈ P537 for households that report it)
     - P537: total domestic energy (interview-based aggregate, weekly £)
 
     Logic:
@@ -282,7 +281,7 @@ def _derive_energy_from_lcfs(household: pd.DataFrame) -> pd.DataFrame:
     dd_mask = (b226 > 0) & (p537 > 0)
     mean_elec_share = (b226[dd_mask] / p537[dd_mask]).clip(0, 1).mean()
     if np.isnan(mean_elec_share):
-        mean_elec_share = 0.52  # ONS fallback: 714/(714+654)
+        mean_elec_share = 0.52  # fallback: typical UK elec/(elec+gas) spend share
 
     electricity = np.zeros(len(household))
     gas = np.zeros(len(household))
@@ -317,7 +316,7 @@ def _calibrate_energy_to_need(
     household: pd.DataFrame, income_col: str = "hbai_household_net_income"
 ) -> pd.DataFrame:
     """
-    Rescale imputed electricity and gas spend to match NEED 2022 income-band means.
+    Rescale imputed electricity and gas spend to match NEED 2023 income-band means.
 
     For each NEED income band, computes the ratio of the NEED-implied mean spend
     to the LCFS-derived mean spend and applies it multiplicatively. This preserves
@@ -434,7 +433,7 @@ def generate_lcfs_table(
     Build the LCFS training table for consumption imputation.
 
     Adds electricity and gas derived from interview variables (B226/B489/B490),
-    calibrates to NEED 2022 income-band targets, and includes housing predictors
+    calibrates to NEED 2023 income-band targets, and includes housing predictors
     (tenure_type, accommodation_type) alongside the existing income/demographic ones.
     """
     person = lcfs_person.rename(columns=PERSON_LCF_RENAMES)
@@ -466,7 +465,7 @@ def generate_lcfs_table(
         )
     household.household_weight *= 1_000
 
-    # Calibrate energy to NEED 2022 targets by income band
+    # Calibrate energy to NEED 2023 targets by income band
     household = _calibrate_energy_to_need(household)
 
     # Impute has_fuel_consumption from WAS vehicle ownership
@@ -578,10 +577,9 @@ def impute_consumption(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     accomm = sim.calculate("accommodation_type", map_to="household").values
     region = sim.calculate("region", map_to="household").values
 
-    for col, rate, need_income, need_tenure, need_accomm, need_region in [
+    for col, need_income, need_tenure, need_accomm, need_region in [
         (
             "electricity_consumption",
-            OFGEM_Q4_2023_ELEC_RATE,
             [
                 (lo, hi, e * OFGEM_Q4_2023_ELEC_RATE)
                 for lo, hi, _, _, e in NEED_INCOME_BANDS
@@ -601,7 +599,6 @@ def impute_consumption(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         ),
         (
             "gas_consumption",
-            OFGEM_Q4_2023_GAS_RATE,
             [
                 (lo, hi, g * OFGEM_Q4_2023_GAS_RATE)
                 for lo, hi, _, g, _ in NEED_INCOME_BANDS
