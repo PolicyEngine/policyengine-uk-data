@@ -8,7 +8,6 @@ test reflects what the QRF + raking calibration actually produces for real
 FRS households at 2023 price levels.
 """
 
-import numpy as np
 import pytest
 from policyengine_uk import Microsimulation
 from policyengine_uk.data import UKSingleYearDataset
@@ -77,7 +76,8 @@ def test_electricity_by_income(arrays):
     for lo, hi, band, _, elec_kwh in NEED_INCOME_BANDS:
         target = elec_kwh * OFGEM_Q4_2023_ELEC_RATE
         mask = (income >= lo) & (income < hi)
-        if mask.sum() == 0: continue
+        if mask.sum() == 0:
+            continue
         imp = _wmean(elec[mask], w[mask])
         tol = HIGH_INC_TOL if lo >= 100_000 else BAND_TOL
         rows.append((band, imp, target, abs(imp - target) / target, tol))
@@ -92,7 +92,8 @@ def test_gas_by_income(arrays):
     for lo, hi, band, gas_kwh, _ in NEED_INCOME_BANDS:
         target = gas_kwh * OFGEM_Q4_2023_GAS_RATE
         mask = (income >= lo) & (income < hi)
-        if mask.sum() == 0: continue
+        if mask.sum() == 0:
+            continue
         imp = _wmean(gas[mask], w[mask])
         tol = HIGH_INC_TOL if lo >= 100_000 else BAND_TOL
         rows.append((band, imp, target, abs(imp - target) / target, tol))
@@ -107,7 +108,8 @@ def test_electricity_by_tenure(arrays):
     for frs_val, need_key in TENURE_TO_NEED.items():
         target = NEED_TENURE_ELEC[need_key] * OFGEM_Q4_2023_ELEC_RATE
         mask = tenure == frs_val
-        if mask.sum() == 0: continue
+        if mask.sum() == 0:
+            continue
         imp = _wmean(elec[mask], w[mask])
         rows.append((frs_val, imp, target, abs(imp - target) / target))
     _check("Electricity £/yr by tenure", rows)
@@ -119,7 +121,8 @@ def test_gas_by_tenure(arrays):
     for frs_val, need_key in TENURE_TO_NEED.items():
         target = NEED_TENURE_GAS[need_key] * OFGEM_Q4_2023_GAS_RATE
         mask = tenure == frs_val
-        if mask.sum() == 0: continue
+        if mask.sum() == 0:
+            continue
         imp = _wmean(gas[mask], w[mask])
         rows.append((frs_val, imp, target, abs(imp - target) / target))
     _check("Gas £/yr by tenure", rows)
@@ -131,7 +134,8 @@ def test_electricity_by_accommodation(arrays):
     for frs_val, need_key in ACCOMM_TO_NEED.items():
         target = NEED_ACCOMM_ELEC[need_key] * OFGEM_Q4_2023_ELEC_RATE
         mask = accomm == frs_val
-        if mask.sum() == 0: continue
+        if mask.sum() == 0:
+            continue
         imp = _wmean(elec[mask], w[mask])
         rows.append((frs_val, imp, target, abs(imp - target) / target))
     _check("Electricity £/yr by accommodation type (excl. OTHER)", rows)
@@ -143,7 +147,8 @@ def test_gas_by_accommodation(arrays):
     for frs_val, need_key in ACCOMM_TO_NEED.items():
         target = NEED_ACCOMM_GAS[need_key] * OFGEM_Q4_2023_GAS_RATE
         mask = accomm == frs_val
-        if mask.sum() == 0: continue
+        if mask.sum() == 0:
+            continue
         imp = _wmean(gas[mask], w[mask])
         rows.append((frs_val, imp, target, abs(imp - target) / target))
     _check("Gas £/yr by accommodation type (excl. OTHER)", rows)
@@ -155,7 +160,8 @@ def test_electricity_by_region(arrays):
     for reg, target_kwh in NEED_REGION_ELEC.items():
         target = target_kwh * OFGEM_Q4_2023_ELEC_RATE
         mask = region == reg
-        if mask.sum() == 0: continue
+        if mask.sum() == 0:
+            continue
         imp = _wmean(elec[mask], w[mask])
         rows.append((reg, imp, target, abs(imp - target) / target))
     _check("Electricity £/yr by region", rows)
@@ -167,7 +173,8 @@ def test_gas_by_region(arrays):
     for reg, target_kwh in NEED_REGION_GAS.items():
         target = target_kwh * OFGEM_Q4_2023_GAS_RATE
         mask = region == reg
-        if mask.sum() == 0: continue
+        if mask.sum() == 0:
+            continue
         imp = _wmean(gas[mask], w[mask])
         rows.append((reg, imp, target, abs(imp - target) / target))
     _check("Gas £/yr by region", rows)
