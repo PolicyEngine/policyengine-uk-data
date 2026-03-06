@@ -229,6 +229,37 @@ NEED_REGION_ELEC = {
     "WALES": 3_151,
 }
 
+# Pre-computed NEED spend targets (£/yr) — kWh × unit rate, keyed by energy type.
+# Used in the raking loop of impute_consumption(); avoids recomputing each call.
+_NEED_SPEND = {}
+for _energy, _rate, _tenure_kwh, _accomm_kwh, _region_kwh, _gas_idx, _elec_idx in [
+    (
+        "electricity",
+        OFGEM_Q4_2023_ELEC_RATE,
+        NEED_TENURE_ELEC,
+        NEED_ACCOMM_ELEC,
+        NEED_REGION_ELEC,
+        None,
+        4,
+    ),
+    (
+        "gas",
+        OFGEM_Q4_2023_GAS_RATE,
+        NEED_TENURE_GAS,
+        NEED_ACCOMM_GAS,
+        NEED_REGION_GAS,
+        3,
+        None,
+    ),
+]:
+    _idx = _elec_idx if _elec_idx is not None else _gas_idx
+    _NEED_SPEND[_energy] = {
+        "income": [(lo, hi, band[_idx] * _rate) for lo, hi, *band in NEED_INCOME_BANDS],
+        "tenure": {k: v * _rate for k, v in _tenure_kwh.items()},
+        "accomm": {k: v * _rate for k, v in _accomm_kwh.items()},
+        "region": {k: v * _rate for k, v in _region_kwh.items()},
+    }
+
 
 def _need_targets(income: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Return NEED-implied annual gas and electricity spend (£) for each household."""
@@ -336,9 +367,7 @@ def _calibrate_energy_to_need(
         need_elec_mean = elec_target[mask].mean()
 
         if lcfs_gas_mean > 0:
-            household.loc[mask, "gas_consumption"] *= (
-                need_gas_mean / lcfs_gas_mean
-            )
+            household.loc[mask, "gas_consumption"] *= need_gas_mean / lcfs_gas_mean
         if lcfs_elec_mean > 0:
             household.loc[mask, "electricity_consumption"] *= (
                 need_elec_mean / lcfs_elec_mean
@@ -420,15 +449,13 @@ def impute_has_fuel_to_lcfs(household: pd.DataFrame) -> pd.DataFrame:
     )
     output_df = model.predict(input_df)
     household = household.copy()
-    household["has_fuel_consumption"] = output_df[
-        "has_fuel_consumption"
-    ].values.clip(0, 1)
+    household["has_fuel_consumption"] = output_df["has_fuel_consumption"].values.clip(
+        0, 1
+    )
     return household
 
 
-def generate_lcfs_table(
-    lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame
-):
+def generate_lcfs_table(lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame):
     """
     Build the LCFS training table for consumption imputation.
 
@@ -442,9 +469,7 @@ def generate_lcfs_table(
 
     # Housing predictors — map LCFS codes to FRS enum strings
     household["tenure_type"] = lcfs_household["A122"].map(LCFS_TENURE_MAP)
-    household["accommodation_type"] = lcfs_household["A121"].map(
-        LCFS_ACCOMM_MAP
-    )
+    household["accommodation_type"] = lcfs_household["A121"].map(LCFS_ACCOMM_MAP)
 
     # Derive gas and electricity before renaming/annualising P537
     household = _derive_energy_from_lcfs(household)
@@ -474,9 +499,7 @@ def generate_lcfs_table(
     return household[PREDICTOR_VARIABLES + IMPUTATIONS + ["household_weight"]].dropna()
 
 
-def uprate_lcfs_table(
-    household: pd.DataFrame, time_period: str
-) -> pd.DataFrame:
+def uprate_lcfs_table(household: pd.DataFrame, time_period: str) -> pd.DataFrame:
     from policyengine_uk.system import system
 
     start_period = 2021
@@ -484,9 +507,7 @@ def uprate_lcfs_table(
     household["petrol_spending"] *= fuel_uprating
     household["diesel_spending"] *= fuel_uprating
 
-    cpi = (
-        system.parameters.gov.economic_assumptions.indices.obr.consumer_price_index
-    )
+    cpi = system.parameters.gov.economic_assumptions.indices.obr.consumer_price_index
     cpi_uprating = cpi(time_period) / cpi(start_period)
 
     energy_vars = {
@@ -534,9 +555,7 @@ def save_imputation_models():
 def create_consumption_model(overwrite_existing: bool = False):
     from policyengine_uk_data.utils.qrf import QRF
 
-    if (
-        STORAGE_FOLDER / "consumption.pkl"
-    ).exists() and not overwrite_existing:
+    if (STORAGE_FOLDER / "consumption.pkl").exists() and not overwrite_existing:
         return QRF(file_path=STORAGE_FOLDER / "consumption.pkl")
     return save_imputation_models()
 
@@ -560,9 +579,7 @@ def impute_consumption(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     model = create_consumption_model()
     predictors = model.input_columns
 
-    non_fuel_predictors = [
-        p for p in predictors if p != "has_fuel_consumption"
-    ]
+    non_fuel_predictors = [p for p in predictors if p != "has_fuel_consumption"]
     input_df = sim.calculate_dataframe(non_fuel_predictors, map_to="household")
     input_df["has_fuel_consumption"] = has_fuel_consumption
 
@@ -572,71 +589,47 @@ def impute_consumption(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
 
     # Re-calibrate electricity and gas to NEED 2023 targets using iterative raking
     # over income band, tenure, accommodation type, and region.
+    # This is a 4-dimensional raking (vs the 1D income-band calibration on LCFS
+    # training data in _calibrate_energy_to_need) because the FRS has the full
+    # set of housing/demographic variables needed for multi-margin calibration.
     income = input_df["hbai_household_net_income"].values
     tenure = sim.calculate("tenure_type", map_to="household").values
     accomm = sim.calculate("accommodation_type", map_to="household").values
     region = sim.calculate("region", map_to="household").values
 
-    for col, need_income, need_tenure, need_accomm, need_region in [
-        (
-            "electricity_consumption",
-            [
-                (lo, hi, e * OFGEM_Q4_2023_ELEC_RATE)
-                for lo, hi, _, _, e in NEED_INCOME_BANDS
-            ],
-            {
-                k: v * OFGEM_Q4_2023_ELEC_RATE
-                for k, v in NEED_TENURE_ELEC.items()
-            },
-            {
-                k: v * OFGEM_Q4_2023_ELEC_RATE
-                for k, v in NEED_ACCOMM_ELEC.items()
-            },
-            {
-                k: v * OFGEM_Q4_2023_ELEC_RATE
-                for k, v in NEED_REGION_ELEC.items()
-            },
-        ),
-        (
-            "gas_consumption",
-            [
-                (lo, hi, g * OFGEM_Q4_2023_GAS_RATE)
-                for lo, hi, _, g, _ in NEED_INCOME_BANDS
-            ],
-            {
-                k: v * OFGEM_Q4_2023_GAS_RATE
-                for k, v in NEED_TENURE_GAS.items()
-            },
-            {
-                k: v * OFGEM_Q4_2023_GAS_RATE
-                for k, v in NEED_ACCOMM_GAS.items()
-            },
-            {
-                k: v * OFGEM_Q4_2023_GAS_RATE
-                for k, v in NEED_REGION_GAS.items()
-            },
-        ),
+    # Pre-compute boolean masks (reused across 20 raking iterations)
+    income_masks = []
+    for lo, hi, _ in _NEED_SPEND["electricity"]["income"]:
+        income_masks.append((income >= lo) & (income < hi))
+    tenure_masks = {frs_val: tenure == frs_val for frs_val in TENURE_TO_NEED}
+    accomm_masks = {frs_val: accomm == frs_val for frs_val in ACCOMM_TO_NEED}
+    region_masks = {reg: region == reg for reg in _NEED_SPEND["electricity"]["region"]}
+
+    for energy, col in [
+        ("electricity", "electricity_consumption"),
+        ("gas", "gas_consumption"),
     ]:
+        targets = _NEED_SPEND[energy]
         arr = dataset.household[col].values.copy()
         for _ in range(20):  # iterative raking — converges in ~10 passes
-            for lo, hi, target in need_income:
-                mask = (income >= lo) & (income < hi)
+            for i, (_, _, target) in enumerate(targets["income"]):
+                mask = income_masks[i]
                 if mask.sum() > 0 and arr[mask].mean() > 0:
                     arr[mask] *= target / arr[mask].mean()
             for frs_val, need_key in TENURE_TO_NEED.items():
-                if need_key not in need_tenure:
+                if need_key not in targets["tenure"]:
                     continue
-                mask = tenure == frs_val
+                mask = tenure_masks[frs_val]
                 if mask.sum() > 0 and arr[mask].mean() > 0:
-                    arr[mask] *= need_tenure[need_key] / arr[mask].mean()
+                    arr[mask] *= targets["tenure"][need_key] / arr[mask].mean()
             for frs_val, need_key in ACCOMM_TO_NEED.items():
-                if need_key not in need_accomm:
+                if need_key not in targets["accomm"]:
                     continue
-                mask = accomm == frs_val
+                mask = accomm_masks[frs_val]
                 if mask.sum() > 0 and arr[mask].mean() > 0:
-                    arr[mask] *= need_accomm[need_key] / arr[mask].mean()
-            for reg_val, target in need_region.items():
-                mask = region == reg_val
+                    arr[mask] *= targets["accomm"][need_key] / arr[mask].mean()
+            for reg_val, target in targets["region"].items():
+                mask = region_masks[reg_val]
                 if mask.sum() > 0 and arr[mask].mean() > 0:
                     arr[mask] *= target / arr[mask].mean()
         dataset.household[col] = arr
