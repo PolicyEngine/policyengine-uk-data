@@ -1,3 +1,10 @@
+## [1.40.4] - 2026-03-06
+
+### Changed
+
+- Switched code formatter from Black to Ruff.
+
+
 ## [1.40.3] - 2026-02-24
 
 ### Changed
