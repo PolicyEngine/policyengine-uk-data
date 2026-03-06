@@ -29,9 +29,7 @@ missing_constituencies = pd.Series(list(set(incomes.code) - set(ages.code)))
 missing_constituencies = pd.DataFrame(
     {
         "code": missing_constituencies.values,
-        "name": incomes.set_index("code")
-        .loc[missing_constituencies]
-        .name.values,
+        "name": incomes.set_index("code").loc[missing_constituencies].name.values,
     }
 )
 for col in ages.columns[2:]:

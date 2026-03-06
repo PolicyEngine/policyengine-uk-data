@@ -34,9 +34,9 @@ def test_property_purchased_rate(baseline):
     target_rate = PROPERTY_PURCHASE_RATE
     tolerance = 0.02
 
-    assert (
-        abs(actual_rate - target_rate) < tolerance
-    ), f"property_purchased rate {actual_rate:.2%} is not close to target {target_rate:.2%}"
+    assert abs(actual_rate - target_rate) < tolerance, (
+        f"property_purchased rate {actual_rate:.2%} is not close to target {target_rate:.2%}"
+    )
 
 
 def test_property_purchased_not_all_true(baseline):
@@ -47,9 +47,9 @@ def test_property_purchased_not_all_true(baseline):
     n_households = len(property_purchased)
 
     # Should NOT be 100% True (the bug we fixed)
-    assert (
-        true_count < n_households * 0.1
-    ), f"Too many households have property_purchased=True ({true_count}/{n_households})"
+    assert true_count < n_households * 0.1, (
+        f"Too many households have property_purchased=True ({true_count}/{n_households})"
+    )
 
 
 def test_property_purchased_has_some_true(baseline):
@@ -80,13 +80,13 @@ def test_sdlt_total_reasonable(baseline):
     max_sdlt = 50e9  # £50bn maximum (official is ~£14bn)
 
     assert total_sdlt > min_sdlt, (
-        f"Total SDLT £{total_sdlt/1e9:.1f}bn is too low "
-        f"(minimum expected: £{min_sdlt/1e9:.1f}bn)"
+        f"Total SDLT £{total_sdlt / 1e9:.1f}bn is too low "
+        f"(minimum expected: £{min_sdlt / 1e9:.1f}bn)"
     )
 
     assert total_sdlt < max_sdlt, (
-        f"Total SDLT £{total_sdlt/1e9:.1f}bn is unrealistically high "
-        f"(maximum expected: £{max_sdlt/1e9:.1f}bn). "
+        f"Total SDLT £{total_sdlt / 1e9:.1f}bn is unrealistically high "
+        f"(maximum expected: £{max_sdlt / 1e9:.1f}bn). "
         f"Official SDLT is ~£14bn. "
         "This suggests property_purchased may be incorrectly set to True for all households."
     )

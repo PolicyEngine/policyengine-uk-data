@@ -2,9 +2,7 @@ from huggingface_hub import hf_hub_download, login, HfApi
 import os
 
 
-def download(
-    repo: str, repo_filename: str, local_folder: str, version: str = None
-):
+def download(repo: str, repo_filename: str, local_folder: str, version: str = None):
     token = os.environ.get(
         "HUGGING_FACE_TOKEN",
     )

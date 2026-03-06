@@ -17,9 +17,7 @@ def compute_benefit_cap(target, ctx) -> np.ndarray:
         return ctx.sim.calculate(
             "benefit_cap_reduction", map_to="household"
         ).values.astype(float)
-    reduction = ctx.sim.calculate(
-        "benefit_cap_reduction", map_to="household"
-    ).values
+    reduction = ctx.sim.calculate("benefit_cap_reduction", map_to="household").values
     return (reduction > 0).astype(float)
 
 
@@ -29,9 +27,7 @@ def compute_scotland_uc_child(target, ctx) -> np.ndarray:
     on_uc = ctx.household_from_family(uc > 0) > 0
     child_u1 = ctx.pe_person("is_child") & (ctx.age < 1)
     has_child_u1 = ctx.household_from_person(child_u1) > 0
-    return (
-        (ctx.household_region == "SCOTLAND") & on_uc & has_child_u1
-    ).astype(float)
+    return ((ctx.household_region == "SCOTLAND") & on_uc & has_child_u1).astype(float)
 
 
 def compute_uc_by_children(target, ctx) -> np.ndarray:
@@ -74,9 +70,7 @@ def compute_uc_by_family_type(target, ctx) -> np.ndarray | None:
     if ft_str == "single_no_children":
         match = ft_hh("SINGLE") & (children_per_hh == 0)
     elif ft_str == "single_with_children":
-        match = (ft_hh("SINGLE") | ft_hh("LONE_PARENT")) & (
-            children_per_hh > 0
-        )
+        match = (ft_hh("SINGLE") | ft_hh("LONE_PARENT")) & (children_per_hh > 0)
     elif ft_str == "couple_no_children":
         match = ft_hh("COUPLE_NO_CHILDREN")
     elif ft_str == "couple_with_children":
@@ -95,15 +89,11 @@ def compute_uc_payment_dist(target, ctx) -> np.ndarray:
     lower = target.lower_bound
     upper = target.upper_bound
 
-    uc_payments = ctx.sim.calculate(
-        "universal_credit", map_to="benunit"
-    ).values
+    uc_payments = ctx.sim.calculate("universal_credit", map_to="benunit").values
     uc_family_type = ctx.sim.calculate("family_type", map_to="benunit").values
 
     in_band = (
-        (uc_payments >= lower)
-        & (uc_payments < upper)
-        & (uc_family_type == family_type)
+        (uc_payments >= lower) & (uc_payments < upper) & (uc_family_type == family_type)
     )
     return ctx.household_from_family(in_band)
 
@@ -113,9 +103,7 @@ def compute_uc_jobseeker(target, ctx) -> np.ndarray:
     family = ctx.sim.populations["benunit"]
     uc = ctx.sim.calculate("universal_credit")
     on_uc = uc > 0
-    unemployed = family.any(
-        ctx.sim.calculate("employment_status") == "UNEMPLOYED"
-    )
+    unemployed = family.any(ctx.sim.calculate("employment_status") == "UNEMPLOYED")
 
     if "non_jobseekers" in target.name:
         mask = on_uc * ~unemployed
@@ -164,17 +152,13 @@ def compute_two_child_limit(target, ctx) -> np.ndarray | None:
     if name == "dwp/uc/two_child_limit/children_affected":
         return children_in_capped
     if name == "dwp/uc/two_child_limit/children_in_affected_households":
-        total_children = sim.map_result(
-            is_child * child_in_uc, "person", "household"
-        )
+        total_children = sim.map_result(is_child * child_in_uc, "person", "household")
         return total_children * capped_hh
 
     if "_children_households_total_children" in name:
         n = int(name.split("/")[-1].split("_")[0])
         children_count = sim.map_result(is_child, "person", "household")
-        return (capped_hh * (children_count == n) * children_count).astype(
-            float
-        )
+        return (capped_hh * (children_count == n) * children_count).astype(float)
     if "_children_households" in name and "total" not in name:
         n = int(name.split("/")[-1].split("_")[0])
         children_count = sim.map_result(is_child, "person", "household")

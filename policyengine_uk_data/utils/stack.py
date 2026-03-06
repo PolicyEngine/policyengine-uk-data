@@ -17,8 +17,6 @@ def stack_datasets(
     return UKSingleYearDataset(
         person=pd.concat([data_1.person, data_2.person], ignore_index=True),
         benunit=pd.concat([data_1.benunit, data_2.benunit], ignore_index=True),
-        household=pd.concat(
-            [data_1.household, data_2.household], ignore_index=True
-        ),
+        household=pd.concat([data_1.household, data_2.household], ignore_index=True),
         fiscal_year=data_1.time_period,
     )

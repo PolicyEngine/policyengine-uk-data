@@ -62,9 +62,7 @@ def save_salary_sacrifice_model():
     employment_income = sim.calculate("employment_income").values
 
     # Get SS amounts and indicator for who was asked
-    ss_amount = (
-        dataset.person.pension_contributions_via_salary_sacrifice.values
-    )
+    ss_amount = dataset.person.pension_contributions_via_salary_sacrifice.values
     if "salary_sacrifice_asked" not in dataset.person.columns:
         raise ValueError(
             "Dataset missing salary_sacrifice_asked field. "
@@ -77,17 +75,13 @@ def save_salary_sacrifice_model():
     training_mask = ss_asked == 1
 
     if training_mask.sum() == 0:
-        raise ValueError(
-            "No training data found - no respondents were asked SALSAC."
-        )
+        raise ValueError("No training data found - no respondents were asked SALSAC.")
 
     train_df = pd.DataFrame(
         {
             "age": age[training_mask],
             "employment_income": employment_income[training_mask],
-            "pension_contributions_via_salary_sacrifice": ss_amount[
-                training_mask
-            ],
+            "pension_contributions_via_salary_sacrifice": ss_amount[training_mask],
         }
     )
 
@@ -141,9 +135,7 @@ def impute_salary_sacrifice(
     # Get variables needed for imputation
     age = sim.calculate("age").values
     employment_income = sim.calculate("employment_income").values
-    current_ss = (
-        dataset.person.pension_contributions_via_salary_sacrifice.values
-    )
+    current_ss = dataset.person.pension_contributions_via_salary_sacrifice.values
 
     # Get indicator for who was asked
     if "salary_sacrifice_asked" not in dataset.person.columns:
@@ -164,9 +156,7 @@ def impute_salary_sacrifice(
     predictions = model.predict(pred_df)
 
     # Get imputed amounts (QRF predicts continuous values)
-    imputed_ss = predictions[
-        "pension_contributions_via_salary_sacrifice"
-    ].values
+    imputed_ss = predictions["pension_contributions_via_salary_sacrifice"].values
 
     # Ensure non-negative
     imputed_ss = np.maximum(0, imputed_ss)
@@ -187,9 +177,7 @@ def impute_salary_sacrifice(
     # 4.3mn below 2k). Donors keep their full employee pension amount
     # so those above 2k become above-cap records and the rest below-cap.
     person_weight = sim.calculate("person_weight").values
-    employee_pension = dataset.person[
-        "employee_pension_contributions"
-    ].values.copy()
+    employee_pension = dataset.person["employee_pension_contributions"].values.copy()
     has_ss = final_ss > 0
 
     # Donor pool: employed pension contributors not already SS users
@@ -207,9 +195,7 @@ def impute_salary_sacrifice(
         if donor_weighted > 0:
             imputation_rate = min(0.5, shortfall / donor_weighted)
             rng = np.random.default_rng(seed=2024)
-            newly_imputed = is_donor & (
-                rng.random(len(final_ss)) < imputation_rate
-            )
+            newly_imputed = is_donor & (rng.random(len(final_ss)) < imputation_rate)
 
             # Move full employee pension to SS so the above/below
             # 2k split reflects the natural pension distribution
