@@ -161,13 +161,13 @@ def objective(params: list[float]) -> float:
     print("\nSpending (£ billion):")
     for key in targets["spending"]:
         print(
-            f"  {key.upper()}: {spending[key]:.3f} (Target: {targets['spending'][key]:.3f}, Ratio: {spending[key]/targets['spending'][key]:.3f})"
+            f"  {key.upper()}: {spending[key]:.3f} (Target: {targets['spending'][key]:.3f}, Ratio: {spending[key] / targets['spending'][key]:.3f})"
         )
 
     print("\nCaseload (thousands):")
     for key in targets["caseload"]:
         print(
-            f"  {key.upper()}: {caseload[key]:.1f} (Target: {targets['caseload'][key]:.1f}, Ratio: {caseload[key]/targets['caseload'][key]:.3f})"
+            f"  {key.upper()}: {caseload[key]:.1f} (Target: {targets['caseload'][key]:.1f}, Ratio: {caseload[key] / targets['caseload'][key]:.3f})"
         )
 
     return loss
@@ -211,11 +211,11 @@ if __name__ == "__main__":
     print("\nSpending (£ billion):")
     for key in targets["spending"]:
         print(
-            f"  {key.upper()}: {final_spending[key]:.3f} (Target: {targets['spending'][key]:.3f}, Ratio: {final_spending[key]/targets['spending'][key]:.3f})"
+            f"  {key.upper()}: {final_spending[key]:.3f} (Target: {targets['spending'][key]:.3f}, Ratio: {final_spending[key] / targets['spending'][key]:.3f})"
         )
 
     print("\nCaseload (thousands):")
     for key in targets["caseload"]:
         print(
-            f"  {key.upper()}: {final_caseload[key]:.1f} (Target: {targets['caseload'][key]:.1f}, Ratio: {final_caseload[key]/targets['caseload'][key]:.3f})"
+            f"  {key.upper()}: {final_caseload[key]:.1f} (Target: {targets['caseload'][key]:.1f}, Ratio: {final_caseload[key] / targets['caseload'][key]:.3f})"
         )

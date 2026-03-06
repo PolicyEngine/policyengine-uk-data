@@ -44,6 +44,6 @@ def test_scotland_uc_households_child_under_1(baseline):
     TOLERANCE = 0.15  # 15% tolerance
 
     assert abs(total / TARGET - 1) < TOLERANCE, (
-        f"Expected ~{TARGET/1000:.0f}k UC households with child under 1 in Scotland, "
-        f"got {total/1000:.0f}k ({total/TARGET*100:.0f}% of target)"
+        f"Expected ~{TARGET / 1000:.0f}k UC households with child under 1 in Scotland, "
+        f"got {total / 1000:.0f}k ({total / TARGET * 100:.0f}% of target)"
     )

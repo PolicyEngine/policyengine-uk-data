@@ -35,9 +35,9 @@ def test_child_limit(baseline):
         440e3 * UPRATING_24_25
     )  # Expected number of affected households
 
-    assert (
-        abs(children_affected / child_target - 1) < 0.3
-    ), f"Expected {child_target/1e6:.1f} million affected children, got {children_affected/1e6:.1f} million."
-    assert (
-        abs(households_affected / household_target - 1) < 0.3
-    ), f"Expected {household_target/1e3:.0f} thousand affected households, got {households_affected/1e3:.0f} thousand."
+    assert abs(children_affected / child_target - 1) < 0.3, (
+        f"Expected {child_target / 1e6:.1f} million affected children, got {children_affected / 1e6:.1f} million."
+    )
+    assert abs(households_affected / household_target - 1) < 0.3, (
+        f"Expected {household_target / 1e3:.0f} thousand affected households, got {households_affected / 1e3:.0f} thousand."
+    )

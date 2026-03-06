@@ -24,7 +24,7 @@ dependencies = [
     "policyengine-uk>=2.43.5",
     "microcalibrate>=0.18.0",
     "microimpute>=1.0.1",
-    "black>=25.1.0",
+    "ruff>=0.9.0",
     "rich>=13.0.0",
     "odfpy",
     "pandas",
@@ -35,7 +35,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "black",
+    "ruff>=0.9.0",
     "pytest",
     "torch",
     "tables",
@@ -70,23 +70,8 @@ filterwarnings = [
     "ignore::PendingDeprecationWarning",
 ]
 
-[tool.black]
+[tool.ruff]
 line-length = 79
-target-version = ['py311']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
 
 [tool.towncrier]
 package = "policyengine_uk_data"

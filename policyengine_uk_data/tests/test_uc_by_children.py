@@ -55,6 +55,6 @@ def test_uc_households_by_children(baseline, bucket, target):
     actual = (household_weight * match).sum()
 
     assert abs(actual / target - 1) < TOLERANCE, (
-        f"UC households with {bucket}: expected {target/1e3:.0f}k, "
-        f"got {actual/1e3:.0f}k ({actual/target*100:.0f}% of target)"
+        f"UC households with {bucket}: expected {target / 1e3:.0f}k, "
+        f"got {actual / 1e3:.0f}k ({actual / target * 100:.0f}% of target)"
     )

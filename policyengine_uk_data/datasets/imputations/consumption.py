@@ -262,9 +262,7 @@ def uprate_lcfs_table(
     household["petrol_spending"] *= fuel_uprating
     household["diesel_spending"] *= fuel_uprating
 
-    cpi = (
-        system.parameters.gov.economic_assumptions.indices.obr.consumer_price_index
-    )
+    cpi = system.parameters.gov.economic_assumptions.indices.obr.consumer_price_index
     cpi_uprating = cpi(time_period) / cpi(start_period)
 
     for variable in IMPUTATIONS:
