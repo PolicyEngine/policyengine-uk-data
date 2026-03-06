@@ -33,9 +33,7 @@ def get_fiscal_impact(reform: dict) -> float:
     return float((reform_revenue - baseline_revenue) / 1e9)
 
 
-def update_impacts(
-    config_path: Path, dry_run: bool = False, verbose: bool = True
-):
+def update_impacts(config_path: Path, dry_run: bool = False, verbose: bool = True):
     """
     Update the expected impacts in the configuration file with current model values.
 
@@ -61,9 +59,7 @@ def update_impacts(
         old_impact = reform["expected_impact"]
         new_impact = round(get_fiscal_impact(reform["parameters"]), 1)
 
-        if (
-            abs(old_impact - new_impact) > 0.01
-        ):  # Only record meaningful changes
+        if abs(old_impact - new_impact) > 0.01:  # Only record meaningful changes
             changes.append(
                 {
                     "name": reform["name"],
@@ -126,9 +122,7 @@ def main():
     parser.add_argument(
         "--config",
         type=Path,
-        default=Path(
-            "policyengine_uk_data/tests/microsimulation/reforms_config.yaml"
-        ),
+        default=Path("policyengine_uk_data/tests/microsimulation/reforms_config.yaml"),
         help="Path to the reforms configuration file (default: reforms_config.yaml)",
     )
     parser.add_argument(

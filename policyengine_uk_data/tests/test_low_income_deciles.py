@@ -42,8 +42,8 @@ def test_first_decile_tax_rate_reasonable(baseline):
         d1_tax_rate = d1_tax / d1_market
         assert d1_tax_rate < 1.75, (
             f"First decile tax rate is {d1_tax_rate:.0%}, which exceeds 175%. "
-            f"Total D1 tax: £{d1_tax/1e9:.1f}bn, "
-            f"Total D1 market income: £{d1_market/1e9:.1f}bn. "
+            f"Total D1 tax: £{d1_tax / 1e9:.1f}bn, "
+            f"Total D1 market income: £{d1_market / 1e9:.1f}bn. "
             "This likely indicates a bug in property_purchased or similar variable."
         )
 

@@ -20,9 +20,9 @@ from policyengine_uk_data.utils.subsample import subsample_dataset
 capital_gains = pd.read_csv(
     STORAGE_FOLDER / "capital_gains_distribution_advani_summers.csv.gz"
 )
-capital_gains["maximum_total_income"] = (
-    capital_gains.minimum_total_income.shift(-1).fillna(np.inf)
-)
+capital_gains["maximum_total_income"] = capital_gains.minimum_total_income.shift(
+    -1
+).fillna(np.inf)
 
 # Silence verbose logging
 logging.getLogger("root").setLevel(logging.WARNING)
@@ -82,9 +82,7 @@ def impute_cg_to_doubled_dataset(
                 sim.map_result(ti_in_range, "person", "household", how="sum")
             )
             household_cg_in_income_range_count = torch.tensor(
-                sim.map_result(
-                    cg_in_income_range, "person", "household", how="sum"
-                )
+                sim.map_result(cg_in_income_range, "person", "household", how="sum")
             )
             pred_ti_in_range = (
                 blended_household_weight * household_ti_in_range_count
@@ -116,9 +114,9 @@ def impute_cg_to_doubled_dataset(
     new_household_weight[first_half] = (
         blend_factor * original_household_weight[first_half]
     )
-    new_household_weight[~first_half] = (
-        1 - blend_factor
-    ) * original_household_weight[first_half]
+    new_household_weight[~first_half] = (1 - blend_factor) * original_household_weight[
+        first_half
+    ]
 
     # Impute actual capital gains amounts given gains
     new_cg = np.zeros(len(ti))

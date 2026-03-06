@@ -285,9 +285,7 @@ class ProcessingProgress:
                         description=f"[yellow]●[/yellow] Calibration epoch {iteration}/{iterations} • calculating loss",
                     )
                 else:
-                    loss_text = (
-                        f" • loss: {loss_value:.6f}" if loss_value else ""
-                    )
+                    loss_text = f" • loss: {loss_value:.6f}" if loss_value else ""
                     nested_progress.update_task(
                         calibration_task,
                         description=f"[blue]●[/blue] Calibration epoch {iteration}/{iterations}{loss_text}",
@@ -317,9 +315,7 @@ class ProcessingProgress:
                             description=f"Calibration iteration {iteration}/{iterations} • [yellow]calculating loss[/yellow]",
                         )
                     else:
-                        loss_text = (
-                            f" • loss: {loss_value:.6f}" if loss_value else ""
-                        )
+                        loss_text = f" • loss: {loss_value:.6f}" if loss_value else ""
                         progress.update_task(
                             main_task,
                             description=f"Calibration iteration {iteration}/{iterations}{loss_text}",
@@ -329,9 +325,7 @@ class ProcessingProgress:
                 yield update_calibration
 
     @contextmanager
-    def track_file_processing(
-        self, files: List[str], operation: str = "processing"
-    ):
+    def track_file_processing(self, files: List[str], operation: str = "processing"):
         """Track file processing operations.
 
         Args:

@@ -131,33 +131,23 @@ def fill_missing_percentiles(row):
         # If this percentile is missing in the row
         if pd.isna(row[col]):
             # Find the closest lower and upper known percentiles
-            lower = max(
-                [p for p in known_percentiles if p < percentile], default=None
-            )
-            upper = min(
-                [p for p in known_percentiles if p > percentile], default=None
-            )
+            lower = max([p for p in known_percentiles if p < percentile], default=None)
+            upper = min([p for p in known_percentiles if p > percentile], default=None)
 
             # If both lower and upper bounds exist, interpolate
             if lower is not None and upper is not None:
                 # Ratio between the target percentile and the lower bound
-                lower_ratio = (
-                    reference_values[percentile] / reference_values[lower]
-                )
+                lower_ratio = reference_values[percentile] / reference_values[lower]
                 row[col] = row[f"{lower} percentile"] * lower_ratio
 
             # If only the lower bound exists, extrapolate upwards
             elif lower is not None:
-                lower_ratio = (
-                    reference_values[percentile] / reference_values[lower]
-                )
+                lower_ratio = reference_values[percentile] / reference_values[lower]
                 row[col] = row[f"{lower} percentile"] * lower_ratio
 
             # If only the upper bound exists, extrapolate downwards
             elif upper is not None:
-                upper_ratio = (
-                    reference_values[percentile] / reference_values[upper]
-                )
+                upper_ratio = reference_values[percentile] / reference_values[upper]
                 row[col] = row[f"{upper} percentile"] * upper_ratio
 
     return row
@@ -311,9 +301,7 @@ def calculate_band_population(row):
         # Ensure lower_percentile is less than upper_percentile
         if lower_percentile < upper_percentile:
             # Integrate to get proportion in this income band
-            proportion_in_band, _ = quad(
-                spline, lower_percentile, upper_percentile
-            )
+            proportion_in_band, _ = quad(spline, lower_percentile, upper_percentile)
             proportion_in_band = proportion_in_band / spline(
                 filtered_percentiles[-1]
             )  # Normalize by max spline value
@@ -340,9 +328,7 @@ def calculate_band_population(row):
         income_bands, columns=["income_lower_bound", "income_upper_bound"]
     )
     band_df["population_count"] = band_population_counts
-    band_df["parliamentary constituency 2010"] = row[
-        "parliamentary constituency 2010"
-    ]
+    band_df["parliamentary constituency 2010"] = row["parliamentary constituency 2010"]
     band_df["constituency_code"] = row["constituency_code"]
 
     return band_df
@@ -435,9 +421,7 @@ result_df_copy = result_df_copy.dropna(subset=["constituency_code"])
 import numpy as np
 
 
-def find_and_replace_zero_populations(
-    result_df_copy, total_income
-) -> pd.DataFrame:
+def find_and_replace_zero_populations(result_df_copy, total_income) -> pd.DataFrame:
     # Step 1: Find constituencies with all zero populations
     constituencies_with_zero_population = (
         result_df_copy.groupby("constituency_code")
@@ -480,15 +464,12 @@ def find_and_replace_zero_populations(
 
             # Calculate absolute differences
             differences = np.abs(
-                other_constituencies["total_income_count"]
-                - current_total_income
+                other_constituencies["total_income_count"] - current_total_income
             )
 
             # Get the index of the minimum difference
             min_diff_idx = differences.values.argmin()
-            nearest_constituency = other_constituencies.iloc[min_diff_idx][
-                "code"
-            ]
+            nearest_constituency = other_constituencies.iloc[min_diff_idx]["code"]
 
             # Step 3: Copy population and earnings data from nearest constituency
             # For each income band of the zero constituency
@@ -543,9 +524,7 @@ def find_and_replace_zero_populations(
                 ].values[0]
 
         except Exception as e:
-            print(
-                f"Error processing constituency {zero_constituency}: {str(e)}"
-            )
+            print(f"Error processing constituency {zero_constituency}: {str(e)}")
             continue
 
     return result_df

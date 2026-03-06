@@ -50,9 +50,7 @@ def create_constituency_target_matrix(
 
     # ── Income targets ─────────────────────────────────────────────
     incomes = get_constituency_income_targets()
-    national_incomes = get_national_income_projections(
-        int(dataset.time_period)
-    )
+    national_incomes = get_national_income_projections(int(dataset.time_period))
 
     for income_variable in INCOME_VARIABLES:
         income_values = sim.calculate(income_variable).values
@@ -107,16 +105,10 @@ def create_constituency_target_matrix(
     children_per_hh = sim.map_result(is_child, "person", "household")
     on_uc_hh = sim.map_result(on_uc, "benunit", "household") > 0
 
-    matrix["uc_hh_0_children"] = (on_uc_hh & (children_per_hh == 0)).astype(
-        float
-    )
+    matrix["uc_hh_0_children"] = (on_uc_hh & (children_per_hh == 0)).astype(float)
     matrix["uc_hh_1_child"] = (on_uc_hh & (children_per_hh == 1)).astype(float)
-    matrix["uc_hh_2_children"] = (on_uc_hh & (children_per_hh == 2)).astype(
-        float
-    )
-    matrix["uc_hh_3plus_children"] = (
-        on_uc_hh & (children_per_hh >= 3)
-    ).astype(float)
+    matrix["uc_hh_2_children"] = (on_uc_hh & (children_per_hh == 2)).astype(float)
+    matrix["uc_hh_3plus_children"] = (on_uc_hh & (children_per_hh >= 3)).astype(float)
 
     uc_by_children = get_constituency_uc_by_children_targets()
     for col in uc_by_children.columns:

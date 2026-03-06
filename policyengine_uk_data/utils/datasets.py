@@ -10,9 +10,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
-def sum_to_entity(
-    values: pd.Series, foreign_key: pd.Series, primary_key
-) -> np.ndarray:
+def sum_to_entity(values: pd.Series, foreign_key: pd.Series, primary_key) -> np.ndarray:
     """Sums values by joining foreign and primary keys.
 
     Args:
@@ -23,14 +21,10 @@ def sum_to_entity(
     Returns:
         pd.Series: A value for each person.
     """
-    return (
-        values.groupby(foreign_key).sum().reindex(primary_key).fillna(0).values
-    )
+    return values.groupby(foreign_key).sum().reindex(primary_key).fillna(0).values
 
 
-def categorical(
-    values: pd.Series, default: int, left: list, right: list
-) -> pd.Series:
+def categorical(values: pd.Series, default: int, left: list, right: list) -> pd.Series:
     """Maps a categorical input to an output using given left and right arrays.
 
     Args:
@@ -45,9 +39,7 @@ def categorical(
     return values.fillna(default).map({i: j for i, j in zip(left, right)})
 
 
-def sum_from_positive_fields(
-    table: pd.DataFrame, fields: List[str]
-) -> np.array:
+def sum_from_positive_fields(table: pd.DataFrame, fields: List[str]) -> np.array:
     """Sum from fields in table, ignoring negative values.
 
     Args:
@@ -57,9 +49,7 @@ def sum_from_positive_fields(
     Returns:
         np.array
     """
-    return np.where(
-        table[fields].sum(axis=1) > 0, table[fields].sum(axis=1), 0
-    )
+    return np.where(table[fields].sum(axis=1) > 0, table[fields].sum(axis=1), 0)
 
 
 def sum_positive_variables(variables: List[str]) -> np.array:

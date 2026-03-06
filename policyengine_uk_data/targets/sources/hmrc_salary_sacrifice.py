@@ -32,9 +32,7 @@ def get_targets() -> list[Target]:
     targets = []
 
     try:
-        r = requests.get(
-            ref, headers=HEADERS, allow_redirects=True, timeout=30
-        )
+        r = requests.get(ref, headers=HEADERS, allow_redirects=True, timeout=30)
         r.raise_for_status()
         df = pd.read_csv(io.StringIO(r.content.decode("utf-8-sig")))
 
@@ -108,14 +106,11 @@ def get_targets() -> list[Target]:
             )
 
     except Exception as e:
-        logger.error(
-            "Failed to download/parse HMRC salary sacrifice CSV: %s", e
-        )
+        logger.error("Failed to download/parse HMRC salary sacrifice CSV: %s", e)
 
     # Total salary sacrifice contributions (SPP Review 2025: £24bn base)
     _SS_CONTRIBUTIONS = {
-        y: 24e9 * _GROWTH ** max(0, y - _BASE_YEAR)
-        for y in range(_BASE_YEAR, 2030)
+        y: 24e9 * _GROWTH ** max(0, y - _BASE_YEAR) for y in range(_BASE_YEAR, 2030)
     }
     targets.append(
         Target(

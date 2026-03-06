@@ -12,9 +12,7 @@ def compute_income_band(target, ctx) -> np.ndarray:
     upper = target.upper_bound
 
     income_df = ctx.sim.calculate_dataframe(["total_income", variable])
-    in_band = (income_df.total_income >= lower) & (
-        income_df.total_income < upper
-    )
+    in_band = (income_df.total_income >= lower) & (income_df.total_income < upper)
 
     if target.is_count:
         return ctx.household_from_person((income_df[variable] > 0) * in_band)
@@ -39,9 +37,7 @@ def compute_ss_it_relief(target, ctx) -> np.ndarray:
 
     name = target.name
     if "basic" in name:
-        mask = (adj_net_income_cf > basic_thresh) & (
-            adj_net_income_cf <= higher_thresh
-        )
+        mask = (adj_net_income_cf > basic_thresh) & (adj_net_income_cf <= higher_thresh)
     elif "higher" in name:
         mask = (adj_net_income_cf > higher_thresh) & (
             adj_net_income_cf <= additional_thresh
@@ -65,14 +61,10 @@ def compute_ss_ni_relief(target, ctx) -> np.ndarray:
     name = target.name
     if "employee" in name:
         ni_base = ctx.sim.calculate("ni_employee")
-        ni_cf = ctx.counterfactual_sim.calculate(
-            "ni_employee", ctx.time_period
-        )
+        ni_cf = ctx.counterfactual_sim.calculate("ni_employee", ctx.time_period)
     else:
         ni_base = ctx.sim.calculate("ni_employer")
-        ni_cf = ctx.counterfactual_sim.calculate(
-            "ni_employer", ctx.time_period
-        )
+        ni_cf = ctx.counterfactual_sim.calculate("ni_employer", ctx.time_period)
     return ctx.household_from_person(ni_cf - ni_base)
 
 
@@ -90,9 +82,7 @@ def compute_ss_headcount(target, ctx) -> np.ndarray:
         "Variable"
     )
     row = "pension_contributions_via_salary_sacrifice"
-    price_adj = (
-        uprating.loc[row, "2023"] / uprating.loc[row, str(ctx.time_period)]
-    )
+    price_adj = uprating.loc[row, "2023"] / uprating.loc[row, str(ctx.time_period)]
     ss_base = ss * price_adj
 
     name = target.name

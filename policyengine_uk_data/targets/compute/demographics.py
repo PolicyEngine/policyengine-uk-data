@@ -33,9 +33,7 @@ def compute_regional_age(target, ctx) -> np.ndarray | None:
         return None
 
     person_match = (
-        (ctx.region.values == pe_region)
-        & (ctx.age >= lower)
-        & (ctx.age <= upper)
+        (ctx.region.values == pe_region) & (ctx.age >= lower) & (ctx.age <= upper)
     )
     return ctx.household_from_person(person_match)
 
@@ -73,7 +71,7 @@ def compute_scotland_demographics(target, ctx) -> np.ndarray | None:
     if name == "ons/scotland_households_3plus_children":
         is_child = ctx.pe_person("is_child")
         children_per_hh = ctx.household_from_person(is_child)
-        return (
-            (ctx.household_region == "SCOTLAND") & (children_per_hh >= 3)
-        ).astype(float)
+        return ((ctx.household_region == "SCOTLAND") & (children_per_hh >= 3)).astype(
+            float
+        )
     return None

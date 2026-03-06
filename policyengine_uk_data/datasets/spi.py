@@ -76,19 +76,14 @@ def create_spi(
     percent_along_age_range = np.random.rand(len(df))
     min_age = np.array([AGE_RANGES[age][0] for age in age_range])
     max_age = np.array([AGE_RANGES[age][1] for age in age_range])
-    person["age"] = (
-        min_age + (max_age - min_age) * percent_along_age_range
-    ).astype(int)
+    person["age"] = (min_age + (max_age - min_age) * percent_along_age_range).astype(
+        int
+    )
 
     person["state_pension_reported"] = df.SRP
     person["other_tax_credits"] = df.TAX_CRED
     person["miscellaneous_income"] = (
-        df.MOTHINC
-        + df.INCPBEN
-        + df.OSSBEN
-        + df.TAXTERM
-        + df.UBISJA
-        + df.OTHERINC
+        df.MOTHINC + df.INCPBEN + df.OSSBEN + df.TAXTERM + df.UBISJA + df.OTHERINC
     )
     person["gift_aid"] = df.GIFTAID + df.GIFTINV
     person["other_investment_income"] = df.OTHERINV

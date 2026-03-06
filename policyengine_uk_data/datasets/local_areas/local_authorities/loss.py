@@ -60,9 +60,7 @@ def create_local_authority_target_matrix(
 
     # ── Income targets ─────────────────────────────────────────────
     incomes = get_la_income_targets()
-    national_incomes = get_national_income_projections(
-        int(dataset.time_period)
-    )
+    national_incomes = get_national_income_projections(int(dataset.time_period))
 
     for income_variable in INCOME_VARIABLES:
         income_values = sim.calculate(income_variable).values
@@ -127,9 +125,7 @@ def create_local_authority_target_matrix(
     )
 
     hbai_net_income = sim.calculate("equiv_hbai_household_net_income").values
-    hbai_net_income_ahc = sim.calculate(
-        "equiv_hbai_household_net_income_ahc"
-    ).values
+    hbai_net_income_ahc = sim.calculate("equiv_hbai_household_net_income_ahc").values
     housing_costs = hbai_net_income - hbai_net_income_ahc
 
     matrix["ons/equiv_net_income_bhc"] = hbai_net_income
@@ -194,15 +190,11 @@ def create_local_authority_target_matrix(
     )
 
     tenure_type = sim.calculate("tenure_type").values
-    matrix["tenure/owned_outright"] = (tenure_type == "OWNED_OUTRIGHT").astype(
+    matrix["tenure/owned_outright"] = (tenure_type == "OWNED_OUTRIGHT").astype(float)
+    matrix["tenure/owned_mortgage"] = (tenure_type == "OWNED_WITH_MORTGAGE").astype(
         float
     )
-    matrix["tenure/owned_mortgage"] = (
-        tenure_type == "OWNED_WITH_MORTGAGE"
-    ).astype(float)
-    matrix["tenure/private_rent"] = (tenure_type == "RENT_PRIVATELY").astype(
-        float
-    )
+    matrix["tenure/private_rent"] = (tenure_type == "RENT_PRIVATELY").astype(float)
     matrix["tenure/social_rent"] = (
         (tenure_type == "RENT_FROM_COUNCIL") | (tenure_type == "RENT_FROM_HA")
     ).astype(float)
@@ -219,9 +211,7 @@ def create_local_authority_target_matrix(
         ("social_rent", "social_rent_pct"),
     ]:
         targets = tenure_merged[pct_col] / 100 * tenure_merged["households"]
-        national = (
-            original_weights * matrix[f"tenure/{tenure_key}"].values
-        ).sum()
+        national = (original_weights * matrix[f"tenure/{tenure_key}"].values).sum()
         y[f"tenure/{tenure_key}"] = np.where(
             has_tenure, targets.values, national * la_household_share
         )

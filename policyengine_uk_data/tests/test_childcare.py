@@ -41,17 +41,11 @@ def test_childcare(baseline, enhanced_frs):
     # Calculate actual spending values
     spending = {
         "tfc": baseline.calculate("tax_free_childcare", 2024).sum() / 1e9,
-        "extended": baseline.calculate(
-            "extended_childcare_entitlement", 2024
-        ).sum()
+        "extended": baseline.calculate("extended_childcare_entitlement", 2024).sum()
         / 1e9,
-        "targeted": baseline.calculate(
-            "targeted_childcare_entitlement", 2024
-        ).sum()
+        "targeted": baseline.calculate("targeted_childcare_entitlement", 2024).sum()
         / 1e9,
-        "universal": baseline.calculate(
-            "universal_childcare_entitlement", 2024
-        ).sum()
+        "universal": baseline.calculate("universal_childcare_entitlement", 2024).sum()
         / 1e9,
     }
 
@@ -82,14 +76,10 @@ def test_childcare(baseline, enhanced_frs):
     for key, rate in take_up_rates.items():
         print(f"{key.upper():<12} {rate:.3f}")
 
-    print(
-        f"\nEXTENDED HOURS: Mean = {hours_mean:.2f}, Std Dev = {hours_std:.2f}"
-    )
+    print(f"\nEXTENDED HOURS: Mean = {hours_mean:.2f}, Std Dev = {hours_std:.2f}")
 
     print("\nSPENDING (£ billion):")
-    print(
-        f"{'PROGRAM':<12} {'ACTUAL':<10} {'TARGET':<10} {'RATIO':<10} {'PASS?':<10}"
-    )
+    print(f"{'PROGRAM':<12} {'ACTUAL':<10} {'TARGET':<10} {'RATIO':<10} {'PASS?':<10}")
     print("-" * 55)
 
     failed_any = False
@@ -106,9 +96,7 @@ def test_childcare(baseline, enhanced_frs):
             failed_any = True
 
     print("\nCASELOAD (thousands):")
-    print(
-        f"{'PROGRAM':<12} {'ACTUAL':<10} {'TARGET':<10} {'RATIO':<10} {'PASS?':<10}"
-    )
+    print(f"{'PROGRAM':<12} {'ACTUAL':<10} {'TARGET':<10} {'RATIO':<10} {'PASS?':<10}")
     print("-" * 55)
 
     # Test caseload for each program

@@ -213,16 +213,14 @@ def impute_has_fuel_to_lcfs(household: pd.DataFrame) -> pd.DataFrame:
 
     output_df = model.predict(input_df)
     # Clip to [0, 1] as it's a probability
-    household["has_fuel_consumption"] = output_df[
-        "has_fuel_consumption"
-    ].values.clip(0, 1)
+    household["has_fuel_consumption"] = output_df["has_fuel_consumption"].values.clip(
+        0, 1
+    )
 
     return household
 
 
-def generate_lcfs_table(
-    lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame
-):
+def generate_lcfs_table(lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame):
     """
     Generate LCFS training table for consumption imputation.
 
@@ -247,14 +245,10 @@ def generate_lcfs_table(
     # This bridges WAS (has vehicles) to LCFS (has fuel spending)
     household = impute_has_fuel_to_lcfs(household)
 
-    return household[
-        PREDICTOR_VARIABLES + IMPUTATIONS + ["household_weight"]
-    ].dropna()
+    return household[PREDICTOR_VARIABLES + IMPUTATIONS + ["household_weight"]].dropna()
 
 
-def uprate_lcfs_table(
-    household: pd.DataFrame, time_period: str
-) -> pd.DataFrame:
+def uprate_lcfs_table(household: pd.DataFrame, time_period: str) -> pd.DataFrame:
     from policyengine_uk.system import system
 
     start_period = 2021
@@ -262,9 +256,7 @@ def uprate_lcfs_table(
     household["petrol_spending"] *= fuel_uprating
     household["diesel_spending"] *= fuel_uprating
 
-    cpi = (
-        system.parameters.gov.economic_assumptions.indices.obr.consumer_price_index
-    )
+    cpi = system.parameters.gov.economic_assumptions.indices.obr.consumer_price_index
     cpi_uprating = cpi(time_period) / cpi(start_period)
 
     for variable in IMPUTATIONS:
@@ -300,9 +292,7 @@ def save_imputation_models():
 def create_consumption_model(overwrite_existing: bool = False):
     from policyengine_uk_data.utils.qrf import QRF
 
-    if (
-        STORAGE_FOLDER / "consumption.pkl"
-    ).exists() and not overwrite_existing:
+    if (STORAGE_FOLDER / "consumption.pkl").exists() and not overwrite_existing:
         return QRF(file_path=STORAGE_FOLDER / "consumption.pkl")
     return save_imputation_models()
 

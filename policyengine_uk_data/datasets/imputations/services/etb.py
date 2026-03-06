@@ -48,9 +48,7 @@ def create_public_services_model(overwrite_existing: bool = False) -> None:
         overwrite_existing: Whether to overwrite an existing model file.
     """
     # Check if model already exists and we're not overwriting
-    if (
-        STORAGE_FOLDER / "public_services.pkl"
-    ).exists() and not overwrite_existing:
+    if (STORAGE_FOLDER / "public_services.pkl").exists() and not overwrite_existing:
         return
 
     etb_path = STORAGE_FOLDER / "etb_1977_21" / "householdv2_1977-2021.tab"
@@ -161,9 +159,7 @@ def create_efrs_input_dataset(dataset: UKSingleYearDataset) -> pd.DataFrame:
 
     df["count_primary_education"] = education == "PRIMARY"
     df["count_secondary_education"] = education == "LOWER_SECONDARY"
-    df["count_further_education"] = education.isin(
-        ["UPPER_SECONDARY", "TERTIARY"]
-    )
+    df["count_further_education"] = education.isin(["UPPER_SECONDARY", "TERTIARY"])
     df["hbai_household_net_income"] = (
         df["hbai_household_net_income"] / df["household_count_people"]
     )
