@@ -17,16 +17,8 @@ from policyengine_uk_data.targets.sources._common import STORAGE
 
 logger = logging.getLogger(__name__)
 
-_CONST_DIR = (
-    STORAGE.parent / "datasets" / "local_areas" / "constituencies" / "targets"
-)
-_LA_DIR = (
-    STORAGE.parent
-    / "datasets"
-    / "local_areas"
-    / "local_authorities"
-    / "targets"
-)
+_CONST_DIR = STORAGE.parent / "datasets" / "local_areas" / "constituencies" / "targets"
+_LA_DIR = STORAGE.parent / "datasets" / "local_areas" / "local_authorities" / "targets"
 
 _REF = (
     "https://www.ons.gov.uk/peoplepopulationandcommunity/"

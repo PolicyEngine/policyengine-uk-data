@@ -131,33 +131,23 @@ def fill_missing_percentiles(row):
         # If this percentile is missing in the row
         if pd.isna(row[col]):
             # Find the closest lower and upper known percentiles
-            lower = max(
-                [p for p in known_percentiles if p < percentile], default=None
-            )
-            upper = min(
-                [p for p in known_percentiles if p > percentile], default=None
-            )
+            lower = max([p for p in known_percentiles if p < percentile], default=None)
+            upper = min([p for p in known_percentiles if p > percentile], default=None)
 
             # If both lower and upper bounds exist, interpolate
             if lower is not None and upper is not None:
                 # Ratio between the target percentile and the lower bound
-                lower_ratio = (
-                    reference_values[percentile] / reference_values[lower]
-                )
+                lower_ratio = reference_values[percentile] / reference_values[lower]
                 row[col] = row[f"{lower} percentile"] * lower_ratio
 
             # If only the lower bound exists, extrapolate upwards
             elif lower is not None:
-                lower_ratio = (
-                    reference_values[percentile] / reference_values[lower]
-                )
+                lower_ratio = reference_values[percentile] / reference_values[lower]
                 row[col] = row[f"{lower} percentile"] * lower_ratio
 
             # If only the upper bound exists, extrapolate downwards
             elif upper is not None:
-                upper_ratio = (
-                    reference_values[percentile] / reference_values[upper]
-                )
+                upper_ratio = reference_values[percentile] / reference_values[upper]
                 row[col] = row[f"{upper} percentile"] * upper_ratio
 
     return row
@@ -280,9 +270,9 @@ def calculate_band_population(row):
             income_bands, columns=["income_lower_bound", "income_upper_bound"]
         )
         band_df["population_count"] = [0] * len(income_bands)
-        band_df["local authority: district / unitary (as of April 2023)"] = (
-            row["local authority: district / unitary (as of April 2023)"]
-        )
+        band_df["local authority: district / unitary (as of April 2023)"] = row[
+            "local authority: district / unitary (as of April 2023)"
+        ]
         band_df["LA_code"] = row["LA_code"]
         return band_df
 
@@ -311,9 +301,7 @@ def calculate_band_population(row):
         # Ensure lower_percentile is less than upper_percentile
         if lower_percentile < upper_percentile:
             # Integrate to get proportion in this income band
-            proportion_in_band, _ = quad(
-                spline, lower_percentile, upper_percentile
-            )
+            proportion_in_band, _ = quad(spline, lower_percentile, upper_percentile)
             proportion_in_band = proportion_in_band / spline(
                 filtered_percentiles[-1]
             )  # Normalize by max spline value
@@ -435,15 +423,11 @@ result_df_copy = result_df_copy.dropna(subset=["LA_code"])
 import numpy as np
 
 
-def find_and_replace_zero_populations(
-    result_df_copy, total_income
-) -> pd.DataFrame:
+def find_and_replace_zero_populations(result_df_copy, total_income) -> pd.DataFrame:
     # Step 1: Find local authorities with all zero populations
     LA_with_zero_population = (
         result_df_copy.groupby("LA_code")
-        .filter(lambda group: (group["population_count"] == 0).all())[
-            "LA_code"
-        ]
+        .filter(lambda group: (group["population_count"] == 0).all())["LA_code"]
         .unique()
     )
 
@@ -462,26 +446,18 @@ def find_and_replace_zero_populations(
                 )
                 continue
 
-            current_total_income = current_LA_data[
-                "total_income_count"
-            ].values[0]
+            current_total_income = current_LA_data["total_income_count"].values[0]
 
             # Find the nearest local authority by total_income_count
             # Exclude both the current local authority and other zero population local authorities
-            other_LA = total_income[
-                ~total_income["code"].isin(LA_with_zero_population)
-            ]
+            other_LA = total_income[~total_income["code"].isin(LA_with_zero_population)]
 
             if other_LA.empty:
-                print(
-                    f"Warning: No valid local authorities found to copy from"
-                )
+                print(f"Warning: No valid local authorities found to copy from")
                 continue
 
             # Calculate absolute differences
-            differences = np.abs(
-                other_LA["total_income_count"] - current_total_income
-            )
+            differences = np.abs(other_LA["total_income_count"] - current_total_income)
 
             # Get the index of the minimum difference
             min_diff_idx = differences.values.argmin()

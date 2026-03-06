@@ -70,9 +70,6 @@ filterwarnings = [
     "ignore::PendingDeprecationWarning",
 ]
 
-[tool.ruff]
-line-length = 79
-
 [tool.towncrier]
 package = "policyengine_uk_data"
 directory = "changelog.d"

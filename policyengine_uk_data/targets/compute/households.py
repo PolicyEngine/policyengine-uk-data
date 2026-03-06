@@ -15,18 +15,18 @@ def compute_household_type(target, ctx) -> np.ndarray | None:
         return ctx.household_from_family(ft == value) > 0
 
     if name == "lone_households_under_65":
-        return (
-            ft_hh("SINGLE") & (children_per_hh == 0) & (age_hh_head < 65)
-        ).astype(float)
+        return (ft_hh("SINGLE") & (children_per_hh == 0) & (age_hh_head < 65)).astype(
+            float
+        )
     if name == "lone_households_over_65":
-        return (
-            ft_hh("SINGLE") & (children_per_hh == 0) & (age_hh_head >= 65)
-        ).astype(float)
+        return (ft_hh("SINGLE") & (children_per_hh == 0) & (age_hh_head >= 65)).astype(
+            float
+        )
     if name == "unrelated_adult_households":
         people_per_hh = ctx.household_from_person(np.ones_like(is_child))
-        return (
-            ft_hh("SINGLE") & (children_per_hh == 0) & (people_per_hh > 1)
-        ).astype(float)
+        return (ft_hh("SINGLE") & (children_per_hh == 0) & (people_per_hh > 1)).astype(
+            float
+        )
     if name == "couple_no_children_households":
         return ft_hh("COUPLE_NO_CHILDREN").astype(float)
     if name == "couple_under_3_children_households":
@@ -36,14 +36,10 @@ def compute_household_type(target, ctx) -> np.ndarray | None:
             & (children_per_hh <= 2)
         ).astype(float)
     if name == "couple_3_plus_children_households":
-        return (ft_hh("COUPLE_WITH_CHILDREN") & (children_per_hh >= 3)).astype(
-            float
-        )
+        return (ft_hh("COUPLE_WITH_CHILDREN") & (children_per_hh >= 3)).astype(float)
     if name == "couple_non_dependent_children_only_households":
         people_per_hh = ctx.household_from_person(np.ones_like(is_child))
-        return (ft_hh("COUPLE_NO_CHILDREN") & (people_per_hh > 2)).astype(
-            float
-        )
+        return (ft_hh("COUPLE_NO_CHILDREN") & (people_per_hh > 2)).astype(float)
     if name == "lone_parent_dependent_children_households":
         return (ft_hh("LONE_PARENT") & (children_per_hh > 0)).astype(float)
     if name == "lone_parent_non_dependent_children_households":

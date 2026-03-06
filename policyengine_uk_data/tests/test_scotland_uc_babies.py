@@ -25,15 +25,11 @@ def test_scotland_uc_households_child_under_1(baseline):
     ).values
 
     # Check if household has child under 1
-    is_child = baseline.calculate(
-        "is_child", map_to="person", period=2025
-    ).values
+    is_child = baseline.calculate("is_child", map_to="person", period=2025).values
     age = baseline.calculate("age", map_to="person", period=2025).values
 
     child_under_1 = is_child & (age < 1)
-    has_child_under_1 = (
-        baseline.map_result(child_under_1, "person", "household") > 0
-    )
+    has_child_under_1 = baseline.map_result(child_under_1, "person", "household") > 0
 
     scotland_uc_child_under_1 = (
         (region.values == "SCOTLAND") & (uc > 0) & has_child_under_1

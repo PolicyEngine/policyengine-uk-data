@@ -77,9 +77,7 @@ def test_all_reforms_have_required_fields():
 
     for i, reform in enumerate(reforms_data):
         for field in required_fields:
-            assert field in reform, (
-                f"Reform {i} missing required field: {field}"
-            )
+            assert field in reform, f"Reform {i} missing required field: {field}"
 
         assert isinstance(reform["parameters"], dict), (
             f"Reform {i} parameters must be a dictionary"

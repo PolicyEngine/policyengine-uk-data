@@ -154,9 +154,7 @@ def get_targets() -> list[Target]:
 
         for idx, row in merged.iterrows():
             lower = int(row["lower_bound"])
-            upper = (
-                _BAND_UPPER[idx] if idx < len(_BAND_UPPER) else float("inf")
-            )
+            upper = _BAND_UPPER[idx] if idx < len(_BAND_UPPER) else float("inf")
             band_label = f"{lower:_}_to_{upper:_}"
 
             for variable in INCOME_VARIABLES:
@@ -182,9 +180,7 @@ def get_targets() -> list[Target]:
                 if count_col in row.index and row[count_col] > 0:
                     targets.append(
                         Target(
-                            name=(
-                                f"hmrc/{variable}_count_income_band_{band_label}"
-                            ),
+                            name=(f"hmrc/{variable}_count_income_band_{band_label}"),
                             variable=variable,
                             source="hmrc_spi",
                             unit=Unit.COUNT,

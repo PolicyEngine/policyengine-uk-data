@@ -53,13 +53,10 @@ def calibrate_local_areas(
     areas_per_household = r.sum(
         axis=0
     )  # number of areas each household can contribute to
-    areas_per_household = np.maximum(
-        areas_per_household, 1
-    )  # avoid division by zero
+    areas_per_household = np.maximum(areas_per_household, 1)  # avoid division by zero
     original_weights = np.log(
         dataset.household.household_weight.values / areas_per_household
-        + np.random.random(len(dataset.household.household_weight.values))
-        * 0.01
+        + np.random.random(len(dataset.household.household_weight.values)) * 0.01
     )
     weights = torch.tensor(
         np.ones((area_count, len(original_weights))) * original_weights,
@@ -85,9 +82,7 @@ def calibrate_local_areas(
         matrix.values if hasattr(matrix, "values") else matrix,
         dtype=torch.float32,
     )
-    y = torch.tensor(
-        y.values if hasattr(y, "values") else y, dtype=torch.float32
-    )
+    y = torch.tensor(y.values if hasattr(y, "values") else y, dtype=torch.float32)
     matrix_national = torch.tensor(
         m_national.values if hasattr(m_national, "values") else m_national,
         dtype=torch.float32,
@@ -135,9 +130,7 @@ def calibrate_local_areas(
 
         if local:
             pred_local = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
-            e_local = torch.sum(
-                torch.abs((pred_local / (1 + y) - 1)) < t
-            ).item()
+            e_local = torch.sum(torch.abs((pred_local / (1 + y) - 1)) < t).item()
             c_local = pred_local.shape[0] * pred_local.shape[1]
             numerator += e_local
             denominator += c_local
@@ -183,9 +176,7 @@ def calibrate_local_areas(
                 optimizer.step()
 
                 local_close = pct_close(weights_, local=True, national=False)
-                national_close = pct_close(
-                    weights_, local=False, national=True
-                )
+                national_close = pct_close(weights_, local=False, national=True)
 
                 if dropout_targets:
                     validation_loss = loss(weights_, validation=True)
@@ -213,9 +204,7 @@ def calibrate_local_areas(
                             excluded_training_targets,
                         )
                         performance_step["epoch"] = epoch
-                        performance_step["loss"] = (
-                            performance_step.rel_abs_error**2
-                        )
+                        performance_step["loss"] = performance_step.rel_abs_error**2
                         performance_step["target_name"] = [
                             f"{area}/{metric}"
                             for area, metric in zip(
@@ -231,9 +220,7 @@ def calibrate_local_areas(
                     with h5py.File(STORAGE_FOLDER / weight_file, "w") as f:
                         f.create_dataset(dataset_key, data=final_weights)
 
-                    dataset.household.household_weight = final_weights.sum(
-                        axis=0
-                    )
+                    dataset.household.household_weight = final_weights.sum(axis=0)
     else:
         for epoch in range(epochs):
             optimizer.zero_grad()

@@ -11,9 +11,7 @@ from pathlib import Path
 PARAMETERS_DIR = Path(__file__).parent
 
 
-def load_parameter(
-    category: str, variable_name: str, year: int = 2015
-) -> float:
+def load_parameter(category: str, variable_name: str, year: int = 2015) -> float:
     """Load parameter from YAML files in a specific category.
 
     Args:
@@ -48,9 +46,7 @@ def load_parameter(
             break
 
     if applicable_value is None:
-        raise ValueError(
-            f"No value found for {category}/{variable_name} in {year}"
-        )
+        raise ValueError(f"No value found for {category}/{variable_name} in {year}")
 
     return applicable_value
 

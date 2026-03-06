@@ -74,23 +74,17 @@ def create_frs(
         if "benunit" in df.columns:
             # In the tables, benunit is the index of the benefit unit *within* the household.
             df.rename(columns={"benunit": "benunit_id"}, inplace=True)
-            df["benunit_id"] = (
-                df["household_id"] * 1e2 + df["benunit_id"]
-            ).astype(int)
+            df["benunit_id"] = (df["household_id"] * 1e2 + df["benunit_id"]).astype(int)
 
         if "person" in df.columns:
             df.rename(columns={"person": "person_id"}, inplace=True)
-            df["person_id"] = (
-                df["household_id"] * 1e3 + df["person_id"]
-            ).astype(int)
+            df["person_id"] = (df["household_id"] * 1e3 + df["person_id"]).astype(int)
 
         frs[table_name] = df
 
     # Combine adult and child tables for convenience
 
-    frs["person"] = (
-        pd.concat([frs["adult"], frs["child"]]).sort_index().fillna(0)
-    )
+    frs["person"] = pd.concat([frs["adult"], frs["child"]]).sort_index().fillna(0)
 
     person = frs["person"]
     benunit = frs["benunit"]
@@ -165,12 +159,7 @@ def create_frs(
         elif (
             typeed2_val in (2, 4)
             or (typeed2_val in (3, 8) and age_val < 11)
-            or (
-                typeed2_val == 0
-                and fted_val == 1
-                and age_val > 5
-                and age_val < 11
-            )
+            or (typeed2_val == 0 and fted_val == 1 and age_val > 5 and age_val < 11)
         ):
             return "PRIMARY"
         # In lower secondary
@@ -191,19 +180,14 @@ def create_frs(
         elif typeed2_val in (7, 8) and age_val >= 19:
             return "POST_SECONDARY"
         # In tertiary
-        elif typeed2_val == 9 or (
-            typeed2_val == 0 and fted_val == 1 and age_val >= 19
-        ):
+        elif typeed2_val == 9 or (typeed2_val == 0 and fted_val == 1 and age_val >= 19):
             return "TERTIARY"
         else:
             return "NOT_IN_EDUCATION"
 
     # Apply the function to determine education level
     pe_person["current_education"] = pd.Series(
-        [
-            determine_education_level(f, t, a)
-            for f, t, a in zip(fted, typeed2, age)
-        ],
+        [determine_education_level(f, t, a) for f, t, a in zip(fted, typeed2, age)],
         index=pe_person.index,
     )
 
@@ -326,9 +310,7 @@ def create_frs(
     ctannual = household.ctannual[CT_valid]
 
     # Build the table
-    ct_mean = ctannual.groupby(
-        [region, band, single_person], dropna=False
-    ).mean()
+    ct_mean = ctannual.groupby([region, band, single_person], dropna=False).mean()
     ct_mean = ct_mean.replace(-1, ct_mean.mean())
 
     # For every household consult the table to find the imputed
@@ -357,9 +339,7 @@ def create_frs(
     BANDS = ["A", "B", "C", "D", "E", "F", "G", "H", "I"]
     # Band 1 is the most common
     pe_household["council_tax_band"] = (
-        categorical(household.ctband, 1, range(1, 10), BANDS)
-        .fillna("D")
-        .values
+        categorical(household.ctband, 1, range(1, 10), BANDS).fillna("D").values
     )
     # Domestic rates variables are all weeklyised, unlike Council Tax variables (despite the variable name suggesting otherwise)
     if year < 2021:
@@ -384,9 +364,7 @@ def create_frs(
 
     WEEKS_IN_YEAR = 365.25 / 7
 
-    pe_person["employment_income"] = (
-        np.maximum(0, person.inearns) * WEEKS_IN_YEAR
-    )
+    pe_person["employment_income"] = np.maximum(0, person.inearns) * WEEKS_IN_YEAR
 
     pension_payment = sum_to_entity(
         pension.penpay * (pension.penpay > 0),
@@ -400,10 +378,7 @@ def create_frs(
     )
     pension_deductions_removed = sum_to_entity(
         pension.poamt
-        * (
-            ((pension.poinc == 2) | (pension.penoth == 1))
-            & (pension.poamt > 0)
-        ),
+        * (((pension.poinc == 2) | (pension.penoth == 1)) & (pension.poamt > 0)),
         pension.person_id,
         person.person_id,
     )
@@ -412,9 +387,7 @@ def create_frs(
         pension_payment + pension_tax_paid + pension_deductions_removed
     ) * WEEKS_IN_YEAR
 
-    pe_person["self_employment_income"] = (
-        np.maximum(0, person.seincam2) * WEEKS_IN_YEAR
-    )
+    pe_person["self_employment_income"] = np.maximum(0, person.seincam2) * WEEKS_IN_YEAR
 
     INVERTED_BASIC_RATE = 1.25
 
@@ -429,10 +402,7 @@ def create_frs(
     )
     taxable_savings_interest = (
         sum_to_entity(
-            (
-                account.accint
-                * np.where(account.acctax == 1, INVERTED_BASIC_RATE, 1)
-            )
+            (account.accint * np.where(account.acctax == 1, INVERTED_BASIC_RATE, 1))
             * (account.account.isin((1, 3, 5, 27, 28))),
             account.person_id,
             person.person_id,
@@ -446,10 +416,7 @@ def create_frs(
     pe_person["dividend_income"] = np.maximum(
         0,
         sum_to_entity(
-            (
-                account.accint
-                * np.where(account.invtax == 1, INVERTED_BASIC_RATE, 1)
-            )
+            (account.accint * np.where(account.invtax == 1, INVERTED_BASIC_RATE, 1))
             * (
                 ((account.account == 6) & (account.invtax == 1))  # GGES
                 | account.account.isin((7, 8))  # Stocks/shares/UITs
@@ -474,16 +441,14 @@ def create_frs(
     pe_person["property_income"] = (
         np.maximum(
             0,
-            is_head * persons_household_property_income
-            + person.cvpay
-            + person.royyr1,
+            is_head * persons_household_property_income + person.cvpay + person.royyr1,
         )
         * WEEKS_IN_YEAR
     )
     maintenance_to_self = np.maximum(
-        pd.Series(
-            np.where(person.mntus1 == 2, person.mntusam1, person.mntamt1)
-        ).fillna(0),
+        pd.Series(np.where(person.mntus1 == 2, person.mntusam1, person.mntamt1)).fillna(
+            0
+        ),
         0,
     )
     maintenance_from_dwp = person.mntamt2
@@ -519,8 +484,7 @@ def create_frs(
     ]
 
     pe_person["private_transfer_income"] = (
-        sum_from_positive_fields(person, PRIVATE_TRANSFER_INCOME_FIELDS)
-        * WEEKS_IN_YEAR
+        sum_from_positive_fields(person, PRIVATE_TRANSFER_INCOME_FIELDS) * WEEKS_IN_YEAR
     )
 
     pe_person["lump_sum_income"] = person.redamt
@@ -561,9 +525,7 @@ def create_frs(
 
     pe_person["jsa_contrib_reported"] = (
         sum_to_entity(
-            benefits.benamt
-            * (benefits.var2.isin((1, 3)))
-            * (benefits.benefit == 14),
+            benefits.benamt * (benefits.var2.isin((1, 3))) * (benefits.benefit == 14),
             benefits.person_id,
             person.person_id,
         )
@@ -571,9 +533,7 @@ def create_frs(
     )
     pe_person["jsa_income_reported"] = (
         sum_to_entity(
-            benefits.benamt
-            * (benefits.var2.isin((2, 4)))
-            * (benefits.benefit == 14),
+            benefits.benamt * (benefits.var2.isin((2, 4))) * (benefits.benefit == 14),
             benefits.person_id,
             person.person_id,
         )
@@ -581,9 +541,7 @@ def create_frs(
     )
     pe_person["esa_contrib_reported"] = (
         sum_to_entity(
-            benefits.benamt
-            * (benefits.var2.isin((1, 3)))
-            * (benefits.benefit == 16),
+            benefits.benamt * (benefits.var2.isin((1, 3))) * (benefits.benefit == 16),
             benefits.person_id,
             person.person_id,
         )
@@ -591,9 +549,7 @@ def create_frs(
     )
     pe_person["esa_income_reported"] = (
         sum_to_entity(
-            benefits.benamt
-            * (benefits.var2.isin((2, 4)))
-            * (benefits.benefit == 16),
+            benefits.benamt * (benefits.var2.isin((2, 4))) * (benefits.benefit == 16),
             benefits.person_id,
             person.person_id,
         )
@@ -647,9 +603,7 @@ def create_frs(
 
     pe_person["maintenance_expenses"] = (
         pd.Series(
-            np.where(
-                maintenance.mrus == 2, maintenance.mruamt, maintenance.mramt
-            )
+            np.where(maintenance.mrus == 2, maintenance.mruamt, maintenance.mramt)
         )
         .groupby(maintenance.person_id)
         .sum()
@@ -662,9 +616,7 @@ def create_frs(
     pe_household["mortgage_interest_repayment"] = (
         household.mortint.fillna(0).values * WEEKS_IN_YEAR
     )
-    mortgage_capital = np.where(
-        mortgage.rmort == 1, mortgage.rmamt, mortgage.borramt
-    )
+    mortgage_capital = np.where(mortgage.rmort == 1, mortgage.rmamt, mortgage.borramt)
     mortgage_capital_repayment = sum_to_entity(
         mortgage_capital / mortgage.mortend,
         mortgage.household_id,
@@ -674,9 +626,7 @@ def create_frs(
 
     pe_person["childcare_expenses"] = (
         sum_to_entity(
-            childcare.chamt
-            * (childcare.cost == 1)
-            * (childcare.registrd == 1),
+            childcare.chamt * (childcare.cost == 1) * (childcare.registrd == 1),
             childcare.person_id,
             person.person_id,
         )
@@ -721,10 +671,7 @@ def create_frs(
     # respondents who were not asked the question (imputation candidates)
     if "salsac_raw" in job.columns:
         salsac_numeric = (
-            job["salsac_raw"]
-            .map({"1": 1, "2": 0, " ": -1})
-            .fillna(-1)
-            .astype(int)
+            job["salsac_raw"].map({"1": 1, "2": 0, " ": -1}).fillna(-1).astype(int)
         )
         # Aggregate to person level: take max (any job with SS = person has SS)
         pe_person["salary_sacrifice_reported"] = np.clip(
@@ -795,17 +742,13 @@ def create_frs(
     from policyengine_uk import Microsimulation
 
     sim = Microsimulation(dataset=dataset)
-    region = sim.populations["benunit"].household(
-        "region", dataset.time_period
-    )
+    region = sim.populations["benunit"].household("region", dataset.time_period)
     lha_category = sim.calculate("LHA_category", year)
 
     brma = np.empty(len(region), dtype=object)
 
     # Sample from a random BRMA in the region, weighted by the number of observations in each BRMA
-    lha_list_of_rents = pd.read_csv(
-        STORAGE_FOLDER / "lha_list_of_rents.csv.gz"
-    )
+    lha_list_of_rents = pd.read_csv(STORAGE_FOLDER / "lha_list_of_rents.csv.gz")
     lha_list_of_rents = lha_list_of_rents.copy()
 
     for possible_region in lha_list_of_rents.region.unique():
@@ -813,9 +756,7 @@ def create_frs(
             lor_mask = (lha_list_of_rents.region == possible_region) & (
                 lha_list_of_rents.lha_category == possible_lha_category
             )
-            mask = (region == possible_region) & (
-                lha_category == possible_lha_category
-            )
+            mask = (region == possible_region) & (lha_category == possible_lha_category)
             brma[mask] = lha_list_of_rents[lor_mask].brma.sample(
                 n=len(region[mask]), replace=True
             )
@@ -831,9 +772,7 @@ def create_frs(
         }
     )
 
-    df = df.groupby("household_id").brma.aggregate(
-        lambda x: x.sample(n=1).iloc[0]
-    )
+    df = df.groupby("household_id").brma.aggregate(lambda x: x.sample(n=1).iloc[0])
     brmas = df[sim.calculate("household_id")].values
 
     pe_household["brma"] = brmas
@@ -862,8 +801,7 @@ def create_frs(
     )
     paragraph_4 = (
         pe_person.pip_dl_reported
-        >= benefit.pip.daily_living.enhanced * WEEKS_IN_YEAR
-        - THRESHOLD_SAFETY_GAP
+        >= benefit.pip.daily_living.enhanced * WEEKS_IN_YEAR - THRESHOLD_SAFETY_GAP
     )
     paragraph_5 = pe_person.afcs_reported > 0
     pe_person["is_severely_disabled_for_benefits"] = (
@@ -882,9 +820,7 @@ def create_frs(
     pension_credit_rate = load_take_up_rate("pension_credit", year)
     universal_credit_rate = load_take_up_rate("universal_credit", year)
     marriage_allowance_rate = load_take_up_rate("marriage_allowance", year)
-    child_benefit_opts_out_rate = load_take_up_rate(
-        "child_benefit_opts_out_rate", year
-    )
+    child_benefit_opts_out_rate = load_take_up_rate("child_benefit_opts_out_rate", year)
     tfc_rate = load_take_up_rate("tax_free_childcare", year)
     extended_childcare_rate = load_take_up_rate("extended_childcare", year)
     universal_childcare_rate = load_take_up_rate("universal_childcare", year)
@@ -911,9 +847,7 @@ def create_frs(
     pe_benunit["would_claim_uc"] = (
         generator.random(len(pe_benunit)) < universal_credit_rate
     )
-    pe_benunit["would_claim_tfc"] = (
-        generator.random(len(pe_benunit)) < tfc_rate
-    )
+    pe_benunit["would_claim_tfc"] = generator.random(len(pe_benunit)) < tfc_rate
     pe_benunit["would_claim_extended_childcare"] = (
         generator.random(len(pe_benunit)) < extended_childcare_rate
     )
@@ -937,12 +871,8 @@ def create_frs(
 
     # Generate other stochastic variables using rates from parameter files
     tv_ownership_rate = load_parameter("stochastic", "tv_ownership_rate", year)
-    tv_evasion_rate = load_parameter(
-        "stochastic", "tv_licence_evasion_rate", year
-    )
-    first_time_buyer_rate = load_parameter(
-        "stochastic", "first_time_buyer_rate", year
-    )
+    tv_evasion_rate = load_parameter("stochastic", "tv_licence_evasion_rate", year)
+    first_time_buyer_rate = load_parameter("stochastic", "first_time_buyer_rate", year)
 
     # Household-level: TV ownership
     pe_household["household_owns_tv"] = (
@@ -963,9 +893,7 @@ def create_frs(
     pe_person["higher_earner_tie_break"] = generator.random(len(pe_person))
 
     # Person-level: Private school attendance random draw
-    pe_person["attends_private_school_random_draw"] = generator.random(
-        len(pe_person)
-    )
+    pe_person["attends_private_school_random_draw"] = generator.random(len(pe_person))
 
     # Generate extended childcare hours usage values with mean 15.019 and sd
     # 4.972
@@ -974,9 +902,7 @@ def create_frs(
     extended_hours_values = np.clip(extended_hours_values, 0, 30)
 
     # Add the maximum extended childcare hours usage
-    pe_benunit["maximum_extended_childcare_hours_usage"] = (
-        extended_hours_values
-    )
+    pe_benunit["maximum_extended_childcare_hours_usage"] = extended_hours_values
 
     # Add marital status at the benefit unit level
 

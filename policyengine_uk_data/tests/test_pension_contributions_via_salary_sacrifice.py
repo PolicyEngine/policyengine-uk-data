@@ -11,9 +11,7 @@ def test_pension_contributions_via_salary_sacrifice(baseline):
 
     # Should have some non-zero values (not everyone uses salary sacrifice, but some do)
     total = values.sum()
-    assert total > 0, (
-        f"Expected some salary sacrifice contributions, got {total}"
-    )
+    assert total > 0, f"Expected some salary sacrifice contributions, got {total}"
 
     # Reasonableness check: total should be less than total employment income
     # This is a very loose check just to catch major issues

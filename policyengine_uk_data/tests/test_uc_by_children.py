@@ -35,9 +35,7 @@ def test_uc_households_by_children(baseline, bucket, target):
     uc = baseline.calculate("universal_credit", period=2025).values
     on_uc = baseline.map_result(uc > 0, "benunit", "household") > 0
 
-    is_child = baseline.calculate(
-        "is_child", map_to="person", period=2025
-    ).values
+    is_child = baseline.calculate("is_child", map_to="person", period=2025).values
     children_per_hh = baseline.map_result(is_child, "person", "household")
 
     if bucket == "0_children":
@@ -49,9 +47,7 @@ def test_uc_households_by_children(baseline, bucket, target):
     else:  # 3plus_children
         match = on_uc & (children_per_hh >= 3)
 
-    household_weight = baseline.calculate(
-        "household_weight", period=2025
-    ).values
+    household_weight = baseline.calculate("household_weight", period=2025).values
     actual = (household_weight * match).sum()
 
     assert abs(actual / target - 1) < TOLERANCE, (
