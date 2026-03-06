@@ -161,9 +161,7 @@ class _SimContext:
         """Calculate variable mapped to household level."""
         key = ("pe", variable)
         if key not in self._cache:
-            self._cache[key] = self.sim.calculate(
-                variable, map_to="household"
-            ).values
+            self._cache[key] = self.sim.calculate(variable, map_to="household").values
         return self._cache[key]
 
     def pe_person(self, variable: str):
@@ -194,9 +192,7 @@ class _SimContext:
     @property
     def region(self):
         if "region" not in self._cache:
-            self._cache["region"] = self.sim.calculate(
-                "region", map_to="person"
-            )
+            self._cache["region"] = self.sim.calculate("region", map_to="person")
         return self._cache["region"]
 
     @property
@@ -225,9 +221,7 @@ class _SimContext:
         if "counterfactual_sim" not in self._cache:
             from policyengine_uk import Microsimulation
 
-            ss = self.sim.calculate(
-                "pension_contributions_via_salary_sacrifice"
-            )
+            ss = self.sim.calculate("pension_contributions_via_salary_sacrifice")
             emp = self.sim.calculate("employment_income")
             cf_sim = Microsimulation(dataset=self.dataset, reform=self.reform)
             cf_sim.set_input(
@@ -247,9 +241,7 @@ class _SimContext:
 # ── Column computation dispatch ──────────────────────────────────────
 
 
-def _compute_column(
-    target: Target, ctx: _SimContext, year: int
-) -> np.ndarray | None:
+def _compute_column(target: Target, ctx: _SimContext, year: int) -> np.ndarray | None:
     """Compute the household-level column for a target.
 
     Dispatches to domain-specific compute modules.

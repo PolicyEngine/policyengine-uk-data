@@ -20,9 +20,9 @@ MIN_YEAR = 2018
 MAX_YEAR = 2029
 
 for time_period in range(MIN_YEAR, MAX_YEAR + 1):
-    time_period_df = statistics[
-        ["name", "unit", "reference", str(time_period)]
-    ].rename(columns={str(time_period): "value"})
+    time_period_df = statistics[["name", "unit", "reference", str(time_period)]].rename(
+        columns={str(time_period): "value"}
+    )
     time_period_df["time_period"] = time_period
     dfs.append(time_period_df)
 
@@ -49,9 +49,7 @@ def create_target_matrix(
     sim = Microsimulation(dataset=dataset, reform=reform)
     sim.default_calculation_period = time_period
 
-    household_from_person = lambda values: sim.map_result(
-        values, "person", "household"
-    )
+    household_from_person = lambda values: sim.map_result(values, "person", "household")
 
     df = pd.DataFrame()
 
@@ -99,9 +97,7 @@ def create_target_matrix(
             target_values.append(row[variable + "_amount"])
             target_names.append(name_amount)
             name_count = (
-                "hmrc/"
-                + variable
-                + f"_count_income_band_{i}_{lower:_}_to_{upper:_}"
+                "hmrc/" + variable + f"_count_income_band_{i}_{lower:_}_to_{upper:_}"
             )
             df[name_count] = household_from_person(
                 (income_df[variable] > 0) * in_income_band
@@ -184,16 +180,10 @@ def create_income_projections():
         for variable in INCOME_VARIABLES:
             count_values = []
             amount_values = []
-            for i, (lower, upper) in enumerate(
-                zip(lower_bounds, upper_bounds)
-            ):
-                in_band = sim.calculate("total_income", year).between(
-                    lower, upper
-                )
+            for i, (lower, upper) in enumerate(zip(lower_bounds, upper_bounds)):
+                in_band = sim.calculate("total_income", year).between(lower, upper)
                 value = sim.calculate(variable, year)
-                count_in_band_with_nonzero_value = round(
-                    ((value > 0) * in_band).sum()
-                )
+                count_in_band_with_nonzero_value = round(((value > 0) * in_band).sum())
                 amount_in_band = round(value[in_band].sum())
                 count_values.append(count_in_band_with_nonzero_value)
                 amount_values.append(amount_in_band)
@@ -202,9 +192,7 @@ def create_income_projections():
         year_df["year"] = year
         projection_df = pd.concat([projection_df, year_df])
 
-    projection_df.to_csv(
-        STORAGE_FOLDER / "incomes_projection.csv", index=False
-    )
+    projection_df.to_csv(STORAGE_FOLDER / "incomes_projection.csv", index=False)
 
 
 if __name__ == "__main__":

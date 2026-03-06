@@ -10,10 +10,8 @@ AGGREGATES = {
 
 @pytest.mark.parametrize("variable", AGGREGATES.keys())
 def test_aggregates(baseline, variable: str):
-    estimate = baseline.calculate(
-        variable, map_to="household", period=2025
-    ).sum()
+    estimate = baseline.calculate(variable, map_to="household", period=2025).sum()
 
-    assert (
-        abs(estimate / AGGREGATES[variable] - 1) < 0.7
-    ), f"Expected {AGGREGATES[variable]/1e9:.1f} billion for {variable}, got {estimate/1e9:.1f} billion (relative error = {abs(estimate / AGGREGATES[variable] - 1):.1%})."
+    assert abs(estimate / AGGREGATES[variable] - 1) < 0.7, (
+        f"Expected {AGGREGATES[variable] / 1e9:.1f} billion for {variable}, got {estimate / 1e9:.1f} billion (relative error = {abs(estimate / AGGREGATES[variable] - 1):.1%})."
+    )

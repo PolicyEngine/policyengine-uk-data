@@ -23,8 +23,8 @@ def test_salary_sacrifice_total_users(baseline):
     TARGET = 7_700_000
 
     assert abs(total_users / TARGET - 1) < TOLERANCE, (
-        f"Expected ~{TARGET/1e6:.1f}mn SS users, "
-        f"got {total_users/1e6:.1f}mn ({total_users/TARGET*100:.0f}% of target)"
+        f"Expected ~{TARGET / 1e6:.1f}mn SS users, "
+        f"got {total_users / 1e6:.1f}mn ({total_users / TARGET * 100:.0f}% of target)"
     )
 
 
@@ -44,8 +44,8 @@ def test_salary_sacrifice_below_cap_users(baseline):
     TARGET = 4_300_000
 
     assert abs(total_below_cap / TARGET - 1) < TOLERANCE, (
-        f"Expected ~{TARGET/1e6:.1f}mn below-cap SS users, "
-        f"got {total_below_cap/1e6:.1f}mn ({total_below_cap/TARGET*100:.0f}% of target)"
+        f"Expected ~{TARGET / 1e6:.1f}mn below-cap SS users, "
+        f"got {total_below_cap / 1e6:.1f}mn ({total_below_cap / TARGET * 100:.0f}% of target)"
     )
 
 
@@ -65,6 +65,6 @@ def test_salary_sacrifice_above_cap_users(baseline):
     TARGET = 3_300_000
 
     assert abs(total_above_cap / TARGET - 1) < TOLERANCE, (
-        f"Expected ~{TARGET/1e6:.1f}mn above-cap SS users, "
-        f"got {total_above_cap/1e6:.1f}mn ({total_above_cap/TARGET*100:.0f}% of target)"
+        f"Expected ~{TARGET / 1e6:.1f}mn above-cap SS users, "
+        f"got {total_above_cap / 1e6:.1f}mn ({total_above_cap / TARGET * 100:.0f}% of target)"
     )

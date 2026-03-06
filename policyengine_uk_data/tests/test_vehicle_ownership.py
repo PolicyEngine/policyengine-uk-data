@@ -9,9 +9,7 @@ ABSOLUTE_TOLERANCE = 0.20
 
 def test_vehicle_ownership(baseline):
     """Test that vehicle ownership distribution matches NTS 2024 targets."""
-    num_vehicles = baseline.calculate(
-        "num_vehicles", map_to="household", period=2025
-    )
+    num_vehicles = baseline.calculate("num_vehicles", map_to="household", period=2025)
     weights = baseline.calculate("household_weight", period=2025)
 
     total_hh = weights.sum()
@@ -28,9 +26,7 @@ def test_vehicle_ownership(baseline):
         f"Expected {NTS_ONE_VEHICLE_RATE:.0%} households with one vehicle, "
         f"got {one_vehicle_rate:.0%}"
     )
-    assert (
-        abs(two_plus_rate - NTS_TWO_PLUS_VEHICLE_RATE) < ABSOLUTE_TOLERANCE
-    ), (
+    assert abs(two_plus_rate - NTS_TWO_PLUS_VEHICLE_RATE) < ABSOLUTE_TOLERANCE, (
         f"Expected {NTS_TWO_PLUS_VEHICLE_RATE:.0%} households with two+ vehicles, "
         f"got {two_plus_rate:.0%}"
     )

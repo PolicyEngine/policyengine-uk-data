@@ -78,9 +78,7 @@ _GENDER_BANDS = [
 @lru_cache(maxsize=1)
 def _download_uk_projection() -> pd.DataFrame:
     """Download and parse the UK principal population projection."""
-    r = requests.get(
-        _UK_ZIP_URL, headers=HEADERS, allow_redirects=True, timeout=120
-    )
+    r = requests.get(_UK_ZIP_URL, headers=HEADERS, allow_redirects=True, timeout=120)
     r.raise_for_status()
     z = zipfile.ZipFile(io.BytesIO(r.content))
     with z.open("uk/uk_ppp_machine_readable.xlsx") as f:
@@ -182,9 +180,7 @@ def _parse_regional_from_csv() -> list[Target]:
 
     for _, row in demographics.iterrows():
         name = row["name"]
-        if name in _SKIP_NAMES or any(
-            name.startswith(p) for p in _SKIP_PREFIXES
-        ):
+        if name in _SKIP_NAMES or any(name.startswith(p) for p in _SKIP_PREFIXES):
             continue
         values = {}
         for y in _YEARS:

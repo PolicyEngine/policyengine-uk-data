@@ -45,9 +45,7 @@ def _download_workbook(url: str) -> openpyxl.Workbook:
     return openpyxl.load_workbook(io.BytesIO(r.content), data_only=False)
 
 
-def _read_row_values(
-    ws, row_num: int, col_letters: list[str]
-) -> dict[int, float]:
+def _read_row_values(ws, row_num: int, col_letters: list[str]) -> dict[int, float]:
     """Read numeric values from a row, mapped to calendar years."""
     result = {}
     for col in col_letters:
@@ -353,9 +351,7 @@ def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
         # Find the second UC row (outside cap section)
         for row in range(uc_outside_row + 1, 55):
             cell_val = ws[f"B{row}"].value
-            if cell_val and str(cell_val).strip().startswith(
-                "Universal credit"
-            ):
+            if cell_val and str(cell_val).strip().startswith("Universal credit"):
                 values = read_49(row)
                 if values:
                     targets.append(
@@ -427,27 +423,20 @@ def _parse_tv_licence(wb: openpyxl.Workbook) -> list[Target]:
 _PRIVATE_SCHOOL = {y: 557_000 for y in range(2018, 2032)}
 
 # SPP Review: salary sacrifice NI relief (uprated 3% pa from 2024 base)
-_SS_EMPLOYEE_NI = {
-    y: 1.2e9 * 1.03 ** max(0, y - 2024) for y in range(2024, 2032)
-}
-_SS_EMPLOYER_NI = {
-    y: 2.9e9 * 1.03 ** max(0, y - 2024) for y in range(2024, 2032)
-}
+_SS_EMPLOYEE_NI = {y: 1.2e9 * 1.03 ** max(0, y - 2024) for y in range(2024, 2032)}
+_SS_EMPLOYER_NI = {y: 2.9e9 * 1.03 ** max(0, y - 2024) for y in range(2024, 2032)}
 
 # Salary sacrifice headcount: 7.7m total (3.3m above £2k, 4.3m below)
 # OBR para 1.7: SS population grows 0.9% faster than employees (~2.4%/yr)
 _SS_HEADCOUNT_GROWTH = 1.024
 _SS_TOTAL_USERS = {
-    y: 7_700_000 * _SS_HEADCOUNT_GROWTH ** max(0, y - 2024)
-    for y in range(2024, 2032)
+    y: 7_700_000 * _SS_HEADCOUNT_GROWTH ** max(0, y - 2024) for y in range(2024, 2032)
 }
 _SS_BELOW_CAP_USERS = {
-    y: 4_300_000 * _SS_HEADCOUNT_GROWTH ** max(0, y - 2024)
-    for y in range(2024, 2032)
+    y: 4_300_000 * _SS_HEADCOUNT_GROWTH ** max(0, y - 2024) for y in range(2024, 2032)
 }
 _SS_ABOVE_CAP_USERS = {
-    y: 3_300_000 * _SS_HEADCOUNT_GROWTH ** max(0, y - 2024)
-    for y in range(2024, 2032)
+    y: 3_300_000 * _SS_HEADCOUNT_GROWTH ** max(0, y - 2024) for y in range(2024, 2032)
 }
 
 

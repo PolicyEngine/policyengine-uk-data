@@ -18,6 +18,4 @@ def test_income_non_negative(frs, variable: str):
     """Test that income variables have no negative values."""
     values = frs.person[variable]
     min_value = values.min()
-    assert (
-        min_value >= 0
-    ), f"{variable} has negative values (min = {min_value:.2f})"
+    assert min_value >= 0, f"{variable} has negative values (min = {min_value:.2f})"

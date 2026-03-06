@@ -63,9 +63,7 @@ def _parse_uc_national_payment_dist():
         "Couple, no children": "COUPLE_NO_CHILDREN",
         "Couple, with children": "COUPLE_WITH_CHILDREN",
     }
-    result_df["family_type"] = result_df["family_type"].map(
-        family_type_mapping
-    )
+    result_df["family_type"] = result_df["family_type"].map(family_type_mapping)
 
     # Reorder columns and drop monthly band
     result_df = result_df[
@@ -111,9 +109,7 @@ def _parse_uc_pc_households():
 
     # Parse NI data
     ni_file_path = storage_path / "dfc-ni-uc-stats-supp-tables-may-2025.ods"
-    df_ni = pd.read_excel(
-        ni_file_path, sheet_name="5b", engine="odf", header=None
-    )
+    df_ni = pd.read_excel(ni_file_path, sheet_name="5b", engine="odf", header=None)
 
     # Get constituency names from row 2, columns 1-18
     ni_constituencies = df_ni.iloc[2, 1:19].tolist()
@@ -179,9 +175,7 @@ def _parse_uc_la_households():
 
     # Parse NI data
     ni_file_path = storage_path / "dfc-ni-uc-stats-supp-tables-may-2025.ods"
-    df_ni = pd.read_excel(
-        ni_file_path, sheet_name="5c", engine="odf", header=None
-    )
+    df_ni = pd.read_excel(ni_file_path, sheet_name="5c", engine="odf", header=None)
 
     # Get LGD names from row 2, columns 1-11
     ni_lgd_names = df_ni.iloc[2, 1:12].tolist()

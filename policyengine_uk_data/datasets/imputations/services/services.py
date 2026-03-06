@@ -86,8 +86,6 @@ def impute_services(
     ]
 
     for person_imputations in visit_variables + spending_variables:
-        dataset.person[person_imputations] = input_data[
-            person_imputations
-        ].values
+        dataset.person[person_imputations] = input_data[person_imputations].values
 
     return dataset

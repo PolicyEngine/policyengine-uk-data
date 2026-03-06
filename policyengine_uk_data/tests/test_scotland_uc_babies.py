@@ -25,15 +25,11 @@ def test_scotland_uc_households_child_under_1(baseline):
     ).values
 
     # Check if household has child under 1
-    is_child = baseline.calculate(
-        "is_child", map_to="person", period=2025
-    ).values
+    is_child = baseline.calculate("is_child", map_to="person", period=2025).values
     age = baseline.calculate("age", map_to="person", period=2025).values
 
     child_under_1 = is_child & (age < 1)
-    has_child_under_1 = (
-        baseline.map_result(child_under_1, "person", "household") > 0
-    )
+    has_child_under_1 = baseline.map_result(child_under_1, "person", "household") > 0
 
     scotland_uc_child_under_1 = (
         (region.values == "SCOTLAND") & (uc > 0) & has_child_under_1
@@ -44,6 +40,6 @@ def test_scotland_uc_households_child_under_1(baseline):
     TOLERANCE = 0.15  # 15% tolerance
 
     assert abs(total / TARGET - 1) < TOLERANCE, (
-        f"Expected ~{TARGET/1000:.0f}k UC households with child under 1 in Scotland, "
-        f"got {total/1000:.0f}k ({total/TARGET*100:.0f}% of target)"
+        f"Expected ~{TARGET / 1000:.0f}k UC households with child under 1 in Scotland, "
+        f"got {total / 1000:.0f}k ({total / TARGET * 100:.0f}% of target)"
     )

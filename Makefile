@@ -1,7 +1,7 @@
 all: data test
 
 format:
-	black . -l 79
+	ruff format .
 
 test:
 	pytest .
