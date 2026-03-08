@@ -78,7 +78,7 @@ HOUSEHOLD_LCF_RENAMES = {
     "G019": "is_child",
     "Gorx": "region",
     "P389p": "hbai_household_net_income",
-    "P344p": "household_gross_income",
+    "p344p": "household_gross_income",
     "weighta": "household_weight",
 }
 PERSON_LCF_RENAMES = {
