@@ -50,7 +50,7 @@ def arrays(imputed):
     sim = Microsimulation(dataset=imputed)
     return dict(
         income=sim.calculate(
-            "hbai_household_net_income", map_to="household", period=2023
+            "household_gross_income", map_to="household", period=2023
         ).values,
         tenure=sim.calculate("tenure_type", map_to="household", period=2023).values,
         accomm=sim.calculate(
