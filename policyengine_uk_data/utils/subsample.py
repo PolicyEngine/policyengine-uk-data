@@ -32,10 +32,15 @@ def subsample_dataset(
     rng = np.random.default_rng(seed)
     household_df = dataset.household
     weights = household_df.household_weight.values.astype(float)
-    total_weight = weights.sum()
+    total_weight = np.nansum(weights)
 
-    # Sample proportional to weight for a more representative subsample
-    probs = weights / total_weight
+    # Sample proportional to weight when weights are available,
+    # otherwise fall back to uniform sampling
+    if total_weight > 0 and not np.any(np.isnan(weights)):
+        probs = weights / total_weight
+    else:
+        probs = None
+
     indices = rng.choice(
         len(household_df),
         size=sample_size,
@@ -51,8 +56,10 @@ def subsample_dataset(
 
     # Rescale weights so the subsample preserves the original population total
     sub_household = dataset.household[household_filter].copy()
-    scale = total_weight / sub_household.household_weight.sum()
-    sub_household["household_weight"] = sub_household.household_weight * scale
+    sub_weight_sum = sub_household.household_weight.sum()
+    if total_weight > 0 and sub_weight_sum > 0:
+        scale = total_weight / sub_weight_sum
+        sub_household["household_weight"] = sub_household.household_weight * scale
 
     subsampled_dataset = UKSingleYearDataset(
         person=dataset.person[person_filter].reset_index(drop=True),

@@ -186,9 +186,7 @@ def main():
             tiny_frs.save(STORAGE_FOLDER / "frs_2023_24_tiny.h5")
 
             tiny_enhanced = subsample_dataset(frs_calibrated, TINY_SIZE)
-            tiny_enhanced.save(
-                STORAGE_FOLDER / "enhanced_frs_2023_24_tiny.h5"
-            )
+            tiny_enhanced.save(STORAGE_FOLDER / "enhanced_frs_2023_24_tiny.h5")
             update_dataset("Create tiny datasets", "completed")
 
         # Display success message
