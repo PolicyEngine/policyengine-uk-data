@@ -1,8 +1,10 @@
+from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk_data.datasets.frs import create_frs
 from policyengine_uk_data.storage import STORAGE_FOLDER
 import logging
 import os
 from policyengine_uk_data.utils.uprating import uprate_dataset
+from policyengine_uk_data.utils.subsample import subsample_dataset
 from policyengine_uk_data.utils.progress import (
     ProcessingProgress,
     display_success_panel,
@@ -37,6 +39,7 @@ def main():
             "Calibrate local authority weights",
             "Downrate to 2023",
             "Save final dataset",
+            "Create tiny datasets",
         ]
 
         with progress_tracker.track_dataset_creation(steps) as (
@@ -172,12 +175,30 @@ def main():
             frs_calibrated.save(STORAGE_FOLDER / "enhanced_frs_2023_24.h5")
             update_dataset("Save final dataset", "completed")
 
+            # Create tiny (n=1000 households) versions for testing
+            update_dataset("Create tiny datasets", "processing")
+            TINY_SIZE = 1_000
+
+            frs_base = UKSingleYearDataset(
+                file_path=str(STORAGE_FOLDER / "frs_2023_24.h5")
+            )
+            tiny_frs = subsample_dataset(frs_base, TINY_SIZE)
+            tiny_frs.save(STORAGE_FOLDER / "frs_2023_24_tiny.h5")
+
+            tiny_enhanced = subsample_dataset(frs_calibrated, TINY_SIZE)
+            tiny_enhanced.save(
+                STORAGE_FOLDER / "enhanced_frs_2023_24_tiny.h5"
+            )
+            update_dataset("Create tiny datasets", "completed")
+
         # Display success message
         display_success_panel(
             "Dataset creation completed successfully",
             details={
                 "base_dataset": "frs_2023_24.h5",
                 "enhanced_dataset": "enhanced_frs_2023_24.h5",
+                "tiny_base_dataset": "frs_2023_24_tiny.h5",
+                "tiny_enhanced_dataset": "enhanced_frs_2023_24_tiny.h5",
                 "imputations_applied": "consumption, wealth, VAT, services, income, capital_gains, salary_sacrifice, student_loan_plan",
                 "calibration": "national, LA and  constituency targets",
             },
