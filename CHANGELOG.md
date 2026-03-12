@@ -1,3 +1,10 @@
+## [1.42.0] - 2026-03-12
+
+### Added
+
+- Added tiny (n=1000 household) versions of frs_2023_24 and enhanced_frs_2023_24 datasets for faster testing and development.
+
+
 ## [1.41.0] - 2026-03-06
 
 ### Added
