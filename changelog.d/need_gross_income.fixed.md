@@ -1,1 +1,0 @@
-Use gross household income (LCFS P344p / FRS household_gross_income) instead of HBAI net income when assigning households to NEED 2023 income bands for energy consumption calibration. NEED uses Experian modelled gross income, so the previous use of net income misallocated households across bands.
