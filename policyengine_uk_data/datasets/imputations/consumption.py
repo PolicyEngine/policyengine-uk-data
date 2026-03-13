@@ -13,6 +13,9 @@ Key features:
   and demographics, matching the strong drivers in NEED admin data.
 - Imputed totals are calibrated to NEED 2023 mean kWh targets by income band,
   converted to spend using Ofgem Q4 2023 unit rates (Oct 2023 price cap).
+  NEED income bands use Experian modelled gross household income, so calibration
+  matches against gross income (LCFS P344p / FRS household_gross_income) rather
+  than HBAI net income.
 """
 
 import pandas as pd
@@ -75,6 +78,7 @@ HOUSEHOLD_LCF_RENAMES = {
     "G019": "is_child",
     "Gorx": "region",
     "P389p": "hbai_household_net_income",
+    "p344p": "household_gross_income",
     "weighta": "household_weight",
 }
 PERSON_LCF_RENAMES = {
@@ -146,6 +150,7 @@ OFGEM_Q4_2023_ELEC_RATE = 27.35 / 100  # £/kWh (Oct 2023 price cap)
 OFGEM_Q4_2023_GAS_RATE = 6.89 / 100  # £/kWh (Oct 2023 price cap)
 
 # NEED 2023 mean kWh by income band (Table 11b gas, Table 12b electricity)
+# Income bands are gross household income (Experian modelled data)
 NEED_INCOME_BANDS = [
     (0, 15_000, "under_15k", 7_755, 2_412),  # gas kWh, elec kWh
     (15_000, 20_000, "15k_20k", 9_196, 2_700),
@@ -336,10 +341,13 @@ def _derive_energy_from_lcfs(household: pd.DataFrame) -> pd.DataFrame:
 
 
 def _calibrate_energy_to_need(
-    household: pd.DataFrame, income_col: str = "hbai_household_net_income"
+    household: pd.DataFrame, income_col: str = "household_gross_income"
 ) -> pd.DataFrame:
     """
     Rescale imputed electricity and gas spend to match NEED 2023 income-band means.
+
+    NEED 2023 income bands use Experian modelled gross household income, so we
+    match against gross income rather than HBAI net income.
 
     For each NEED income band, computes the ratio of the NEED-implied mean spend
     to the LCFS-derived mean spend and applies it multiplicatively. This preserves
@@ -471,6 +479,7 @@ def generate_lcfs_table(lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame)
     # Annualise weekly LCFS values (× 52)
     annualise = list(CONSUMPTION_VARIABLE_RENAMES.values()) + [
         "hbai_household_net_income",
+        "household_gross_income",
         "electricity_consumption",
         "gas_consumption",
     ]
@@ -516,6 +525,7 @@ def uprate_lcfs_table(household: pd.DataFrame, time_period: str) -> pd.DataFrame
     # Uprate income predictor so training distribution matches FRS target year
     for col in [
         "hbai_household_net_income",
+        "household_gross_income",
         "employment_income",
         "self_employment_income",
         "private_pension_income",
@@ -584,7 +594,9 @@ def impute_consumption(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     # This is a 4-dimensional raking (vs the 1D income-band calibration on LCFS
     # training data in _calibrate_energy_to_need) because the FRS has the full
     # set of housing/demographic variables needed for multi-margin calibration.
-    income = input_df["hbai_household_net_income"].values
+    # NEED income bands use Experian modelled gross income, so we use
+    # household_gross_income rather than hbai_household_net_income.
+    income = sim.calculate("household_gross_income", map_to="household").values
     tenure = sim.calculate("tenure_type", map_to="household").values
     accomm = sim.calculate("accommodation_type", map_to="household").values
     region = sim.calculate("region", map_to="household").values
