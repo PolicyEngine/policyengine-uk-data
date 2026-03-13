@@ -1,3 +1,10 @@
+## [1.43.0] - 2026-03-13
+
+### Added
+
+- Upload tiny FRS datasets (frs_2023_24_tiny.h5 and enhanced_frs_2023_24_tiny.h5) to HuggingFace in the CI pipeline.
+
+
 ## [1.42.1] - 2026-03-13
 
 ### Fixed
