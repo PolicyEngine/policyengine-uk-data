@@ -30,6 +30,7 @@ from policyengine_uk_data.targets.compute import (
     compute_household_type,
     compute_housing,
     compute_income_band,
+    compute_land_value,
     compute_obr_council_tax,
     compute_pip_claimants,
     compute_regional_age,
@@ -288,6 +289,15 @@ def _compute_column(target: Target, ctx: _SimContext, year: int) -> np.ndarray |
     # Housing
     if name in ("housing/total_mortgage", "housing/rent_private"):
         return compute_housing(target, ctx)
+
+    # Land and property wealth (ONS National Balance Sheet)
+    if name in (
+        "ons/household_land_value",
+        "ons/corporate_land_value",
+        "ons/land_value",
+        "ons/property_wealth",
+    ):
+        return compute_land_value(target, ctx)
 
     # Savings
     if name == "ons/savings_interest_income":
