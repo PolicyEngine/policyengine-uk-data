@@ -29,9 +29,7 @@ YEAR = 2025
 TOLERANCE = 0.30  # 30% relative error allowed
 
 
-@pytest.mark.xfail(
-    reason="Will pass after recalibration with ONS land value targets"
-)
+@pytest.mark.xfail(reason="Will pass after recalibration with ONS land value targets")
 @pytest.mark.parametrize(
     "variable,target",
     list(LAND_TARGETS.items()),
@@ -51,15 +49,17 @@ def test_land_value_aggregate(baseline, variable, target):
     )
 
 
-@pytest.mark.xfail(
-    reason="Will pass after recalibration with ONS land value targets"
-)
+@pytest.mark.xfail(reason="Will pass after recalibration with ONS land value targets")
 def test_land_value_composition(baseline):
     """Household + corporate land should equal total land value."""
     weights = baseline.calculate("household_weight", period=YEAR).values
     total = baseline.calculate("land_value", map_to="household", period=YEAR).values
-    hh = baseline.calculate("household_land_value", map_to="household", period=YEAR).values
-    corp = baseline.calculate("corporate_land_value", map_to="household", period=YEAR).values
+    hh = baseline.calculate(
+        "household_land_value", map_to="household", period=YEAR
+    ).values
+    corp = baseline.calculate(
+        "corporate_land_value", map_to="household", period=YEAR
+    ).values
 
     total_agg = (total * weights).sum()
     sum_agg = ((hh + corp) * weights).sum()
@@ -70,13 +70,13 @@ def test_land_value_composition(baseline):
     )
 
 
-@pytest.mark.xfail(
-    reason="Will pass after recalibration with ONS land value targets"
-)
+@pytest.mark.xfail(reason="Will pass after recalibration with ONS land value targets")
 def test_household_land_less_than_property_wealth(baseline):
     """Household land value should not exceed total property wealth."""
     weights = baseline.calculate("household_weight", period=YEAR).values
-    hh_land = baseline.calculate("household_land_value", map_to="household", period=YEAR).values
+    hh_land = baseline.calculate(
+        "household_land_value", map_to="household", period=YEAR
+    ).values
     prop = baseline.calculate("property_wealth", map_to="household", period=YEAR).values
 
     hh_land_agg = (hh_land * weights).sum()
