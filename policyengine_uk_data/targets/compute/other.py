@@ -49,6 +49,11 @@ def compute_scottish_child_payment(target, ctx) -> np.ndarray:
     return ctx.household_from_person(scp)
 
 
+def compute_land_value(target, ctx) -> np.ndarray:
+    """Compute land/property wealth targets from household-level variables."""
+    return ctx.pe(target.variable)
+
+
 def compute_student_loan_plan(target, ctx) -> np.ndarray:
     """Count England borrowers on a given plan with repayments > 0.
 
