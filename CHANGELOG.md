@@ -1,3 +1,14 @@
+## [1.44.0] - 2026-03-17
+
+### Added
+
+- Add ONS land value calibration targets (household, corporate, total land, property wealth) from the National Balance Sheet 2025.
+
+### Fixed
+
+- Fixed versioning workflow by replacing expired PAT with GitHub App token.
+
+
 ## [1.43.0] - 2026-03-13
 
 ### Added
