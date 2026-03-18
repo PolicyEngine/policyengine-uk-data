@@ -1,3 +1,10 @@
+## [1.44.4] - 2026-03-18
+
+### Changed
+
+- Clarified that NOMIS ASHE employment income targets cover all workers (part-time and full-time), not just full-time.
+
+
 ## [1.44.3] - 2026-03-18
 
 ### Changed
