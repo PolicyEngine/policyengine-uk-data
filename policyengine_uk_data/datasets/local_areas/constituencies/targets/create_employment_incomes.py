@@ -9,7 +9,7 @@ warnings.filterwarnings("ignore")
 income = pd.read_excel(
     "nomis_earning_jobs_data.xlsx"
 )  # Ensure only one ".xlsx" extension
-# Export the above from Nomis- containing percentiles of earnings for each constituency (all jobs).
+# Export the above from Nomis ASHE resident analysis (not workplace analysis), containing percentiles of earnings for all workers (not just full-time) in each constituency.
 income = income.drop(index=range(0, 7)).reset_index(drop=True)
 income.columns = income.iloc[0]
 income = income.drop(index=0).reset_index(drop=True)
