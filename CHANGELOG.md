@@ -1,3 +1,10 @@
+## [1.44.2] - 2026-03-18
+
+### Fixed
+
+- Fixed ESA calibration target entity mapping: use `household_from_family()` for the benunit-level `esa_income` variable instead of `household_from_person()`.
+
+
 ## [1.44.1] - 2026-03-18
 
 ### Changed
