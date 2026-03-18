@@ -1,3 +1,10 @@
+## [1.44.1] - 2026-03-18
+
+### Changed
+
+- Fixed text errors in methodology documentation page.
+
+
 ## [1.44.0] - 2026-03-17
 
 ### Added
