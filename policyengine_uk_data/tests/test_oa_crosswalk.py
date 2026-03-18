@@ -18,12 +18,10 @@ import pytest
 
 import policyengine_uk_data.calibration.oa_crosswalk as oa_crosswalk_module
 from policyengine_uk_data.calibration.oa_crosswalk import (
-    build_oa_crosswalk,
     load_oa_crosswalk,
     CROSSWALK_PATH,
 )
 from policyengine_uk_data.calibration.oa_assignment import (
-    GeographyAssignment,
     assign_random_geography,
     save_geography,
     load_geography,

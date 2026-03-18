@@ -18,20 +18,9 @@ from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 
-from policyengine_uk_data.calibration.oa_crosswalk import (
-    CROSSWALK_PATH,
-    load_oa_crosswalk,
-)
+from policyengine_uk_data.calibration.oa_crosswalk import load_oa_crosswalk
 
 logger = logging.getLogger(__name__)
-
-# Country name → OA code prefix mapping
-COUNTRY_PREFIXES = {
-    "England": "E",
-    "Wales": "W",
-    "Scotland": "S",
-    "Northern Ireland": "N",  # NI DZ codes start with digits
-}
 
 # Map FRS country codes to country names.
 # FRS uses numeric codes: 1=England, 2=Wales, 3=Scotland,
