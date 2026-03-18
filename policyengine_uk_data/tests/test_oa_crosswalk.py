@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+import policyengine_uk_data.calibration.oa_crosswalk as oa_crosswalk_module
 from policyengine_uk_data.calibration.oa_crosswalk import (
     build_oa_crosswalk,
     load_oa_crosswalk,
@@ -186,14 +187,22 @@ class TestCrosswalkStructure:
 
     def test_population_total_range(self, crosswalk):
         """UK total population should be ~67M (2021 Census)."""
-        total = pd.to_numeric(crosswalk["population"], errors="coerce").sum()
+        total = crosswalk["population"].sum()
         assert 55_000_000 < total < 75_000_000, (
             f"UK population {total:,} outside expected range"
         )
 
+    def test_population_is_numeric(self, crosswalk):
+        assert pd.api.types.is_numeric_dtype(crosswalk["population"])
+
     def test_every_oa_has_la(self, crosswalk):
         missing = crosswalk["la_code"].isna() | (crosswalk["la_code"] == "")
         assert missing.sum() == 0, f"{missing.sum()} OAs missing LA code"
+
+    def test_every_england_oa_has_region(self, crosswalk):
+        eng = crosswalk[crosswalk["country"] == "England"]
+        missing = eng["region_code"].isna() | (eng["region_code"] == "")
+        assert missing.sum() == 0, f"{missing.sum()} English OAs missing region code"
 
     def test_ew_oas_have_constituency(self, crosswalk):
         """E+W OAs should have constituency codes."""
@@ -376,3 +385,106 @@ class TestOAAssignment:
             assert geo.country[i] == "England"
         for i in range(5, 8):
             assert geo.country[i] == "Wales"
+
+    def test_uppercase_country_input(self, small_crosswalk):
+        """Should accept repo-style uppercase country names."""
+        df, path = small_crosswalk
+        countries = np.array(["ENGLAND", "WALES", "SCOTLAND", "NORTHERN_IRELAND"])
+
+        geo = assign_random_geography(
+            household_countries=countries,
+            n_clones=1,
+            seed=42,
+            crosswalk_path=str(path),
+        )
+
+        assert geo.country.tolist() == [
+            "England",
+            "Wales",
+            "Scotland",
+            "Northern Ireland",
+        ]
+
+    def test_object_country_code_input(self, small_crosswalk):
+        """Should accept object-dtype arrays of numeric country codes."""
+        df, path = small_crosswalk
+        countries = np.array([1, 2, 3, 4], dtype=object)
+
+        geo = assign_random_geography(
+            household_countries=countries,
+            n_clones=1,
+            seed=42,
+            crosswalk_path=str(path),
+        )
+
+        assert geo.country.tolist() == [
+            "England",
+            "Wales",
+            "Scotland",
+            "Northern Ireland",
+        ]
+
+    def test_missing_country_distribution_raises(self, small_crosswalk, tmp_path):
+        """Missing country distributions should fail loudly."""
+        df, _ = small_crosswalk
+        no_ni = df[df["country"] != "Northern Ireland"]
+        path = tmp_path / "crosswalk_no_ni.csv.gz"
+        no_ni.to_csv(path, index=False, compression="gzip")
+
+        with pytest.raises(ValueError, match="Northern Ireland"):
+            assign_random_geography(
+                household_countries=np.array([4]),
+                n_clones=1,
+                seed=42,
+                crosswalk_path=str(path),
+            )
+
+
+class TestCrosswalkHelpers:
+    def test_scotland_direct_lookup_prefers_oa_mapping(self, monkeypatch):
+        def fake_download_csv_from_zip(
+            url: str, csv_filter: str = ".csv", timeout: int = 300
+        ):
+            if url == oa_crosswalk_module._SCOTLAND_OA_DZ_URL:
+                return pd.DataFrame(
+                    {
+                        "OA22": ["S00123456"],
+                        "DZ22": ["S01000001"],
+                    }
+                )
+            if url == oa_crosswalk_module._SCOTLAND_OA_CONST_URL:
+                if csv_filter != "oa22_ukpc24":
+                    return pd.DataFrame(
+                        {
+                            "UKParliamentaryConstituency2024Code": ["S14009999"],
+                            "UKParliamentaryConstituency2024Name": ["Wrong file"],
+                        }
+                    )
+                return pd.DataFrame(
+                    {
+                        "OA22": ["S00123456"],
+                        "UKPC24_CODE": ["S14000042"],
+                    }
+                )
+            raise AssertionError(f"Unexpected ZIP URL: {url}")
+
+        def fake_download_csv(url: str, timeout: int = 300):
+            if url == oa_crosswalk_module._SCOTLAND_DZ_LOOKUP_URL:
+                return pd.DataFrame(
+                    {
+                        "DZ22_CODE": ["S01000001"],
+                        "IZ22_CODE": ["S02000001"],
+                        "LA_CODE": ["S12000033"],
+                        "UKPC24_CODE": ["S14009999"],
+                    }
+                )
+            raise AssertionError(f"Unexpected CSV URL: {url}")
+
+        monkeypatch.setattr(
+            oa_crosswalk_module, "_download_csv_from_zip", fake_download_csv_from_zip
+        )
+        monkeypatch.setattr(oa_crosswalk_module, "_download_csv", fake_download_csv)
+
+        result = oa_crosswalk_module._get_scotland_oa_hierarchy()
+
+        assert result.loc[0, "constituency_code"] == "S14000042"

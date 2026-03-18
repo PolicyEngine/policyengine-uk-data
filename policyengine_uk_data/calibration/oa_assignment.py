@@ -43,6 +43,13 @@ FRS_COUNTRY_MAP = {
     4: "Northern Ireland",
 }
 
+COUNTRY_NAME_MAP = {
+    "ENGLAND": "England",
+    "WALES": "Wales",
+    "SCOTLAND": "Scotland",
+    "NORTHERN_IRELAND": "Northern Ireland",
+}
+
 
 @dataclass
 class GeographyAssignment:
@@ -120,6 +127,23 @@ def _load_country_distributions(
     return distributions
 
 
+def _normalise_country(value) -> Optional[str]:
+    """Normalise FRS country codes and repo country labels."""
+    if pd.isna(value):
+        return None
+
+    if isinstance(value, (int, np.integer)) and not isinstance(value, bool):
+        return FRS_COUNTRY_MAP.get(int(value))
+
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.isdigit():
+        return FRS_COUNTRY_MAP.get(int(text))
+
+    return COUNTRY_NAME_MAP.get(text.upper().replace("-", "_").replace(" ", "_"))
+
+
 def assign_random_geography(
     household_countries: np.ndarray,
     n_clones: int = 10,
@@ -151,13 +175,19 @@ def assign_random_geography(
     n_records = len(household_countries)
     n_total = n_records * n_clones
 
-    # Normalise country codes to names
-    if np.issubdtype(household_countries.dtype, np.integer):
-        countries = np.array(
-            [FRS_COUNTRY_MAP.get(int(c), "England") for c in household_countries]
+    # Normalise country codes to canonical country names
+    countries = np.array(
+        [_normalise_country(value) for value in household_countries],
+        dtype=object,
+    )
+    invalid_mask = pd.isna(countries)
+    if invalid_mask.any():
+        bad_values = sorted(
+            {str(value) for value in np.asarray(household_countries)[invalid_mask]}
         )
-    else:
-        countries = np.asarray(household_countries, dtype=str)
+        raise ValueError(
+            "Unrecognised household country values: " + ", ".join(bad_values)
+        )
 
     distributions = _load_country_distributions(
         str(crosswalk_path) if crosswalk_path else None
@@ -179,17 +209,17 @@ def assign_random_geography(
 
     # Track assigned constituencies per record for
     # collision avoidance
-    assigned_const = np.empty((n_clones, n_records), dtype=object)
+    assigned_const = np.full((n_clones, n_records), "", dtype=object)
+    missing_distributions = sorted(set(unique_countries) - set(distributions))
+    if missing_distributions:
+        raise ValueError(
+            "No OA distribution available for: " + ", ".join(missing_distributions)
+        )
 
     for clone_idx in range(n_clones):
         start = clone_idx * n_records
-        end = start + n_records
 
         for country_name in unique_countries:
-            if country_name not in distributions:
-                logger.warning(f"No distribution for {country_name}, skipping")
-                continue
-
             dist = distributions[country_name]
             hh_mask = countries == country_name
             n_hh = hh_mask.sum()
@@ -234,15 +264,14 @@ def assign_random_geography(
 
             # Store results
             positions = np.where(hh_mask)[0]
-            for i, pos in enumerate(positions):
-                idx = start + pos
-                oa_codes[idx] = dist["oa_codes"][indices[i]]
-                constituency_codes[idx] = dist["constituencies"][indices[i]]
-                lsoa_codes[idx] = dist["lsoa_codes"][indices[i]]
-                msoa_codes[idx] = dist["msoa_codes"][indices[i]]
-                la_codes[idx] = dist["la_codes"][indices[i]]
-                region_codes[idx] = dist["region_codes"][indices[i]]
-                country_names[idx] = country_name
+            store_idx = start + positions
+            oa_codes[store_idx] = dist["oa_codes"][indices]
+            constituency_codes[store_idx] = dist["constituencies"][indices]
+            lsoa_codes[store_idx] = dist["lsoa_codes"][indices]
+            msoa_codes[store_idx] = dist["msoa_codes"][indices]
+            la_codes[store_idx] = dist["la_codes"][indices]
+            region_codes[store_idx] = dist["region_codes"][indices]
+            country_names[store_idx] = country_name
 
             assigned_const[clone_idx, positions] = sampled_const
 

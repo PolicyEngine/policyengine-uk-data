@@ -53,11 +53,11 @@ _EW_OA_CONST_URL = (
     "5968b5b2c0f14dd29ba277beaae6dec3/csv?layers=0"
 )
 
-# ONS Hub CSV download: LAD24 → RGN24 (England only)
+# ONS Hub CSV download: LAD22 → RGN22 (England only)
 _EN_LAD_REGION_URL = (
     "https://open-geography-portalx-ons.hub.arcgis.com/"
     "api/download/v1/items/"
-    "3959874c514b470e9dd160acdc00c97a/csv?layers=0"
+    "78b348cd8fb04037ada3c862aa054428/csv?layers=0"
 )
 
 # Nomis Census 2021 TS001 (population by OA) - bulk zip
@@ -341,9 +341,14 @@ def _get_scotland_oa_hierarchy() -> pd.DataFrame:
 
     # Also try OA → constituency direct lookup
     try:
-        oa_const = _download_csv_from_zip(_SCOTLAND_OA_CONST_URL, csv_filter="")
+        oa_const = _download_csv_from_zip(
+            _SCOTLAND_OA_CONST_URL,
+            csv_filter="oa22_ukpc24",
+        )
         oa_c_col = [
-            c for c in oa_const.columns if "oa" in c.lower() and "code" in c.lower()
+            c
+            for c in oa_const.columns
+            if c.lower() == "oa22" or ("oa" in c.lower() and "code" in c.lower())
         ]
         const_c_col = [
             c
@@ -599,14 +604,14 @@ def _assign_regions(df: pd.DataFrame) -> pd.DataFrame:
             return "S99999999"
         if la_code.startswith("N"):
             return "N99999999"
-        # Try matching on different LAD vintage
-        for k, v in la_to_region.items():
-            if k[:3] == la_code[:3]:
-                # Same LA type prefix
-                pass
         return ""
 
     df["region_code"] = df["la_code"].apply(get_region)
+    missing_eng = (
+        (df["la_code"].fillna("").str.startswith("E")) & (df["region_code"] == "")
+    ).sum()
+    if missing_eng:
+        logger.warning("Could not assign region_code for %s English rows", missing_eng)
     return df
 
 
@@ -750,7 +755,20 @@ def load_oa_crosswalk(
             "oa_crosswalk' to generate."
         )
 
-    return pd.read_csv(path, dtype=str)
+    df = pd.read_csv(
+        path,
+        dtype={
+            "oa_code": str,
+            "lsoa_code": str,
+            "msoa_code": str,
+            "la_code": str,
+            "constituency_code": str,
+            "region_code": str,
+            "country": str,
+        },
+    )
+    df["population"] = pd.to_numeric(df["population"], errors="coerce").astype("Int64")
+    return df
 
 
 if __name__ == "__main__":
