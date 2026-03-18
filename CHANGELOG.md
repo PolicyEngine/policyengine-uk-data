@@ -1,3 +1,10 @@
+## [1.45.0] - 2026-03-18
+
+### Added
+
+- Added policyengine-claude plugin auto-install configuration.
+
+
 ## [1.44.4] - 2026-03-18
 
 ### Changed
