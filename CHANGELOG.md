@@ -1,3 +1,10 @@
+## [1.45.2] - 2026-03-19
+
+### Fixed
+
+- Remove the remaining non-land calibration `xfail` markers and make pytest `xfail` strict so temporary expected failures cannot silently linger.
+
+
 ## [1.45.1] - 2026-03-19
 
 ### Fixed
