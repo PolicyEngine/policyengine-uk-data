@@ -16,7 +16,9 @@ SPI_PATH = STORAGE_FOLDER / "incomes.csv"
 @pytest.fixture
 def projections():
     if not PROJECTION_PATH.exists():
-        pytest.skip("incomes_projection.csv not available (run create_income_projections first)")
+        pytest.skip(
+            "incomes_projection.csv not available (run create_income_projections first)"
+        )
     return pd.read_csv(PROJECTION_PATH)
 
 
@@ -51,8 +53,8 @@ def test_projected_totals_not_inflated(projections, spi_targets, variable):
         projected_total = year_df[f"{variable}_amount"].sum()
         ratio = projected_total / spi_total
         assert ratio < MAX_RATIO, (
-            f"{variable} in {year}: projected £{projected_total/1e9:.1f}bn "
-            f"is {ratio:.2f}x the SPI baseline £{spi_total/1e9:.1f}bn "
+            f"{variable} in {year}: projected £{projected_total / 1e9:.1f}bn "
+            f"is {ratio:.2f}x the SPI baseline £{spi_total / 1e9:.1f}bn "
             f"(max allowed {MAX_RATIO}x)"
         )
 
@@ -66,8 +68,8 @@ def test_employment_income_still_calibrated(projections, spi_targets):
     # should be within 30% of a simple uprate from the SPI baseline.
     ratio = projected_total / spi_total
     assert 0.7 < ratio < 1.8, (
-        f"Employment income in 2022: projected £{projected_total/1e9:.1f}bn "
-        f"vs SPI baseline £{spi_total/1e9:.1f}bn (ratio {ratio:.2f})"
+        f"Employment income in 2022: projected £{projected_total / 1e9:.1f}bn "
+        f"vs SPI baseline £{spi_total / 1e9:.1f}bn (ratio {ratio:.2f})"
     )
 
 
