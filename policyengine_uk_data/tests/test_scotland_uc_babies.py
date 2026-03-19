@@ -6,12 +6,6 @@ Filters: Scotland, Age of Youngest Child = 0
 Result: 13,992 households (~14k)
 """
 
-import pytest
-
-
-@pytest.mark.xfail(
-    reason="Will pass after recalibration with new scotland_uc_households_child_under_1 target"
-)
 def test_scotland_uc_households_child_under_1(baseline):
     """Test that UC households in Scotland with child under 1 matches DWP data.
 
