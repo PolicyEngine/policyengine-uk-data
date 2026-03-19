@@ -1,3 +1,10 @@
+## [1.45.1] - 2026-03-19
+
+### Fixed
+
+- Remove the incorrect `property_wealth` land calibration target and keep only direct land-value targets from the ONS National Balance Sheet.
+
+
 ## [1.45.0] - 2026-03-18
 
 ### Added
