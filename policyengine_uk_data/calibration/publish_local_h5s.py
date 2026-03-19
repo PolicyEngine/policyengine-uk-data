@@ -173,11 +173,13 @@ def publish_area_h5(
             grp = f.create_group(table_name)
             for col in df.columns:
                 values = df[col].values
-                if values.dtype == object:
-                    values = values.astype(str)
-                    grp.create_dataset(col, data=values.astype("S"))
-                else:
-                    grp.create_dataset(col, data=values)
+                if not np.issubdtype(values.dtype, np.number) and not np.issubdtype(
+                    values.dtype, np.bool_
+                ):
+                    # Convert any non-numeric type (object, categorical,
+                    # string) to fixed-length byte strings for HDF5
+                    values = np.array([str(v) for v in values], dtype="S")
+                grp.create_dataset(col, data=values)
 
         # Metadata
         f.attrs["area_code"] = area_code
