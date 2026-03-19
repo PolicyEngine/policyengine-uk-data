@@ -21,6 +21,7 @@ _TARGETS = {
 
 TOLERANCE = 0.30  # 30% relative tolerance
 
+
 @pytest.mark.parametrize(
     "bucket,target",
     list(_TARGETS.items()),

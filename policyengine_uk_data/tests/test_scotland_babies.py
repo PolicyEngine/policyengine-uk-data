@@ -5,6 +5,7 @@ https://www.nrscotland.gov.uk/publications/vital-events-reference-tables-2024/
 Scotland had 45,763 live births in 2024.
 """
 
+
 def test_scotland_babies_under_1(baseline):
     """Test that babies under 1 in Scotland matches NRS birth statistics.
 
