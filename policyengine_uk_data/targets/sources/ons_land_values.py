@@ -68,16 +68,4 @@ def get_targets() -> list[Target]:
             },
             reference_url=_REF_URL,
         ),
-        Target(
-            name="ons/property_wealth",
-            variable="property_wealth",
-            source="ons",
-            unit=Unit.GBP,
-            values={
-                2024: _ONS_2024_TOTAL,
-                2025: _ONS_2024_TOTAL,
-                2026: _ONS_2024_TOTAL,
-            },
-            reference_url=_REF_URL,
-        ),
     ]

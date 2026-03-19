@@ -295,7 +295,6 @@ def _compute_column(target: Target, ctx: _SimContext, year: int) -> np.ndarray |
         "ons/household_land_value",
         "ons/corporate_land_value",
         "ons/land_value",
-        "ons/property_wealth",
     ):
         return compute_land_value(target, ctx)
 
