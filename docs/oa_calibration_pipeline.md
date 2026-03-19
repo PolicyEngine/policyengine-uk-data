@@ -100,13 +100,26 @@ Build sparse calibration matrix from cloned dataset, bridging Phase 2 (clone-and
 ---
 
 ### Phase 5: SQLite Target Database
-**Status: Not Started**
+**Status: Complete**
 
-Hierarchical target storage: UK → country → region → LA → constituency → MSOA → LSOA → OA.
+Hierarchical target storage with two parallel geographic branches:
+- Administrative: country → region → LA → MSOA → LSOA → OA
+- Parliamentary: country → constituency
+
+LA and constituency are parallel — a constituency can span multiple LAs and vice versa.
 
 **Deliverables:**
-- `policyengine_uk_data/db/` directory with ETL scripts
-- Migrate existing CSV/Excel targets into SQLite
+- `policyengine_uk_data/db/schema.py` — SQLite schema: `areas` (geographic hierarchy), `targets` (definitions), `target_values` (year-indexed values)
+- `policyengine_uk_data/db/etl.py` — ETL loading areas from OA crosswalk + area code CSVs, targets from registry + local CSV/XLSX sources
+- `policyengine_uk_data/db/query.py` — query API: `get_targets()`, `get_area_targets()`, `get_area_children()`, `get_area_hierarchy()`
+- `tests/test_target_db.py` — tests covering schema creation, area hierarchy, target loading, queries
+
+**Key design:**
+- Areas table with `parent_code` encoding hierarchy; LAs parent to regions, constituencies parent to countries
+- Targets loaded from two sources: registry (national/country/region via `get_all_targets()`) and local CSVs (constituency/LA age, income, UC, LA extras)
+- Query API supports filtering by geographic level, area code, variable, source, year
+- `get_area_hierarchy()` walks up the tree from any code (e.g. OA → LSOA → MSOA → LA → region → country)
+- Full rebuild via `python -m policyengine_uk_data.db.etl`
 
 **US reference:** PR #398 (treasury) + PR #488 (db-work)
 
