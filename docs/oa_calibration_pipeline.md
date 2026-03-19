@@ -79,13 +79,21 @@ L0-regularised calibration using HardConcrete gates from the `l0-python` package
 ---
 
 ### Phase 4: Sparse Matrix Builder
-**Status: Not Started**
+**Status: Complete**
 
-Build sparse calibration matrix from cloned dataset.
+Build sparse calibration matrix from cloned dataset, bridging Phase 2 (clone-and-assign) and Phase 3 (L0 calibration).
 
 **Deliverables:**
-- `policyengine_uk_data/calibration/matrix_builder.py`
-- Wire existing `targets/sources/` definitions into sparse matrix rows
+- `policyengine_uk_data/calibration/matrix_builder.py` — sparse assignment matrix builder, consolidated metric computation, target loading for both constituency and LA levels
+- `tests/test_matrix_builder.py` — 10 tests covering assignment matrix shape, sparsity, binary values, area types, unassigned households
+
+**Key design:**
+- `build_assignment_matrix()`: builds sparse `(n_areas, n_households)` binary matrix from OA geography columns — each household in exactly one area
+- `create_cloned_target_matrix()`: backward-compatible `(metrics, targets, country_mask)` interface for use as `matrix_fn` in both dense Adam and L0 calibrators
+- `build_sparse_calibration_matrix()`: direct sparse path producing `(M_csr, y, group_ids)` — skips dense country_mask entirely, O(n_households × n_metrics) non-zeros
+- `_compute_household_metrics()`: consolidates metric computation duplicated between constituency and LA loss files
+- `_load_area_targets()`: consolidates target loading with national consistency adjustments, boundary mapping, and LA extras
+- Supports both constituency (650 areas) and LA (360 areas) geography types
 
 **US reference:** PR #456 + PR #489
 
