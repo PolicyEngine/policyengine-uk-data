@@ -90,6 +90,7 @@ def publish_area_h5(
     area_code: str,
     hh_indices: np.ndarray,
     output_path: Path,
+    area_idx: Optional[int] = None,
 ) -> dict:
     """Write a single per-area H5 file.
 
@@ -98,10 +99,13 @@ def publish_area_h5(
 
     Args:
         dataset: Full cloned dataset.
-        weights: Sparse weight vector (length = total cloned households).
+        weights: Weight array — either 1D (n_households,) from L0
+            calibrator, or 2D (n_areas, n_households) from dense Adam.
         area_code: GSS area code.
         hh_indices: Row indices of households in this area.
         output_path: Where to write the H5 file.
+        area_idx: Row index into 2D weight matrix (required when
+            weights is 2D).
 
     Returns:
         Dict with area stats: code, n_households, n_active, total_weight.
@@ -115,7 +119,13 @@ def publish_area_h5(
             "total_weight": 0.0,
         }
 
-    area_weights = weights[hh_indices]
+    # Handle both 2D (n_areas, n_households) and 1D (n_households,) weights
+    if weights.ndim == 2:
+        if area_idx is None:
+            raise ValueError("area_idx is required when weights is a 2D matrix")
+        area_weights = weights[area_idx, hh_indices]
+    else:
+        area_weights = weights[hh_indices]
 
     # Filter to active households (non-zero weight after L0 pruning)
     active_mask = area_weights > 0
@@ -192,15 +202,15 @@ def publish_local_h5s(
     output_dir: Optional[Path] = None,
     min_weight: float = 0.0,
 ) -> pd.DataFrame:
-    """Generate per-area H5 files from L0-calibrated weights.
+    """Generate per-area H5 files from calibrated weights.
 
-    Reads the sparse weight vector from the L0 output, maps each
-    household to its area via clone-and-assign geography columns,
-    and writes one H5 per area containing only active households.
+    Supports both weight formats:
+    - 1D ``(n_households,)`` from L0 calibrator (sparse flat vector)
+    - 2D ``(n_areas, n_households)`` from dense Adam calibrator
 
     Args:
         dataset: Cloned dataset (post clone-and-assign).
-        weight_file: HDF5 file with sparse weight vector (from calibrate_l0).
+        weight_file: HDF5 file with weight array.
         area_type: "constituency" or "la".
         dataset_key: Key within the weight HDF5 file.
         output_dir: Override output directory.
@@ -234,6 +244,14 @@ def publish_local_h5s(
     # Build area → household index mapping
     area_indices = _get_area_household_indices(dataset, area_type, area_codes)
 
+    is_2d = weights.ndim == 2
+    if is_2d:
+        logger.info(
+            "Weight matrix is 2D (%d areas x %d households) — using area row indexing",
+            weights.shape[0],
+            weights.shape[1],
+        )
+
     # Generate H5 files
     stats = []
     n_areas = len(area_codes)
@@ -248,6 +266,7 @@ def publish_local_h5s(
             area_code=code,
             hh_indices=hh_indices,
             output_path=h5_path,
+            area_idx=i if is_2d else None,
         )
         stats.append(stat)
 

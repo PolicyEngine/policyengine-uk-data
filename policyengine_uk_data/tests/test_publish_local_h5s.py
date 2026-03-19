@@ -180,6 +180,28 @@ class TestPublishAreaH5:
 
             assert stat["total_weight"] == pytest.approx(1250.0)
 
+    def test_2d_weights_matrix(self, mock_dataset):
+        """2D weight matrix (n_areas, n_households) should use area_idx."""
+        # 4 areas x 20 households
+        weights_2d = np.full((4, 20), 100.0)
+        weights_2d[0, 0] = 999.0  # Area 0, household 0
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "E14001001.h5"
+            hh_indices = np.array([0, 1, 2, 3, 4])
+
+            stat = publish_area_h5(
+                dataset=mock_dataset,
+                weights=weights_2d,
+                area_code="E14001001",
+                hh_indices=hh_indices,
+                output_path=output_path,
+                area_idx=0,
+            )
+
+            # household 0 has weight 999, others 100
+            assert stat["total_weight"] == pytest.approx(999.0 + 4 * 100.0)
+
     def test_persons_match_households(self, mock_dataset, mock_weights):
         """Person table should only contain members of active households."""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -295,6 +317,51 @@ class TestPublishLocalH5s:
             assert "total_weight" in stats.columns
             # Total active should equal non-zero weights
             assert stats["n_active"].sum() == (mock_weights > 0).sum()
+
+    def test_2d_weight_matrix_integration(self, mock_dataset):
+        """Full cycle with 2D (n_areas, n_households) weight matrix."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+
+            # 2D weight matrix: 4 areas x 20 households
+            weights_2d = np.full((4, 20), 100.0)
+            weight_path = tmpdir / "test_weights_2d.h5"
+            with h5py.File(weight_path, "w") as f:
+                f.create_dataset("2025", data=weights_2d)
+
+            area_codes = pd.DataFrame(
+                {
+                    "code": [
+                        "E14001001",
+                        "E14001002",
+                        "S14000001",
+                        "S14000002",
+                    ],
+                    "name": ["A", "B", "C", "D"],
+                }
+            )
+            (tmpdir / "constituencies_2024.csv").write_text(
+                area_codes.to_csv(index=False)
+            )
+
+            import policyengine_uk_data.calibration.publish_local_h5s as mod
+
+            original_folder = mod.STORAGE_FOLDER
+            mod.STORAGE_FOLDER = tmpdir
+
+            try:
+                stats = publish_local_h5s(
+                    dataset=mock_dataset,
+                    weight_file="test_weights_2d.h5",
+                    area_type="constituency",
+                    output_dir=tmpdir / "out",
+                )
+            finally:
+                mod.STORAGE_FOLDER = original_folder
+
+            assert len(stats) == 4
+            # All households have weight 100, so all should be active
+            assert stats["n_active"].sum() == 20
 
 
 class TestValidateLocalH5s:
