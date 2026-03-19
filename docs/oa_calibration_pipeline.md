@@ -126,11 +126,21 @@ LA and constituency are parallel — a constituency can span multiple LAs and vi
 ---
 
 ### Phase 6: Local Area Publishing
-**Status: Not Started**
+**Status: Complete**
 
-Generate per-area H5 files from sparse weights. Modal integration for scale.
+Generate per-area H5 files from sparse L0-calibrated weights.
 
 **Deliverables:**
-- `policyengine_uk_data/calibration/publish_local_h5s.py`
+- `policyengine_uk_data/calibration/publish_local_h5s.py` — extracts per-area H5 subsets from the sparse weight vector; each H5 contains only active households (non-zero weight) with their calibrated weights, plus the linked person and benunit rows
+- `datasets/create_datasets.py` — publish step wired in after calibration, before downrating
+- `tests/test_publish_local_h5s.py` — 13 tests covering area-household mapping, H5 structure, pruned-household exclusion, weight correctness, person/benunit FK integrity, full publish cycle, summary statistics, and validation
+
+**Key design:**
+- `_get_area_household_indices()`: maps each area code to its household row indices via OA geography columns from clone-and-assign
+- `publish_area_h5()`: writes a single H5 per area — filters to active (non-zero weight) households, extracts linked persons and benunits via FK joins, stores as HDF5 groups with metadata attributes
+- `publish_local_h5s()`: orchestrates the full publish cycle — loads L0 weight vector, iterates over all areas, writes H5 files to `storage/local_h5s/{area_type}/`, produces `_summary.csv` with per-area statistics
+- `validate_local_h5s()`: post-publish validation checking file existence, HDF5 structure, and cross-area household ID uniqueness
+- Supports both constituency (650) and LA (360) area types
+- Zero-weight households (L0-pruned) are excluded from area H5 files — only active records are published
 
 **US reference:** PR #465 (modal)
