@@ -160,9 +160,7 @@ def clone_and_assign(
         # Clone household table
         hh_clone = hh.copy()
         hh_clone["household_id"] = new_hh_ids
-        hh_clone["household_weight"] = (
-            hh["household_weight"].values / n_clones
-        )
+        hh_clone["household_weight"] = hh["household_weight"].values / n_clones
 
         # Add geography columns from assignment
         start = clone_idx * n_households
@@ -171,9 +169,7 @@ def clone_and_assign(
         hh_clone["lsoa_code"] = geography.lsoa_code[start:end]
         hh_clone["msoa_code"] = geography.msoa_code[start:end]
         hh_clone["la_code_oa"] = geography.la_code[start:end]
-        hh_clone["constituency_code_oa"] = geography.constituency_code[
-            start:end
-        ]
+        hh_clone["constituency_code_oa"] = geography.constituency_code[start:end]
         hh_clone["region_code_oa"] = geography.region_code[start:end]
         hh_clone["clone_index"] = clone_idx
 
@@ -181,9 +177,7 @@ def clone_and_assign(
 
         # Clone person table
         person_clone = person.copy()
-        person_clone["person_id"] = _remap_ids(
-            person_id_col, clone_idx, id_multiplier
-        )
+        person_clone["person_id"] = _remap_ids(person_id_col, clone_idx, id_multiplier)
         person_clone["person_household_id"] = _remap_ids(
             person_hh_id_col, clone_idx, id_multiplier
         )

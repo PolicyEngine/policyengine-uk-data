@@ -81,11 +81,7 @@ def toy_dataset() -> UKSingleYearDataset:
         {
             "household_id": np.arange(1, n_hh + 1),
             "household_weight": np.full(n_hh, 1000.0),
-            "region": (
-                ["LONDON"] * 5
-                + ["WALES"] * 3
-                + ["SCOTLAND"] * 2
-            ),
+            "region": (["LONDON"] * 5 + ["WALES"] * 3 + ["SCOTLAND"] * 2),
         }
     )
 
@@ -147,9 +143,7 @@ class TestCloneAndAssign:
         )
 
         cloned_total = result.household["household_weight"].sum()
-        np.testing.assert_allclose(
-            cloned_total, original_total, rtol=1e-10
-        )
+        np.testing.assert_allclose(cloned_total, original_total, rtol=1e-10)
 
     def test_unique_household_ids(self, toy_dataset, small_crosswalk):
         result = clone_and_assign(
@@ -207,9 +201,7 @@ class TestCloneAndAssign:
             "region_code_oa",
             "clone_index",
         ]:
-            assert col in result.household.columns, (
-                f"Missing column: {col}"
-            )
+            assert col in result.household.columns, f"Missing column: {col}"
 
     def test_country_constraint(self, toy_dataset, small_crosswalk):
         """English households should get English OAs, etc."""
@@ -220,11 +212,13 @@ class TestCloneAndAssign:
         )
 
         hh = result.household
-        eng_mask = hh["region"].isin([
-            "LONDON",
-            "NORTH_EAST",
-            "SOUTH_EAST",
-        ])
+        eng_mask = hh["region"].isin(
+            [
+                "LONDON",
+                "NORTH_EAST",
+                "SOUTH_EAST",
+            ]
+        )
         wales_mask = hh["region"] == "WALES"
         scot_mask = hh["region"] == "SCOTLAND"
 
@@ -243,14 +237,10 @@ class TestCloneAndAssign:
             crosswalk_path=str(small_crosswalk),
         )
 
-        clone_indices = sorted(
-            result.household["clone_index"].unique()
-        )
+        clone_indices = sorted(result.household["clone_index"].unique())
         assert clone_indices == list(range(n_clones))
 
-    def test_data_preserved_across_clones(
-        self, toy_dataset, small_crosswalk
-    ):
+    def test_data_preserved_across_clones(self, toy_dataset, small_crosswalk):
         """Non-ID columns should be identical across clones."""
         result = clone_and_assign(
             toy_dataset,
@@ -266,9 +256,7 @@ class TestCloneAndAssign:
             original_regions = toy_dataset.household["region"].values
             np.testing.assert_array_equal(regions, original_regions)
 
-    def test_single_clone_is_near_identity(
-        self, toy_dataset, small_crosswalk
-    ):
+    def test_single_clone_is_near_identity(self, toy_dataset, small_crosswalk):
         """With n_clones=1, output should match input dimensions."""
         result = clone_and_assign(
             toy_dataset,
