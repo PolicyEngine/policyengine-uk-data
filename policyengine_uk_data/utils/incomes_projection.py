@@ -4,7 +4,7 @@ from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk_data.utils import uprate_values
 import warnings
 from policyengine_uk import Microsimulation
-from policyengine_uk_data.utils.reweight import reweight
+from microcalibrate import Calibration
 from policyengine_uk_data.datasets import SPI_2020_21
 
 warnings.filterwarnings("ignore")
@@ -29,21 +29,38 @@ for time_period in range(MIN_YEAR, MAX_YEAR + 1):
 statistics = pd.concat(dfs)
 statistics = statistics[statistics.value.notnull()]
 
+# All income types available in SPI data.
+ALL_INCOME_VARIABLES = [
+    "employment_income",
+    "self_employment_income",
+    "state_pension",
+    "private_pension_income",
+    "property_income",
+    "dividend_income",
+]
+
+# Only reweight against employment and self-employment targets.
+# Reweighting against all 6 income types simultaneously inflates
+# dividends, property, and pension income by ~2.5x because the
+# optimiser inflates high-income band weights to match dividend
+# targets concentrated in the £1M+ band (see issue #218).
+# The other income types flow naturally from the SPI distribution.
+REWEIGHT_VARIABLES = [
+    "employment_income",
+    "self_employment_income",
+]
+
 
 def create_target_matrix(
     dataset: str,
     time_period: str,
     reform=None,
 ) -> np.ndarray:
+    """Create a target matrix for reweighting SPI data.
+
+    Only includes employment and self-employment income targets
+    to avoid inflating other income types (see issue #218).
     """
-    Create a target matrix A, s.t. for household weights w, the target vector b and a perfectly calibrated PolicyEngine UK:
-
-    A * w = b
-
-    """
-
-    # First- tax-benefit outcomes from the DWP and OBR.
-
     from policyengine_uk import Microsimulation
 
     sim = Microsimulation(dataset=dataset, reform=reform)
@@ -53,27 +70,13 @@ def create_target_matrix(
 
     df = pd.DataFrame()
 
-    # Finally, incomes from HMRC
-
     target_names = []
     target_values = []
 
-    # Note: savings_interest_income is excluded here because SPI data
-    # significantly underestimates household interest income. It is instead
-    # calibrated from ONS National Accounts D.41g data in tax_benefit.csv.
-    INCOME_VARIABLES = [
-        "employment_income",
-        "self_employment_income",
-        "state_pension",
-        "private_pension_income",
-        "property_income",
-        "dividend_income",
-    ]
-
-    income_df = sim.calculate_dataframe(["total_income"] + INCOME_VARIABLES)
+    income_df = sim.calculate_dataframe(["total_income"] + REWEIGHT_VARIABLES)
 
     incomes = pd.read_csv(STORAGE_FOLDER / "incomes.csv")
-    for variable in INCOME_VARIABLES:
+    for variable in REWEIGHT_VARIABLES:
         incomes[variable + "_count"] = uprate_values(
             incomes[variable + "_count"], "household_weight", 2021, time_period
         )
@@ -87,7 +90,7 @@ def create_target_matrix(
         in_income_band = (income_df.total_income >= lower) & (
             income_df.total_income < upper
         )
-        for variable in INCOME_VARIABLES:
+        for variable in REWEIGHT_VARIABLES:
             name_amount = (
                 "hmrc/" + variable + f"_income_band_{i}_{lower:_}_to_{upper:_}"
             )
@@ -145,27 +148,18 @@ def create_income_projections():
     sim = Microsimulation(dataset=SPI_2020_21)
     household_weights = sim.calculate("household_weight", 2022).values
 
-    reweighted_weights = reweight(
-        household_weights,
-        loss_matrix,
-        targets_array,
+    calibration = Calibration(
+        weights=household_weights,
+        targets=targets_array.values,
+        target_names=targets_array.index.tolist(),
+        estimate_matrix=loss_matrix,
         epochs=1_000,
     )
+    calibration.calibrate()
+    reweighted_weights = calibration.weights
 
     sim = Microsimulation(dataset=SPI_2020_21)
     sim.set_input("household_weight", 2022, reweighted_weights)
-
-    # Note: savings_interest_income is excluded because SPI significantly
-    # underestimates it. Savings income is calibrated from ONS National
-    # Accounts D.41g household interest data in tax_benefit.csv instead.
-    INCOME_VARIABLES = [
-        "employment_income",
-        "self_employment_income",
-        "state_pension",
-        "private_pension_income",
-        "property_income",
-        "dividend_income",
-    ]
 
     incomes = pd.read_csv(STORAGE_FOLDER / "incomes.csv")
 
@@ -177,7 +171,7 @@ def create_income_projections():
         year_df = pd.DataFrame()
         year_df["total_income_lower_bound"] = lower_bounds
         year_df["total_income_upper_bound"] = upper_bounds
-        for variable in INCOME_VARIABLES:
+        for variable in ALL_INCOME_VARIABLES:
             count_values = []
             amount_values = []
             for i, (lower, upper) in enumerate(zip(lower_bounds, upper_bounds)):
