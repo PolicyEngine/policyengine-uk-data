@@ -29,7 +29,6 @@ YEAR = 2025
 TOLERANCE = 0.30  # 30% relative error allowed
 
 
-@pytest.mark.xfail(reason="Will pass after recalibration with ONS land value targets")
 @pytest.mark.parametrize(
     "variable,target",
     list(LAND_TARGETS.items()),
@@ -49,7 +48,6 @@ def test_land_value_aggregate(baseline, variable, target):
     )
 
 
-@pytest.mark.xfail(reason="Will pass after recalibration with ONS land value targets")
 def test_land_value_composition(baseline):
     """Household + corporate land should equal total land value."""
     weights = baseline.calculate("household_weight", period=YEAR).values
@@ -70,7 +68,6 @@ def test_land_value_composition(baseline):
     )
 
 
-@pytest.mark.xfail(reason="Will pass after recalibration with ONS land value targets")
 def test_household_land_less_than_property_wealth(baseline):
     """Household land value should not exceed total property wealth."""
     weights = baseline.calculate("household_weight", period=YEAR).values

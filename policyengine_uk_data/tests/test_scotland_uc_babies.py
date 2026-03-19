@@ -26,8 +26,9 @@ def test_scotland_uc_households_child_under_1(baseline):
     child_under_1 = is_child & (age < 1)
     has_child_under_1 = baseline.map_result(child_under_1, "person", "household") > 0
 
+    on_uc = baseline.map_result(uc > 0, "benunit", "household") > 0
     scotland_uc_child_under_1 = (
-        (region.values == "SCOTLAND") & (uc > 0) & has_child_under_1
+        (region.values == "SCOTLAND") & on_uc & has_child_under_1
     )
     total = (household_weight * scotland_uc_child_under_1).sum()
 
