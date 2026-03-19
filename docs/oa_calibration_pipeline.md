@@ -16,7 +16,7 @@ The UK pipeline currently uses standard PyTorch Adam gradient descent on a dense
 ## Implementation Phases
 
 ### Phase 1: Output Area Crosswalk & Geographic Assignment
-**Status: In Progress**
+**Status: Complete**
 
 Build the OA crosswalk and population-weighted assignment function.
 
@@ -36,18 +36,21 @@ Build the OA crosswalk and population-weighted assignment function.
 ---
 
 ### Phase 2: Clone-and-Assign
-**Status: Not Started**
+**Status: Complete**
 
 Clone each FRS household N times and assign each clone a different OA.
 
 **Deliverables:**
-- `policyengine_uk_data/calibration/clone_and_assign.py`
-- Modify `datasets/create_datasets.py` to insert clone step after imputations, before calibration
+- `policyengine_uk_data/calibration/clone_and_assign.py` — clones all three entity tables (household, person, benunit), remaps IDs, divides weights by N, attaches OA geography columns
+- `datasets/create_datasets.py` — clone step inserted after imputations, before uprating/calibration (N=10 production, N=2 testing)
+- `tests/test_clone_and_assign.py` — 14 tests covering dimensions, weight preservation, ID uniqueness, FK integrity, country constraints, data preservation
 
 **Key design:**
-- N=10 clones initially (tune later)
+- N=10 clones in production, N=2 in testing mode
 - Constituency collision avoidance: each clone gets a different constituency where possible
 - Country constraint preserved: English households → English OAs only
+- Weights divided by N so population totals are preserved
+- Pure pandas/numpy operations — no simulation required, fast execution
 
 **US reference:** PR #457 (district-h5) + PR #531 (census-block-calibration)
 

@@ -34,6 +34,7 @@ def main():
             "Impute capital gains",
             "Impute salary sacrifice",
             "Impute student loan plan",
+            "Clone and assign OA geography",
             "Uprate to 2025",
             "Calibrate constituency weights",
             "Calibrate local authority weights",
@@ -101,6 +102,16 @@ def main():
             update_dataset("Impute student loan plan", "processing")
             frs = impute_student_loan_plan(frs, year=2025)
             update_dataset("Impute student loan plan", "completed")
+
+            # Clone households and assign OA geography
+            update_dataset("Clone and assign OA geography", "processing")
+            from policyengine_uk_data.calibration.clone_and_assign import (
+                clone_and_assign,
+            )
+
+            n_clones = 2 if is_testing else 10
+            frs = clone_and_assign(frs, n_clones=n_clones)
+            update_dataset("Clone and assign OA geography", "completed")
 
             # Uprate dataset
             update_dataset("Uprate to 2025", "processing")
