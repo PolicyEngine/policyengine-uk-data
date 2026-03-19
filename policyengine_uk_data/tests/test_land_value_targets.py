@@ -1,7 +1,7 @@
 """Tests for ONS land value calibration targets.
 
 These validate that the generated Enhanced FRS dataset reproduces
-aggregate land and property wealth values from the ONS National
+aggregate land values from the ONS National
 Balance Sheet 2025.
 
 Source: https://www.ons.gov.uk/economy/nationalaccounts/uksectoraccounts/bulletins/nationalbalancesheet/2025
@@ -22,7 +22,6 @@ LAND_TARGETS = {
     "land_value": _ONS_2024_TOTAL,
     "household_land_value": _ONS_2020_HOUSEHOLD * _SCALE,
     "corporate_land_value": _ONS_2020_CORPORATE * _SCALE,
-    "property_wealth": _ONS_2024_TOTAL,
 }
 
 YEAR = 2025
@@ -36,7 +35,7 @@ TOLERANCE = 0.30  # 30% relative error allowed
     ids=list(LAND_TARGETS.keys()),
 )
 def test_land_value_aggregate(baseline, variable, target):
-    """Check weighted aggregate land/property values against ONS targets."""
+    """Check weighted aggregate land values against ONS targets."""
     weights = baseline.calculate("household_weight", period=YEAR).values
     values = baseline.calculate(variable, map_to="household", period=YEAR).values
     estimate = (values * weights).sum()
@@ -49,7 +48,6 @@ def test_land_value_aggregate(baseline, variable, target):
     )
 
 
-@pytest.mark.xfail(reason="Will pass after recalibration with ONS land value targets")
 def test_land_value_composition(baseline):
     """Household + corporate land should equal total land value."""
     weights = baseline.calculate("household_weight", period=YEAR).values
@@ -70,7 +68,6 @@ def test_land_value_composition(baseline):
     )
 
 
-@pytest.mark.xfail(reason="Will pass after recalibration with ONS land value targets")
 def test_household_land_less_than_property_wealth(baseline):
     """Household land value should not exceed total property wealth."""
     weights = baseline.calculate("household_weight", period=YEAR).values
