@@ -111,13 +111,46 @@ def clone_and_assign(
     # Get country codes for OA assignment
     country_codes = _household_country_codes(dataset)
 
-    # Assign OA geography to all clones
-    geography = assign_random_geography(
-        household_countries=country_codes,
-        n_clones=n_clones,
-        seed=seed,
-        crosswalk_path=crosswalk_path,
+    # Check which countries have OA distributions available.
+    # NI is excluded until NISRA updates their download URLs.
+    from policyengine_uk_data.calibration.oa_assignment import (
+        _load_country_distributions,
+        FRS_COUNTRY_MAP,
     )
+
+    available_distributions = _load_country_distributions(
+        str(crosswalk_path) if crosswalk_path else None
+    )
+    available_countries = set(available_distributions.keys())
+    has_oa = np.array(
+        [
+            FRS_COUNTRY_MAP.get(int(c), "Unknown") in available_countries
+            for c in country_codes
+        ]
+    )
+
+    if not has_oa.all():
+        n_excluded = (~has_oa).sum()
+        excluded_names = sorted(
+            {FRS_COUNTRY_MAP.get(int(c), "Unknown") for c in country_codes[~has_oa]}
+        )
+        logger.warning(
+            "Skipping OA assignment for %d households in %s "
+            "(no crosswalk data available)",
+            n_excluded,
+            ", ".join(excluded_names),
+        )
+
+    # Only assign OA geography to households with available distributions
+    if has_oa.any():
+        geography = assign_random_geography(
+            household_countries=country_codes[has_oa],
+            n_clones=n_clones,
+            seed=seed,
+            crosswalk_path=crosswalk_path,
+        )
+    else:
+        geography = None
 
     # ID offset must be larger than any existing ID to avoid collisions.
     # person_id = household_id * 1000 + person_idx (largest IDs)
@@ -163,14 +196,44 @@ def clone_and_assign(
         hh_clone["household_weight"] = hh["household_weight"].values / n_clones
 
         # Add geography columns from assignment
-        start = clone_idx * n_households
-        end = start + n_households
-        hh_clone["oa_code"] = geography.oa_code[start:end]
-        hh_clone["lsoa_code"] = geography.lsoa_code[start:end]
-        hh_clone["msoa_code"] = geography.msoa_code[start:end]
-        hh_clone["la_code_oa"] = geography.la_code[start:end]
-        hh_clone["constituency_code_oa"] = geography.constituency_code[start:end]
-        hh_clone["region_code_oa"] = geography.region_code[start:end]
+        # Initialise with empty strings for all households
+        geo_cols = {
+            "oa_code": "",
+            "lsoa_code": "",
+            "msoa_code": "",
+            "la_code_oa": "",
+            "constituency_code_oa": "",
+            "region_code_oa": "",
+        }
+        for col, default in geo_cols.items():
+            hh_clone[col] = default
+
+        if geography is not None:
+            # Map geography back to full household array
+            n_assigned = int(has_oa.sum())
+            start = clone_idx * n_assigned
+            end = start + n_assigned
+            oa_positions = np.where(has_oa)[0]
+
+            hh_clone.iloc[oa_positions, hh_clone.columns.get_loc("oa_code")] = (
+                geography.oa_code[start:end]
+            )
+            hh_clone.iloc[oa_positions, hh_clone.columns.get_loc("lsoa_code")] = (
+                geography.lsoa_code[start:end]
+            )
+            hh_clone.iloc[oa_positions, hh_clone.columns.get_loc("msoa_code")] = (
+                geography.msoa_code[start:end]
+            )
+            hh_clone.iloc[oa_positions, hh_clone.columns.get_loc("la_code_oa")] = (
+                geography.la_code[start:end]
+            )
+            hh_clone.iloc[
+                oa_positions, hh_clone.columns.get_loc("constituency_code_oa")
+            ] = geography.constituency_code[start:end]
+            hh_clone.iloc[oa_positions, hh_clone.columns.get_loc("region_code_oa")] = (
+                geography.region_code[start:end]
+            )
+
         hh_clone["clone_index"] = clone_idx
 
         hh_dfs.append(hh_clone)

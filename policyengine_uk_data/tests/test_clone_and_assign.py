@@ -273,6 +273,46 @@ class TestCloneAndAssign:
             toy_dataset.household["household_weight"].values,
         )
 
+    def test_ni_households_gracefully_skipped(self, small_crosswalk):
+        """NI households should clone but get empty OA geography."""
+        n_hh = 6
+        household = pd.DataFrame(
+            {
+                "household_id": np.arange(1, n_hh + 1),
+                "household_weight": np.full(n_hh, 1000.0),
+                "region": ["LONDON"] * 3 + ["NORTHERN_IRELAND"] * 3,
+            }
+        )
+        person_rows = []
+        for hh_id in range(1, n_hh + 1):
+            person_rows.append(
+                {
+                    "person_id": hh_id * 1000 + 1,
+                    "person_household_id": hh_id,
+                    "person_benunit_id": hh_id * 100 + 1,
+                    "age": 35,
+                    "gender": "MALE",
+                }
+            )
+        person = pd.DataFrame(person_rows)
+        benunit = pd.DataFrame({"benunit_id": np.arange(1, n_hh + 1) * 100 + 1})
+
+        # small_crosswalk has no NI OAs
+        ds = UKSingleYearDataset(
+            person=person, benunit=benunit, household=household, fiscal_year=2023
+        )
+
+        result = clone_and_assign(ds, n_clones=2, crosswalk_path=str(small_crosswalk))
+
+        # Should not crash — NI households get empty geography
+        assert len(result.household) == n_hh * 2
+        hh = result.household
+        ni_mask = hh["region"] == "NORTHERN_IRELAND"
+        assert (hh.loc[ni_mask, "oa_code"] == "").all()
+        # English households should still have OA codes
+        eng_mask = hh["region"] == "LONDON"
+        assert hh.loc[eng_mask, "oa_code"].str.startswith("E").all()
+
 
 class TestHelpers:
     def test_remap_ids_clone_zero(self):
