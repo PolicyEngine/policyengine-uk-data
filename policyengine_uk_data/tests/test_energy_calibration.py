@@ -5,7 +5,7 @@ type, and region.
 
 Runs impute_consumption() on the base FRS (post-wealth imputation) so the
 test reflects what the QRF + raking calibration actually produces for real
-FRS households at 2023 price levels.
+FRS households at FY26/27 price levels (Ofgem Q2 2026 rates).
 """
 
 import numpy as np
@@ -22,15 +22,17 @@ from policyengine_uk_data.datasets.imputations.consumption import (
     NEED_REGION_GAS,
     NEED_TENURE_ELEC,
     NEED_TENURE_GAS,
-    OFGEM_Q4_2023_ELEC_RATE,
-    OFGEM_Q4_2023_GAS_RATE,
+    OFGEM_Q2_2026_ELEC_RATE,
+    OFGEM_Q2_2026_GAS_RATE,
     TENURE_TO_NEED,
     impute_consumption,
 )
 from policyengine_uk_data.datasets.imputations.wealth import impute_wealth
 from policyengine_uk_data.storage import STORAGE_FOLDER
 
-BAND_TOL = 0.11  # 11% per cell (raking tension between dimensions can push ~10%)
+BAND_TOL = (
+    0.11  # 11% per cell (raking tension between dimensions can push ~10%)
+)
 HIGH_INC_TOL = 0.15  # 15% for £100k+ bands (thin FRS sample, raking tension)
 
 
@@ -52,7 +54,9 @@ def arrays(imputed):
         income=sim.calculate(
             "household_gross_income", map_to="household", period=2023
         ).values,
-        tenure=sim.calculate("tenure_type", map_to="household", period=2023).values,
+        tenure=sim.calculate(
+            "tenure_type", map_to="household", period=2023
+        ).values,
         accomm=sim.calculate(
             "accommodation_type", map_to="household", period=2023
         ).values,
@@ -72,16 +76,16 @@ def _wmean(values, weights):
 def _check(label, rows):
     _print_table(label, rows)
     for band, imputed, target, pct_err in rows:
-        assert pct_err < BAND_TOL, (
-            f"{label} [{band}]: imputed {imputed:.0f} vs NEED {target:.0f} ({pct_err:.1%})"
-        )
+        assert (
+            pct_err < BAND_TOL
+        ), f"{label} [{band}]: imputed {imputed:.0f} vs NEED {target:.0f} ({pct_err:.1%})"
 
 
 def test_electricity_by_income(arrays):
     elec, income, w = arrays["elec"], arrays["income"], arrays["weights"]
     rows = []
     for lo, hi, band, _, elec_kwh in NEED_INCOME_BANDS:
-        target = elec_kwh * OFGEM_Q4_2023_ELEC_RATE
+        target = elec_kwh * OFGEM_Q2_2026_ELEC_RATE
         mask = (income >= lo) & (income < hi)
         if mask.sum() == 0:
             continue
@@ -93,34 +97,36 @@ def test_electricity_by_income(arrays):
         [(b, i, t, e) for b, i, t, e, _ in rows],
     )
     for band, imp, target, pct_err, tol in rows:
-        assert pct_err < tol, (
-            f"Electricity by income [{band}]: {imp:.0f} vs {target:.0f} ({pct_err:.1%})"
-        )
+        assert (
+            pct_err < tol
+        ), f"Electricity by income [{band}]: {imp:.0f} vs {target:.0f} ({pct_err:.1%})"
 
 
 def test_gas_by_income(arrays):
     gas, income, w = arrays["gas"], arrays["income"], arrays["weights"]
     rows = []
     for lo, hi, band, gas_kwh, _ in NEED_INCOME_BANDS:
-        target = gas_kwh * OFGEM_Q4_2023_GAS_RATE
+        target = gas_kwh * OFGEM_Q2_2026_GAS_RATE
         mask = (income >= lo) & (income < hi)
         if mask.sum() == 0:
             continue
         imp = _wmean(gas[mask], w[mask])
         tol = HIGH_INC_TOL if lo >= 100_000 else BAND_TOL
         rows.append((band, imp, target, abs(imp - target) / target, tol))
-    _print_table("Gas £/yr by income band", [(b, i, t, e) for b, i, t, e, _ in rows])
+    _print_table(
+        "Gas £/yr by income band", [(b, i, t, e) for b, i, t, e, _ in rows]
+    )
     for band, imp, target, pct_err, tol in rows:
-        assert pct_err < tol, (
-            f"Gas by income [{band}]: {imp:.0f} vs {target:.0f} ({pct_err:.1%})"
-        )
+        assert (
+            pct_err < tol
+        ), f"Gas by income [{band}]: {imp:.0f} vs {target:.0f} ({pct_err:.1%})"
 
 
 def test_electricity_by_tenure(arrays):
     elec, tenure, w = arrays["elec"], arrays["tenure"], arrays["weights"]
     rows = []
     for frs_val, need_key in TENURE_TO_NEED.items():
-        target = NEED_TENURE_ELEC[need_key] * OFGEM_Q4_2023_ELEC_RATE
+        target = NEED_TENURE_ELEC[need_key] * OFGEM_Q2_2026_ELEC_RATE
         mask = tenure == frs_val
         if mask.sum() == 0:
             continue
@@ -133,7 +139,7 @@ def test_gas_by_tenure(arrays):
     gas, tenure, w = arrays["gas"], arrays["tenure"], arrays["weights"]
     rows = []
     for frs_val, need_key in TENURE_TO_NEED.items():
-        target = NEED_TENURE_GAS[need_key] * OFGEM_Q4_2023_GAS_RATE
+        target = NEED_TENURE_GAS[need_key] * OFGEM_Q2_2026_GAS_RATE
         mask = tenure == frs_val
         if mask.sum() == 0:
             continue
@@ -146,7 +152,7 @@ def test_electricity_by_accommodation(arrays):
     elec, accomm, w = arrays["elec"], arrays["accomm"], arrays["weights"]
     rows = []
     for frs_val, need_key in ACCOMM_TO_NEED.items():
-        target = NEED_ACCOMM_ELEC[need_key] * OFGEM_Q4_2023_ELEC_RATE
+        target = NEED_ACCOMM_ELEC[need_key] * OFGEM_Q2_2026_ELEC_RATE
         mask = accomm == frs_val
         if mask.sum() == 0:
             continue
@@ -159,7 +165,7 @@ def test_gas_by_accommodation(arrays):
     gas, accomm, w = arrays["gas"], arrays["accomm"], arrays["weights"]
     rows = []
     for frs_val, need_key in ACCOMM_TO_NEED.items():
-        target = NEED_ACCOMM_GAS[need_key] * OFGEM_Q4_2023_GAS_RATE
+        target = NEED_ACCOMM_GAS[need_key] * OFGEM_Q2_2026_GAS_RATE
         mask = accomm == frs_val
         if mask.sum() == 0:
             continue
@@ -172,7 +178,7 @@ def test_electricity_by_region(arrays):
     elec, region, w = arrays["elec"], arrays["region"], arrays["weights"]
     rows = []
     for reg, target_kwh in NEED_REGION_ELEC.items():
-        target = target_kwh * OFGEM_Q4_2023_ELEC_RATE
+        target = target_kwh * OFGEM_Q2_2026_ELEC_RATE
         mask = region == reg
         if mask.sum() == 0:
             continue
@@ -185,7 +191,7 @@ def test_gas_by_region(arrays):
     gas, region, w = arrays["gas"], arrays["region"], arrays["weights"]
     rows = []
     for reg, target_kwh in NEED_REGION_GAS.items():
-        target = target_kwh * OFGEM_Q4_2023_GAS_RATE
+        target = target_kwh * OFGEM_Q2_2026_GAS_RATE
         mask = region == reg
         if mask.sum() == 0:
             continue
@@ -198,7 +204,9 @@ def test_non_negative_energy(imputed):
     """All households should have non-negative electricity and gas spend."""
     elec = imputed.household["electricity_consumption"].values
     gas = imputed.household["gas_consumption"].values
-    assert (elec >= 0).all(), f"{(elec < 0).sum()} households have negative electricity"
+    assert (
+        elec >= 0
+    ).all(), f"{(elec < 0).sum()} households have negative electricity"
     assert (gas >= 0).all(), f"{(gas < 0).sum()} households have negative gas"
 
 
@@ -208,10 +216,10 @@ def test_national_mean(arrays):
     # NEED 2023 overall mean: unweighted average across income bands as proxy
     need_elec_national = (
         sum(e for *_, e in NEED_INCOME_BANDS) / len(NEED_INCOME_BANDS)
-    ) * OFGEM_Q4_2023_ELEC_RATE
+    ) * OFGEM_Q2_2026_ELEC_RATE
     need_gas_national = (
         sum(g for *_, g, _ in NEED_INCOME_BANDS) / len(NEED_INCOME_BANDS)
-    ) * OFGEM_Q4_2023_GAS_RATE
+    ) * OFGEM_Q2_2026_GAS_RATE
 
     imp_elec = _wmean(arrays["elec"], w)
     imp_gas = _wmean(arrays["gas"], w)
@@ -256,5 +264,7 @@ def _print_table(title, rows):
     print(f"  {'─' * 26} {'─' * 10} {'─' * 10} {'─' * 8}")
     for group, imp, target, pct_err in rows:
         flag = " !" if pct_err >= BAND_TOL else ""
-        print(f"  {str(group):<26} {imp:>10.0f} {target:>10.0f} {pct_err:>7.1%}{flag}")
+        print(
+            f"  {str(group):<26} {imp:>10.0f} {target:>10.0f} {pct_err:>7.1%}{flag}"
+        )
     print(f"{'─' * 68}")
