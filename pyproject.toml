@@ -38,6 +38,7 @@ dev = [
     "ruff>=0.9.0",
     "pytest",
     "torch",
+    "l0-python>=0.4.0",
     "tables",
     "furo",
     "yaml-changelog>=0.1.7",

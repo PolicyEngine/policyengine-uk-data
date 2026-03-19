@@ -57,19 +57,22 @@ Clone each FRS household N times and assign each clone a different OA.
 ---
 
 ### Phase 3: L0 Calibration Engine
-**Status: Not Started**
+**Status: Complete**
 
-Port L0-regularized optimization from US side.
+L0-regularised calibration using HardConcrete gates from the `l0-python` package.
 
 **Deliverables:**
-- `policyengine_uk_data/utils/calibrate_l0.py`
-- Add `l0-python` dependency to `pyproject.toml`
+- `policyengine_uk_data/utils/calibrate_l0.py` — wraps `SparseCalibrationWeights` with the existing target matrix interface; builds a sparse `(n_targets, n_records)` matrix with country masking baked into sparsity; supports target grouping for balanced metric weighting
+- `l0-python>=0.4.0` added to dev dependencies in `pyproject.toml`
+- `tests/test_calibrate_l0.py` — 6 tests covering sparse matrix construction, country masking, zero-target filtering, group structure, error reduction, and sparsity behaviour
+- Existing `calibrate.py` preserved as fallback
 
 **Key design:**
 - HardConcrete gates for continuous L0 relaxation
-- Relative squared error loss
-- L0 + L2 regularization with presets (local vs national)
-- Keep existing `calibrate.py` as fallback during validation
+- Relative squared error loss with target group weighting
+- L0 + L2 regularisation (configurable strengths)
+- Sparse matrix representation — country masking baked into sparsity pattern rather than dense mask multiplication
+- Same `matrix_fn` / `national_matrix_fn` interface as existing calibration
 
 **US reference:** PR #364 (bogorek-l0) + PR #365
 
