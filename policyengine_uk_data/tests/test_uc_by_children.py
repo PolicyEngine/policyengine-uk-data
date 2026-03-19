@@ -22,9 +22,6 @@ _TARGETS = {
 TOLERANCE = 0.30  # 30% relative tolerance
 
 
-@pytest.mark.xfail(
-    reason="Will pass after recalibration with UC-by-children constituency targets"
-)
 @pytest.mark.parametrize(
     "bucket,target",
     list(_TARGETS.items()),
