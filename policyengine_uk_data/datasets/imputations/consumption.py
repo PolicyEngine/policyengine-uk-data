@@ -12,7 +12,9 @@ Key features:
 - Housing predictors (tenure_type, accommodation_type) added alongside income
   and demographics, matching the strong drivers in NEED admin data.
 - Imputed totals are calibrated to NEED 2023 mean kWh targets by income band,
-  converted to spend using Ofgem Q4 2023 unit rates (Oct 2023 price cap).
+  converted to spend using Ofgem Q2 2026 unit rates (Apr 2026 price cap) so the
+  stored £/yr values represent FY26/27 price levels. Energy variables are not
+  CPI-uprated, so this avoids the need for price-level adjustment at simulation time.
   NEED income bands use Experian modelled gross household income, so calibration
   matches against gross income (LCFS P344p / FRS household_gross_income) rather
   than HBAI net income.
@@ -143,11 +145,13 @@ IMPUTATIONS = [
 # Source: NEED 2023 headline tables (published 2025), England & Wales, ~18M dwellings.
 # Tables 11b/12b: mean gas/electricity kWh by income; 9b/10b by tenure;
 # 5b/6b by property type; 15b/16b by region; 13b/14b by number of adults.
-# Converted to annual spend using Ofgem Q4 2023 (Oct 2023 price cap) unit rates.
-# 2023 is used rather than 2022 because 2022 was an extreme energy-price crisis year.
+# NEED kWh targets are physical consumption (stable across years). We convert to
+# annual spend using Ofgem Q2 2026 unit rates so the raked values represent
+# FY26/27 price levels. Energy variables are not CPI-uprated, so this ensures
+# the stored £/yr values are correct for the target simulation year.
 # Standing charges excluded to keep to unit-rate spend consistent with LCFS recording.
-OFGEM_Q4_2023_ELEC_RATE = 27.35 / 100  # £/kWh (Oct 2023 price cap)
-OFGEM_Q4_2023_GAS_RATE = 6.89 / 100  # £/kWh (Oct 2023 price cap)
+OFGEM_Q2_2026_ELEC_RATE = 24.67 / 100  # £/kWh (Apr 2026 price cap)
+OFGEM_Q2_2026_GAS_RATE = 5.74 / 100  # £/kWh (Apr 2026 price cap)
 
 # NEED 2023 mean kWh by income band (Table 11b gas, Table 12b electricity)
 # Income bands are gross household income (Experian modelled data)
@@ -234,26 +238,26 @@ NEED_REGION_ELEC = {
     "WALES": 3_151,
 }
 
-# Pre-computed NEED spend targets (£/yr) — kWh × unit rate, keyed by energy type.
-# Used in the raking loop of impute_consumption(); avoids recomputing each call.
+# Pre-computed NEED spend targets (£/yr at FY26/27 prices) — kWh × Ofgem Q2 2026
+# unit rate, keyed by energy type. Used in the raking loop of impute_consumption().
 _NEED_SPEND = {
     "electricity": {
         "income": [
-            (lo, hi, elec_kwh * OFGEM_Q4_2023_ELEC_RATE)
+            (lo, hi, elec_kwh * OFGEM_Q2_2026_ELEC_RATE)
             for lo, hi, _, _, elec_kwh in NEED_INCOME_BANDS
         ],
-        "tenure": {k: v * OFGEM_Q4_2023_ELEC_RATE for k, v in NEED_TENURE_ELEC.items()},
-        "accomm": {k: v * OFGEM_Q4_2023_ELEC_RATE for k, v in NEED_ACCOMM_ELEC.items()},
-        "region": {k: v * OFGEM_Q4_2023_ELEC_RATE for k, v in NEED_REGION_ELEC.items()},
+        "tenure": {k: v * OFGEM_Q2_2026_ELEC_RATE for k, v in NEED_TENURE_ELEC.items()},
+        "accomm": {k: v * OFGEM_Q2_2026_ELEC_RATE for k, v in NEED_ACCOMM_ELEC.items()},
+        "region": {k: v * OFGEM_Q2_2026_ELEC_RATE for k, v in NEED_REGION_ELEC.items()},
     },
     "gas": {
         "income": [
-            (lo, hi, gas_kwh * OFGEM_Q4_2023_GAS_RATE)
+            (lo, hi, gas_kwh * OFGEM_Q2_2026_GAS_RATE)
             for lo, hi, _, gas_kwh, _ in NEED_INCOME_BANDS
         ],
-        "tenure": {k: v * OFGEM_Q4_2023_GAS_RATE for k, v in NEED_TENURE_GAS.items()},
-        "accomm": {k: v * OFGEM_Q4_2023_GAS_RATE for k, v in NEED_ACCOMM_GAS.items()},
-        "region": {k: v * OFGEM_Q4_2023_GAS_RATE for k, v in NEED_REGION_GAS.items()},
+        "tenure": {k: v * OFGEM_Q2_2026_GAS_RATE for k, v in NEED_TENURE_GAS.items()},
+        "accomm": {k: v * OFGEM_Q2_2026_GAS_RATE for k, v in NEED_ACCOMM_GAS.items()},
+        "region": {k: v * OFGEM_Q2_2026_GAS_RATE for k, v in NEED_REGION_GAS.items()},
     },
 }
 
@@ -264,18 +268,18 @@ def _need_targets(income: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     elec_spend = np.full(len(income), np.nan)
     for lo, hi, _, gas_kwh, elec_kwh in NEED_INCOME_BANDS:
         mask = (income >= lo) & (income < hi)
-        gas_spend[mask] = gas_kwh * OFGEM_Q4_2023_GAS_RATE
-        elec_spend[mask] = elec_kwh * OFGEM_Q4_2023_ELEC_RATE
+        gas_spend[mask] = gas_kwh * OFGEM_Q2_2026_GAS_RATE
+        elec_spend[mask] = elec_kwh * OFGEM_Q2_2026_ELEC_RATE
     # Fill any missing with overall means
     overall_gas = (
         sum(g for *_, g, _ in NEED_INCOME_BANDS)
         / len(NEED_INCOME_BANDS)
-        * OFGEM_Q4_2023_GAS_RATE
+        * OFGEM_Q2_2026_GAS_RATE
     )
     overall_elec = (
         sum(e for *_, e in NEED_INCOME_BANDS)
         / len(NEED_INCOME_BANDS)
-        * OFGEM_Q4_2023_ELEC_RATE
+        * OFGEM_Q2_2026_ELEC_RATE
     )
     gas_spend = np.where(np.isnan(gas_spend), overall_gas, gas_spend)
     elec_spend = np.where(np.isnan(elec_spend), overall_elec, elec_spend)
@@ -344,7 +348,8 @@ def _calibrate_energy_to_need(
     household: pd.DataFrame, income_col: str = "household_gross_income"
 ) -> pd.DataFrame:
     """
-    Rescale imputed electricity and gas spend to match NEED 2023 income-band means.
+    Rescale imputed electricity and gas spend to match NEED 2023 income-band means
+    at FY26/27 price levels (Ofgem Q2 2026 rates).
 
     NEED 2023 income bands use Experian modelled gross household income, so we
     match against gross income rather than HBAI net income.
@@ -589,19 +594,20 @@ def impute_consumption(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     for column in output_df.columns:
         dataset.household[column] = output_df[column].values
 
-    # Re-calibrate electricity and gas to NEED 2023 targets using iterative raking
-    # over income band, tenure, accommodation type, and region.
-    # This is a 4-dimensional raking (vs the 1D income-band calibration on LCFS
-    # training data in _calibrate_energy_to_need) because the FRS has the full
-    # set of housing/demographic variables needed for multi-margin calibration.
+    # Re-calibrate electricity and gas to NEED 2023 kWh targets (converted to
+    # FY26/27 £ at Ofgem Q2 2026 rates) using iterative raking over income band,
+    # tenure, accommodation type, and region. Energy variables are not CPI-uprated,
+    # so raking at the target-year price level ensures stored £/yr values are
+    # correct for the simulation year without further adjustment.
     # NEED income bands use Experian modelled gross income, so we use
     # household_gross_income rather than hbai_household_net_income.
     income = sim.calculate("household_gross_income", map_to="household").values
     tenure = sim.calculate("tenure_type", map_to="household").values
     accomm = sim.calculate("accommodation_type", map_to="household").values
     region = sim.calculate("region", map_to="household").values
+    weights = sim.calculate("household_weight", map_to="household").values
 
-    # Pre-compute boolean masks (reused across 20 raking iterations)
+    # Pre-compute boolean masks (reused across raking iterations)
     income_masks = []
     for lo, hi, _ in _NEED_SPEND["electricity"]["income"]:
         income_masks.append((income >= lo) & (income < hi))
@@ -609,33 +615,44 @@ def impute_consumption(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     accomm_masks = {frs_val: accomm == frs_val for frs_val in ACCOMM_TO_NEED}
     region_masks = {reg: region == reg for reg in _NEED_SPEND["electricity"]["region"]}
 
+    def _wmean(arr, mask):
+        w = weights[mask]
+        total_w = w.sum()
+        if total_w == 0:
+            return 0.0
+        return (arr[mask] * w).sum() / total_w
+
     for energy, col in [
         ("electricity", "electricity_consumption"),
         ("gas", "gas_consumption"),
     ]:
         targets = _NEED_SPEND[energy]
         arr = dataset.household[col].values.copy()
-        for _ in range(20):  # iterative raking — converges in ~10 passes
+        for _ in range(50):  # iterative raking
             for i, (_, _, target) in enumerate(targets["income"]):
                 mask = income_masks[i]
-                if mask.sum() > 0 and arr[mask].mean() > 0:
-                    arr[mask] *= target / arr[mask].mean()
+                wm = _wmean(arr, mask)
+                if mask.sum() > 0 and wm > 0:
+                    arr[mask] *= target / wm
             for frs_val, need_key in TENURE_TO_NEED.items():
                 if need_key not in targets["tenure"]:
                     continue
                 mask = tenure_masks[frs_val]
-                if mask.sum() > 0 and arr[mask].mean() > 0:
-                    arr[mask] *= targets["tenure"][need_key] / arr[mask].mean()
+                wm = _wmean(arr, mask)
+                if mask.sum() > 0 and wm > 0:
+                    arr[mask] *= targets["tenure"][need_key] / wm
             for frs_val, need_key in ACCOMM_TO_NEED.items():
                 if need_key not in targets["accomm"]:
                     continue
                 mask = accomm_masks[frs_val]
-                if mask.sum() > 0 and arr[mask].mean() > 0:
-                    arr[mask] *= targets["accomm"][need_key] / arr[mask].mean()
+                wm = _wmean(arr, mask)
+                if mask.sum() > 0 and wm > 0:
+                    arr[mask] *= targets["accomm"][need_key] / wm
             for reg_val, target in targets["region"].items():
                 mask = region_masks[reg_val]
-                if mask.sum() > 0 and arr[mask].mean() > 0:
-                    arr[mask] *= target / arr[mask].mean()
+                wm = _wmean(arr, mask)
+                if mask.sum() > 0 and wm > 0:
+                    arr[mask] *= target / wm
         dataset.household[col] = arr
 
     # Zero out car-fuel spending for non-ICE households
