@@ -173,11 +173,17 @@ def publish_area_h5(
             grp = f.create_group(table_name)
             for col in df.columns:
                 values = df[col].values
-                if not np.issubdtype(values.dtype, np.number) and not np.issubdtype(
-                    values.dtype, np.bool_
-                ):
-                    # Convert any non-numeric type (object, categorical,
-                    # string) to fixed-length byte strings for HDF5
+                # Check if dtype is numeric/bool. Pandas extension
+                # dtypes (StringDtype, CategoricalDtype) aren't numpy
+                # dtypes and crash np.issubdtype, so catch TypeError.
+                is_numeric = False
+                try:
+                    is_numeric = np.issubdtype(
+                        values.dtype, np.number
+                    ) or np.issubdtype(values.dtype, np.bool_)
+                except TypeError:
+                    pass
+                if not is_numeric:
                     values = np.array([str(v) for v in values], dtype="S")
                 grp.create_dataset(col, data=values)
 
