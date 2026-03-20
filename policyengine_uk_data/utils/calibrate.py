@@ -1,3 +1,4 @@
+import logging
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Optional, Union
@@ -9,6 +10,8 @@ import h5py
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk_data.utils.progress import ProcessingProgress
+
+logger = logging.getLogger(__name__)
 
 
 def load_weights(
@@ -365,5 +368,36 @@ def calibrate_local_areas(
                     f.create_dataset(dataset_key, data=final_weights)
 
                 dataset.household.household_weight = final_weights.sum(axis=0)
+
+    # Post-calibration population rescaling: the optimiser treats
+    # population as 1 of ~556 targets so it drifts ~6% high. Rescale
+    # all weights so the weighted population matches the ONS target.
+    pop_col_name = "ons/uk_population"
+    pop_idx = None
+    if hasattr(m_n, "columns"):
+        cols = list(m_n.columns)
+        if pop_col_name in cols:
+            pop_idx = cols.index(pop_col_name)
+    if pop_idx is not None:
+        pop_metric = (
+            m_n.values[:, pop_idx] if hasattr(m_n, "values") else m_n[:, pop_idx]
+        )
+        pop_target = float(y_n.iloc[pop_idx] if hasattr(y_n, "iloc") else y_n[pop_idx])
+        national_weights = final_weights.sum(axis=0)
+        actual_pop = (national_weights * pop_metric).sum()
+        if actual_pop > 0:
+            scale = pop_target / actual_pop
+            final_weights *= scale
+            logger.info(
+                "Population rescale: %.2fM -> %.2fM (factor %.4f)",
+                actual_pop / 1e6,
+                pop_target / 1e6,
+                scale,
+            )
+
+            # Re-save rescaled weights
+            with h5py.File(STORAGE_FOLDER / weight_file, "w") as f:
+                f.create_dataset(dataset_key, data=final_weights)
+            dataset.household.household_weight = final_weights.sum(axis=0)
 
     return dataset
