@@ -19,8 +19,7 @@ def test_weighted_population_matches_ons_target(baseline):
 
 def test_household_count_reasonable(baseline):
     """Total weighted households should be roughly 28-30M (ONS estimate)."""
-    weights = baseline.calculate("household_weight", 2025).values
-    total_hh = weights.sum() / 1e6
+    total_hh = baseline.calculate("household_weight", 2025).sum() / 1e6
     assert 25 < total_hh < 33, (
         f"Total weighted households {total_hh:.1f}M outside 25-33M range."
     )
@@ -36,15 +35,13 @@ def test_population_not_inflated(baseline):
 
 def test_country_populations_sum_to_uk(baseline):
     """England + Scotland + Wales + NI populations should sum to UK total."""
-    hw = baseline.calculate("household_weight", 2025).values
-    people = baseline.calculate("people_in_household", 2025).values
-    country = baseline.calculate("country", map_to="household").values
+    people = baseline.calculate("people_in_household", 2025)
+    country = baseline.calculate("country", map_to="household")
 
-    uk_pop = (hw * people).sum()
-    country_sum = 0
-    for c in set(country):
-        mask = country == c
-        country_sum += (hw[mask] * people[mask]).sum()
+    uk_pop = people.sum()
+    country_sum = sum(
+        people[country == c].sum() for c in country.unique()
+    )
 
     assert abs(country_sum / uk_pop - 1) < 0.001, (
         f"Country populations sum to {country_sum/1e6:.1f}M "
