@@ -11,6 +11,60 @@ from policyengine_uk_data.utils.progress import ProcessingProgress
 logger = logging.getLogger(__name__)
 
 
+def rescale_weights_to_population(
+    final_weights: np.ndarray,
+    national_matrix,
+    national_targets,
+) -> tuple[np.ndarray, float]:
+    """Rescale weights so weighted UK population matches the ONS target.
+
+    The optimiser treats population as 1 of ~556 targets so it drifts
+    ~6% high. This uniformly scales all weights to correct for that.
+
+    Args:
+        final_weights: calibrated weight matrix (n_areas x n_households)
+        national_matrix: DataFrame or array with national metric columns
+        national_targets: Series or array of national target values
+
+    Returns:
+        (rescaled_weights, scale_factor) — scale_factor is 1.0 if no
+        population column is found or actual population is zero.
+    """
+    pop_col_name = "ons/uk_population"
+    pop_idx = None
+    if hasattr(national_matrix, "columns"):
+        cols = list(national_matrix.columns)
+        if pop_col_name in cols:
+            pop_idx = cols.index(pop_col_name)
+    if pop_idx is None:
+        return final_weights, 1.0
+
+    pop_metric = (
+        national_matrix.values[:, pop_idx]
+        if hasattr(national_matrix, "values")
+        else national_matrix[:, pop_idx]
+    )
+    pop_target = float(
+        national_targets.iloc[pop_idx]
+        if hasattr(national_targets, "iloc")
+        else national_targets[pop_idx]
+    )
+    national_weights = final_weights.sum(axis=0)
+    actual_pop = (national_weights * pop_metric).sum()
+    if actual_pop <= 0:
+        return final_weights, 1.0
+
+    scale = pop_target / actual_pop
+    rescaled = final_weights * scale
+    logger.info(
+        "Population rescale: %.2fM -> %.2fM (factor %.4f)",
+        actual_pop / 1e6,
+        pop_target / 1e6,
+        scale,
+    )
+    return rescaled, scale
+
+
 def calibrate_local_areas(
     dataset: UKSingleYearDataset,
     matrix_fn,
@@ -282,32 +336,12 @@ def calibrate_local_areas(
     # Post-calibration population rescaling: the optimiser treats
     # population as 1 of ~556 targets so it drifts ~6% high. Rescale
     # all weights so the weighted population matches the ONS target.
-    pop_col_name = "ons/uk_population"
-    pop_idx = None
-    if hasattr(m_n, "columns"):
-        cols = list(m_n.columns)
-        if pop_col_name in cols:
-            pop_idx = cols.index(pop_col_name)
-    if pop_idx is not None:
-        pop_metric = (
-            m_n.values[:, pop_idx] if hasattr(m_n, "values") else m_n[:, pop_idx]
-        )
-        pop_target = float(y_n.iloc[pop_idx] if hasattr(y_n, "iloc") else y_n[pop_idx])
-        national_weights = final_weights.sum(axis=0)
-        actual_pop = (national_weights * pop_metric).sum()
-        if actual_pop > 0:
-            scale = pop_target / actual_pop
-            final_weights *= scale
-            logger.info(
-                "Population rescale: %.2fM -> %.2fM (factor %.4f)",
-                actual_pop / 1e6,
-                pop_target / 1e6,
-                scale,
-            )
-
-            # Re-save rescaled weights
-            with h5py.File(STORAGE_FOLDER / weight_file, "w") as f:
-                f.create_dataset(dataset_key, data=final_weights)
-            dataset.household.household_weight = final_weights.sum(axis=0)
+    final_weights, scale = rescale_weights_to_population(
+        final_weights, m_n, y_n
+    )
+    if scale != 1.0:
+        with h5py.File(STORAGE_FOLDER / weight_file, "w") as f:
+            f.create_dataset(dataset_key, data=final_weights)
+        dataset.household.household_weight = final_weights.sum(axis=0)
 
     return dataset
