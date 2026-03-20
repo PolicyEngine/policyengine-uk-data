@@ -39,11 +39,9 @@ def test_country_populations_sum_to_uk(baseline):
     country = baseline.calculate("country", map_to="household")
 
     uk_pop = people.sum()
-    country_sum = sum(
-        people[country == c].sum() for c in country.unique()
-    )
+    country_sum = sum(people[country == c].sum() for c in country.unique())
 
     assert abs(country_sum / uk_pop - 1) < 0.001, (
-        f"Country populations sum to {country_sum/1e6:.1f}M "
-        f"but UK total is {uk_pop/1e6:.1f}M."
+        f"Country populations sum to {country_sum / 1e6:.1f}M "
+        f"but UK total is {uk_pop / 1e6:.1f}M."
     )

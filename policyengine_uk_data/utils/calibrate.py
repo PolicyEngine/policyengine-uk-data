@@ -336,9 +336,7 @@ def calibrate_local_areas(
     # Post-calibration population rescaling: the optimiser treats
     # population as 1 of ~556 targets so it drifts ~6% high. Rescale
     # all weights so the weighted population matches the ONS target.
-    final_weights, scale = rescale_weights_to_population(
-        final_weights, m_n, y_n
-    )
+    final_weights, scale = rescale_weights_to_population(final_weights, m_n, y_n)
     if scale != 1.0:
         with h5py.File(STORAGE_FOLDER / weight_file, "w") as f:
             f.create_dataset(dataset_key, data=final_weights)
