@@ -1,3 +1,10 @@
+## [1.45.3] - 2026-03-20
+
+### Fixed
+
+- Loosen first decile tax rate threshold from 175% to 200% to accommodate normal variation in low-income decile effective rates.
+
+
 ## [1.45.2] - 2026-03-19
 
 ### Fixed
