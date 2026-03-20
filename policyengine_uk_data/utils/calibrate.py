@@ -1,11 +1,14 @@
+import logging
+
 import torch
-from policyengine_uk import Microsimulation
 import pandas as pd
 import numpy as np
 import h5py
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk_data.utils.progress import ProcessingProgress
+
+logger = logging.getLogger(__name__)
 
 
 def calibrate_local_areas(
@@ -171,8 +174,8 @@ def calibrate_local_areas(
 
                 optimizer.zero_grad()
                 weights_ = torch.exp(dropout_weights(weights, 0.05)) * r
-                l = loss(weights_)
-                l.backward()
+                loss_val = loss(weights_)
+                loss_val.backward()
                 optimizer.step()
 
                 local_close = pct_close(weights_, local=True, national=False)
@@ -187,7 +190,7 @@ def calibrate_local_areas(
                     )
                 else:
                     update_calibration(
-                        epoch + 1, loss_value=l.item(), calculating_loss=False
+                        epoch + 1, loss_value=loss_val.item(), calculating_loss=False
                     )
 
                 if epoch % 10 == 0:
@@ -225,8 +228,8 @@ def calibrate_local_areas(
         for epoch in range(epochs):
             optimizer.zero_grad()
             weights_ = torch.exp(dropout_weights(weights, 0.05)) * r
-            l = loss(weights_)
-            l.backward()
+            loss_val = loss(weights_)
+            loss_val.backward()
             optimizer.step()
 
             local_close = pct_close(weights_, local=True, national=False)
@@ -236,12 +239,12 @@ def calibrate_local_areas(
                 if dropout_targets:
                     validation_loss = loss(weights_, validation=True)
                     print(
-                        f"Training loss: {l.item():,.3f}, Validation loss: {validation_loss.item():,.3f}, Epoch: {epoch}, "
+                        f"Training loss: {loss_val.item():,.3f}, Validation loss: {validation_loss.item():,.3f}, Epoch: {epoch}, "
                         f"{area_name}<10%: {local_close:.1%}, National<10%: {national_close:.1%}"
                     )
                 else:
                     print(
-                        f"Loss: {l.item()}, Epoch: {epoch}, {area_name}<10%: {local_close:.1%}, National<10%: {national_close:.1%}"
+                        f"Loss: {loss_val.item()}, Epoch: {epoch}, {area_name}<10%: {local_close:.1%}, National<10%: {national_close:.1%}"
                     )
 
         if epoch % 10 == 0:
@@ -274,6 +277,37 @@ def calibrate_local_areas(
             with h5py.File(STORAGE_FOLDER / weight_file, "w") as f:
                 f.create_dataset(dataset_key, data=final_weights)
 
+            dataset.household.household_weight = final_weights.sum(axis=0)
+
+    # Post-calibration population rescaling: the optimiser treats
+    # population as 1 of ~556 targets so it drifts ~6% high. Rescale
+    # all weights so the weighted population matches the ONS target.
+    pop_col_name = "ons/uk_population"
+    pop_idx = None
+    if hasattr(m_n, "columns"):
+        cols = list(m_n.columns)
+        if pop_col_name in cols:
+            pop_idx = cols.index(pop_col_name)
+    if pop_idx is not None:
+        pop_metric = (
+            m_n.values[:, pop_idx] if hasattr(m_n, "values") else m_n[:, pop_idx]
+        )
+        pop_target = float(y_n.iloc[pop_idx] if hasattr(y_n, "iloc") else y_n[pop_idx])
+        national_weights = final_weights.sum(axis=0)
+        actual_pop = (national_weights * pop_metric).sum()
+        if actual_pop > 0:
+            scale = pop_target / actual_pop
+            final_weights *= scale
+            logger.info(
+                "Population rescale: %.2fM -> %.2fM (factor %.4f)",
+                actual_pop / 1e6,
+                pop_target / 1e6,
+                scale,
+            )
+
+            # Re-save rescaled weights
+            with h5py.File(STORAGE_FOLDER / weight_file, "w") as f:
+                f.create_dataset(dataset_key, data=final_weights)
             dataset.household.household_weight = final_weights.sum(axis=0)
 
     return dataset
