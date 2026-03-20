@@ -1,3 +1,10 @@
+## [1.45.4] - 2026-03-20
+
+### Fixed
+
+- Scale property income targets by 1.9x to match HMRC Property Rental Income Statistics, and fix double-counting of aggregate rows in projected years (#230).
+
+
 ## [1.45.3] - 2026-03-20
 
 ### Fixed
