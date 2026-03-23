@@ -53,49 +53,10 @@ column_order = [
 income = income[column_order]
 income = income.replace("#", np.nan)
 
-# reference values from here: https://www.gov.uk/government/statistics/percentile-points-from-1-to-99-for-total-income-before-and-after-tax#:~:text=Details,in%20the%20Background%20Quality%20Report.
-reference_values = {
-    10: 15300,
-    20: 18000,
-    30: 20800,
-    40: 23700,
-    50: 27200,
-    60: 31600,
-    70: 37500,
-    80: 46100,
-    90: 62000,
-    91: 65300,
-    92: 69200,
-    93: 74000,
-    94: 79800,
-    95: 87400,
-    96: 97200,
-    97: 111000,
-    98: 137000,
-    100: 199000,
-}
-
-# List of columns to work on, now including 91-98 percentiles, in order
-percentile_columns = [
-    "10 percentile",
-    "20 percentile",
-    "30 percentile",
-    "40 percentile",
-    "50 percentile",
-    "60 percentile",
-    "70 percentile",
-    "80 percentile",
-    "90 percentile",
-    "91 percentile",
-    "92 percentile",
-    "93 percentile",
-    "94 percentile",
-    "95 percentile",
-    "96 percentile",
-    "97 percentile",
-    "98 percentile",
-    "100 percentile",
-]
+from policyengine_uk_data.datasets.local_areas.earnings_percentiles import (
+    PERCENTILE_COLUMNS as percentile_columns,
+    fill_missing_percentiles,
+)
 
 # Ensure all new percentile columns exist in the DataFrame, set them to NaN initially if they don’t
 for col in percentile_columns:
@@ -106,51 +67,6 @@ for col in percentile_columns:
 income[percentile_columns] = income[percentile_columns].apply(
     pd.to_numeric, errors="coerce"
 )
-
-
-# Function to fill missing values based on reference ratios
-def fill_missing_percentiles(row):
-    # Extract known values and their corresponding percentiles
-    known_values = {
-        int(col.split()[0]): row[col]
-        for col in percentile_columns
-        if pd.notna(row[col])
-    }
-
-    # If no values are known, return the row unchanged
-    if not known_values:
-        return row
-
-    # Sort known values by percentile to calculate intermediate values
-    known_percentiles = sorted(known_values.keys())
-
-    # Fill missing values based on ratios
-    for col in percentile_columns:
-        percentile = int(col.split()[0])
-
-        # If this percentile is missing in the row
-        if pd.isna(row[col]):
-            # Find the closest lower and upper known percentiles
-            lower = max([p for p in known_percentiles if p < percentile], default=None)
-            upper = min([p for p in known_percentiles if p > percentile], default=None)
-
-            # If both lower and upper bounds exist, interpolate
-            if lower is not None and upper is not None:
-                # Ratio between the target percentile and the lower bound
-                lower_ratio = reference_values[percentile] / reference_values[lower]
-                row[col] = row[f"{lower} percentile"] * lower_ratio
-
-            # If only the lower bound exists, extrapolate upwards
-            elif lower is not None:
-                lower_ratio = reference_values[percentile] / reference_values[lower]
-                row[col] = row[f"{lower} percentile"] * lower_ratio
-
-            # If only the upper bound exists, extrapolate downwards
-            elif upper is not None:
-                upper_ratio = reference_values[percentile] / reference_values[upper]
-                row[col] = row[f"{upper} percentile"] * upper_ratio
-
-    return row
 
 
 # Apply the function to each row in the DataFrame
