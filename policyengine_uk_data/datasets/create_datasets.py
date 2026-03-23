@@ -38,7 +38,6 @@ def main():
             "Uprate to 2025",
             "Calibrate constituency weights",
             "Calibrate local authority weights",
-            "Publish local area H5 files",
             "Downrate to 2023",
             "Save final dataset",
             "Create tiny datasets",
@@ -177,24 +176,6 @@ def main():
             )
 
             update_dataset("Calibrate dataset", "completed")
-
-            # Publish per-area H5 files from L0 weights
-            update_dataset("Publish local area H5 files", "processing")
-            from policyengine_uk_data.calibration.publish_local_h5s import (
-                publish_local_h5s,
-            )
-
-            publish_local_h5s(
-                dataset=frs,
-                weight_file="parliamentary_constituency_weights.h5",
-                area_type="constituency",
-            )
-            publish_local_h5s(
-                dataset=frs,
-                weight_file="local_authority_weights.h5",
-                area_type="la",
-            )
-            update_dataset("Publish local area H5 files", "completed")
 
             # Downrate and save
             update_dataset("Downrate to 2023", "processing")
