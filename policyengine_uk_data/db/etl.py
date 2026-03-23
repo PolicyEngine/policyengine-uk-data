@@ -123,9 +123,7 @@ def load_areas(session: Session) -> int:
             count += 1
 
         # Build LA → region lookup from crosswalk
-        la_region = xw[["la_code", "region_code"]].drop_duplicates(
-            subset=["la_code"]
-        )
+        la_region = xw[["la_code", "region_code"]].drop_duplicates(subset=["la_code"])
         for _, r in la_region.iterrows():
             if pd.notna(r["la_code"]) and pd.notna(r["region_code"]):
                 la_to_region[r["la_code"]] = r["region_code"]
@@ -223,9 +221,7 @@ def load_areas(session: Session) -> int:
         count += oa_count
         logger.info("Loaded %d OAs", oa_count)
     else:
-        logger.warning(
-            "OA crosswalk not found at %s — skipping sub-LA areas", xw_path
-        )
+        logger.warning("OA crosswalk not found at %s — skipping sub-LA areas", xw_path)
 
     session.commit()
     logger.info("Total areas loaded: %d", count)
@@ -255,16 +251,12 @@ def _insert_target(
 ) -> int:
     """Insert a target and its year-values. Returns the target ID."""
     # Check for existing target with same name
-    existing = session.exec(
-        select(Target).where(col(Target.name) == name)
-    ).first()
+    existing = session.exec(select(Target).where(col(Target.name) == name)).first()
     if existing:
         session.delete(existing)
         # Also delete associated values
         old_values = session.exec(
-            select(TargetValue).where(
-                col(TargetValue.target_id) == existing.id
-            )
+            select(TargetValue).where(col(TargetValue.target_id) == existing.id)
         ).all()
         for v in old_values:
             session.delete(v)
@@ -290,9 +282,7 @@ def _insert_target(
 
     if values:
         for year, val in values.items():
-            session.add(
-                TargetValue(target_id=target.id, year=year, value=val)
-            )
+            session.add(TargetValue(target_id=target.id, year=year, value=val))
 
     return target.id
 
@@ -348,9 +338,7 @@ def _load_local_age_targets(session: Session) -> int:
             area_name = row.get("name", "")
             for lower in range(0, 80, 10):
                 upper = lower + 10
-                age_cols = [
-                    str(a) for a in range(lower, upper) if str(a) in df.columns
-                ]
+                age_cols = [str(a) for a in range(lower, upper) if str(a) in df.columns]
                 value = float(row[age_cols].sum())
                 target_name = f"ons/{level}/{code}/age_{lower}_{upper}"
                 _insert_target(
@@ -446,9 +434,7 @@ def _load_local_uc_targets(session: Session) -> int:
         if level == "constituency":
             codes_df = pd.read_csv(STORAGE_FOLDER / "constituencies_2024.csv")
         else:
-            codes_df = pd.read_csv(
-                STORAGE_FOLDER / "local_authorities_2021.csv"
-            )
+            codes_df = pd.read_csv(STORAGE_FOLDER / "local_authorities_2021.csv")
 
         for i, hh_count in enumerate(df.household_count.values):
             if i >= len(codes_df):
@@ -612,13 +598,9 @@ def build_database(db_path: Path | None = None) -> Path:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-    parser = argparse.ArgumentParser(
-        description="Build the target SQLite database."
-    )
+    parser = argparse.ArgumentParser(description="Build the target SQLite database.")
     parser.add_argument("--areas", action="store_true", help="Load areas only.")
-    parser.add_argument(
-        "--targets", action="store_true", help="Load targets only."
-    )
+    parser.add_argument("--targets", action="store_true", help="Load targets only.")
     parser.add_argument("--db", type=Path, help="Override database path.")
     args = parser.parse_args()
 
