@@ -13,13 +13,19 @@ Usage:
 
 import argparse
 import logging
-import sqlite3
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from sqlmodel import Session, select, col
 
-from policyengine_uk_data.db.schema import get_connection, DB_PATH
+from policyengine_uk_data.db.schema import (
+    Area,
+    Target,
+    TargetValue,
+    get_engine,
+    DB_PATH,
+)
 from policyengine_uk_data.storage import STORAGE_FOLDER
 
 logger = logging.getLogger(__name__)
@@ -27,10 +33,15 @@ logger = logging.getLogger(__name__)
 # ── Area hierarchy ──────────────────────────────────────────────────
 
 _COUNTRY_ROWS = [
-    ("E92000001", "England", "country", None, "England"),
-    ("W92000004", "Wales", "country", None, "Wales"),
-    ("S92000003", "Scotland", "country", None, "Scotland"),
-    ("N92000002", "Northern Ireland", "country", None, "Northern Ireland"),
+    Area(code="E92000001", name="England", level="country", country="England"),
+    Area(code="W92000004", name="Wales", level="country", country="Wales"),
+    Area(code="S92000003", name="Scotland", level="country", country="Scotland"),
+    Area(
+        code="N92000002",
+        name="Northern Ireland",
+        level="country",
+        country="Northern Ireland",
+    ),
 ]
 
 _COUNTRY_PREFIX_MAP = {
@@ -41,65 +52,80 @@ _COUNTRY_PREFIX_MAP = {
 }
 
 
-def load_areas(conn: sqlite3.Connection) -> int:
+def _merge_area(session: Session, area: Area) -> None:
+    """Insert or ignore an area row."""
+    existing = session.get(Area, area.code)
+    if existing is None:
+        session.add(area)
+
+
+def load_areas(session: Session) -> int:
     """Populate the areas table from OA crosswalk and area code CSVs.
 
     Returns the number of rows inserted.
     """
-    conn.execute("DELETE FROM areas")
+    # Clear existing areas
+    for area in session.exec(select(Area)).all():
+        session.delete(area)
+    session.commit()
+
     count = 0
 
     # Countries
-    conn.executemany(
-        "INSERT OR IGNORE INTO areas (code, name, level, parent_code, country) "
-        "VALUES (?, ?, ?, ?, ?)",
-        _COUNTRY_ROWS,
-    )
+    for area in _COUNTRY_ROWS:
+        session.add(area)
     count += len(_COUNTRY_ROWS)
 
     # Constituencies (2024 boundaries)
     const_path = STORAGE_FOLDER / "constituencies_2024.csv"
     if const_path.exists():
         df = pd.read_csv(const_path)
-        rows = []
         for _, r in df.iterrows():
             country = r.get("country", "")
             parent = _COUNTRY_PREFIX_MAP.get(country)
-            rows.append((r["code"], r["name"], "constituency", parent, country))
-        conn.executemany(
-            "INSERT OR IGNORE INTO areas (code, name, level, parent_code, country) "
-            "VALUES (?, ?, ?, ?, ?)",
-            rows,
-        )
-        count += len(rows)
-        logger.info("Loaded %d constituencies", len(rows))
+            _merge_area(
+                session,
+                Area(
+                    code=r["code"],
+                    name=r["name"],
+                    level="constituency",
+                    parent_code=parent,
+                    country=country,
+                ),
+            )
+            count += 1
+        logger.info("Loaded %d constituencies", len(df))
 
     # OA crosswalk (provides region → LA → MSOA → LSOA → OA hierarchy)
-    # Loaded before standalone LA CSV so we can parent LAs to regions.
     xw_path = STORAGE_FOLDER / "oa_crosswalk.csv.gz"
-    la_to_region = {}  # LA code → region code (from crosswalk)
+    la_to_region = {}
     if xw_path.exists():
         xw = pd.read_csv(xw_path, dtype=str)
 
         # Regions (parent: country)
         regions = xw[["region_code", "country"]].drop_duplicates()
-        region_rows = []
         for _, r in regions.iterrows():
             code = r["region_code"]
             if pd.isna(code) or code == "":
                 continue
             country = r["country"]
             parent = _COUNTRY_PREFIX_MAP.get(country)
-            region_rows.append((code, "", "region", parent, country))
-        conn.executemany(
-            "INSERT OR IGNORE INTO areas (code, name, level, parent_code, country) "
-            "VALUES (?, ?, ?, ?, ?)",
-            region_rows,
-        )
-        count += len(region_rows)
+            _merge_area(
+                session,
+                Area(
+                    code=code,
+                    name="",
+                    level="region",
+                    parent_code=parent,
+                    country=country,
+                ),
+            )
+            count += 1
 
         # Build LA → region lookup from crosswalk
-        la_region = xw[["la_code", "region_code"]].drop_duplicates(subset=["la_code"])
+        la_region = xw[["la_code", "region_code"]].drop_duplicates(
+            subset=["la_code"]
+        )
         for _, r in la_region.iterrows():
             if pd.notna(r["la_code"]) and pd.notna(r["region_code"]):
                 la_to_region[r["la_code"]] = r["region_code"]
@@ -108,7 +134,6 @@ def load_areas(conn: sqlite3.Connection) -> int:
     la_path = STORAGE_FOLDER / "local_authorities_2021.csv"
     if la_path.exists():
         df = pd.read_csv(la_path)
-        rows = []
         for _, r in df.iterrows():
             code = str(r["code"])
             prefix = code[0]
@@ -119,16 +144,19 @@ def load_areas(conn: sqlite3.Connection) -> int:
                 "N": "Northern Ireland",
             }
             country = country_map.get(prefix, "")
-            # Parent to region if available, else country
             parent = la_to_region.get(code, _COUNTRY_PREFIX_MAP.get(country))
-            rows.append((code, r.get("name", ""), "la", parent, country))
-        conn.executemany(
-            "INSERT OR IGNORE INTO areas (code, name, level, parent_code, country) "
-            "VALUES (?, ?, ?, ?, ?)",
-            rows,
-        )
-        count += len(rows)
-        logger.info("Loaded %d local authorities", len(rows))
+            _merge_area(
+                session,
+                Area(
+                    code=code,
+                    name=r.get("name", ""),
+                    level="la",
+                    parent_code=parent,
+                    country=country,
+                ),
+            )
+            count += 1
+        logger.info("Loaded %d local authorities", len(df))
 
     # Sub-LA areas from crosswalk (MSOA → LSOA → OA)
     if xw_path.exists():
@@ -136,56 +164,70 @@ def load_areas(conn: sqlite3.Connection) -> int:
         msoas = xw[["msoa_code", "la_code", "country"]].drop_duplicates(
             subset=["msoa_code"]
         )
-        msoa_rows = [
-            (r["msoa_code"], "", "msoa", r["la_code"], r["country"])
-            for _, r in msoas.iterrows()
-            if pd.notna(r["msoa_code"]) and r["msoa_code"] != ""
-        ]
-        conn.executemany(
-            "INSERT OR IGNORE INTO areas (code, name, level, parent_code, country) "
-            "VALUES (?, ?, ?, ?, ?)",
-            msoa_rows,
-        )
-        count += len(msoa_rows)
-        logger.info("Loaded %d MSOAs", len(msoa_rows))
+        msoa_count = 0
+        for _, r in msoas.iterrows():
+            if pd.notna(r["msoa_code"]) and r["msoa_code"] != "":
+                _merge_area(
+                    session,
+                    Area(
+                        code=r["msoa_code"],
+                        name="",
+                        level="msoa",
+                        parent_code=r["la_code"],
+                        country=r["country"],
+                    ),
+                )
+                msoa_count += 1
+        count += msoa_count
+        logger.info("Loaded %d MSOAs", msoa_count)
 
         # LSOAs
         lsoas = xw[["lsoa_code", "msoa_code", "country"]].drop_duplicates(
             subset=["lsoa_code"]
         )
-        lsoa_rows = [
-            (r["lsoa_code"], "", "lsoa", r["msoa_code"], r["country"])
-            for _, r in lsoas.iterrows()
-            if pd.notna(r["lsoa_code"]) and r["lsoa_code"] != ""
-        ]
-        conn.executemany(
-            "INSERT OR IGNORE INTO areas (code, name, level, parent_code, country) "
-            "VALUES (?, ?, ?, ?, ?)",
-            lsoa_rows,
-        )
-        count += len(lsoa_rows)
-        logger.info("Loaded %d LSOAs", len(lsoa_rows))
+        lsoa_count = 0
+        for _, r in lsoas.iterrows():
+            if pd.notna(r["lsoa_code"]) and r["lsoa_code"] != "":
+                _merge_area(
+                    session,
+                    Area(
+                        code=r["lsoa_code"],
+                        name="",
+                        level="lsoa",
+                        parent_code=r["msoa_code"],
+                        country=r["country"],
+                    ),
+                )
+                lsoa_count += 1
+        count += lsoa_count
+        logger.info("Loaded %d LSOAs", lsoa_count)
 
         # OAs
         oas = xw[["oa_code", "lsoa_code", "country"]].drop_duplicates(
             subset=["oa_code"]
         )
-        oa_rows = [
-            (r["oa_code"], "", "oa", r["lsoa_code"], r["country"])
-            for _, r in oas.iterrows()
-            if pd.notna(r["oa_code"]) and r["oa_code"] != ""
-        ]
-        conn.executemany(
-            "INSERT OR IGNORE INTO areas (code, name, level, parent_code, country) "
-            "VALUES (?, ?, ?, ?, ?)",
-            oa_rows,
-        )
-        count += len(oa_rows)
-        logger.info("Loaded %d OAs", len(oa_rows))
+        oa_count = 0
+        for _, r in oas.iterrows():
+            if pd.notna(r["oa_code"]) and r["oa_code"] != "":
+                _merge_area(
+                    session,
+                    Area(
+                        code=r["oa_code"],
+                        name="",
+                        level="oa",
+                        parent_code=r["lsoa_code"],
+                        country=r["country"],
+                    ),
+                )
+                oa_count += 1
+        count += oa_count
+        logger.info("Loaded %d OAs", oa_count)
     else:
-        logger.warning("OA crosswalk not found at %s — skipping sub-LA areas", xw_path)
+        logger.warning(
+            "OA crosswalk not found at %s — skipping sub-LA areas", xw_path
+        )
 
-    conn.commit()
+    session.commit()
     logger.info("Total areas loaded: %d", count)
     return count
 
@@ -194,7 +236,7 @@ def load_areas(conn: sqlite3.Connection) -> int:
 
 
 def _insert_target(
-    conn: sqlite3.Connection,
+    session: Session,
     *,
     name: str,
     variable: str,
@@ -212,51 +254,58 @@ def _insert_target(
     values: dict[int, float] | None = None,
 ) -> int:
     """Insert a target and its year-values. Returns the target ID."""
-    cur = conn.execute(
-        """INSERT OR REPLACE INTO targets
-           (name, variable, source, unit, geographic_level, geo_code,
-            geo_name, breakdown_variable, lower_bound, upper_bound,
-            is_count, reference_url, forecast_vintage)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (
-            name,
-            variable,
-            source,
-            unit,
-            geographic_level,
-            geo_code,
-            geo_name,
-            breakdown_variable,
-            lower_bound,
-            upper_bound,
-            int(is_count),
-            reference_url,
-            forecast_vintage,
-        ),
+    # Check for existing target with same name
+    existing = session.exec(
+        select(Target).where(col(Target.name) == name)
+    ).first()
+    if existing:
+        session.delete(existing)
+        # Also delete associated values
+        old_values = session.exec(
+            select(TargetValue).where(
+                col(TargetValue.target_id) == existing.id
+            )
+        ).all()
+        for v in old_values:
+            session.delete(v)
+        session.flush()
+
+    target = Target(
+        name=name,
+        variable=variable,
+        source=source,
+        unit=unit,
+        geographic_level=geographic_level,
+        geo_code=geo_code,
+        geo_name=geo_name,
+        breakdown_variable=breakdown_variable,
+        lower_bound=lower_bound,
+        upper_bound=upper_bound,
+        is_count=int(is_count),
+        reference_url=reference_url,
+        forecast_vintage=forecast_vintage,
     )
-    target_id = cur.lastrowid
+    session.add(target)
+    session.flush()
+
     if values:
-        conn.executemany(
-            "INSERT OR REPLACE INTO target_values (target_id, year, value) "
-            "VALUES (?, ?, ?)",
-            [(target_id, year, val) for year, val in values.items()],
-        )
-    return target_id
+        for year, val in values.items():
+            session.add(
+                TargetValue(target_id=target.id, year=year, value=val)
+            )
+
+    return target.id
 
 
-def load_registry_targets(conn: sqlite3.Connection) -> int:
-    """Load all targets from the target registry into the database.
-
-    These are the national/country/region targets discovered via
-    ``get_all_targets()``.
-    """
+def load_registry_targets(session: Session) -> int:
+    """Load all targets from the target registry into the database."""
     from policyengine_uk_data.targets.registry import get_all_targets
 
     targets = get_all_targets()
     count = 0
     for t in targets:
         _insert_target(
-            conn,
+            session,
             name=t.name,
             variable=t.variable,
             source=t.source,
@@ -274,12 +323,12 @@ def load_registry_targets(conn: sqlite3.Connection) -> int:
         )
         count += 1
 
-    conn.commit()
+    session.commit()
     logger.info("Loaded %d registry targets", count)
     return count
 
 
-def _load_local_age_targets(conn: sqlite3.Connection) -> int:
+def _load_local_age_targets(session: Session) -> int:
     """Load constituency and LA age targets from CSVs."""
     count = 0
     base = STORAGE_FOLDER.parent / "datasets" / "local_areas"
@@ -294,17 +343,18 @@ def _load_local_age_targets(conn: sqlite3.Connection) -> int:
             continue
 
         df = pd.read_csv(age_path)
-        # Aggregate single-year ages to 10-year bands
         for _, row in df.iterrows():
             code = row["code"]
             area_name = row.get("name", "")
             for lower in range(0, 80, 10):
                 upper = lower + 10
-                age_cols = [str(a) for a in range(lower, upper) if str(a) in df.columns]
+                age_cols = [
+                    str(a) for a in range(lower, upper) if str(a) in df.columns
+                ]
                 value = float(row[age_cols].sum())
                 target_name = f"ons/{level}/{code}/age_{lower}_{upper}"
                 _insert_target(
-                    conn,
+                    session,
                     name=target_name,
                     variable="age",
                     source="ons",
@@ -320,12 +370,12 @@ def _load_local_age_targets(conn: sqlite3.Connection) -> int:
                 )
                 count += 1
 
-    conn.commit()
+    session.commit()
     logger.info("Loaded %d local age targets", count)
     return count
 
 
-def _load_local_income_targets(conn: sqlite3.Connection) -> int:
+def _load_local_income_targets(session: Session) -> int:
     """Load constituency and LA income targets from SPI CSVs."""
     count = 0
     base = STORAGE_FOLDER.parent / "datasets" / "local_areas"
@@ -349,15 +399,15 @@ def _load_local_income_targets(conn: sqlite3.Connection) -> int:
                     ("_amount", "gbp", False),
                     ("_count", "count", True),
                 ]:
-                    col = f"{var}{suffix}"
-                    if col not in df.columns:
+                    col_name = f"{var}{suffix}"
+                    if col_name not in df.columns:
                         continue
-                    value = float(row[col])
+                    value = float(row[col_name])
                     if np.isnan(value):
                         continue
                     target_name = f"hmrc/{level}/{code}/{var}{suffix}"
                     _insert_target(
-                        conn,
+                        session,
                         name=target_name,
                         variable=var,
                         source="hmrc",
@@ -371,12 +421,12 @@ def _load_local_income_targets(conn: sqlite3.Connection) -> int:
                     )
                     count += 1
 
-    conn.commit()
+    session.commit()
     logger.info("Loaded %d local income targets", count)
     return count
 
 
-def _load_local_uc_targets(conn: sqlite3.Connection) -> int:
+def _load_local_uc_targets(session: Session) -> int:
     """Load UC household targets from XLSX files."""
     count = 0
 
@@ -393,11 +443,12 @@ def _load_local_uc_targets(conn: sqlite3.Connection) -> int:
 
         df = getattr(uc_data, loader_attr)
 
-        # Get area codes for alignment
         if level == "constituency":
             codes_df = pd.read_csv(STORAGE_FOLDER / "constituencies_2024.csv")
         else:
-            codes_df = pd.read_csv(STORAGE_FOLDER / "local_authorities_2021.csv")
+            codes_df = pd.read_csv(
+                STORAGE_FOLDER / "local_authorities_2021.csv"
+            )
 
         for i, hh_count in enumerate(df.household_count.values):
             if i >= len(codes_df):
@@ -409,7 +460,7 @@ def _load_local_uc_targets(conn: sqlite3.Connection) -> int:
                 continue
             target_name = f"dwp/{level}/{code}/uc_households"
             _insert_target(
-                conn,
+                session,
                 name=target_name,
                 variable="universal_credit",
                 source="dwp",
@@ -423,12 +474,12 @@ def _load_local_uc_targets(conn: sqlite3.Connection) -> int:
             )
             count += 1
 
-    conn.commit()
+    session.commit()
     logger.info("Loaded %d local UC targets", count)
     return count
 
 
-def _load_la_extras(conn: sqlite3.Connection) -> int:
+def _load_la_extras(session: Session) -> int:
     """Load LA-only targets: ONS income, tenure, private rent."""
     from policyengine_uk_data.targets.sources.local_la_extras import (
         load_ons_la_income,
@@ -443,14 +494,14 @@ def _load_la_extras(conn: sqlite3.Connection) -> int:
     if not ons_income.empty:
         for _, row in ons_income.iterrows():
             code = row["la_code"]
-            for col in ["total_income", "net_income_bhc", "net_income_ahc"]:
-                val = row.get(col)
+            for col_name in ["total_income", "net_income_bhc", "net_income_ahc"]:
+                val = row.get(col_name)
                 if val is None or np.isnan(val):
                     continue
                 _insert_target(
-                    conn,
-                    name=f"ons/la/{code}/{col}",
-                    variable=col,
+                    session,
+                    name=f"ons/la/{code}/{col_name}",
+                    variable=col_name,
                     source="ons",
                     unit="gbp",
                     geographic_level="local_authority",
@@ -467,7 +518,7 @@ def _load_la_extras(conn: sqlite3.Connection) -> int:
             if np.isnan(val):
                 continue
             _insert_target(
-                conn,
+                session,
                 name=f"ons/la/{code}/households",
                 variable="households",
                 source="ons",
@@ -483,19 +534,19 @@ def _load_la_extras(conn: sqlite3.Connection) -> int:
     if not tenure.empty:
         for _, row in tenure.iterrows():
             code = row["la_code"]
-            for col in [
+            for col_name in [
                 "owned_outright_pct",
                 "owned_mortgage_pct",
                 "private_rent_pct",
                 "social_rent_pct",
             ]:
-                val = row.get(col)
+                val = row.get(col_name)
                 if val is None or np.isnan(val):
                     continue
                 _insert_target(
-                    conn,
-                    name=f"ehs/la/{code}/{col}",
-                    variable=col.replace("_pct", ""),
+                    session,
+                    name=f"ehs/la/{code}/{col_name}",
+                    variable=col_name.replace("_pct", ""),
                     source="ehs",
                     unit="rate",
                     geographic_level="local_authority",
@@ -512,7 +563,7 @@ def _load_la_extras(conn: sqlite3.Connection) -> int:
             if np.isnan(val):
                 continue
             _insert_target(
-                conn,
+                session,
                 name=f"voa/la/{code}/median_annual_rent",
                 variable="median_annual_rent",
                 source="voa",
@@ -523,23 +574,26 @@ def _load_la_extras(conn: sqlite3.Connection) -> int:
             )
             count += 1
 
-    conn.commit()
+    session.commit()
     logger.info("Loaded %d LA extra targets", count)
     return count
 
 
-def load_all_targets(conn: sqlite3.Connection) -> int:
+def load_all_targets(session: Session) -> int:
     """Load all targets (registry + local CSVs) into the database."""
-    conn.execute("DELETE FROM target_values")
-    conn.execute("DELETE FROM targets")
-    conn.commit()
+    # Clear existing targets and values
+    for tv in session.exec(select(TargetValue)).all():
+        session.delete(tv)
+    for t in session.exec(select(Target)).all():
+        session.delete(t)
+    session.commit()
 
     count = 0
-    count += load_registry_targets(conn)
-    count += _load_local_age_targets(conn)
-    count += _load_local_income_targets(conn)
-    count += _load_local_uc_targets(conn)
-    count += _load_la_extras(conn)
+    count += load_registry_targets(session)
+    count += _load_local_age_targets(session)
+    count += _load_local_income_targets(session)
+    count += _load_local_uc_targets(session)
+    count += _load_la_extras(session)
     logger.info("Total targets loaded: %d", count)
     return count
 
@@ -547,10 +601,10 @@ def load_all_targets(conn: sqlite3.Connection) -> int:
 def build_database(db_path: Path | None = None) -> Path:
     """Full rebuild: create schema, load areas, load targets."""
     path = db_path or DB_PATH
-    conn = get_connection(path)
-    load_areas(conn)
-    load_all_targets(conn)
-    conn.close()
+    engine = get_engine(path)
+    with Session(engine) as session:
+        load_areas(session)
+        load_all_targets(session)
     logger.info("Database built at %s", path)
     return path
 
@@ -558,22 +612,25 @@ def build_database(db_path: Path | None = None) -> Path:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
-    parser = argparse.ArgumentParser(description="Build the target SQLite database.")
+    parser = argparse.ArgumentParser(
+        description="Build the target SQLite database."
+    )
     parser.add_argument("--areas", action="store_true", help="Load areas only.")
-    parser.add_argument("--targets", action="store_true", help="Load targets only.")
+    parser.add_argument(
+        "--targets", action="store_true", help="Load targets only."
+    )
     parser.add_argument("--db", type=Path, help="Override database path.")
     args = parser.parse_args()
 
     path = args.db or DB_PATH
-    conn = get_connection(path)
+    engine = get_engine(path)
+    with Session(engine) as session:
+        if args.areas:
+            load_areas(session)
+        elif args.targets:
+            load_all_targets(session)
+        else:
+            load_areas(session)
+            load_all_targets(session)
 
-    if args.areas:
-        load_areas(conn)
-    elif args.targets:
-        load_all_targets(conn)
-    else:
-        load_areas(conn)
-        load_all_targets(conn)
-
-    conn.close()
     logger.info("Done: %s", path)
