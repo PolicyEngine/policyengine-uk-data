@@ -205,33 +205,6 @@ def _parse_regional_from_csv() -> list[Target]:
     return targets
 
 
-# Scotland-specific (from NRS/census — not in ONS projections)
-_SCOTLAND_CHILDREN_UNDER_16 = {
-    y: v * 1e3
-    for y, v in {
-        2022: 904,
-        2023: 900,
-        2024: 896,
-        2025: 892,
-        2026: 888,
-        2027: 884,
-        2028: 880,
-    }.items()
-}
-
-_SCOTLAND_BABIES_UNDER_1 = {
-    y: v * 1e3
-    for y, v in {
-        2022: 46,
-        2023: 46,
-        2024: 46,
-        2025: 46,
-        2026: 46,
-        2027: 46,
-        2028: 46,
-    }.items()
-}
-
 _SCOTLAND_HOUSEHOLDS_3PLUS_CHILDREN = {
     y: v * 1e3
     for y, v in {
@@ -263,38 +236,7 @@ def get_targets() -> list[Target]:
     # Regional age bands from demographics.csv
     targets.extend(_parse_regional_from_csv())
 
-    # Scotland-specific (NRS/census — small number of static values)
-    targets.append(
-        Target(
-            name="ons/scotland_children_under_16",
-            variable="age",
-            source="nrs",
-            unit=Unit.COUNT,
-            values=_SCOTLAND_CHILDREN_UNDER_16,
-            is_count=True,
-            geographic_level=GeographicLevel.COUNTRY,
-            geo_code="S",
-            geo_name="Scotland",
-            reference_url=_REF_NRS,
-        )
-    )
-    targets.append(
-        Target(
-            name="ons/scotland_babies_under_1",
-            variable="age",
-            source="nrs",
-            unit=Unit.COUNT,
-            values=_SCOTLAND_BABIES_UNDER_1,
-            is_count=True,
-            geographic_level=GeographicLevel.COUNTRY,
-            geo_code="S",
-            geo_name="Scotland",
-            reference_url=(
-                "https://www.nrscotland.gov.uk/publications/"
-                "vital-events-reference-tables-2024/"
-            ),
-        )
-    )
+    # Scotland households (census-derived, no overlap with age bands)
     targets.append(
         Target(
             name="ons/scotland_households_3plus_children",
