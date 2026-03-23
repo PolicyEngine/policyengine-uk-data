@@ -4,17 +4,18 @@ Convenience functions for retrieving targets by geographic level,
 area code, variable, source, and year.
 """
 
-import sqlite3
 from pathlib import Path
 from typing import Optional
 
 import pandas as pd
+from sqlmodel import Session, col, select
 
-from policyengine_uk_data.db.schema import DB_PATH, get_connection
-
-
-def _conn(db_path: Path | None = None) -> sqlite3.Connection:
-    return get_connection(db_path)
+from policyengine_uk_data.db.schema import (
+    Area,
+    Target,
+    TargetValue,
+    get_session,
+)
 
 
 def get_targets(
@@ -31,42 +32,50 @@ def get_targets(
     Returns a DataFrame with columns: name, variable, source, unit,
     geographic_level, geo_code, geo_name, year, value.
     """
-    conn = _conn(db_path)
-    clauses = []
-    params = []
+    with get_session(db_path) as session:
+        stmt = select(
+            Target.name,
+            Target.variable,
+            Target.source,
+            Target.unit,
+            Target.geographic_level,
+            Target.geo_code,
+            Target.geo_name,
+            TargetValue.year,
+            TargetValue.value,
+        ).join(TargetValue, col(Target.id) == col(TargetValue.target_id))
 
-    if geographic_level:
-        clauses.append("t.geographic_level = ?")
-        params.append(geographic_level)
-    if geo_code:
-        clauses.append("t.geo_code = ?")
-        params.append(geo_code)
-    if variable:
-        clauses.append("t.variable = ?")
-        params.append(variable)
-    if source:
-        clauses.append("t.source = ?")
-        params.append(source)
-    if year:
-        clauses.append("tv.year = ?")
-        params.append(year)
+        if geographic_level:
+            stmt = stmt.where(col(Target.geographic_level) == geographic_level)
+        if geo_code:
+            stmt = stmt.where(col(Target.geo_code) == geo_code)
+        if variable:
+            stmt = stmt.where(col(Target.variable) == variable)
+        if source:
+            stmt = stmt.where(col(Target.source) == source)
+        if year:
+            stmt = stmt.where(col(TargetValue.year) == year)
 
-    where = " AND ".join(clauses)
-    if where:
-        where = "WHERE " + where
+        stmt = stmt.order_by(
+            col(Target.geographic_level),
+            col(Target.geo_code),
+            col(Target.name),
+            col(TargetValue.year),
+        )
 
-    sql = f"""
-        SELECT t.name, t.variable, t.source, t.unit,
-               t.geographic_level, t.geo_code, t.geo_name,
-               tv.year, tv.value
-        FROM targets t
-        JOIN target_values tv ON t.id = tv.target_id
-        {where}
-        ORDER BY t.geographic_level, t.geo_code, t.name, tv.year
-    """
-    df = pd.read_sql_query(sql, conn, params=params)
-    conn.close()
-    return df
+        rows = session.exec(stmt).all()
+        columns = [
+            "name",
+            "variable",
+            "source",
+            "unit",
+            "geographic_level",
+            "geo_code",
+            "geo_name",
+            "year",
+            "value",
+        ]
+        return pd.DataFrame(rows, columns=columns)
 
 
 def get_area_targets(
@@ -74,51 +83,40 @@ def get_area_targets(
     year: int = 2025,
     db_path: Optional[Path] = None,
 ) -> pd.DataFrame:
-    """Get all targets for a specific area and year.
-
-    Args:
-        geo_code: Area GSS code (e.g. "E14001063" for a constituency).
-        year: Target year.
-        db_path: Override database path.
-
-    Returns:
-        DataFrame with columns: name, variable, source, unit, value.
-    """
-    conn = _conn(db_path)
-    sql = """
-        SELECT t.name, t.variable, t.source, t.unit, tv.value
-        FROM targets t
-        JOIN target_values tv ON t.id = tv.target_id
-        WHERE t.geo_code = ? AND tv.year = ?
-        ORDER BY t.source, t.variable
-    """
-    df = pd.read_sql_query(sql, conn, params=[geo_code, year])
-    conn.close()
-    return df
+    """Get all targets for a specific area and year."""
+    with get_session(db_path) as session:
+        stmt = (
+            select(
+                Target.name,
+                Target.variable,
+                Target.source,
+                Target.unit,
+                TargetValue.value,
+            )
+            .join(TargetValue, col(Target.id) == col(TargetValue.target_id))
+            .where(col(Target.geo_code) == geo_code)
+            .where(col(TargetValue.year) == year)
+            .order_by(col(Target.source), col(Target.variable))
+        )
+        rows = session.exec(stmt).all()
+        return pd.DataFrame(
+            rows, columns=["name", "variable", "source", "unit", "value"]
+        )
 
 
 def get_area_children(
     parent_code: str,
     db_path: Optional[Path] = None,
 ) -> pd.DataFrame:
-    """Get child areas of a given parent in the hierarchy.
-
-    Args:
-        parent_code: Parent area GSS code.
-
-    Returns:
-        DataFrame with columns: code, name, level, country.
-    """
-    conn = _conn(db_path)
-    sql = """
-        SELECT code, name, level, country
-        FROM areas
-        WHERE parent_code = ?
-        ORDER BY code
-    """
-    df = pd.read_sql_query(sql, conn, params=[parent_code])
-    conn.close()
-    return df
+    """Get child areas of a given parent in the hierarchy."""
+    with get_session(db_path) as session:
+        stmt = (
+            select(Area.code, Area.name, Area.level, Area.country)
+            .where(col(Area.parent_code) == parent_code)
+            .order_by(col(Area.code))
+        )
+        rows = session.exec(stmt).all()
+        return pd.DataFrame(rows, columns=["code", "name", "level", "country"])
 
 
 def get_area_hierarchy(
@@ -128,47 +126,51 @@ def get_area_hierarchy(
     """Walk up the area hierarchy from a given code to the root.
 
     Returns a list of dicts from most specific to least:
-    [{"code": "E00...", "level": "oa"}, {"code": "E01...", "level": "lsoa"}, ...].
+    [{"code": "E00...", "level": "oa"}, ...].
     """
-    conn = _conn(db_path)
-    result = []
-    current = code
-    while current:
-        row = conn.execute(
-            "SELECT code, name, level, parent_code, country FROM areas WHERE code = ?",
-            (current,),
-        ).fetchone()
-        if row is None:
-            break
-        result.append(
-            {
-                "code": row[0],
-                "name": row[1],
-                "level": row[2],
-                "parent_code": row[3],
-                "country": row[4],
-            }
-        )
-        current = row[3]
-    conn.close()
-    return result
+    with get_session(db_path) as session:
+        result = []
+        current = code
+        while current:
+            area = session.get(Area, current)
+            if area is None:
+                break
+            result.append(
+                {
+                    "code": area.code,
+                    "name": area.name,
+                    "level": area.level,
+                    "parent_code": area.parent_code,
+                    "country": area.country,
+                }
+            )
+            current = area.parent_code
+        return result
 
 
 def count_areas_by_level(db_path: Optional[Path] = None) -> dict[str, int]:
     """Return area counts grouped by geographic level."""
-    conn = _conn(db_path)
-    rows = conn.execute(
-        "SELECT level, COUNT(*) FROM areas GROUP BY level ORDER BY COUNT(*) DESC"
-    ).fetchall()
-    conn.close()
-    return {level: count for level, count in rows}
+    with get_session(db_path) as session:
+        from sqlalchemy import func
+
+        stmt = (
+            select(Area.level, func.count())
+            .group_by(col(Area.level))
+            .order_by(func.count().desc())
+        )
+        rows = session.exec(stmt).all()
+        return {level: count for level, count in rows}
 
 
 def count_targets_by_source(db_path: Optional[Path] = None) -> dict[str, int]:
     """Return target counts grouped by source."""
-    conn = _conn(db_path)
-    rows = conn.execute(
-        "SELECT source, COUNT(*) FROM targets GROUP BY source ORDER BY COUNT(*) DESC"
-    ).fetchall()
-    conn.close()
-    return {source: count for source, count in rows}
+    with get_session(db_path) as session:
+        from sqlalchemy import func
+
+        stmt = (
+            select(Target.source, func.count())
+            .group_by(col(Target.source))
+            .order_by(func.count().desc())
+        )
+        rows = session.exec(stmt).all()
+        return {source: count for source, count in rows}

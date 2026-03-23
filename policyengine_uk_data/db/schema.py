@@ -16,66 +16,81 @@ LAs and vice versa. OAs map to both via the crosswalk, but the
 parent_code chain follows the administrative branch only.
 """
 
-import sqlite3
 from pathlib import Path
+from typing import Optional
+
+from sqlmodel import Field, Session, SQLModel, create_engine
 
 from policyengine_uk_data.storage import STORAGE_FOLDER
 
 DB_PATH = STORAGE_FOLDER / "targets.db"
 
-_SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS areas (
-    code        TEXT PRIMARY KEY,
-    name        TEXT,
-    level       TEXT NOT NULL,  -- country, region, la, constituency, msoa, lsoa, oa
-    parent_code TEXT,
-    country     TEXT,
-    FOREIGN KEY (parent_code) REFERENCES areas(code)
-);
 
-CREATE INDEX IF NOT EXISTS idx_areas_level ON areas(level);
-CREATE INDEX IF NOT EXISTS idx_areas_parent ON areas(parent_code);
-CREATE INDEX IF NOT EXISTS idx_areas_country ON areas(country);
+class Area(SQLModel, table=True):
+    __tablename__ = "areas"
 
-CREATE TABLE IF NOT EXISTS targets (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    name                TEXT NOT NULL UNIQUE,
-    variable            TEXT NOT NULL,
-    source              TEXT NOT NULL,
-    unit                TEXT NOT NULL,  -- gbp, count, rate
-    geographic_level    TEXT NOT NULL,  -- national, country, region, constituency, local_authority
-    geo_code            TEXT,
-    geo_name            TEXT,
-    breakdown_variable  TEXT,
-    lower_bound         REAL,
-    upper_bound         REAL,
-    is_count            INTEGER NOT NULL DEFAULT 0,
-    reference_url       TEXT,
-    forecast_vintage    TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_targets_variable ON targets(variable);
-CREATE INDEX IF NOT EXISTS idx_targets_source ON targets(source);
-CREATE INDEX IF NOT EXISTS idx_targets_geo_level ON targets(geographic_level);
-CREATE INDEX IF NOT EXISTS idx_targets_geo_code ON targets(geo_code);
-
-CREATE TABLE IF NOT EXISTS target_values (
-    target_id   INTEGER NOT NULL,
-    year        INTEGER NOT NULL,
-    value       REAL NOT NULL,
-    PRIMARY KEY (target_id, year),
-    FOREIGN KEY (target_id) REFERENCES targets(id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_target_values_year ON target_values(year);
-"""
+    code: str = Field(primary_key=True)
+    name: Optional[str] = None
+    level: str = Field(index=True)
+    parent_code: Optional[str] = Field(
+        default=None, foreign_key="areas.code", index=True
+    )
+    country: Optional[str] = Field(default=None, index=True)
 
 
-def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
-    """Open (or create) the target database and ensure schema exists."""
+class Target(SQLModel, table=True):
+    __tablename__ = "targets"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(unique=True)
+    variable: str = Field(index=True)
+    source: str = Field(index=True)
+    unit: str
+    geographic_level: str = Field(index=True)
+    geo_code: Optional[str] = Field(default=None, index=True)
+    geo_name: Optional[str] = None
+    breakdown_variable: Optional[str] = None
+    lower_bound: Optional[float] = None
+    upper_bound: Optional[float] = None
+    is_count: int = 0
+    reference_url: Optional[str] = None
+    forecast_vintage: Optional[str] = None
+
+
+class TargetValue(SQLModel, table=True):
+    __tablename__ = "target_values"
+
+    target_id: int = Field(foreign_key="targets.id", primary_key=True)
+    year: int = Field(primary_key=True, index=True)
+    value: float
+
+
+def get_engine(db_path: Path | None = None):
+    """Create a SQLAlchemy engine for the target database."""
     path = db_path or DB_PATH
+    engine = create_engine(f"sqlite:///{path}", echo=False)
+    SQLModel.metadata.create_all(engine)
+    return engine
+
+
+def get_session(db_path: Path | None = None) -> Session:
+    """Open a session with schema auto-created."""
+    return Session(get_engine(db_path))
+
+
+# Backward-compatible helper used by etl.py and tests
+def get_connection(db_path: Path | None = None):
+    """Return a raw sqlite3 connection with schema created.
+
+    Prefer get_session() for new code.
+    """
+    import sqlite3
+
+    path = db_path or DB_PATH
+    # Ensure schema exists via SQLModel
+    engine = get_engine(path)
+    engine.dispose()
     conn = sqlite3.connect(str(path))
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
-    conn.executescript(_SCHEMA_SQL)
     return conn
