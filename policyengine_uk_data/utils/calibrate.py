@@ -10,59 +10,31 @@ from policyengine_uk_data.utils.progress import ProcessingProgress
 
 logger = logging.getLogger(__name__)
 
+# Population gets this multiplier in the national loss so the optimiser
+# keeps it on target rather than letting it drift ~6% high.
+POPULATION_LOSS_WEIGHT = 10.0
 
-def rescale_weights_to_population(
-    final_weights: np.ndarray,
+
+def _build_national_target_weights(
     national_matrix,
-    national_targets,
-) -> tuple[np.ndarray, float]:
-    """Rescale weights so weighted UK population matches the ONS target.
+    population_weight: float = POPULATION_LOSS_WEIGHT,
+) -> np.ndarray:
+    """Build per-target weight vector for the national loss.
 
-    The optimiser treats population as 1 of ~556 targets so it drifts
-    ~6% high. This uniformly scales all weights to correct for that.
-
-    Args:
-        final_weights: calibrated weight matrix (n_areas x n_households)
-        national_matrix: DataFrame or array with national metric columns
-        national_targets: Series or array of national target values
-
-    Returns:
-        (rescaled_weights, scale_factor) — scale_factor is 1.0 if no
-        population column is found or actual population is zero.
+    Every target gets weight 1.0 except ``ons/uk_population`` which gets
+    ``population_weight``.  This ensures the optimiser treats population
+    accuracy as a hard constraint rather than 1-of-N soft targets.
     """
     pop_col_name = "ons/uk_population"
-    pop_idx = None
     if hasattr(national_matrix, "columns"):
+        n = len(national_matrix.columns)
+        w = np.ones(n, dtype=np.float32)
         cols = list(national_matrix.columns)
         if pop_col_name in cols:
-            pop_idx = cols.index(pop_col_name)
-    if pop_idx is None:
-        return final_weights, 1.0
-
-    pop_metric = (
-        national_matrix.values[:, pop_idx]
-        if hasattr(national_matrix, "values")
-        else national_matrix[:, pop_idx]
-    )
-    pop_target = float(
-        national_targets.iloc[pop_idx]
-        if hasattr(national_targets, "iloc")
-        else national_targets[pop_idx]
-    )
-    national_weights = final_weights.sum(axis=0)
-    actual_pop = (national_weights * pop_metric).sum()
-    if actual_pop <= 0:
-        return final_weights, 1.0
-
-    scale = pop_target / actual_pop
-    rescaled = final_weights * scale
-    logger.info(
-        "Population rescale: %.2fM -> %.2fM (factor %.4f)",
-        actual_pop / 1e6,
-        pop_target / 1e6,
-        scale,
-    )
-    return rescaled, scale
+            w[cols.index(pop_col_name)] = population_weight
+        return w
+    # Fallback: no column names available — equal weights
+    return np.ones(national_matrix.shape[1], dtype=np.float32)
 
 
 def calibrate_local_areas(
@@ -150,10 +122,19 @@ def calibrate_local_areas(
     )
     r = torch.tensor(r, dtype=torch.float32)
 
+    # Per-target weights for the national loss (population gets boosted)
+    national_target_weights = torch.tensor(
+        _build_national_target_weights(m_national),
+        dtype=torch.float32,
+    )
+
     def sre(x, y):
         one_way = ((1 + x) / (1 + y) - 1) ** 2
         other_way = ((1 + y) / (1 + x) - 1) ** 2
         return torch.min(one_way, other_way)
+
+    def weighted_mean(values, weights):
+        return (values * weights).sum() / weights.sum()
 
     def loss(w, validation: bool = False):
         pred_local = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
@@ -174,9 +155,15 @@ def calibrate_local_areas(
             else:
                 mask = ~validation_targets_national
             pred_national = pred_national[mask]
-            mse_national = torch.mean(sre(pred_national, y_national[mask]))
+            mse_national = weighted_mean(
+                sre(pred_national, y_national[mask]),
+                national_target_weights[mask],
+            )
         else:
-            mse_national = torch.mean(sre(pred_national, y_national))
+            mse_national = weighted_mean(
+                sre(pred_national, y_national),
+                national_target_weights,
+            )
 
         return mse_local + mse_national
 
@@ -332,14 +319,5 @@ def calibrate_local_areas(
                 f.create_dataset(dataset_key, data=final_weights)
 
             dataset.household.household_weight = final_weights.sum(axis=0)
-
-    # Post-calibration population rescaling: the optimiser treats
-    # population as 1 of ~556 targets so it drifts ~6% high. Rescale
-    # all weights so the weighted population matches the ONS target.
-    final_weights, scale = rescale_weights_to_population(final_weights, m_n, y_n)
-    if scale != 1.0:
-        with h5py.File(STORAGE_FOLDER / weight_file, "w") as f:
-            f.create_dataset(dataset_key, data=final_weights)
-        dataset.household.household_weight = final_weights.sum(axis=0)
 
     return dataset
