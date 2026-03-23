@@ -1,7 +1,8 @@
-"""Tests for post-calibration population rescaling (#217).
+"""Tests for population accuracy in calibration (#217).
 
 Verifies that the calibrated dataset's weighted population matches the
-ONS target, rather than drifting ~6% high as it did before the fix.
+ONS target. The population target is boosted in the calibration loss
+function to prevent it drifting ~6% high.
 """
 
 import warnings
