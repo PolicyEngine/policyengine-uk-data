@@ -13,10 +13,6 @@ from policyengine_uk_data.utils.progress import ProcessingProgress
 
 logger = logging.getLogger(__name__)
 
-# Population gets this multiplier in the national loss so the optimiser
-# keeps it on target rather than letting it drift ~6% high.
-POPULATION_LOSS_WEIGHT = 10.0
-
 def load_weights(
     weight_file: Union[str, Path],
     dataset_key: str = "2025",
@@ -88,27 +84,6 @@ def load_weights(
         )
     return arr
 
-
-def _build_national_target_weights(
-    national_matrix,
-    population_weight: float = POPULATION_LOSS_WEIGHT,
-) -> np.ndarray:
-    """Build per-target weight vector for the national loss.
-
-    Every target gets weight 1.0 except ``ons/uk_population`` which gets
-    ``population_weight``.  This ensures the optimiser treats population
-    accuracy as a hard constraint rather than 1-of-N soft targets.
-    """
-    pop_col_name = "ons/uk_population"
-    if hasattr(national_matrix, "columns"):
-        n = len(national_matrix.columns)
-        w = np.ones(n, dtype=np.float32)
-        cols = list(national_matrix.columns)
-        if pop_col_name in cols:
-            w[cols.index(pop_col_name)] = population_weight
-        return w
-    # Fallback: no column names available — equal weights
-    return np.ones(national_matrix.shape[1], dtype=np.float32)
 
 
 def calibrate_local_areas(
@@ -211,19 +186,13 @@ def calibrate_local_areas(
         )
         r = torch.tensor(r, dtype=torch.float32)
 
-    # Per-target weights for the national loss (population gets boosted)
-    national_target_weights = torch.tensor(
-        _build_national_target_weights(m_national),
-        dtype=torch.float32,
-    )
-
     def sre(x, y):
-        one_way = ((1 + x) / (1 + y) - 1) ** 2
-        other_way = ((1 + y) / (1 + x) - 1) ** 2
-        return torch.min(one_way, other_way)
-
-    def weighted_mean(values, weights):
-        return (values * weights).sum() / weights.sum()
+        """Squared log-ratio loss — symmetric so overshoot and undershoot
+        of the same magnitude incur identical cost.  The previous
+        min-of-two-ratios formulation penalised undershoot more than
+        overshoot, which systematically biased the optimiser toward
+        inflating weights (root cause of the ~6 % population overshoot)."""
+        return torch.log((1 + x) / (1 + y)) ** 2
 
     def loss(w, validation: bool = False):
         pred_local = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
@@ -244,15 +213,9 @@ def calibrate_local_areas(
             else:
                 mask = ~validation_targets_national
             pred_national = pred_national[mask]
-            mse_national = weighted_mean(
-                sre(pred_national, y_national[mask]),
-                national_target_weights[mask],
-            )
+            mse_national = torch.mean(sre(pred_national, y_national[mask]))
         else:
-            mse_national = weighted_mean(
-                sre(pred_national, y_national),
-                national_target_weights,
-            )
+            mse_national = torch.mean(sre(pred_national, y_national))
 
         return mse_local + mse_national
 
