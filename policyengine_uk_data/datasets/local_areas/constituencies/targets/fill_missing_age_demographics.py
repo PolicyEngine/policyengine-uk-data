@@ -9,32 +9,50 @@ NI_CONSTITUENCY = "N06"
 SCOTLAND_CONSTITUENCY = "S14"
 WALES_CONSTITUENCY = "W07"
 
+COUNTRY_PREFIXES = {
+    "E": ENGLAND_CONSTITUENCY,
+    "N": NI_CONSTITUENCY,
+    "S": SCOTLAND_CONSTITUENCY,
+    "W": WALES_CONSTITUENCY,
+}
+
 incomes = incomes[
     np.any(
         [
             incomes["code"].str.contains(country_code)
-            for country_code in [
-                ENGLAND_CONSTITUENCY,
-                NI_CONSTITUENCY,
-                SCOTLAND_CONSTITUENCY,
-                WALES_CONSTITUENCY,
-            ]
+            for country_code in COUNTRY_PREFIXES.values()
         ],
         axis=0,
     )
 ]
 
-full_constituencies = incomes.code
-missing_constituencies = pd.Series(list(set(incomes.code) - set(ages.code)))
+missing_codes = set(incomes.code) - set(ages.code)
 missing_constituencies = pd.DataFrame(
     {
-        "code": missing_constituencies.values,
-        "name": incomes.set_index("code").loc[missing_constituencies].name.values,
+        "code": list(missing_codes),
+        "name": incomes.set_index("code").loc[list(missing_codes)].name.values,
     }
 )
-for col in ages.columns[2:]:
-    # We only have England and Wales demographics- fill in the remaining with the average age profiles among the rest of the UK.
-    missing_constituencies[col] = ages[col].mean()
+
+age_cols = ages.columns[2:]
+
+# Use country-specific mean profiles instead of UK-wide mean (#64).
+# For each missing constituency, find areas in the same country and
+# use their mean age profile. Falls back to UK-wide mean if no areas
+# exist for that country.
+for _, row in missing_constituencies.iterrows():
+    country_letter = row["code"][0]
+    same_country = ages[ages["code"].str.startswith(country_letter)]
+    if len(same_country) > 0:
+        for col in age_cols:
+            missing_constituencies.loc[
+                missing_constituencies["code"] == row["code"], col
+            ] = same_country[col].mean()
+    else:
+        for col in age_cols:
+            missing_constituencies.loc[
+                missing_constituencies["code"] == row["code"], col
+            ] = ages[col].mean()
 
 ages = pd.concat([ages, missing_constituencies])
 ages.to_csv("age.csv", index=False)
