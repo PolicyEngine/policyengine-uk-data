@@ -49,7 +49,7 @@ def test_population_not_inflated(baseline):
 def test_country_populations_sum_to_uk(baseline):
     """England + Scotland + Wales + NI populations should sum to UK total."""
     people = baseline.calculate("people", 2025)
-    country = baseline.calculate("country")
+    country = baseline.calculate("country", map_to="person")
 
     uk_pop = people.sum()
     country_sum = sum(people[country == c].sum() for c in country.unique())
