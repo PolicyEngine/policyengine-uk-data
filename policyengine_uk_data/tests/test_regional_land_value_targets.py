@@ -79,9 +79,7 @@ def test_london_to_north_east_ratio():
     dwelling counts the ratio should far exceed the old model's 1.2x.
     """
     ratio = REGIONAL_TARGETS["LONDON"] / REGIONAL_TARGETS["NORTH_EAST"]
-    assert ratio >= 3.0, (
-        f"London/NE ratio = {ratio:.1f}x, expected >= 3x"
-    )
+    assert ratio >= 3.0, f"London/NE ratio = {ratio:.1f}x, expected >= 3x"
 
 
 def test_south_east_above_south_west():
