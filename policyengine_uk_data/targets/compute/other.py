@@ -56,7 +56,7 @@ def compute_land_value(target, ctx) -> np.ndarray:
 
 def compute_regional_land_value(target, ctx) -> np.ndarray:
     """Compute household land value filtered to a single region."""
-    region = target.name.split("/")[-1]  # e.g. "mhclg/household_land_value/LONDON"
+    region = target.name.split("/")[-1]  # e.g. "ons/household_land_value/LONDON"
     in_region = ctx.sim.calculate("region").values == region
     return ctx.pe("household_land_value") * in_region
 

@@ -1,16 +1,14 @@
 """Regional household land value targets.
 
-Derived from MHCLG residential land value estimates (2023) and
-UK House Price Index (Dec 2025), constrained to sum to the ONS
-National Balance Sheet 2025 household land total.
+Splits the ONS National Balance Sheet household land total across
+regions in proportion to total property wealth (dwellings × avg
+house price from UK HPI Dec 2025).
 
-The national flat intensity ratio (0.673) produces implausibly
-uniform regional land values. These targets capture the true
-regional variation so calibration can correct household weights.
+The model's regional intensity ratios (in policyengine-uk) handle the
+conversion from property wealth to land value per household. These
+targets ensure the weighted regional totals match official estimates.
 
 Sources:
-  - MHCLG Land Value Estimates for Policy Appraisal 2023
-    https://www.gov.uk/government/publications/land-value-estimates-for-policy-appraisal-2023
   - UK House Price Index Dec 2025
     https://www.gov.uk/government/statistics/uk-house-price-index-for-december-2025
   - ONS National Balance Sheet 2025
@@ -36,31 +34,26 @@ _ONS_2024_TOTAL = 7.1e12
 _SCALE = _ONS_2024_TOTAL / _ONS_2020_TOTAL
 _ONS_2024_HOUSEHOLD = _ONS_2020_HOUSEHOLD * _SCALE
 
-_MHCLG_REF = (
-    "https://www.gov.uk/government/publications/"
-    "land-value-estimates-for-policy-appraisal-2023"
+_ONS_REF = (
+    "https://www.ons.gov.uk/economy/nationalaccounts/"
+    "uksectoraccounts/bulletins/nationalbalancesheet/2025"
 )
 
 
 def _compute_regional_targets() -> dict[str, float]:
-    """Derive regional household land value targets.
+    """Split the ONS household land total across regions.
 
-    For each region, estimate total residential land value as:
-        dwellings × avg_house_price × land_intensity
-
-    Then rescale so the GB total matches the ONS national household
-    land value (£5.04tn for 2024). Northern Ireland is excluded as
-    it is not in the FRS sample frame.
+    Each region's share is proportional to its total property wealth
+    (dwellings × avg_house_price). The shares are then scaled so the
+    GB total matches the ONS national household land value.
     """
     csv_path = STORAGE / "regional_land_values.csv"
     df = pd.read_csv(csv_path)
 
-    df["raw_land"] = df["dwellings"] * df["avg_house_price"] * df["land_intensity"]
-    raw_total = df["raw_land"].sum()
+    df["property_wealth"] = df["dwellings"] * df["avg_house_price"]
+    total = df["property_wealth"].sum()
 
-    # Rescale to match ONS national household land total
-    scale = _ONS_2024_HOUSEHOLD / raw_total
-    return dict(zip(df["region"], df["raw_land"] * scale))
+    return dict(zip(df["region"], df["property_wealth"] / total * _ONS_2024_HOUSEHOLD))
 
 
 def get_targets() -> list[Target]:
@@ -74,9 +67,9 @@ def get_targets() -> list[Target]:
     for region, value in regional.items():
         targets.append(
             Target(
-                name=f"mhclg/household_land_value/{region}",
+                name=f"ons/household_land_value/{region}",
                 variable="household_land_value",
-                source="mhclg",
+                source="ons",
                 unit=Unit.GBP,
                 geographic_level=GeographicLevel.REGION,
                 geo_name=region,
@@ -85,7 +78,7 @@ def get_targets() -> list[Target]:
                     2025: value,
                     2026: value,
                 },
-                reference_url=_MHCLG_REF,
+                reference_url=_ONS_REF,
             )
         )
 

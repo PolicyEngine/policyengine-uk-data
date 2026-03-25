@@ -299,8 +299,8 @@ def _compute_column(target: Target, ctx: _SimContext, year: int) -> np.ndarray |
     ):
         return compute_land_value(target, ctx)
 
-    # Regional household land values (MHCLG)
-    if name.startswith("mhclg/household_land_value/"):
+    # Regional household land values (ONS total split by region)
+    if name.startswith("ons/household_land_value/"):
         return compute_regional_land_value(target, ctx)
 
     # Savings

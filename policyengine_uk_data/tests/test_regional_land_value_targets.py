@@ -1,4 +1,4 @@
-"""Tests for MHCLG regional household land value calibration targets.
+"""Tests for regional household land value calibration targets.
 
 See: https://github.com/PolicyEngine/policyengine-uk-data/issues/314
 """
@@ -75,8 +75,8 @@ def test_london_highest_land_value():
 def test_london_to_north_east_ratio():
     """London/NE ratio should be at least 3x.
 
-    MHCLG shows 20x in land per hectare; even after adjusting for
-    dwelling counts the ratio should far exceed the old model's 1.2x.
+    UK HPI shows London avg house price ~3.3x North East, and London
+    has ~3x more dwellings, so the ratio should be substantial.
     """
     ratio = REGIONAL_TARGETS["LONDON"] / REGIONAL_TARGETS["NORTH_EAST"]
     assert ratio >= 3.0, f"London/NE ratio = {ratio:.1f}x, expected >= 3x"
@@ -102,10 +102,10 @@ def test_get_targets_returns_11():
 
 
 def test_target_names_match_regions():
-    """Target names should follow the mhclg/household_land_value/{REGION} pattern."""
+    """Target names should follow the ons/household_land_value/{REGION} pattern."""
     targets = get_targets()
     names = {t.name for t in targets}
-    expected = {f"mhclg/household_land_value/{r}" for r in _GB_REGIONS}
+    expected = {f"ons/household_land_value/{r}" for r in _GB_REGIONS}
     assert names == expected
 
 
@@ -115,13 +115,15 @@ def test_targets_have_values_for_2025():
         assert 2025 in t.values, f"{t.name} missing value for 2025"
 
 
-def test_target_registry_includes_mhclg():
-    """MHCLG regional targets should appear in the global registry."""
+def test_target_registry_includes_regional():
+    """Regional land targets should appear in the global registry."""
     from policyengine_uk_data.targets import get_all_targets
 
     targets = get_all_targets(year=2025)
-    mhclg = [t for t in targets if t.source == "mhclg"]
-    assert len(mhclg) == 11, f"Expected 11 MHCLG regional targets, got {len(mhclg)}"
+    regional = [t for t in targets if t.name.startswith("ons/household_land_value/")]
+    assert len(regional) == 11, (
+        f"Expected 11 regional land targets, got {len(regional)}"
+    )
 
 
 # ── House price data verification ────────────────────────────────────
@@ -139,27 +141,15 @@ def test_hpi_prices_within_range():
         )
 
 
-def test_intensity_ratios_within_range():
-    """Intensity ratios should be between 0.3 and 0.95."""
+def test_london_highest_house_price():
+    """London should have the highest average house price."""
     from policyengine_uk_data.targets.sources._common import STORAGE
 
     df = pd.read_csv(STORAGE / "regional_land_values.csv")
-    for _, row in df.iterrows():
-        assert 0.3 <= row["land_intensity"] <= 0.95, (
-            f"{row['region']}: land_intensity {row['land_intensity']} "
-            f"outside plausible range"
-        )
-
-
-def test_london_highest_intensity():
-    """London should have the highest land intensity."""
-    from policyengine_uk_data.targets.sources._common import STORAGE
-
-    df = pd.read_csv(STORAGE / "regional_land_values.csv")
-    london = df.loc[df["region"] == "LONDON", "land_intensity"].iloc[0]
+    london = df.loc[df["region"] == "LONDON", "avg_house_price"].iloc[0]
     for _, row in df.iterrows():
         if row["region"] != "LONDON":
-            assert london >= row["land_intensity"], (
-                f"London intensity ({london}) should be >= "
-                f"{row['region']} ({row['land_intensity']})"
+            assert london >= row["avg_house_price"], (
+                f"London price (£{london:,.0f}) should be >= "
+                f"{row['region']} (£{row['avg_house_price']:,.0f})"
             )
