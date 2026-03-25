@@ -1,34 +1,19 @@
 """Housing affordability targets.
 
-Total mortgage payments, private rent, and social rent.
+Total mortgage payments and private rent from ONS/English Housing Survey.
 
 Sources:
-- ONS PRHI Feb 2026: UK avg private rent £1,374/month
-  https://www.ons.gov.uk/economy/inflationandpriceindices/bulletins/privaterentandhousepricesuk/march2026
-- English Housing Survey 2023-24: avg social rent £118/week
-  https://www.gov.uk/government/statistics/english-housing-survey-2023-to-2024-rented-sectors
-- EHS + devolved stats: ~5.4m private renters, ~5.0m social renters UK-wide
+- ONS PRHI: https://www.ons.gov.uk/economy/inflationandpriceindices/bulletins/privaterentandhousepricesuk/january2025
+- English Housing Survey mortgage data
 """
 
 from policyengine_uk_data.targets.schema import Target, Unit
 
-# Private rent: ONS PRHI UK avg £1,374/month × 5.4m UK private renters
-_PRIVATE_RENT_TOTAL = 1_374 * 12 * 5.4e6  # ~£89bn
-
-# Mortgage: avg £1,100/month × 7.5m owner-occupiers with mortgage
-_MORTGAGE_TOTAL = 1_100 * 12 * 7.5e6  # ~£99bn
-
-# Social rent: EHS 2023-24 mean £118/week × 52 × 5.0m UK social renters
-_SOCIAL_RENT_TOTAL = 118 * 52 * 5.0e6  # ~£30.7bn
-
-_EHS_REF = (
-    "https://www.gov.uk/government/statistics/"
-    "english-housing-survey-2023-to-2024-rented-sectors"
-)
-_ONS_RENT_REF = (
-    "https://www.ons.gov.uk/economy/inflationandpriceindices/"
-    "bulletins/privaterentandhousepricesuk/march2026"
-)
+# Estimated total annual housing costs (£)
+# Private rent: avg £1,400/month × 12 × 4.7m private renters
+# Mortgage: avg £1,100/month × 12 × 7.5m owner-occupiers with mortgage
+_PRIVATE_RENT_TOTAL = 1_400 * 12 * 4.7e6
+_MORTGAGE_TOTAL = 1_100 * 12 * 7.5e6
 
 
 def get_targets() -> list[Target]:
@@ -39,22 +24,14 @@ def get_targets() -> list[Target]:
             source="ons",
             unit=Unit.GBP,
             values={2025: _MORTGAGE_TOTAL},
-            reference_url=_ONS_RENT_REF,
+            reference_url="https://www.ons.gov.uk/economy/inflationandpriceindices/bulletins/privaterentandhousepricesuk/january2025",
         ),
         Target(
             name="housing/rent_private",
             variable="rent",
-            source="ehs",
+            source="ons",
             unit=Unit.GBP,
             values={2025: _PRIVATE_RENT_TOTAL},
-            reference_url=_ONS_RENT_REF,
-        ),
-        Target(
-            name="housing/rent_social",
-            variable="rent",
-            source="ehs",
-            unit=Unit.GBP,
-            values={2025: _SOCIAL_RENT_TOTAL},
-            reference_url=_EHS_REF,
+            reference_url="https://www.ons.gov.uk/economy/inflationandpriceindices/bulletins/privaterentandhousepricesuk/january2025",
         ),
     ]

@@ -27,16 +27,13 @@ def compute_vehicles(target, ctx) -> np.ndarray:
 
 
 def compute_housing(target, ctx) -> np.ndarray:
-    """Compute housing targets (mortgage, private rent, social rent)."""
+    """Compute housing targets (mortgage, private rent)."""
     name = target.name
     if name == "housing/total_mortgage":
         return ctx.pe("mortgage_capital_repayment") + ctx.pe(
             "mortgage_interest_repayment"
         )
     tenure = ctx.sim.calculate("tenure_type", map_to="household").values
-    if name == "housing/rent_social":
-        is_social = (tenure == "RENT_FROM_COUNCIL") | (tenure == "RENT_FROM_HA")
-        return ctx.pe("rent") * is_social
     return ctx.pe("rent") * (tenure == "RENT_PRIVATELY")
 
 
