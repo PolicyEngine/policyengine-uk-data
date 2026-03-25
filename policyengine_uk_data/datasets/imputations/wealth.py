@@ -6,7 +6,6 @@ corporate) using machine learning models trained on the UK Wealth and Assets
 Survey (WAS) data.
 """
 
-import numpy as np
 import pandas as pd
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
@@ -223,55 +222,6 @@ def impute_wealth(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     for column in output_df.columns:
         dataset.household[column] = output_df[column].values
 
-    _calibrate_main_residence_to_hpi(dataset, input_df["region"].values)
-
     dataset.validate()
 
     return dataset
-
-
-# UK HPI Dec 2025 average house prices by region.
-# Source: https://www.gov.uk/government/statistics/uk-house-price-index-for-december-2025
-_HPI_TARGETS = {
-    "LONDON": 551_294,
-    "SOUTH_EAST": 378_800,
-    "EAST_OF_ENGLAND": 338_002,
-    "SOUTH_WEST": 301_226,
-    "WEST_MIDLANDS": 246_141,
-    "EAST_MIDLANDS": 243_632,
-    "NORTH_WEST": 217_428,
-    "YORKSHIRE": 208_447,
-    "NORTH_EAST": 165_257,
-    "SCOTLAND": 195_000,
-    "WALES": 189_677,
-    "NORTHERN_IRELAND": 189_677,
-}
-
-
-def _calibrate_main_residence_to_hpi(
-    dataset: UKSingleYearDataset,
-    regions: np.ndarray,
-) -> None:
-    """Scale imputed main_residence_value so regional means match UK HPI.
-
-    The QRF imputation from WAS compresses regional variation (e.g.
-    London £325k vs HPI £551k). This post-imputation step multiplies
-    each household's main_residence_value by a per-region factor so the
-    unweighted regional mean matches UK HPI Dec 2025 average prices.
-
-    Only owner-occupied households (main_residence_value > 0) are
-    scaled. Renters (value == 0) are left unchanged.
-    """
-    mrv = dataset.household["main_residence_value"].values.copy()
-
-    for region, target in _HPI_TARGETS.items():
-        mask = (regions == region) & (mrv > 0)
-        if not mask.any():
-            continue
-        current_mean = mrv[mask].mean()
-        if current_mean <= 0:
-            continue
-        scale = target / current_mean
-        mrv[mask] *= scale
-
-    dataset.household["main_residence_value"] = mrv
