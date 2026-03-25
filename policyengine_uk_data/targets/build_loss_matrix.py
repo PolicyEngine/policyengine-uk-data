@@ -31,6 +31,7 @@ from policyengine_uk_data.targets.compute import (
     compute_housing,
     compute_income_band,
     compute_land_value,
+    compute_regional_land_value,
     compute_obr_council_tax,
     compute_pip_claimants,
     compute_regional_age,
@@ -297,6 +298,10 @@ def _compute_column(target: Target, ctx: _SimContext, year: int) -> np.ndarray |
         "ons/land_value",
     ):
         return compute_land_value(target, ctx)
+
+    # Regional household land values (MHCLG)
+    if name.startswith("mhclg/household_land_value/"):
+        return compute_regional_land_value(target, ctx)
 
     # Savings
     if name == "ons/savings_interest_income":
