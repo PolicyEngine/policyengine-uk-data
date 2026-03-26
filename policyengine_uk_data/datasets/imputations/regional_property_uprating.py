@@ -76,9 +76,7 @@ def uprate_property_by_region(
     household = pd.DataFrame(dataset.household)
     household = _calibrate_property_to_hpi(household)
 
-    dataset.household["main_residence_value"] = household[
-        "main_residence_value"
-    ].values
+    dataset.household["main_residence_value"] = household["main_residence_value"].values
     dataset.household["property_wealth"] = household["property_wealth"].values
 
     dataset.validate()

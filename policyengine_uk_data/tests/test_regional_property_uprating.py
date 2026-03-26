@@ -99,12 +99,9 @@ def test_property_wealth_scales_proportionally():
             "household_weight": [1.0, 1.0],
         }
     )
-    original_ratio = (
-        df["property_wealth"].values / df["main_residence_value"].values
-    )
+    original_ratio = df["property_wealth"].values / df["main_residence_value"].values
     calibrated = _calibrate_property_to_hpi(df)
     new_ratio = (
-        calibrated["property_wealth"].values
-        / calibrated["main_residence_value"].values
+        calibrated["property_wealth"].values / calibrated["main_residence_value"].values
     )
     np.testing.assert_allclose(original_ratio, new_ratio, rtol=1e-10)
