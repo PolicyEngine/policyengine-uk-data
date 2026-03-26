@@ -65,6 +65,7 @@ def main():
                 impute_services,
                 impute_salary_sacrifice,
                 impute_student_loan_plan,
+                uprate_property_by_region,
             )
 
             # Apply imputations with progress tracking
@@ -72,6 +73,7 @@ def main():
             # uses num_vehicles as a predictor for fuel spending
             update_dataset("Impute wealth", "processing")
             frs = impute_wealth(frs)
+            frs = uprate_property_by_region(frs)
             update_dataset("Impute wealth", "completed")
 
             update_dataset("Impute consumption", "processing")
