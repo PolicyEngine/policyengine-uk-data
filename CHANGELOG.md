@@ -1,3 +1,10 @@
+## [1.45.5] - 2026-03-27
+
+### Fixed
+
+- Add regional household land value calibration targets (#314).
+
+
 ## [1.45.4] - 2026-03-20
 
 ### Fixed
