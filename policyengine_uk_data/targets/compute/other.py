@@ -54,6 +54,13 @@ def compute_land_value(target, ctx) -> np.ndarray:
     return ctx.pe(target.variable)
 
 
+def compute_regional_land_value(target, ctx) -> np.ndarray:
+    """Compute household land value filtered to a single region."""
+    region = target.name.split("/")[-1]  # e.g. "ons/household_land_value/LONDON"
+    in_region = ctx.sim.calculate("region").values == region
+    return ctx.pe("household_land_value") * in_region
+
+
 def compute_student_loan_plan(target, ctx) -> np.ndarray:
     """Count England borrowers on a given plan with repayments > 0.
 
