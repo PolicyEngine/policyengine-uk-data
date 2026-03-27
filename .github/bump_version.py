@@ -19,17 +19,18 @@ def get_current_version(pyproject_path: Path) -> str:
 
 def infer_bump(changelog_dir: Path) -> str:
     fragments = [
-        f for f in changelog_dir.iterdir() if f.is_file() and f.name != ".gitkeep"
+        f
+        for f in changelog_dir.rglob("*")
+        if f.is_file() and f.name != ".gitkeep"
     ]
     if not fragments:
         print("No changelog fragments found", file=sys.stderr)
         sys.exit(1)
 
-    categories = {f.suffix.lstrip(".") for f in fragments}
+    categories = set()
     for f in fragments:
-        parts = f.stem.split(".")
-        if len(parts) >= 2:
-            categories.add(parts[-1])
+        # The fragment's parent directory name is the category (e.g. fixed, added)
+        categories.add(f.parent.name)
 
     if "breaking" in categories:
         return "major"
