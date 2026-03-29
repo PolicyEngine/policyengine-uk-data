@@ -1,10 +1,11 @@
 from policyengine_uk import Microsimulation
 
-from policyengine_uk_data.datasets import create_policybench_transfer
+from policyengine_uk_data.datasets import create_enhanced_cps
+from policyengine_uk_data.utils.loss import get_loss_results
 
 
 def test_policybench_transfer_dataset_validates():
-    dataset = create_policybench_transfer(max_rows=10)
+    dataset = create_enhanced_cps(max_rows=10, calibrate=False)
 
     dataset.validate()
 
@@ -15,7 +16,7 @@ def test_policybench_transfer_dataset_validates():
 
 
 def test_policybench_transfer_runs_uk_microsimulation():
-    dataset = create_policybench_transfer(max_rows=10)
+    dataset = create_enhanced_cps(max_rows=10, calibrate=False)
     sim = Microsimulation(dataset=dataset)
 
     for variable in (
@@ -25,3 +26,13 @@ def test_policybench_transfer_runs_uk_microsimulation():
     ):
         values = sim.calculate(variable, map_to="household").values
         assert len(values) == len(dataset.household)
+
+
+def test_policybench_transfer_calibration_improves_loss():
+    dataset = create_enhanced_cps(max_rows=100, calibrate=False)
+    uncalibrated_loss = get_loss_results(dataset, "2025")
+
+    calibrated = create_enhanced_cps(max_rows=100, calibrate=True)
+    calibrated_loss = get_loss_results(calibrated, "2025")
+
+    assert calibrated_loss.abs_rel_error.mean() < uncalibrated_loss.abs_rel_error.mean()
