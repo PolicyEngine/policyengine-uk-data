@@ -288,7 +288,9 @@ def _assign_council_tax_bands(households: pd.DataFrame) -> pd.DataFrame:
         percentiles = (
             ordered["household_weight"].cumsum() - 0.5 * ordered["household_weight"]
         ) / total_weight
-        band_codes = [bands[np.searchsorted(cumulative, pct, side="right")] for pct in percentiles]
+        band_codes = [
+            bands[np.searchsorted(cumulative, pct, side="right")] for pct in percentiles
+        ]
         households.loc[ordered.index, "council_tax_band"] = band_codes
 
     return households
