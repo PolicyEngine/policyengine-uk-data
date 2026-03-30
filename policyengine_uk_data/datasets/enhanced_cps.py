@@ -128,9 +128,7 @@ def _build_base_dataset(
                     exchange_rate,
                 ),
                 "household_wealth": _gbp(
-                    float(
-                        scenario.get("household_inputs", {}).get("net_worth", 0.0)
-                    ),
+                    float(scenario.get("household_inputs", {}).get("net_worth", 0.0)),
                     exchange_rate,
                 ),
             }
@@ -140,9 +138,7 @@ def _build_base_dataset(
         for person_index, person in enumerate(people, start=1):
             inputs = person.get("inputs", {})
             person_id = household_id * 10 + person_index
-            is_joint_couple = (
-                scenario["filing_status"] == "joint" and person_index <= 2
-            )
+            is_joint_couple = scenario["filing_status"] == "joint" and person_index <= 2
 
             person_rows.append(
                 {
@@ -150,9 +146,7 @@ def _build_base_dataset(
                     "person_household_id": household_id,
                     "person_benunit_id": benunit_id,
                     "age": int(person["age"]),
-                    "gender": "MALE"
-                    if (household_id + person_index) % 2
-                    else "FEMALE",
+                    "gender": "MALE" if (household_id + person_index) % 2 else "FEMALE",
                     "marital_status": "MARRIED" if is_joint_couple else "SINGLE",
                     "employment_income": _gbp(
                         float(person.get("employment_income", 0.0)),
@@ -196,9 +190,7 @@ def _build_base_dataset(
                     ),
                     "employment_expenses": _gbp(
                         float(
-                            inputs.get(
-                                "unreimbursed_business_employee_expenses", 0.0
-                            )
+                            inputs.get("unreimbursed_business_employee_expenses", 0.0)
                         ),
                         exchange_rate,
                     ),
@@ -207,9 +199,7 @@ def _build_base_dataset(
                         + float(inputs.get("traditional_ira_contributions", 0.0))
                         + max(
                             float(
-                                inputs.get(
-                                    "self_employed_pension_contributions", 0.0
-                                )
+                                inputs.get("self_employed_pension_contributions", 0.0)
                             ),
                             0.0,
                         ),
