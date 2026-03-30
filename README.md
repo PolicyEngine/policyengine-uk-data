@@ -10,13 +10,15 @@ This repo now also includes a public calibrated microdata file:
 - source manifest: `policyengine_uk_data/storage/enhanced_cps_source_2025.csv`
 
 The UK enhanced CPS starts from PolicyBench's public 1,000-household CPS-derived
-sample, maps those records into a `UKSingleYearDataset`, and recalibrates the
-household weights against the UK national/region/country target registry used by
-the loss pipeline.
+sample, maps those records into a `UKSingleYearDataset`, aligns core UK-facing
+inputs such as council tax bands, vehicle ownership, pensions, disability/PIP,
+consumption, and capital gains, and then recalibrates the household weights
+against the UK national/region/country target registry used by the loss
+pipeline.
 
-On the native 2025 loss matrix, that reweighting step cuts mean absolute
-relative error from roughly `3.81` on the raw transfer weights to roughly
-`0.66` on the calibrated dataset.
+On the native 2025 loss matrix, that alignment plus reweighting step cuts mean
+absolute relative error from roughly `3.81` on the raw transfer weights to
+roughly `0.39` on the calibrated dataset.
 
 This is a public calibrated dataset, not a replacement for the FRS or enhanced
 FRS. It is intended as the first step in a broader cross-country public-microdata
