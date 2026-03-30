@@ -310,11 +310,12 @@ def _build_base_dataset(
     benunit_rows: list[dict] = []
     household_rows: list[dict] = []
 
-    for _, row in source.iterrows():
+    for dataset_household_id, (_, row) in enumerate(source.iterrows(), start=1):
         scenario = json.loads(row["scenario_json"])
-        household_id = int(row["household_id"])
+        source_household_id = int(row["household_id"])
+        household_id = int(dataset_household_id)
         benunit_id = household_id
-        region = _pick_region(household_id)
+        region = _pick_region(source_household_id)
         adults = scenario["adults"]
         children = scenario["children"]
         people = adults + children
@@ -380,6 +381,7 @@ def _build_base_dataset(
         household_rows.append(
             {
                 "household_id": household_id,
+                "source_household_id": source_household_id,
                 "household_weight": float(row["household_weight"]),
                 "region": region,
                 "tenure_type": tenure_type,
@@ -404,7 +406,13 @@ def _build_base_dataset(
                 ),
             }
         )
-        benunit_rows.append({"benunit_id": benunit_id})
+        benunit_rows.append(
+            {
+                "benunit_id": benunit_id,
+                "source_benunit_id": source_household_id,
+                "source_household_id": source_household_id,
+            }
+        )
 
         for person_index, person in enumerate(people, start=1):
             inputs = person.get("inputs", {})
@@ -416,6 +424,7 @@ def _build_base_dataset(
                     "person_id": person_id,
                     "person_household_id": household_id,
                     "person_benunit_id": benunit_id,
+                    "source_household_id": source_household_id,
                     "age": int(person["age"]),
                     "gender": "MALE" if (household_id + person_index) % 2 else "FEMALE",
                     "marital_status": "MARRIED" if is_joint_couple else "SINGLE",
