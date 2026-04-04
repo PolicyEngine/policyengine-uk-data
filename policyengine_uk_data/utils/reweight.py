@@ -28,7 +28,8 @@ def calibrate_household_weights(
     reform=None,
     min_weight: float = 1e-9,
     max_iter: int = 2000,
-) -> tuple[np.ndarray, ReweightDiagnostics]:
+    compute_diagnostics: bool = True,
+) -> tuple[np.ndarray, ReweightDiagnostics | None]:
     """Calibrate household weights to national/region/country targets.
 
     This fits non-negative household weights against the target matrix using a
@@ -62,21 +63,23 @@ def calibrate_household_weights(
 
     calibrated_weights = result.x
 
-    before = get_loss_results(dataset, time_period, reform=reform)
-    after = get_loss_results(
-        dataset,
-        time_period,
-        reform=reform,
-        household_weights=calibrated_weights,
-    )
+    diagnostics = None
+    if compute_diagnostics:
+        before = get_loss_results(dataset, time_period, reform=reform)
+        after = get_loss_results(
+            dataset,
+            time_period,
+            reform=reform,
+            household_weights=calibrated_weights,
+        )
 
-    diagnostics = ReweightDiagnostics(
-        target_count=len(after),
-        mean_abs_rel_error_before=float(before.abs_rel_error.mean()),
-        mean_abs_rel_error_after=float(after.abs_rel_error.mean()),
-        median_abs_rel_error_before=float(before.abs_rel_error.median()),
-        median_abs_rel_error_after=float(after.abs_rel_error.median()),
-        pct_within_10_before=float((before.abs_rel_error <= 0.10).mean()),
-        pct_within_10_after=float((after.abs_rel_error <= 0.10).mean()),
-    )
+        diagnostics = ReweightDiagnostics(
+            target_count=len(after),
+            mean_abs_rel_error_before=float(before.abs_rel_error.mean()),
+            mean_abs_rel_error_after=float(after.abs_rel_error.mean()),
+            median_abs_rel_error_before=float(before.abs_rel_error.median()),
+            median_abs_rel_error_after=float(after.abs_rel_error.median()),
+            pct_within_10_before=float((before.abs_rel_error <= 0.10).mean()),
+            pct_within_10_after=float((after.abs_rel_error <= 0.10).mean()),
+        )
     return calibrated_weights, diagnostics

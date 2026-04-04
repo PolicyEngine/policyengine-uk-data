@@ -2,6 +2,7 @@ from .enhanced_cps import (
     ENHANCED_CPS_FILE,
     ENHANCED_CPS_SOURCE_FILE,
     create_enhanced_cps,
+    export_enhanced_cps_source,
     save_enhanced_cps,
 )
 from .frs import create_frs
@@ -16,6 +17,7 @@ __all__ = [
     "ENHANCED_CPS_FILE",
     "ENHANCED_CPS_SOURCE_FILE",
     "create_enhanced_cps",
+    "export_enhanced_cps_source",
     "POLICYBENCH_TRANSFER_SOURCE_FILE",
     "create_frs",
     "create_policybench_transfer",

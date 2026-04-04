@@ -1,8 +1,9 @@
 """Public UK enhanced CPS built from open U.S. microdata.
 
-This dataset starts from PolicyEngine's public 1,000-household CPS-derived
-sample, maps those records into a UKSingleYearDataset, and then calibrates the
-household weights to UK national/region/country targets.
+This dataset starts from a public export of eligible households from
+PolicyEngine-US Enhanced CPS, maps those records into a UKSingleYearDataset,
+and then calibrates the household weights to UK national/region/country
+targets.
 
 It is a public calibrated dataset. It does not replace the FRS or enhanced FRS,
 but it follows the same general strategy: public microdata plus imputations and
@@ -289,22 +290,119 @@ def _assign_council_tax_bands(households: pd.DataFrame) -> pd.DataFrame:
             ordered["household_weight"].cumsum() - 0.5 * ordered["household_weight"]
         ) / total_weight
         band_codes = [
-            bands[np.searchsorted(cumulative, pct, side="right")] for pct in percentiles
+            bands[min(np.searchsorted(cumulative, pct, side="right"), len(bands) - 1)]
+            for pct in percentiles
         ]
         households.loc[ordered.index, "council_tax_band"] = band_codes
 
     return households
 
 
+def export_enhanced_cps_source(
+    output_file_path: str | Path = ENHANCED_CPS_SOURCE_FILE,
+) -> pd.DataFrame:
+    """Export the default Enhanced CPS source manifest from PolicyBench inputs.
+
+    This is a build-time helper. It requires local access to the PolicyBench,
+    PolicyEngine-US, and PolicyEngine-US-Data repos so it can read the full
+    Enhanced CPS dataset and convert eligible households into the manifest
+    format used by this dataset builder.
+    """
+
+    try:
+        from policybench.scenarios import (
+            SUPPORTED_FILING_STATUSES,
+            Scenario,
+            _build_person,
+            _eligible_households,
+            _extract_entity_inputs,
+            _prepare_cps_frame,
+            load_enhanced_cps_person_frame,
+            scenario_to_dict,
+        )
+    except ImportError as exc:
+        raise ImportError(
+            "export_enhanced_cps_source requires the local PolicyBench and "
+            "PolicyEngine-US repos on PYTHONPATH."
+        ) from exc
+
+    person_df, dataset_year = load_enhanced_cps_person_frame()
+    prepared = _prepare_cps_frame(person_df)
+    eligible = _eligible_households(prepared)
+
+    weight_lookup = (
+        eligible.set_index("household_id")["household_weight"].astype(float).to_dict()
+    )
+
+    rows: list[dict] = []
+    household_ids = sorted(int(household_id) for household_id in eligible["household_id"])
+    for index, household_id in enumerate(household_ids):
+        household = prepared[prepared["household_id"] == household_id].copy()
+        household = household.sort_values(
+            by=["is_tax_unit_head", "is_tax_unit_spouse", "age", "person_id"],
+            ascending=[False, False, False, True],
+        )
+
+        adults = []
+        children = []
+        adult_count = 0
+        child_count = 0
+        for _, person_row in household.iterrows():
+            if bool(person_row["is_adult"]):
+                adult_count += 1
+                adults.append(_build_person(person_row, f"adult{adult_count}"))
+            else:
+                child_count += 1
+                children.append(_build_person(person_row, f"child{child_count}"))
+
+        scenario = Scenario(
+            id=f"scenario_{index:05d}",
+            state=str(household["state_code"].iloc[0]),
+            filing_status=SUPPORTED_FILING_STATUSES[household["filing_status"].iloc[0]],
+            adults=adults,
+            children=children,
+            tax_unit_inputs=_extract_entity_inputs(household.iloc[0], "tax_unit"),
+            spm_unit_inputs=_extract_entity_inputs(household.iloc[0], "spm_unit"),
+            household_inputs=_extract_entity_inputs(household.iloc[0], "household"),
+            year=2025,
+            source_dataset=f"enhanced_cps_{int(dataset_year)}",
+            metadata={
+                "household_id": household_id,
+                "tax_unit_id": int(household["tax_unit_id"].iloc[0]),
+                "dataset_year": int(dataset_year),
+            },
+        )
+
+        rows.append(
+            {
+                "scenario_id": scenario.id,
+                "household_id": household_id,
+                "household_weight": float(weight_lookup[household_id]),
+                "state": scenario.state,
+                "filing_status": scenario.filing_status,
+                "num_adults": len(scenario.adults),
+                "num_children": len(scenario.children),
+                "total_income": float(scenario.total_income),
+                "source_dataset": scenario.source_dataset,
+                "scenario_json": json.dumps(
+                    scenario_to_dict(scenario),
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
+            }
+        )
+
+    manifest = pd.DataFrame(rows)
+    manifest.to_csv(output_file_path, index=False)
+    return manifest
+
+
 def _build_base_dataset(
     source_file_path: str | Path,
     fiscal_year: int,
     exchange_rate: float,
-    max_rows: int | None,
 ) -> UKSingleYearDataset:
     source = pd.read_csv(source_file_path)
-    if max_rows is not None:
-        source = source.head(max_rows).copy()
 
     person_rows: list[dict] = []
     benunit_rows: list[dict] = []
@@ -525,7 +623,6 @@ def create_enhanced_cps(
     source_file_path: str | Path = ENHANCED_CPS_SOURCE_FILE,
     fiscal_year: int = 2025,
     exchange_rate: float = USD_TO_GBP,
-    max_rows: int | None = None,
     calibrate: bool = True,
 ):
     """Create the public UK enhanced CPS dataset."""
@@ -533,10 +630,13 @@ def create_enhanced_cps(
         source_file_path=source_file_path,
         fiscal_year=fiscal_year,
         exchange_rate=exchange_rate,
-        max_rows=max_rows,
     )
     if calibrate:
-        weights, _ = calibrate_household_weights(dataset, str(fiscal_year))
+        weights, _ = calibrate_household_weights(
+            dataset,
+            str(fiscal_year),
+            compute_diagnostics=False,
+        )
         dataset.household.household_weight = weights
     return dataset
 
@@ -546,7 +646,6 @@ def save_enhanced_cps(
     source_file_path: str | Path = ENHANCED_CPS_SOURCE_FILE,
     fiscal_year: int = 2025,
     exchange_rate: float = USD_TO_GBP,
-    max_rows: int | None = None,
     calibrate: bool = True,
 ) -> UKSingleYearDataset:
     """Create and save the public UK enhanced CPS dataset."""
@@ -554,7 +653,6 @@ def save_enhanced_cps(
         source_file_path=source_file_path,
         fiscal_year=fiscal_year,
         exchange_rate=exchange_rate,
-        max_rows=max_rows,
         calibrate=calibrate,
     )
     dataset.save(output_file_path)
