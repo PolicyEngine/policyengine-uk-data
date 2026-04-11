@@ -27,6 +27,11 @@ def _sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
+EXPECTED_COMPATIBLE_MODEL_PACKAGES = [
+    {"name": "policyengine-uk", "version": "2.74.0"}
+]
+
+
 def test_build_release_manifest_tracks_uk_release_artifacts(tmp_path):
     enhanced_bytes = b"enhanced-frs"
     baseline_bytes = b"baseline-frs"
@@ -56,12 +61,7 @@ def test_build_release_manifest_tracks_uk_release_artifacts(tmp_path):
         "version": "1.40.4",
     }
     assert manifest["schema_version"] == RELEASE_MANIFEST_SCHEMA_VERSION
-    assert manifest["compatible_model_packages"] == [
-        {
-            "name": "policyengine-uk",
-            "specifier": "==2.74.0",
-        }
-    ]
+    assert manifest["compatible_model_packages"] == EXPECTED_COMPATIBLE_MODEL_PACKAGES
     assert manifest["default_datasets"] == {
         "national": "enhanced_frs_2023_24",
         "baseline": "frs_2023_24",
@@ -141,7 +141,7 @@ def test_build_release_manifest_preserves_existing_created_at(tmp_path):
                 "name": "policyengine-uk-data",
                 "version": "1.40.4",
             },
-            "compatible_model_packages": [],
+            "compatible_model_packages": EXPECTED_COMPATIBLE_MODEL_PACKAGES,
             "default_datasets": {},
             "created_at": "2026-04-10T12:00:00Z",
             "artifacts": {},

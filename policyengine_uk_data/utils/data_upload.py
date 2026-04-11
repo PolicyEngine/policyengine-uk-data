@@ -86,6 +86,20 @@ def assert_release_not_finalized(
         )
 
 
+def get_repo_head_revision(
+    api: HfApi,
+    repo_id: str,
+    repo_type: str,
+    token: Optional[str] = None,
+) -> Optional[str]:
+    repo_info = api.repo_info(
+        repo_id=repo_id,
+        repo_type=repo_type,
+        token=token,
+    )
+    return getattr(repo_info, "sha", None)
+
+
 def create_release_manifest_commit_operations(
     files_with_repo_paths: List[Tuple[Path, str]],
     version: str,
@@ -124,14 +138,14 @@ def create_release_manifest_commit_operations(
 def upload_data_files(
     files: List[str],
     gcs_bucket_name: str = "policyengine-uk-data-private",
-    hf_repo_name: str = "policyengine/policyengine-uk-data",
+    hf_repo_name: str = "policyengine/policyengine-uk-data-private",
     hf_repo_type: str = "model",
     version: str = None,
 ):
     if version is None:
         version = metadata.version("policyengine-uk-data")
 
-    upload_files_to_hf(
+    commit_oid = upload_files_to_hf(
         files=files,
         version=version,
         hf_repo_name=hf_repo_name,
@@ -142,6 +156,13 @@ def upload_data_files(
         files=files,
         version=version,
         gcs_bucket_name=gcs_bucket_name,
+    )
+
+    create_release_tag(
+        version=version,
+        revision=commit_oid,
+        hf_repo_name=hf_repo_name,
+        hf_repo_type=hf_repo_type,
     )
 
 
@@ -179,16 +200,23 @@ def upload_files_to_hf(
             )
         )
 
+    model_package_version = _get_model_package_version()
     existing_manifest = load_release_manifest_from_hf(
         version=version,
         hf_repo_name=hf_repo_name,
         hf_repo_type=hf_repo_type,
     )
+    parent_commit = get_repo_head_revision(
+        api=api,
+        repo_id=hf_repo_name,
+        repo_type=hf_repo_type,
+        token=token,
+    )
     _, manifest_operations = create_release_manifest_commit_operations(
         files_with_repo_paths=files_with_repo_paths,
         version=version,
         hf_repo_name=hf_repo_name,
-        model_package_version=_get_model_package_version(),
+        model_package_version=model_package_version,
         existing_manifest=existing_manifest,
     )
     hf_operations.extend(manifest_operations)
@@ -199,26 +227,58 @@ def upload_files_to_hf(
         operations=hf_operations,
         repo_type=hf_repo_type,
         commit_message=f"Upload data files for version {version}",
+        parent_commit=parent_commit,
     )
     logging.info(f"Uploaded files to Hugging Face repository {hf_repo_name}.")
+    return commit_info.oid
 
-    # Tag commit with version
+
+def create_release_tag(
+    version: str,
+    revision: str,
+    hf_repo_name: str = "policyengine/policyengine-uk-data-private",
+    hf_repo_type: str = "model",
+    token: Optional[str] = None,
+    api: Optional[HfApi] = None,
+) -> None:
+    api = api or HfApi()
+    token = token or os.environ.get("HUGGING_FACE_TOKEN")
     try:
         api.create_tag(
             token=token,
             repo_id=hf_repo_name,
             tag=version,
-            revision=commit_info.oid,
+            revision=revision,
             repo_type=hf_repo_type,
+            exist_ok=False,
         )
         logging.info(
             f"Tagged commit with {version} in Hugging Face repository {hf_repo_name}."
         )
     except Exception as e:
         if "Tag reference exists already" in str(e) or "409" in str(e):
-            logging.warning(
-                f"Tag {version} already exists in {hf_repo_name}. Skipping tag creation."
+            tagged_revision = getattr(
+                api.repo_info(
+                    repo_id=hf_repo_name,
+                    repo_type=hf_repo_type,
+                    revision=version,
+                    token=token,
+                ),
+                "sha",
+                None,
             )
+            if tagged_revision == revision:
+                logging.info(
+                    "Tag %s already exists in %s and already points to %s.",
+                    version,
+                    hf_repo_name,
+                    revision,
+                )
+                return
+            raise RuntimeError(
+                f"Tag {version} already exists in {hf_repo_name} at "
+                f"{tagged_revision}; refusing to treat {revision} as finalized."
+            ) from e
         else:
             raise
 
