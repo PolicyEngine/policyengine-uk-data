@@ -20,21 +20,21 @@ RELEASE_MANIFEST_PATH = "release_manifest.json"
 
 def _get_model_package_version(
     package_name: str = "policyengine-uk",
-) -> Optional[str]:
+) -> str:
     try:
         return metadata.version(package_name)
     except metadata.PackageNotFoundError:
-        logging.warning(
-            "Could not determine installed version for %s while building release manifest.",
-            package_name,
+        raise RuntimeError(
+            "Could not determine installed version for "
+            f"{package_name} while building a release manifest."
         )
-        return None
 
 
 def load_release_manifest_from_hf(
     version: str,
     hf_repo_name: str = "policyengine/policyengine-uk-data-private",
     hf_repo_type: str = "model",
+    revision: Optional[str] = None,
 ) -> Optional[Dict]:
     token = os.environ.get("HUGGING_FACE_TOKEN")
     candidate_paths = [
@@ -49,9 +49,10 @@ def load_release_manifest_from_hf(
                 filename=path_in_repo,
                 repo_type=hf_repo_type,
                 token=token,
+                revision=revision,
             )
         except RevisionNotFoundError:
-            raise
+            return None
         except Exception:
             continue
 
@@ -65,6 +66,26 @@ def load_release_manifest_from_hf(
     return None
 
 
+def assert_release_not_finalized(
+    version: str,
+    hf_repo_name: str = "policyengine/policyengine-uk-data-private",
+    hf_repo_type: str = "model",
+) -> None:
+    if (
+        load_release_manifest_from_hf(
+            version=version,
+            hf_repo_name=hf_repo_name,
+            hf_repo_type=hf_repo_type,
+            revision=version,
+        )
+        is not None
+    ):
+        raise RuntimeError(
+            f"Release {version} is already finalized on {hf_repo_name}. "
+            "Refusing to mutate release manifest state after the tag exists."
+        )
+
+
 def create_release_manifest_commit_operations(
     files_with_repo_paths: List[Tuple[Path, str]],
     version: str,
@@ -73,6 +94,11 @@ def create_release_manifest_commit_operations(
     model_package_version: Optional[str] = None,
     existing_manifest: Optional[Dict] = None,
 ) -> Tuple[Dict, List[CommitOperationAdd]]:
+    if not model_package_version:
+        raise RuntimeError(
+            "A compatible policyengine-uk version is required when publishing "
+            "a release manifest."
+        )
     manifest = build_release_manifest(
         files_with_repo_paths=files_with_repo_paths,
         version=version,
@@ -131,6 +157,11 @@ def upload_files_to_hf(
     api = HfApi()
     token = os.environ.get(
         "HUGGING_FACE_TOKEN",
+    )
+    assert_release_not_finalized(
+        version=version,
+        hf_repo_name=hf_repo_name,
+        hf_repo_type=hf_repo_type,
     )
     hf_operations = []
     files_with_repo_paths = []

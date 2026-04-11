@@ -113,7 +113,7 @@ def build_release_manifest(
         )
     else:
         manifest["schema_version"] = RELEASE_MANIFEST_SCHEMA_VERSION
-        manifest["created_at"] = manifest_timestamp
+        manifest["created_at"] = manifest.get("created_at") or manifest_timestamp
         if model_package_version:
             manifest["compatible_model_packages"] = [
                 {
