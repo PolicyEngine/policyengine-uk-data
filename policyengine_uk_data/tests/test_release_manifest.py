@@ -27,9 +27,7 @@ def _sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
-EXPECTED_COMPATIBLE_MODEL_PACKAGES = [
-    {"name": "policyengine-uk", "version": "2.74.0"}
-]
+EXPECTED_COMPATIBLE_MODEL_PACKAGES = [{"name": "policyengine-uk", "version": "2.74.0"}]
 
 
 def test_build_release_manifest_tracks_uk_release_artifacts(tmp_path):
@@ -70,9 +68,7 @@ def test_build_release_manifest_tracks_uk_release_artifacts(tmp_path):
     assert manifest["artifacts"]["enhanced_frs_2023_24"]["sha256"] == _sha256(
         enhanced_bytes
     )
-    assert manifest["artifacts"]["frs_2023_24"]["sha256"] == _sha256(
-        baseline_bytes
-    )
+    assert manifest["artifacts"]["frs_2023_24"]["sha256"] == _sha256(baseline_bytes)
     assert manifest["artifacts"]["local_authority_weights"]["kind"] == "weights"
 
 
@@ -157,7 +153,7 @@ def test_load_release_manifest_from_hf_passes_revision(tmp_path):
         tmp_path / "release_manifest.json",
         (
             '{"data_package": {"name": "policyengine-uk-data", "version": "1.40.4"}}'
-        ).encode()
+        ).encode(),
     )
 
     with patch(

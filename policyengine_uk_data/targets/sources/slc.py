@@ -15,6 +15,7 @@ https://explore-education-statistics.service.gov.uk/data-tables/permalink/6ff755
 """
 
 import json
+import os
 import re
 import requests
 from functools import lru_cache
@@ -26,6 +27,23 @@ _PERMALINK_URL = (
     f"https://explore-education-statistics.service.gov.uk"
     f"/data-tables/permalink/{_PERMALINK_ID}"
 )
+_TESTING_DATA = {
+    "plan_2": {
+        2025: 3_670_000,
+        2026: 4_130_000,
+        2027: 4_480_000,
+        2028: 4_700_000,
+        2029: 4_820_000,
+        2030: 4_870_000,
+    },
+    "plan_5": {
+        2026: 25_000,
+        2027: 115_000,
+        2028: 340_000,
+        2029: 700_000,
+        2030: 1_140_000,
+    },
+}
 
 
 @lru_cache(maxsize=1)
@@ -36,6 +54,9 @@ def _fetch_slc_data() -> dict:
         Dict with keys 'plan_2' and 'plan_5', each containing a dict
         mapping calendar year (int) to borrower count above threshold (int).
     """
+    if os.environ.get("TESTING", "0") == "1":
+        return _TESTING_DATA
+
     response = requests.get(_PERMALINK_URL, timeout=30)
     response.raise_for_status()
 

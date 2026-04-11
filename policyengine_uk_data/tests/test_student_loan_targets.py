@@ -1,7 +1,5 @@
 """Tests for SLC student loan calibration targets."""
 
-import pytest
-
 
 def test_slc_targets_registered():
     """SLC targets appear in the target registry."""
@@ -32,3 +30,20 @@ def test_slc_plan5_values():
     assert 2025 not in p5.values  # no Plan 5 borrowers yet in 2024-25
     assert p5.values[2026] == 25_000
     assert p5.values[2029] == 700_000
+
+
+def test_slc_testing_mode_uses_snapshot_without_network(monkeypatch):
+    """Dataset-build CI should not depend on a live SLC endpoint."""
+    from policyengine_uk_data.targets.sources import slc
+
+    slc._fetch_slc_data.cache_clear()
+    monkeypatch.setenv("TESTING", "1")
+
+    def fail_network(*args, **kwargs):
+        raise AssertionError("network should not be used in TESTING mode")
+
+    monkeypatch.setattr(slc.requests, "get", fail_network)
+
+    assert slc._fetch_slc_data() == slc._TESTING_DATA
+
+    slc._fetch_slc_data.cache_clear()
