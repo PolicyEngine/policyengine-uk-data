@@ -39,6 +39,5 @@ def assert_local_build_environment() -> None:
         return
 
     raise RuntimeError(
-        "Local UK data build environment is not compatible:\n- "
-        + "\n- ".join(issues)
+        "Local UK data build environment is not compatible:\n- " + "\n- ".join(issues)
     )
