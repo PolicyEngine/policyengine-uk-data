@@ -1,12 +1,98 @@
-from typing import List
-from huggingface_hub import HfApi, CommitOperationAdd
+from io import BytesIO
+from typing import Dict, List, Optional, Tuple
+from huggingface_hub import HfApi, CommitOperationAdd, hf_hub_download
 from huggingface_hub.errors import RevisionNotFoundError
 from google.cloud import storage
 from pathlib import Path
 from importlib import metadata
 import google.auth
+import json
 import logging
 import os
+
+from policyengine_uk_data.utils.release_manifest import (
+    build_release_manifest,
+    serialize_release_manifest,
+)
+
+RELEASE_MANIFEST_PATH = "release_manifest.json"
+
+
+def _get_model_package_version(
+    package_name: str = "policyengine-uk",
+) -> Optional[str]:
+    try:
+        return metadata.version(package_name)
+    except metadata.PackageNotFoundError:
+        logging.warning(
+            "Could not determine installed version for %s while building release manifest.",
+            package_name,
+        )
+        return None
+
+
+def load_release_manifest_from_hf(
+    version: str,
+    hf_repo_name: str = "policyengine/policyengine-uk-data-private",
+    hf_repo_type: str = "model",
+) -> Optional[Dict]:
+    token = os.environ.get("HUGGING_FACE_TOKEN")
+    candidate_paths = [
+        f"releases/{version}/{RELEASE_MANIFEST_PATH}",
+        RELEASE_MANIFEST_PATH,
+    ]
+
+    for path_in_repo in candidate_paths:
+        try:
+            manifest_path = hf_hub_download(
+                repo_id=hf_repo_name,
+                filename=path_in_repo,
+                repo_type=hf_repo_type,
+                token=token,
+            )
+        except RevisionNotFoundError:
+            raise
+        except Exception:
+            continue
+
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+
+        data_package = manifest.get("data_package", {})
+        if data_package.get("version") == version:
+            return manifest
+
+    return None
+
+
+def create_release_manifest_commit_operations(
+    files_with_repo_paths: List[Tuple[Path, str]],
+    version: str,
+    hf_repo_name: str = "policyengine/policyengine-uk-data-private",
+    model_package_name: str = "policyengine-uk",
+    model_package_version: Optional[str] = None,
+    existing_manifest: Optional[Dict] = None,
+) -> Tuple[Dict, List[CommitOperationAdd]]:
+    manifest = build_release_manifest(
+        files_with_repo_paths=files_with_repo_paths,
+        version=version,
+        repo_id=hf_repo_name,
+        model_package_name=model_package_name,
+        model_package_version=model_package_version,
+        existing_manifest=existing_manifest,
+    )
+    manifest_payload = serialize_release_manifest(manifest)
+    operations = [
+        CommitOperationAdd(
+            path_in_repo=RELEASE_MANIFEST_PATH,
+            path_or_fileobj=BytesIO(manifest_payload),
+        ),
+        CommitOperationAdd(
+            path_in_repo=f"releases/{version}/{RELEASE_MANIFEST_PATH}",
+            path_or_fileobj=BytesIO(manifest_payload),
+        ),
+    ]
+    return manifest, operations
 
 
 def upload_data_files(
@@ -47,17 +133,35 @@ def upload_files_to_hf(
         "HUGGING_FACE_TOKEN",
     )
     hf_operations = []
+    files_with_repo_paths = []
 
     for file_path in files:
         file_path = Path(file_path)
         if not file_path.exists():
             raise ValueError(f"File {file_path} does not exist.")
+        repo_path = file_path.name
+        files_with_repo_paths.append((file_path, repo_path))
         hf_operations.append(
             CommitOperationAdd(
-                path_in_repo=file_path.name,
+                path_in_repo=repo_path,
                 path_or_fileobj=str(file_path),
             )
         )
+
+    existing_manifest = load_release_manifest_from_hf(
+        version=version,
+        hf_repo_name=hf_repo_name,
+        hf_repo_type=hf_repo_type,
+    )
+    _, manifest_operations = create_release_manifest_commit_operations(
+        files_with_repo_paths=files_with_repo_paths,
+        version=version,
+        hf_repo_name=hf_repo_name,
+        model_package_version=_get_model_package_version(),
+        existing_manifest=existing_manifest,
+    )
+    hf_operations.extend(manifest_operations)
+
     commit_info = api.create_commit(
         token=token,
         repo_id=hf_repo_name,
@@ -68,16 +172,24 @@ def upload_files_to_hf(
     logging.info(f"Uploaded files to Hugging Face repository {hf_repo_name}.")
 
     # Tag commit with version
-    api.create_tag(
-        token=token,
-        repo_id=hf_repo_name,
-        tag=version,
-        revision=commit_info.oid,
-        repo_type=hf_repo_type,
-    )
-    logging.info(
-        f"Tagged commit with {version} in Hugging Face repository {hf_repo_name}."
-    )
+    try:
+        api.create_tag(
+            token=token,
+            repo_id=hf_repo_name,
+            tag=version,
+            revision=commit_info.oid,
+            repo_type=hf_repo_type,
+        )
+        logging.info(
+            f"Tagged commit with {version} in Hugging Face repository {hf_repo_name}."
+        )
+    except Exception as e:
+        if "Tag reference exists already" in str(e) or "409" in str(e):
+            logging.warning(
+                f"Tag {version} already exists in {hf_repo_name}. Skipping tag creation."
+            )
+        else:
+            raise
 
 
 def upload_files_to_gcs(
