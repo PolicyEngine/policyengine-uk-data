@@ -40,7 +40,7 @@ def test_legacy_jobseeker_proxy_tracks_unemployed_working_age_low_hours():
                 "UNEMPLOYED",
             ]
         ),
-        hours_worked=np.array([0, 12, 16, 0, 0, 0, 0, 0, 0, 0]),
+        hours_worked=np.array([0, 12 * 52, 16 * 52, 0, 0, 0, 0, 0, 0, 0]),
         current_education=np.array(
             [
                 "NOT_IN_EDUCATION",
@@ -107,7 +107,7 @@ def test_esa_support_group_proxy_is_stricter_subset_of_health_proxy():
                 "LONG_TERM_DISABLED",
             ]
         ),
-        hours_worked=np.array([0, 0, 12, 0, 0]),
+        hours_worked=np.array([0, 0, 12 * 52, 0, 0]),
         esa_health_condition_proxy=health_proxy,
         employment_status_reported=np.array([True, True, True, True, False]),
         state_pension_age=np.array([66, 66, 66, 66, 66]),
@@ -126,7 +126,7 @@ def test_add_legacy_benefit_proxies_wires_all_three_columns():
                 "SHORT_TERM_DISABLED",
                 "LONG_TERM_DISABLED",
             ],
-            "hours_worked": [0, 0, 12, 0],
+            "hours_worked": [0, 0, 12 * 52, 0],
             "current_education": [
                 "NOT_IN_EDUCATION",
                 "NOT_IN_EDUCATION",
@@ -178,7 +178,7 @@ def test_attach_legacy_benefit_proxies_from_frs_person_uses_empstati_mask():
         {
             "age": [30, 30],
             "employment_status": ["UNEMPLOYED", "LONG_TERM_DISABLED"],
-            "hours_worked": [12, 0],
+            "hours_worked": [12 * 52, 0],
             "current_education": ["NOT_IN_EDUCATION", "NOT_IN_EDUCATION"],
         }
     )
