@@ -22,6 +22,130 @@ from policyengine_uk_data.utils.datasets import (
 from policyengine_uk_data.parameters import load_take_up_rate, load_parameter
 
 
+LEGACY_JOBSEEKER_MIN_AGE = 18
+ESA_MIN_AGE = 16
+ESA_HEALTH_EMPLOYMENT_STATUSES = (
+    "LONG_TERM_DISABLED",
+    "SHORT_TERM_DISABLED",
+)
+
+
+def derive_legacy_jobseeker_proxy(
+    age,
+    employment_status,
+    hours_worked,
+    state_pension_age,
+) -> np.ndarray:
+    """Approximate legacy JSA claimant-state from observed survey data.
+
+    This is intentionally a proxy, not a legislative determination. It
+    identifies person-level working-age adults who report being unemployed
+    and not currently working any hours.
+    """
+
+    age = np.asarray(age)
+    employment_status = np.asarray(employment_status)
+    hours_worked = np.asarray(hours_worked)
+    state_pension_age = np.asarray(state_pension_age)
+
+    return (
+        (age >= LEGACY_JOBSEEKER_MIN_AGE)
+        & (age < state_pension_age)
+        & (employment_status == "UNEMPLOYED")
+        & (hours_worked <= 0)
+    )
+
+
+def derive_esa_health_condition_proxy(
+    age,
+    employment_status,
+    state_pension_age,
+) -> np.ndarray:
+    """Approximate working-age ESA health-related claimant-state.
+
+    This proxy relies only on person-level labour market status, not on
+    current disability or incapacity benefit receipt. It is a dataset-side
+    approximation for future modelling, not a direct observation of ESA
+    legal entitlement or LCW/LCWRA status.
+    """
+
+    age = np.asarray(age)
+    employment_status = np.asarray(employment_status)
+    state_pension_age = np.asarray(state_pension_age)
+    disability_labour_market_state = np.isin(
+        employment_status, ESA_HEALTH_EMPLOYMENT_STATUSES
+    )
+
+    return (
+        (age >= ESA_MIN_AGE)
+        & (age < state_pension_age)
+        & disability_labour_market_state
+    )
+
+
+def derive_esa_support_group_proxy(
+    age,
+    employment_status,
+    hours_worked,
+    esa_health_condition_proxy,
+    state_pension_age,
+) -> np.ndarray:
+    """Approximate a severe-health ESA subgroup akin to support group.
+
+    This is a stricter subset of ``esa_health_condition_proxy`` intended
+    for future legacy ESA approximation work. It uses only non-receipt
+    labour market signals already available in the survey.
+    """
+
+    age = np.asarray(age)
+    employment_status = np.asarray(employment_status)
+    hours_worked = np.asarray(hours_worked)
+    esa_health_condition_proxy = np.asarray(esa_health_condition_proxy)
+    state_pension_age = np.asarray(state_pension_age)
+    severe_health_evidence = (employment_status == "LONG_TERM_DISABLED") & (
+        hours_worked <= 0
+    )
+
+    return (
+        (age >= ESA_MIN_AGE)
+        & (age < state_pension_age)
+        & esa_health_condition_proxy
+        & severe_health_evidence
+    )
+
+
+def add_legacy_benefit_proxies(
+    pe_person: pd.DataFrame, state_pension_age
+) -> pd.DataFrame:
+    """Populate person-scoped ESA/JSA proxy columns on the person frame.
+
+    These remain person-level by design because the claimant-state inputs
+    they approximate attach to individuals. Downstream benunit-level legacy
+    benefit models should aggregate them explicitly rather than assuming the
+    raw survey contains a benunit claimant-state field.
+    """
+
+    pe_person["legacy_jobseeker_proxy"] = derive_legacy_jobseeker_proxy(
+        age=pe_person.age,
+        employment_status=pe_person.employment_status,
+        hours_worked=pe_person.hours_worked,
+        state_pension_age=state_pension_age,
+    )
+    pe_person["esa_health_condition_proxy"] = derive_esa_health_condition_proxy(
+        age=pe_person.age,
+        employment_status=pe_person.employment_status,
+        state_pension_age=state_pension_age,
+    )
+    pe_person["esa_support_group_proxy"] = derive_esa_support_group_proxy(
+        age=pe_person.age,
+        employment_status=pe_person.employment_status,
+        hours_worked=pe_person.hours_worked,
+        esa_health_condition_proxy=pe_person.esa_health_condition_proxy,
+        state_pension_age=state_pension_age,
+    )
+    return pe_person
+
+
 def create_frs(
     raw_frs_folder: str,
     year: int,
@@ -744,6 +868,7 @@ def create_frs(
     sim = Microsimulation(dataset=dataset)
     region = sim.populations["benunit"].household("region", dataset.time_period)
     lha_category = sim.calculate("LHA_category", year)
+    state_pension_age = sim.calculate("state_pension_age", year).values
 
     brma = np.empty(len(region), dtype=object)
 
@@ -807,6 +932,11 @@ def create_frs(
     pe_person["is_severely_disabled_for_benefits"] = (
         paragraph_3 | paragraph_4 | paragraph_5
     )
+
+    # Dataset-side claimant-state approximations for future legacy ESA/JSA
+    # modelling. These are explicit proxies based on observed survey
+    # conditions, not legislative determinations.
+    pe_person = add_legacy_benefit_proxies(pe_person, state_pension_age)
 
     # Generate stochastic take-up decisions
     # All randomness is generated here in the data package using take-up rates
