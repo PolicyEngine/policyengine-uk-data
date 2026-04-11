@@ -23,6 +23,7 @@ from policyengine_uk_data.parameters import load_take_up_rate, load_parameter
 
 
 LEGACY_JOBSEEKER_MIN_AGE = 18
+LEGACY_JOBSEEKER_MAX_HOURS = 16
 ESA_MIN_AGE = 16
 ESA_HEALTH_EMPLOYMENT_STATUSES = (
     "LONG_TERM_DISABLED",
@@ -34,31 +35,38 @@ def derive_legacy_jobseeker_proxy(
     age,
     employment_status,
     hours_worked,
+    current_education,
+    employment_status_reported,
     state_pension_age,
 ) -> np.ndarray:
     """Approximate legacy JSA claimant-state from observed survey data.
 
     This is intentionally a proxy, not a legislative determination. It
     identifies person-level working-age adults who report being unemployed
-    and not currently working any hours.
+    and working less than the legacy JSA 16-hour limit.
     """
 
     age = np.asarray(age)
     employment_status = np.asarray(employment_status)
     hours_worked = np.asarray(hours_worked)
+    current_education = np.asarray(current_education)
+    employment_status_reported = np.asarray(employment_status_reported)
     state_pension_age = np.asarray(state_pension_age)
 
     return (
-        (age >= LEGACY_JOBSEEKER_MIN_AGE)
+        employment_status_reported
+        & (age >= LEGACY_JOBSEEKER_MIN_AGE)
         & (age < state_pension_age)
         & (employment_status == "UNEMPLOYED")
-        & (hours_worked <= 0)
+        & (hours_worked < LEGACY_JOBSEEKER_MAX_HOURS)
+        & (current_education == "NOT_IN_EDUCATION")
     )
 
 
 def derive_esa_health_condition_proxy(
     age,
     employment_status,
+    employment_status_reported,
     state_pension_age,
 ) -> np.ndarray:
     """Approximate working-age ESA health-related claimant-state.
@@ -71,13 +79,15 @@ def derive_esa_health_condition_proxy(
 
     age = np.asarray(age)
     employment_status = np.asarray(employment_status)
+    employment_status_reported = np.asarray(employment_status_reported)
     state_pension_age = np.asarray(state_pension_age)
     disability_labour_market_state = np.isin(
         employment_status, ESA_HEALTH_EMPLOYMENT_STATUSES
     )
 
     return (
-        (age >= ESA_MIN_AGE)
+        employment_status_reported
+        & (age >= ESA_MIN_AGE)
         & (age < state_pension_age)
         & disability_labour_market_state
     )
@@ -88,6 +98,7 @@ def derive_esa_support_group_proxy(
     employment_status,
     hours_worked,
     esa_health_condition_proxy,
+    employment_status_reported,
     state_pension_age,
 ) -> np.ndarray:
     """Approximate a severe-health ESA subgroup akin to support group.
@@ -101,13 +112,15 @@ def derive_esa_support_group_proxy(
     employment_status = np.asarray(employment_status)
     hours_worked = np.asarray(hours_worked)
     esa_health_condition_proxy = np.asarray(esa_health_condition_proxy)
+    employment_status_reported = np.asarray(employment_status_reported)
     state_pension_age = np.asarray(state_pension_age)
     severe_health_evidence = (employment_status == "LONG_TERM_DISABLED") & (
         hours_worked <= 0
     )
 
     return (
-        (age >= ESA_MIN_AGE)
+        employment_status_reported
+        & (age >= ESA_MIN_AGE)
         & (age < state_pension_age)
         & esa_health_condition_proxy
         & severe_health_evidence
@@ -115,7 +128,7 @@ def derive_esa_support_group_proxy(
 
 
 def add_legacy_benefit_proxies(
-    pe_person: pd.DataFrame, state_pension_age
+    pe_person: pd.DataFrame, employment_status_reported, state_pension_age
 ) -> pd.DataFrame:
     """Populate person-scoped ESA/JSA proxy columns on the person frame.
 
@@ -129,11 +142,14 @@ def add_legacy_benefit_proxies(
         age=pe_person.age,
         employment_status=pe_person.employment_status,
         hours_worked=pe_person.hours_worked,
+        current_education=pe_person.current_education,
+        employment_status_reported=employment_status_reported,
         state_pension_age=state_pension_age,
     )
     pe_person["esa_health_condition_proxy"] = derive_esa_health_condition_proxy(
         age=pe_person.age,
         employment_status=pe_person.employment_status,
+        employment_status_reported=employment_status_reported,
         state_pension_age=state_pension_age,
     )
     pe_person["esa_support_group_proxy"] = derive_esa_support_group_proxy(
@@ -141,9 +157,37 @@ def add_legacy_benefit_proxies(
         employment_status=pe_person.employment_status,
         hours_worked=pe_person.hours_worked,
         esa_health_condition_proxy=pe_person.esa_health_condition_proxy,
+        employment_status_reported=employment_status_reported,
         state_pension_age=state_pension_age,
     )
     return pe_person
+
+
+def apply_legacy_benefit_proxies(
+    pe_person: pd.DataFrame, sim, year: int, employment_status_reported
+) -> pd.DataFrame:
+    """Attach legacy ESA/JSA proxies using post-build simulation context."""
+
+    state_pension_age = sim.calculate("state_pension_age", year).values
+    return add_legacy_benefit_proxies(
+        pe_person,
+        employment_status_reported=employment_status_reported,
+        state_pension_age=state_pension_age,
+    )
+
+
+def attach_legacy_benefit_proxies_from_frs_person(
+    pe_person: pd.DataFrame, person: pd.DataFrame, sim, year: int
+) -> pd.DataFrame:
+    """Bridge raw FRS person fields into the proxy derivation hook."""
+
+    employment_status_reported = person.empstati.fillna(0).to_numpy() > 0
+    return apply_legacy_benefit_proxies(
+        pe_person,
+        sim,
+        year,
+        employment_status_reported=employment_status_reported,
+    )
 
 
 def create_frs(
@@ -868,8 +912,6 @@ def create_frs(
     sim = Microsimulation(dataset=dataset)
     region = sim.populations["benunit"].household("region", dataset.time_period)
     lha_category = sim.calculate("LHA_category", year)
-    state_pension_age = sim.calculate("state_pension_age", year).values
-
     brma = np.empty(len(region), dtype=object)
 
     # Sample from a random BRMA in the region, weighted by the number of observations in each BRMA
@@ -936,7 +978,9 @@ def create_frs(
     # Dataset-side claimant-state approximations for future legacy ESA/JSA
     # modelling. These are explicit proxies based on observed survey
     # conditions, not legislative determinations.
-    pe_person = add_legacy_benefit_proxies(pe_person, state_pension_age)
+    pe_person = attach_legacy_benefit_proxies_from_frs_person(
+        pe_person, person, sim, year
+    )
 
     # Generate stochastic take-up decisions
     # All randomness is generated here in the data package using take-up rates
