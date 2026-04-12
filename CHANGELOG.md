@@ -1,3 +1,10 @@
+## [1.46.0] - 2026-04-12
+
+### Added
+
+- Add Output Area crosswalk and geographic assignment for OA-level calibration pipeline.
+
+
 ## [1.45.8] - 2026-03-31
 
 No significant changes.
