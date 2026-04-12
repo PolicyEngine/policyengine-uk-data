@@ -1,25 +1,39 @@
 """Test UC households by number of children calibration targets.
 
 Validates that the weighted count of UC households split by number of
-children (0, 1, 2, 3+) matches DWP Stat-Xplore country-level totals
-(November 2023).
+children (0, 1, 2, 3+) matches the latest GB-wide UC household totals
+used for local calibration targets.
 
 Source: DWP Stat-Xplore, UC Households dataset
 https://stat-xplore.dwp.gov.uk/
 """
 
 import pytest
+from policyengine_uk_data.targets.sources.local_uc import (
+    _scaled_uc_children_by_country,
+)
 
-# DWP Stat-Xplore November 2023 national totals (GB)
-# England + Wales + Scotland
+# Latest GB UC household totals by children count used by local_uc.py.
 _TARGETS = {
-    "0_children": 2_411_993 + 141_054 + 253_609,  # 2,806,656
-    "1_child": 948_304 + 52_953 + 86_321,  # 1,087,578
-    "2_children": 802_992 + 44_348 + 66_829,  # 914,169
-    "3plus_children": 495_279 + 26_372 + 35_036,  # 556,687
+    "0_children": 2_937_389,
+    "1_child": 1_222_944,
+    "2_children": 1_058_967,
+    "3plus_children": 716_200,
 }
 
 TOLERANCE = 0.30  # 30% relative tolerance
+
+
+def test_scaled_country_children_buckets_match_latest_gb_totals():
+    """Scaled country buckets should recover the latest GB child-count totals."""
+    country_buckets = _scaled_uc_children_by_country(5_935_500)
+    gb_totals = country_buckets["E"] + country_buckets["W"] + country_buckets["S"]
+    assert gb_totals.tolist() == [
+        _TARGETS["0_children"],
+        _TARGETS["1_child"],
+        _TARGETS["2_children"],
+        _TARGETS["3plus_children"],
+    ]
 
 
 @pytest.mark.parametrize(

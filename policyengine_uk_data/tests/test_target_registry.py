@@ -7,8 +7,7 @@ Verifies that:
 4. Target values match the current system's hardcoded values
 """
 
-import pytest
-from policyengine_uk_data.targets import get_all_targets, Target
+from policyengine_uk_data.targets import get_all_targets
 
 
 def test_registry_loads():
@@ -33,11 +32,11 @@ def test_obr_income_tax_exists():
 
 
 def test_obr_income_tax_value():
-    """OBR income tax for 2025 should be ~£329bn (Table 3.4 accrued basis)."""
+    """OBR income tax for 2025 should be ~£331bn (March 2026 Table 3.4)."""
     targets = get_all_targets(year=2025)
     it = next(t for t in targets if t.name == "obr/income_tax")
-    # Table 3.4 D6 = 328.96bn for FY 2025-26 → calendar 2025
-    assert abs(it.values[2025] - 329e9) < 1e9
+    # Table 3.4 D6 = 331.44bn for FY 2025-26 → calendar 2025
+    assert abs(it.values[2025] - 331.4e9) < 1e9
 
 
 def test_ons_uk_population_exists():
@@ -83,6 +82,15 @@ def test_two_child_limit_targets():
     names = {t.name for t in targets}
     assert "dwp/uc/two_child_limit/households_affected" in names
     assert "dwp/uc/two_child_limit/children_affected" in names
+
+
+def test_benefit_cap_targets_refreshed():
+    """Benefit cap target values should match the November 2025 release."""
+    targets = get_all_targets(year=2025)
+    capped = next(t for t in targets if t.name == "dwp/benefit_capped_households")
+    total = next(t for t in targets if t.name == "dwp/benefit_cap_total_reduction")
+    assert capped.values[2025] == 110_637
+    assert total.values[2025] == 320_866_000
 
 
 def test_scottish_child_payment():

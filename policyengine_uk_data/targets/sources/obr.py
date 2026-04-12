@@ -5,8 +5,8 @@ and expenditure xlsx) to extract tax receipt forecasts, benefit
 expenditure, and benefit caseloads.
 
 Sources:
-- Receipts: https://obr.uk/download/november-2025-economic-and-fiscal-outlook-detailed-forecast-tables-receipts/
-- Expenditure: https://obr.uk/download/november-2025-economic-and-fiscal-outlook-detailed-forecast-tables-expenditure/
+- Receipts: https://obr.uk/download/march-2026-economic-and-fiscal-outlook-detailed-forecast-tables-receipts/
+- Expenditure: https://obr.uk/download/march-2026-economic-and-fiscal-outlook-detailed-forecast-tables-expenditure/
 """
 
 import io

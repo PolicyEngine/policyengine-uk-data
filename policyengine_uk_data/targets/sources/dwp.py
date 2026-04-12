@@ -6,8 +6,8 @@ two-child limit breakdowns, and Scotland UC households with child under 1.
 
 Sources:
 - DWP Stat-Xplore: https://stat-xplore.dwp.gov.uk
-- DWP benefit cap: https://www.gov.uk/government/statistics/benefit-cap-number-of-households-capped-to-february-2025
-- DWP two-child limit: https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024
+- DWP benefit cap: https://www.gov.uk/government/statistics/benefit-cap-number-of-households-capped-to-november-2025
+- DWP two-child limit: https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025
 """
 
 from policyengine_uk_data.targets.schema import Target, Unit
@@ -48,9 +48,9 @@ def get_targets() -> list[Target]:
             variable="benefit_cap_reduction",
             source="dwp",
             unit=Unit.COUNT,
-            values={2025: 115_000},
+            values={2025: 110_637},
             is_count=True,
-            reference_url="https://www.gov.uk/government/statistics/benefit-cap-number-of-households-capped-to-february-2025/benefit-cap-number-of-households-capped-to-february-2025",
+            reference_url="https://www.gov.uk/government/statistics/benefit-cap-number-of-households-capped-to-november-2025/benefit-cap-number-of-households-capped-to-november-2025",
         )
     )
     targets.append(
@@ -59,8 +59,10 @@ def get_targets() -> list[Target]:
             variable="benefit_cap_reduction",
             source="dwp",
             unit=Unit.GBP,
-            values={2025: 60 * 52 * 115_000},
-            reference_url="https://www.gov.uk/government/statistics/benefit-cap-number-of-households-capped-to-february-2025/benefit-cap-number-of-households-capped-to-february-2025",
+            # Uses the November 2025 point-in-time cap distribution midpoint by band,
+            # annualized to align with the model's yearly benefit_cap_reduction output.
+            values={2025: 320_866_000},
+            reference_url="https://www.gov.uk/government/statistics/benefit-cap-number-of-households-capped-to-november-2025/benefit-cap-number-of-households-capped-to-november-2025",
         )
     )
 
@@ -119,7 +121,7 @@ def get_targets() -> list[Target]:
             )
         )
 
-    # Two-child limit statistics (2026 data)
+    # Two-child limit statistics (April 2025 publication, modeled at 2026)
     targets.append(
         Target(
             name="dwp/uc/two_child_limit/households_affected",
@@ -128,7 +130,7 @@ def get_targets() -> list[Target]:
             unit=Unit.COUNT,
             values={2026: 453_600},
             is_count=True,
-            reference_url="https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024",
+            reference_url="https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025",
         )
     )
     targets.append(
@@ -139,7 +141,7 @@ def get_targets() -> list[Target]:
             unit=Unit.COUNT,
             values={2026: 1_613_980},
             is_count=True,
-            reference_url="https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024",
+            reference_url="https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025",
         )
     )
     targets.append(
@@ -150,7 +152,7 @@ def get_targets() -> list[Target]:
             unit=Unit.COUNT,
             values={2026: 580_400},
             is_count=True,
-            reference_url="https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024",
+            reference_url="https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025",
         )
     )
 
@@ -170,7 +172,7 @@ def get_targets() -> list[Target]:
                 unit=Unit.COUNT,
                 values={2026: households},
                 is_count=True,
-                reference_url="https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024",
+                reference_url="https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025",
             )
         )
         targets.append(
@@ -181,7 +183,7 @@ def get_targets() -> list[Target]:
                 unit=Unit.COUNT,
                 values={2026: children},
                 is_count=True,
-                reference_url="https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024",
+                reference_url="https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025",
             )
         )
 
@@ -195,7 +197,7 @@ def get_targets() -> list[Target]:
                 unit=Unit.COUNT,
                 values={2026: 62_260},
                 is_count=True,
-                reference_url="https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024",
+                reference_url="https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025",
             ),
             Target(
                 name="dwp/uc/two_child_limit/adult_pip_children",
@@ -204,7 +206,7 @@ def get_targets() -> list[Target]:
                 unit=Unit.COUNT,
                 values={2026: 225_320},
                 is_count=True,
-                reference_url="https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024",
+                reference_url="https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025",
             ),
             Target(
                 name="dwp/uc/two_child_limit/disabled_child_element_households",
@@ -213,7 +215,7 @@ def get_targets() -> list[Target]:
                 unit=Unit.COUNT,
                 values={2026: 124_560},
                 is_count=True,
-                reference_url="https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024",
+                reference_url="https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025",
             ),
             Target(
                 name="dwp/uc/two_child_limit/disabled_child_element_children",
@@ -222,7 +224,7 @@ def get_targets() -> list[Target]:
                 unit=Unit.COUNT,
                 values={2026: 462_660},
                 is_count=True,
-                reference_url="https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024",
+                reference_url="https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025",
             ),
         ]
     )
