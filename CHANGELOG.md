@@ -1,3 +1,10 @@
+## [1.46.2] - 2026-04-12
+
+### Changed
+
+- Record build-time model version, git SHA, and data-build fingerprint in UK data release manifests.
+
+
 ## [1.46.1] - 2026-04-12
 
 ### Changed
