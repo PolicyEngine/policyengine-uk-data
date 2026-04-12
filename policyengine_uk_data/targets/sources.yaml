@@ -2,9 +2,9 @@
 # Update these when new vintages are published.
 
 obr:
-  efo_receipts: "https://obr.uk/download/november-2025-economic-and-fiscal-outlook-detailed-forecast-tables-receipts/"
-  efo_expenditure: "https://obr.uk/download/november-2025-economic-and-fiscal-outlook-detailed-forecast-tables-expenditure/"
-  vintage: "november_2025"
+  efo_receipts: "https://obr.uk/download/march-2026-economic-and-fiscal-outlook-detailed-forecast-tables-receipts/"
+  efo_expenditure: "https://obr.uk/download/march-2026-economic-and-fiscal-outlook-detailed-forecast-tables-expenditure/"
+  vintage: "march_2026"
 
 hmrc:
   spi_collated: "https://assets.publishing.service.gov.uk/media/67cabb37ade26736dbf9ffe5/Collated_Tables_3_1_to_3_17_2223.ods"
@@ -14,8 +14,8 @@ hmrc:
 
 dwp:
   stat_xplore_api: "https://stat-xplore.dwp.gov.uk/webapi/rest/v1"
-  two_child_limit: "https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024"
-  benefit_cap: "https://www.gov.uk/government/statistics/benefit-cap-number-of-households-capped-to-february-2025"
+  two_child_limit: "https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025"
+  benefit_cap: "https://www.gov.uk/government/statistics/benefit-cap-number-of-households-capped-to-november-2025/benefit-cap-number-of-households-capped-to-november-2025"
   uc_national_payment_dist: "https://stat-xplore.dwp.gov.uk"
   uc_pc_households: "https://stat-xplore.dwp.gov.uk"
   uc_la_households: "https://stat-xplore.dwp.gov.uk"
