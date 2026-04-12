@@ -14,6 +14,9 @@ import numpy as np
 import pandas as pd
 from policyengine_uk import CountryTaxBenefitSystem
 from policyengine_uk.data import UKSingleYearDataset
+from policyengine_uk.variables.household.income.employment_status import (
+    EmploymentStatus,
+)
 from policyengine_uk_data.utils.datasets import (
     sum_to_entity,
     categorical,
@@ -29,8 +32,8 @@ LEGACY_JOBSEEKER_MIN_AGE = 18
 HOURS_WORKED_WEEKS_PER_YEAR = 52
 ESA_MIN_AGE = 16
 ESA_HEALTH_EMPLOYMENT_STATUSES = (
-    "LONG_TERM_DISABLED",
-    "SHORT_TERM_DISABLED",
+    EmploymentStatus.LONG_TERM_DISABLED.name,
+    EmploymentStatus.SHORT_TERM_DISABLED.name,
 )
 
 
