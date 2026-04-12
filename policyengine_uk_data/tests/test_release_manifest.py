@@ -67,7 +67,7 @@ def test_build_release_manifest_tracks_uk_release_artifacts(tmp_path):
             "version": "2.74.0",
             "git_sha": "deadbeef",
             "data_build_fingerprint": "sha256:fingerprint",
-        }
+        },
     }
     assert manifest["default_datasets"] == {
         "national": "enhanced_frs_2023_24",
@@ -77,9 +77,7 @@ def test_build_release_manifest_tracks_uk_release_artifacts(tmp_path):
     assert manifest["artifacts"]["enhanced_frs_2023_24"]["sha256"] == _sha256(
         enhanced_bytes
     )
-    assert manifest["artifacts"]["frs_2023_24"]["sha256"] == _sha256(
-        baseline_bytes
-    )
+    assert manifest["artifacts"]["frs_2023_24"]["sha256"] == _sha256(baseline_bytes)
     assert manifest["artifacts"]["local_authority_weights"]["kind"] == "weights"
 
 
