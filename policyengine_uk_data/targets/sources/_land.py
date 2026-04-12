@@ -63,4 +63,3 @@ CORPORATE_LAND_VALUES.update(
         2026: CORPORATE_LAND_VALUES[2024],
     }
 )
-

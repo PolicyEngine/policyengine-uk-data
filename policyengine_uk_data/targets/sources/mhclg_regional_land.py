@@ -35,8 +35,7 @@ def _compute_regional_targets() -> dict[str, dict[int, float]]:
     shares = _compute_regional_shares()
     return {
         region: {
-            year: share * HOUSEHOLD_LAND_VALUES[year]
-            for year in HOUSEHOLD_LAND_VALUES
+            year: share * HOUSEHOLD_LAND_VALUES[year] for year in HOUSEHOLD_LAND_VALUES
         }
         for region, share in shares.items()
     }
