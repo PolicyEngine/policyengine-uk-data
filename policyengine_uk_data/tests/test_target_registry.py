@@ -64,10 +64,25 @@ def test_dwp_pip_targets():
 
 def test_voa_council_tax_targets():
     """VOA council tax band targets should exist."""
-    targets = get_all_targets(year=2024)
+    targets = get_all_targets(year=2025)
     voa = [t for t in targets if t.source == "voa"]
     # 11 regions × 9 (8 bands + total) = 99
     assert len(voa) >= 90, f"Expected 90+ VOA targets, got {len(voa)}"
+
+
+def test_dwp_pip_targets_use_official_source():
+    """PIP daily living targets should cite the official DWP release."""
+    targets = get_all_targets(year=2025)
+    standard = next(t for t in targets if t.name == "dwp/pip_dl_standard_claimants")
+    enhanced = next(t for t in targets if t.name == "dwp/pip_dl_enhanced_claimants")
+    assert (
+        "gov.uk/government/statistics/personal-independence-payment-statistics-to-january-2026"
+        in standard.reference_url
+    )
+    assert (
+        "gov.uk/government/statistics/personal-independence-payment-statistics-to-january-2026"
+        in enhanced.reference_url
+    )
 
 
 def test_core_target_count():
