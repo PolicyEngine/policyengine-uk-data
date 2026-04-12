@@ -288,8 +288,10 @@ def _compute_column(target: Target, ctx: _SimContext, year: int) -> np.ndarray |
         return compute_vehicles(target, ctx)
 
     # Housing
-    if name == "housing/total_mortgage" or name.startswith(
-        ("housing/rent_private", "housing/rent_social")
+    if name in (
+        "housing/total_mortgage",
+        "housing/rent_private",
+        "housing/rent_social",
     ):
         return compute_housing(target, ctx)
 

@@ -1,8 +1,7 @@
 """Country-level housing targets for Scotland and Wales.
 
-Adds private-rented stock and private-rent spend anchors for the two
-countries that are currently most weakly identified in constituency
-calibration.
+Adds private-rented stock and average-rent anchors for the two countries
+that are currently most weakly identified in constituency calibration.
 
 Sources:
 - Wales dwelling stock by tenure, 31 March 2024:
@@ -12,6 +11,8 @@ Sources:
 - ONS private rents bulletin, May 2025:
   https://www.ons.gov.uk/economy/inflationandpriceindices/bulletins/privaterentandhousepricesuk/may2025
 """
+
+import numpy as np
 
 from policyengine_uk_data.targets.schema import GeographicLevel, Target, Unit
 
@@ -33,12 +34,24 @@ _SCOTLAND_PRIVATE_RENTED_STOCK_2025 = 357_706
 _WALES_AVG_MONTHLY_RENT_2025 = 795
 _SCOTLAND_AVG_MONTHLY_RENT_2025 = 999
 
-_WALES_PRIVATE_RENT_TOTAL_2025 = (
-    _WALES_PRIVATE_RENTED_STOCK_2025 * _WALES_AVG_MONTHLY_RENT_2025 * 12
-)
-_SCOTLAND_PRIVATE_RENT_TOTAL_2025 = (
-    _SCOTLAND_PRIVATE_RENTED_STOCK_2025 * _SCOTLAND_AVG_MONTHLY_RENT_2025 * 12
-)
+_COUNTRY_NAME = {
+    "W": "WALES",
+    "S": "SCOTLAND",
+}
+_COUNTRY_ANNUAL_PRIVATE_RENT = {
+    "W": _WALES_AVG_MONTHLY_RENT_2025 * 12,
+    "S": _SCOTLAND_AVG_MONTHLY_RENT_2025 * 12,
+}
+
+
+def _compute_private_rent_average_gap(ctx, target, year) -> np.ndarray:
+    """Linearised country private-rent average constraint."""
+    country = _COUNTRY_NAME[target.geo_code]
+    annual_rent = _COUNTRY_ANNUAL_PRIVATE_RENT[target.geo_code]
+    tenure = ctx.sim.calculate("tenure_type", map_to="household").values
+    private_renter = tenure == "RENT_PRIVATELY"
+    in_country = ctx.country == country
+    return np.where(in_country & private_renter, ctx.pe("rent") - annual_rent, 0.0)
 
 
 def get_targets() -> list[Target]:
@@ -68,25 +81,27 @@ def get_targets() -> list[Target]:
             reference_url=_SCOTLAND_STOCK_REF,
         ),
         Target(
-            name="housing/rent_private/wales",
+            name="housing/private_rent_average_gap/wales",
             variable="rent",
             source="ons",
             unit=Unit.GBP,
             geographic_level=GeographicLevel.COUNTRY,
             geo_code="W",
             geo_name="Wales",
-            values={2025: _WALES_PRIVATE_RENT_TOTAL_2025},
+            values={2025: 0.0},
             reference_url=_ONS_RENT_REF,
+            custom_compute=_compute_private_rent_average_gap,
         ),
         Target(
-            name="housing/rent_private/scotland",
+            name="housing/private_rent_average_gap/scotland",
             variable="rent",
             source="ons",
             unit=Unit.GBP,
             geographic_level=GeographicLevel.COUNTRY,
             geo_code="S",
             geo_name="Scotland",
-            values={2025: _SCOTLAND_PRIVATE_RENT_TOTAL_2025},
+            values={2025: 0.0},
             reference_url=_ONS_RENT_REF,
+            custom_compute=_compute_private_rent_average_gap,
         ),
     ]

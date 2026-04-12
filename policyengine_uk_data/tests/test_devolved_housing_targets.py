@@ -3,10 +3,9 @@ from types import SimpleNamespace
 import numpy as np
 
 from policyengine_uk_data.targets.compute.households import compute_tenure
-from policyengine_uk_data.targets.compute.other import compute_housing
 from policyengine_uk_data.targets.sources.devolved_housing import (
-    _SCOTLAND_PRIVATE_RENT_TOTAL_2025,
-    _WALES_PRIVATE_RENT_TOTAL_2025,
+    _COUNTRY_ANNUAL_PRIVATE_RENT,
+    _compute_private_rent_average_gap,
     get_targets,
 )
 
@@ -37,31 +36,26 @@ def test_devolved_targets_exist():
     names = {t.name for t in get_targets()}
     assert "gov_scot/tenure_scotland_rented_privately" in names
     assert "gov_wales/tenure_wales_rented_privately" in names
-    assert "housing/rent_private/scotland" in names
-    assert "housing/rent_private/wales" in names
+    assert "housing/private_rent_average_gap/scotland" in names
+    assert "housing/private_rent_average_gap/wales" in names
 
 
-def test_devolved_private_rent_values():
+def test_devolved_private_rent_gap_targets_zero():
     targets = {t.name: t for t in get_targets()}
-    assert (
-        targets["housing/rent_private/scotland"].values[2025]
-        == _SCOTLAND_PRIVATE_RENT_TOTAL_2025
-    )
-    assert (
-        targets["housing/rent_private/wales"].values[2025]
-        == _WALES_PRIVATE_RENT_TOTAL_2025
-    )
+    assert targets["housing/private_rent_average_gap/scotland"].values[2025] == 0
+    assert targets["housing/private_rent_average_gap/wales"].values[2025] == 0
 
 
-def test_compute_housing_filters_to_country():
+def test_compute_private_rent_average_gap_filters_to_country():
     ctx = _FakeCtx(
         tenure_type=["RENT_PRIVATELY", "RENT_PRIVATELY", "RENT_FROM_HA"],
         country=["SCOTLAND", "WALES", "SCOTLAND"],
-        rent=[1000.0, 800.0, 600.0],
+        rent=[12_600.0, 9_600.0, 600.0],
     )
-    target = SimpleNamespace(name="housing/rent_private/scotland", geo_code="S")
-    result = compute_housing(target, ctx)
-    np.testing.assert_array_equal(result, np.array([1000.0, 0.0, 0.0]))
+    target = SimpleNamespace(geo_code="S")
+    result = _compute_private_rent_average_gap(ctx, target, 2025)
+    expected_gap = 12_600.0 - _COUNTRY_ANNUAL_PRIVATE_RENT["S"]
+    np.testing.assert_array_equal(result, np.array([expected_gap, 0.0, 0.0]))
 
 
 def test_compute_tenure_filters_to_country():

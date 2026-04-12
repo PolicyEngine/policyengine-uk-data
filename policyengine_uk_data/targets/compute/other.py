@@ -15,13 +15,6 @@ _ENGLAND_REGIONS = {
     "SOUTH_WEST",
 }
 
-_COUNTRY_CODE_MAP = {
-    "E": "ENGLAND",
-    "W": "WALES",
-    "S": "SCOTLAND",
-    "N": "NORTHERN_IRELAND",
-}
-
 
 def compute_vehicles(target, ctx) -> np.ndarray:
     """Compute vehicle ownership targets."""
@@ -41,18 +34,11 @@ def compute_housing(target, ctx) -> np.ndarray:
             "mortgage_interest_repayment"
         )
 
-    country_mask = 1.0
-    if target.geo_code is not None:
-        country = _COUNTRY_CODE_MAP.get(target.geo_code)
-        if country is None:
-            return None
-        country_mask = (ctx.country == country).astype(float)
-
     tenure = ctx.sim.calculate("tenure_type", map_to="household").values
-    if name == "housing/rent_social" or name.startswith("housing/rent_social/"):
+    if name == "housing/rent_social":
         is_social = (tenure == "RENT_FROM_COUNCIL") | (tenure == "RENT_FROM_HA")
-        return ctx.pe("rent") * is_social * country_mask
-    return ctx.pe("rent") * (tenure == "RENT_PRIVATELY") * country_mask
+        return ctx.pe("rent") * is_social
+    return ctx.pe("rent") * (tenure == "RENT_PRIVATELY")
 
 
 def compute_savings_interest(target, ctx) -> np.ndarray:

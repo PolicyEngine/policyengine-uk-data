@@ -137,5 +137,5 @@ def test_devolved_private_rent_targets_exist():
     names = {t.name for t in targets}
     assert "gov_scot/tenure_scotland_rented_privately" in names
     assert "gov_wales/tenure_wales_rented_privately" in names
-    assert "housing/rent_private/scotland" in names
-    assert "housing/rent_private/wales" in names
+    assert "housing/private_rent_average_gap/scotland" in names
+    assert "housing/private_rent_average_gap/wales" in names
