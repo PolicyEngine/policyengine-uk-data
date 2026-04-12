@@ -1,16 +1,25 @@
 """DWP benefit targets.
 
-PIP daily living standard/enhanced claimant counts, benefit cap,
-UC payment distribution, UC claimant counts by children/family type,
-two-child limit breakdowns, and Scotland UC households with child under 1.
+PIP daily living standard/enhanced claimant counts, ESA/JSA claimant
+counts, benefit cap, UC payment distribution, UC claimant counts by
+children/family type, two-child limit breakdowns, and Scotland UC
+households with child under 1.
 
 Sources:
+- DWP benefit statistics: https://www.gov.uk/government/statistics/dwp-benefit-statistics-february-2026/dwp-benefit-statistics-february-2026
 - DWP Stat-Xplore: https://stat-xplore.dwp.gov.uk
 - DWP benefit cap: https://www.gov.uk/government/statistics/benefit-cap-number-of-households-capped-to-february-2025
 - DWP two-child limit: https://www.gov.uk/government/statistics/universal-credit-and-child-tax-credit-claimants-statistics-related-to-the-policy-to-provide-support-for-a-maximum-of-2-children-april-2024
 """
 
 from policyengine_uk_data.targets.schema import Target, Unit
+
+
+_DWP_BENEFIT_STATS_FEB_2026 = (
+    "https://www.gov.uk/government/statistics/"
+    "dwp-benefit-statistics-february-2026/"
+    "dwp-benefit-statistics-february-2026"
+)
 
 
 def get_targets() -> list[Target]:
@@ -39,6 +48,52 @@ def get_targets() -> list[Target]:
             is_count=True,
             reference_url="https://www.disabilityrightsuk.org/news/90-pip-standard-daily-living-component-recipients-would-fail-new-green-paper-test",
         )
+    )
+
+    # ESA and JSA claimant counts from the DWP summary release.
+    #
+    # The JSA scheme is now effectively New Style / contributory only,
+    # so the official JSA claimant count is mapped to jsa_contrib rather
+    # than the legacy jsa_income variable.
+    targets.extend(
+        [
+            Target(
+                name="dwp/esa_claimants",
+                variable="esa",
+                source="dwp",
+                unit=Unit.COUNT,
+                values={2025: 999_000},
+                is_count=True,
+                reference_url=_DWP_BENEFIT_STATS_FEB_2026,
+            ),
+            Target(
+                name="dwp/esa_contrib_claimants",
+                variable="esa_contrib",
+                source="dwp",
+                unit=Unit.COUNT,
+                values={2025: 620_000},
+                is_count=True,
+                reference_url=_DWP_BENEFIT_STATS_FEB_2026,
+            ),
+            Target(
+                name="dwp/esa_income_claimants",
+                variable="esa_income",
+                source="dwp",
+                unit=Unit.COUNT,
+                values={2025: 180_000},
+                is_count=True,
+                reference_url=_DWP_BENEFIT_STATS_FEB_2026,
+            ),
+            Target(
+                name="dwp/jsa_claimants",
+                variable="jsa_contrib",
+                source="dwp",
+                unit=Unit.COUNT,
+                values={2025: 71_000},
+                is_count=True,
+                reference_url=_DWP_BENEFIT_STATS_FEB_2026,
+            ),
+        ]
     )
 
     # Benefit cap

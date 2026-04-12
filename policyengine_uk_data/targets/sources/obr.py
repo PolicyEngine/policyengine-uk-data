@@ -319,7 +319,7 @@ def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
         "state_pension": ("State pension", "state_pension"),
         "jobseekers_allowance": (
             "Jobseeker's allowance",
-            "jsa_income",
+            "jsa",
         ),
     }
 
