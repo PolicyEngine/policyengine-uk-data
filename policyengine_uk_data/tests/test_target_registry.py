@@ -129,3 +129,13 @@ def test_land_targets_exist():
     assert "ons/household_land_value" in names
     assert "ons/corporate_land_value" in names
     assert "ons/land_value" in names
+
+
+def test_devolved_private_rent_targets_exist():
+    """Country-level private-rent anchors should exist for Scotland and Wales."""
+    targets = get_all_targets(year=2025)
+    names = {t.name for t in targets}
+    assert "gov_scot/tenure_scotland_rented_privately" in names
+    assert "gov_wales/tenure_wales_rented_privately" in names
+    assert "housing/rent_private/scotland" in names
+    assert "housing/rent_private/wales" in names

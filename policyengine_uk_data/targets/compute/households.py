@@ -60,28 +60,38 @@ def compute_household_type(target, ctx) -> np.ndarray | None:
 def compute_tenure(target, ctx) -> np.ndarray | None:
     """Compute dwelling count by tenure type."""
     _TENURE_MAP = {
-        "tenure_england_owned_outright": "OWNED_OUTRIGHT",
-        "tenure_england_owned_with_mortgage": "OWNED_WITH_MORTGAGE",
-        "tenure_england_rented_privately": "RENT_PRIVATELY",
-        "tenure_england_social_rent": [
-            "RENT_FROM_COUNCIL",
-            "RENT_FROM_HA",
-        ],
-        "tenure_england_total": None,
+        "tenure_england_owned_outright": ("OWNED_OUTRIGHT", "ENGLAND"),
+        "tenure_england_owned_with_mortgage": (
+            "OWNED_WITH_MORTGAGE",
+            "ENGLAND",
+        ),
+        "tenure_england_rented_privately": ("RENT_PRIVATELY", "ENGLAND"),
+        "tenure_england_social_rent": (
+            [
+                "RENT_FROM_COUNCIL",
+                "RENT_FROM_HA",
+            ],
+            "ENGLAND",
+        ),
+        "tenure_wales_rented_privately": ("RENT_PRIVATELY", "WALES"),
+        "tenure_scotland_rented_privately": ("RENT_PRIVATELY", "SCOTLAND"),
+        "tenure_england_total": (None, "ENGLAND"),
     }
-    suffix = target.name.removeprefix("ons/")
-    pe_values = _TENURE_MAP.get(suffix)
-    if pe_values is None and suffix == "tenure_england_total":
-        return (ctx.country == "ENGLAND").astype(float)
-    if pe_values is None:
+    suffix = target.name.split("/", 1)[-1]
+    tenure_spec = _TENURE_MAP.get(suffix)
+    if tenure_spec is None:
         return None
 
+    pe_values, country = tenure_spec
+    if pe_values is None:
+        return (ctx.country == country).astype(float)
+
     tenure = ctx.sim.calculate("tenure_type", map_to="household").values
-    in_england = ctx.country == "ENGLAND"
+    in_country = ctx.country == country
     if isinstance(pe_values, list):
         match = np.zeros_like(tenure, dtype=bool)
         for v in pe_values:
             match = match | (tenure == v)
     else:
         match = tenure == pe_values
-    return (match & in_england).astype(float)
+    return (match & in_country).astype(float)
