@@ -19,9 +19,7 @@ _ONS_RENT_REF = (
     "https://www.ons.gov.uk/economy/inflationandpriceindices/"
     "bulletins/privaterentandhousepricesuk/may2025"
 )
-_WALES_STOCK_REF = (
-    "https://www.gov.wales/dwelling-stock-estimates-31-march-2024-html"
-)
+_WALES_STOCK_REF = "https://www.gov.wales/dwelling-stock-estimates-31-march-2024-html"
 _SCOTLAND_STOCK_REF = (
     "https://www.gov.scot/binaries/content/documents/govscot/publications/"
     "statistics/2018/09/housing-statistics-stock-by-tenure/documents/"
@@ -39,9 +37,7 @@ _WALES_PRIVATE_RENT_TOTAL_2025 = (
     _WALES_PRIVATE_RENTED_STOCK_2025 * _WALES_AVG_MONTHLY_RENT_2025 * 12
 )
 _SCOTLAND_PRIVATE_RENT_TOTAL_2025 = (
-    _SCOTLAND_PRIVATE_RENTED_STOCK_2025
-    * _SCOTLAND_AVG_MONTHLY_RENT_2025
-    * 12
+    _SCOTLAND_PRIVATE_RENTED_STOCK_2025 * _SCOTLAND_AVG_MONTHLY_RENT_2025 * 12
 )
 
 
