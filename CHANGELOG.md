@@ -1,3 +1,10 @@
+## [1.46.1] - 2026-04-12
+
+### Changed
+
+- Read local-authority ONS income uprating assumptions from `policyengine-uk` parameters when available, while keeping a compatibility fallback for the current released dependency.
+
+
 ## [1.46.0] - 2026-04-12
 
 ### Added
