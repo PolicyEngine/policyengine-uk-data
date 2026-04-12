@@ -20,21 +20,56 @@ RELEASE_MANIFEST_PATH = "release_manifest.json"
 
 def _get_model_package_version(
     package_name: str = "policyengine-uk",
-) -> str:
+) -> Optional[str]:
     try:
         return metadata.version(package_name)
     except metadata.PackageNotFoundError:
-        raise RuntimeError(
-            "Could not determine installed version for "
-            f"{package_name} while building a release manifest."
+        logging.warning(
+            "Could not determine installed version for %s while building release manifest.",
+            package_name,
         )
+        return None
+
+
+def _get_model_package_build_metadata(
+    package_name: str = "policyengine-uk",
+) -> Dict[str, Optional[str]]:
+    metadata_payload: Dict[str, Optional[str]] = {
+        "version": _get_model_package_version(package_name),
+        "git_sha": None,
+        "data_build_fingerprint": None,
+    }
+    module_name = package_name.replace("-", "_")
+    try:
+        build_metadata_module = __import__(
+            f"{module_name}.build_metadata",
+            fromlist=["get_data_build_metadata"],
+        )
+        get_data_build_metadata = getattr(
+            build_metadata_module, "get_data_build_metadata", None
+        )
+        if callable(get_data_build_metadata):
+            package_metadata = get_data_build_metadata()
+            metadata_payload["version"] = (
+                package_metadata.get("version") or metadata_payload["version"]
+            )
+            metadata_payload["git_sha"] = package_metadata.get("git_sha")
+            metadata_payload["data_build_fingerprint"] = package_metadata.get(
+                "data_build_fingerprint"
+            )
+    except Exception:
+        logging.warning(
+            "Could not load build metadata from %s while building release manifest.",
+            package_name,
+            exc_info=True,
+        )
+    return metadata_payload
 
 
 def load_release_manifest_from_hf(
     version: str,
     hf_repo_name: str = "policyengine/policyengine-uk-data-private",
     hf_repo_type: str = "model",
-    revision: Optional[str] = None,
 ) -> Optional[Dict]:
     token = os.environ.get("HUGGING_FACE_TOKEN")
     candidate_paths = [
@@ -49,10 +84,9 @@ def load_release_manifest_from_hf(
                 filename=path_in_repo,
                 repo_type=hf_repo_type,
                 token=token,
-                revision=revision,
             )
         except RevisionNotFoundError:
-            return None
+            raise
         except Exception:
             continue
 
@@ -66,59 +100,24 @@ def load_release_manifest_from_hf(
     return None
 
 
-def assert_release_not_finalized(
-    version: str,
-    hf_repo_name: str = "policyengine/policyengine-uk-data-private",
-    hf_repo_type: str = "model",
-) -> None:
-    if (
-        load_release_manifest_from_hf(
-            version=version,
-            hf_repo_name=hf_repo_name,
-            hf_repo_type=hf_repo_type,
-            revision=version,
-        )
-        is not None
-    ):
-        raise RuntimeError(
-            f"Release {version} is already finalized on {hf_repo_name}. "
-            "Refusing to mutate release manifest state after the tag exists."
-        )
-
-
-def get_repo_head_revision(
-    api: HfApi,
-    repo_id: str,
-    repo_type: str,
-    token: Optional[str] = None,
-) -> Optional[str]:
-    repo_info = api.repo_info(
-        repo_id=repo_id,
-        repo_type=repo_type,
-        token=token,
-    )
-    return getattr(repo_info, "sha", None)
-
-
 def create_release_manifest_commit_operations(
     files_with_repo_paths: List[Tuple[Path, str]],
     version: str,
     hf_repo_name: str = "policyengine/policyengine-uk-data-private",
     model_package_name: str = "policyengine-uk",
     model_package_version: Optional[str] = None,
+    model_package_git_sha: Optional[str] = None,
+    model_package_data_build_fingerprint: Optional[str] = None,
     existing_manifest: Optional[Dict] = None,
 ) -> Tuple[Dict, List[CommitOperationAdd]]:
-    if not model_package_version:
-        raise RuntimeError(
-            "A compatible policyengine-uk version is required when publishing "
-            "a release manifest."
-        )
     manifest = build_release_manifest(
         files_with_repo_paths=files_with_repo_paths,
         version=version,
         repo_id=hf_repo_name,
         model_package_name=model_package_name,
         model_package_version=model_package_version,
+        model_package_git_sha=model_package_git_sha,
+        model_package_data_build_fingerprint=model_package_data_build_fingerprint,
         existing_manifest=existing_manifest,
     )
     manifest_payload = serialize_release_manifest(manifest)
@@ -138,14 +137,14 @@ def create_release_manifest_commit_operations(
 def upload_data_files(
     files: List[str],
     gcs_bucket_name: str = "policyengine-uk-data-private",
-    hf_repo_name: str = "policyengine/policyengine-uk-data-private",
+    hf_repo_name: str = "policyengine/policyengine-uk-data",
     hf_repo_type: str = "model",
     version: str = None,
 ):
     if version is None:
         version = metadata.version("policyengine-uk-data")
 
-    commit_oid = upload_files_to_hf(
+    upload_files_to_hf(
         files=files,
         version=version,
         hf_repo_name=hf_repo_name,
@@ -156,13 +155,6 @@ def upload_data_files(
         files=files,
         version=version,
         gcs_bucket_name=gcs_bucket_name,
-    )
-
-    create_release_tag(
-        version=version,
-        revision=commit_oid,
-        hf_repo_name=hf_repo_name,
-        hf_repo_type=hf_repo_type,
     )
 
 
@@ -178,11 +170,6 @@ def upload_files_to_hf(
     api = HfApi()
     token = os.environ.get(
         "HUGGING_FACE_TOKEN",
-    )
-    assert_release_not_finalized(
-        version=version,
-        hf_repo_name=hf_repo_name,
-        hf_repo_type=hf_repo_type,
     )
     hf_operations = []
     files_with_repo_paths = []
@@ -200,23 +187,21 @@ def upload_files_to_hf(
             )
         )
 
-    model_package_version = _get_model_package_version()
     existing_manifest = load_release_manifest_from_hf(
         version=version,
         hf_repo_name=hf_repo_name,
         hf_repo_type=hf_repo_type,
     )
-    parent_commit = get_repo_head_revision(
-        api=api,
-        repo_id=hf_repo_name,
-        repo_type=hf_repo_type,
-        token=token,
-    )
+    model_build_metadata = _get_model_package_build_metadata()
     _, manifest_operations = create_release_manifest_commit_operations(
         files_with_repo_paths=files_with_repo_paths,
         version=version,
         hf_repo_name=hf_repo_name,
-        model_package_version=model_package_version,
+        model_package_version=model_build_metadata["version"],
+        model_package_git_sha=model_build_metadata["git_sha"],
+        model_package_data_build_fingerprint=model_build_metadata[
+            "data_build_fingerprint"
+        ],
         existing_manifest=existing_manifest,
     )
     hf_operations.extend(manifest_operations)
@@ -227,58 +212,26 @@ def upload_files_to_hf(
         operations=hf_operations,
         repo_type=hf_repo_type,
         commit_message=f"Upload data files for version {version}",
-        parent_commit=parent_commit,
     )
     logging.info(f"Uploaded files to Hugging Face repository {hf_repo_name}.")
-    return commit_info.oid
 
-
-def create_release_tag(
-    version: str,
-    revision: str,
-    hf_repo_name: str = "policyengine/policyengine-uk-data-private",
-    hf_repo_type: str = "model",
-    token: Optional[str] = None,
-    api: Optional[HfApi] = None,
-) -> None:
-    api = api or HfApi()
-    token = token or os.environ.get("HUGGING_FACE_TOKEN")
+    # Tag commit with version
     try:
         api.create_tag(
             token=token,
             repo_id=hf_repo_name,
             tag=version,
-            revision=revision,
+            revision=commit_info.oid,
             repo_type=hf_repo_type,
-            exist_ok=False,
         )
         logging.info(
             f"Tagged commit with {version} in Hugging Face repository {hf_repo_name}."
         )
     except Exception as e:
         if "Tag reference exists already" in str(e) or "409" in str(e):
-            tagged_revision = getattr(
-                api.repo_info(
-                    repo_id=hf_repo_name,
-                    repo_type=hf_repo_type,
-                    revision=version,
-                    token=token,
-                ),
-                "sha",
-                None,
+            logging.warning(
+                f"Tag {version} already exists in {hf_repo_name}. Skipping tag creation."
             )
-            if tagged_revision == revision:
-                logging.info(
-                    "Tag %s already exists in %s and already points to %s.",
-                    version,
-                    hf_repo_name,
-                    revision,
-                )
-                return
-            raise RuntimeError(
-                f"Tag {version} already exists in {hf_repo_name} at "
-                f"{tagged_revision}; refusing to treat {revision} as finalized."
-            ) from e
         else:
             raise
 
