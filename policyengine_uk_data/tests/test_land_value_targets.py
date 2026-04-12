@@ -1,30 +1,18 @@
-"""Tests for ONS land value calibration targets.
-
-These validate that the generated Enhanced FRS dataset reproduces
-aggregate land values from the ONS National
-Balance Sheet 2025.
-
-Source: https://www.ons.gov.uk/economy/nationalaccounts/uksectoraccounts/bulletins/nationalbalancesheet/2025
-"""
+"""Tests for ONS land value calibration targets."""
 
 import pytest
-
-# ONS National Balance Sheet 2025
-# 2024 measured total: £7.1tn
-# 2020 split scaled proportionally: household £5.04tn, corporate £2.06tn
-_ONS_2020_HOUSEHOLD = 4.31e12
-_ONS_2020_CORPORATE = 1.76e12
-_ONS_2020_TOTAL = _ONS_2020_HOUSEHOLD + _ONS_2020_CORPORATE
-_ONS_2024_TOTAL = 7.1e12
-_SCALE = _ONS_2024_TOTAL / _ONS_2020_TOTAL
+from policyengine_uk_data.targets.sources._land import (
+    CORPORATE_LAND_VALUES,
+    HOUSEHOLD_LAND_VALUES,
+    TOTAL_LAND_VALUES,
+)
 
 LAND_TARGETS = {
-    "land_value": _ONS_2024_TOTAL,
-    "household_land_value": _ONS_2020_HOUSEHOLD * _SCALE,
-    "corporate_land_value": _ONS_2020_CORPORATE * _SCALE,
+    "land_value": TOTAL_LAND_VALUES,
+    "household_land_value": HOUSEHOLD_LAND_VALUES,
+    "corporate_land_value": CORPORATE_LAND_VALUES,
 }
 
-YEAR = 2025
 TOLERANCES = {
     "land_value": 0.65,
     "household_land_value": 0.65,
@@ -34,15 +22,13 @@ TOLERANCES = {
 }
 
 
-@pytest.mark.parametrize(
-    "variable,target",
-    list(LAND_TARGETS.items()),
-    ids=list(LAND_TARGETS.keys()),
-)
-def test_land_value_aggregate(baseline, variable, target):
+@pytest.mark.parametrize("year", [2021, 2023, 2025], ids=["2021", "2023", "2025"])
+@pytest.mark.parametrize("variable", list(LAND_TARGETS), ids=list(LAND_TARGETS))
+def test_land_value_aggregate(baseline, variable, year):
     """Check weighted aggregate land values against ONS targets."""
-    weights = baseline.calculate("household_weight", period=YEAR).values
-    values = baseline.calculate(variable, map_to="household", period=YEAR).values
+    target = LAND_TARGETS[variable][year]
+    weights = baseline.calculate("household_weight", period=year).values
+    values = baseline.calculate(variable, map_to="household", period=year).values
     estimate = (values * weights).sum()
 
     tolerance = TOLERANCES[variable]
@@ -56,13 +42,14 @@ def test_land_value_aggregate(baseline, variable, target):
 
 def test_land_value_composition(baseline):
     """Household + corporate land should equal total land value."""
-    weights = baseline.calculate("household_weight", period=YEAR).values
-    total = baseline.calculate("land_value", map_to="household", period=YEAR).values
+    year = 2025
+    weights = baseline.calculate("household_weight", period=year).values
+    total = baseline.calculate("land_value", map_to="household", period=year).values
     hh = baseline.calculate(
-        "household_land_value", map_to="household", period=YEAR
+        "household_land_value", map_to="household", period=year
     ).values
     corp = baseline.calculate(
-        "corporate_land_value", map_to="household", period=YEAR
+        "corporate_land_value", map_to="household", period=year
     ).values
 
     total_agg = (total * weights).sum()
@@ -76,11 +63,12 @@ def test_land_value_composition(baseline):
 
 def test_household_land_less_than_property_wealth(baseline):
     """Household land value should not exceed total property wealth."""
-    weights = baseline.calculate("household_weight", period=YEAR).values
+    year = 2025
+    weights = baseline.calculate("household_weight", period=year).values
     hh_land = baseline.calculate(
-        "household_land_value", map_to="household", period=YEAR
+        "household_land_value", map_to="household", period=year
     ).values
-    prop = baseline.calculate("property_wealth", map_to="household", period=YEAR).values
+    prop = baseline.calculate("property_wealth", map_to="household", period=year).values
 
     hh_land_agg = (hh_land * weights).sum()
     prop_agg = (prop * weights).sum()

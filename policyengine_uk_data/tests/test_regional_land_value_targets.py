@@ -4,11 +4,10 @@ See: https://github.com/PolicyEngine/policyengine-uk-data/issues/314
 """
 
 import pandas as pd
-import pytest
 
+from policyengine_uk_data.targets.sources._land import HOUSEHOLD_LAND_VALUES
 from policyengine_uk_data.targets.sources.mhclg_regional_land import (
     _compute_regional_targets,
-    _ONS_2024_HOUSEHOLD,
     get_targets,
 )
 
@@ -44,8 +43,9 @@ def test_csv_no_northern_ireland():
 
 def test_all_targets_positive():
     """Every regional target should be a positive value."""
-    for region, value in REGIONAL_TARGETS.items():
-        assert value > 0, f"{region} has non-positive target: {value}"
+    for region, values in REGIONAL_TARGETS.items():
+        for year, value in values.items():
+            assert value > 0, f"{region} {year} has non-positive target: {value}"
 
 
 # ── Target value constraints ─────────────────────────────────────────
@@ -53,19 +53,22 @@ def test_all_targets_positive():
 
 def test_regional_targets_sum_to_national():
     """Regional targets should sum to the ONS national household land total."""
-    regional_sum = sum(REGIONAL_TARGETS.values())
-    rel_error = abs(regional_sum / _ONS_2024_HOUSEHOLD - 1)
-    assert rel_error < 0.01, (
-        f"Regional sum £{regional_sum / 1e12:.2f}tn != "
-        f"national £{_ONS_2024_HOUSEHOLD / 1e12:.2f}tn"
-    )
+    for year in (2021, 2023, 2025):
+        regional_sum = sum(values[year] for values in REGIONAL_TARGETS.values())
+        national = HOUSEHOLD_LAND_VALUES[year]
+        rel_error = abs(regional_sum / national - 1)
+        assert rel_error < 0.01, (
+            f"{year}: regional sum £{regional_sum / 1e12:.2f}tn != "
+            f"national £{national / 1e12:.2f}tn"
+        )
 
 
 def test_london_highest_land_value():
     """London should have the highest regional land value target."""
-    london = REGIONAL_TARGETS["LONDON"]
-    for region, value in REGIONAL_TARGETS.items():
+    london = REGIONAL_TARGETS["LONDON"][2025]
+    for region, values in REGIONAL_TARGETS.items():
         if region != "LONDON":
+            value = values[2025]
             assert london > value, (
                 f"London (£{london / 1e9:.0f}bn) should exceed "
                 f"{region} (£{value / 1e9:.0f}bn)"
@@ -78,18 +81,21 @@ def test_london_to_north_east_ratio():
     UK HPI shows London avg house price ~3.3x North East, and London
     has ~3x more dwellings, so the ratio should be substantial.
     """
-    ratio = REGIONAL_TARGETS["LONDON"] / REGIONAL_TARGETS["NORTH_EAST"]
+    ratio = REGIONAL_TARGETS["LONDON"][2025] / REGIONAL_TARGETS["NORTH_EAST"][2025]
     assert ratio >= 3.0, f"London/NE ratio = {ratio:.1f}x, expected >= 3x"
 
 
 def test_south_east_above_south_west():
     """South East should have higher land value than South West."""
-    assert REGIONAL_TARGETS["SOUTH_EAST"] > REGIONAL_TARGETS["SOUTH_WEST"]
+    assert REGIONAL_TARGETS["SOUTH_EAST"][2025] > REGIONAL_TARGETS["SOUTH_WEST"][2025]
 
 
 def test_east_of_england_above_east_midlands():
     """East of England should have higher land value than East Midlands."""
-    assert REGIONAL_TARGETS["EAST_OF_ENGLAND"] > REGIONAL_TARGETS["EAST_MIDLANDS"]
+    assert (
+        REGIONAL_TARGETS["EAST_OF_ENGLAND"][2025]
+        > REGIONAL_TARGETS["EAST_MIDLANDS"][2025]
+    )
 
 
 # ── Target registry integration ──────────────────────────────────────
@@ -113,6 +119,13 @@ def test_targets_have_values_for_2025():
     """All targets should have a value for 2025."""
     for t in get_targets():
         assert 2025 in t.values, f"{t.name} missing value for 2025"
+
+
+def test_targets_have_values_for_2021_to_2026():
+    """Regional targets should cover the full backfilled annual range."""
+    expected_years = set(range(2021, 2027))
+    for target in get_targets():
+        assert set(target.values) == expected_years
 
 
 def test_target_registry_includes_regional():
