@@ -1,0 +1,1 @@
+Added adversarial weight regularisation pipeline: detects high-influence survey records, generates synthetic offspring via TVAE, and recalibrates with entropy regularisation and weight capping to reduce output noise in population subgroup statistics.
