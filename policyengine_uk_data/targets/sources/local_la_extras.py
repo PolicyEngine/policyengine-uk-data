@@ -42,14 +42,19 @@ _REF_RENT = (
 
 def get_ons_income_uprating_factors(year: int) -> tuple[float, float]:
     """Return BHC-income and housing-cost uprating factors for LA ONS targets."""
-    try:
-        ons_income = system.parameters.gov.economic_assumptions.local_authority_targets.ons_income
+    econ_assumptions = system.parameters.gov.economic_assumptions
+    local_authority_targets = getattr(econ_assumptions, "local_authority_targets", None)
+
+    if local_authority_targets is not None:
+        ons_income = local_authority_targets.ons_income
         net_income_bhc = ons_income.net_income_bhc_uprating_factor(f"{year}-01-01")
         housing_costs = ons_income.housing_costs_uprating_factor(f"{year}-01-01")
-        if net_income_bhc is not None and housing_costs is not None:
-            return float(net_income_bhc), float(housing_costs)
-    except AttributeError:
-        pass
+        if net_income_bhc is None or housing_costs is None:
+            raise ValueError(
+                f"policyengine-uk local authority target uprating factors are "
+                f"incomplete for {year}."
+            )
+        return float(net_income_bhc), float(housing_costs)
 
     if year in _LEGACY_ONS_INCOME_UPRATING_FACTORS:
         return _LEGACY_ONS_INCOME_UPRATING_FACTORS[year]

@@ -49,3 +49,23 @@ def test_get_ons_income_uprating_factors_raises_for_unknown_year(monkeypatch):
 
     with pytest.raises(ValueError, match="No ONS LA income uprating factors"):
         local_la_extras.get_ons_income_uprating_factors(2024)
+
+
+def test_get_ons_income_uprating_factors_raises_for_partial_upstream_tree(
+    monkeypatch,
+):
+    params = SimpleNamespace(
+        gov=SimpleNamespace(
+            economic_assumptions=SimpleNamespace(
+                local_authority_targets=SimpleNamespace()
+            )
+        )
+    )
+    monkeypatch.setattr(
+        local_la_extras,
+        "system",
+        SimpleNamespace(parameters=params),
+    )
+
+    with pytest.raises(AttributeError):
+        local_la_extras.get_ons_income_uprating_factors(2025)
