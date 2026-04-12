@@ -149,9 +149,7 @@ def test_add_legacy_benefit_proxies_wires_all_three_columns():
         pe_person.copy(),
         employment_status_reported=np.array([True, True, True, False]),
         state_pension_age=np.array([66, 66, 66, 66]),
-        legacy_jobseeker_max_annual_hours=load_legacy_jobseeker_max_annual_hours(
-            2025
-        ),
+        legacy_jobseeker_max_annual_hours=load_legacy_jobseeker_max_annual_hours(2025),
     )
 
     assert result["legacy_jobseeker_proxy"].tolist() == [True, False, False, False]
