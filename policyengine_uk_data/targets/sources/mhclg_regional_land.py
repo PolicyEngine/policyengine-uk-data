@@ -1,21 +1,4 @@
-"""Regional household land value targets.
-
-Splits the ONS National Balance Sheet household land total across
-regions in proportion to total property wealth (dwellings × avg
-house price from UK HPI Dec 2025).
-
-The model's regional intensity ratios (in policyengine-uk) handle the
-conversion from property wealth to land value per household. These
-targets ensure the weighted regional totals match official estimates.
-
-Sources:
-  - UK House Price Index Dec 2025
-    https://www.gov.uk/government/statistics/uk-house-price-index-for-december-2025
-  - ONS National Balance Sheet 2025
-    https://www.ons.gov.uk/economy/nationalaccounts/uksectoraccounts/bulletins/nationalbalancesheet/2025
-
-See: https://github.com/PolicyEngine/policyengine-uk-data/issues/314
-"""
+"""Regional household land value targets."""
 
 import pandas as pd
 
@@ -24,28 +7,19 @@ from policyengine_uk_data.targets.schema import (
     Target,
     Unit,
 )
+from policyengine_uk_data.targets.sources._land import (
+    HOUSEHOLD_LAND_VALUES,
+    _REF_URL,
+)
 from policyengine_uk_data.targets.sources._common import STORAGE
 
-# ONS National Balance Sheet 2025 — household land value
-_ONS_2020_HOUSEHOLD = 4.31e12
-_ONS_2020_CORPORATE = 1.76e12
-_ONS_2020_TOTAL = _ONS_2020_HOUSEHOLD + _ONS_2020_CORPORATE
-_ONS_2024_TOTAL = 7.1e12
-_SCALE = _ONS_2024_TOTAL / _ONS_2020_TOTAL
-_ONS_2024_HOUSEHOLD = _ONS_2020_HOUSEHOLD * _SCALE
 
-_ONS_REF = (
-    "https://www.ons.gov.uk/economy/nationalaccounts/"
-    "uksectoraccounts/bulletins/nationalbalancesheet/2025"
-)
-
-
-def _compute_regional_targets() -> dict[str, float]:
-    """Split the ONS household land total across regions.
+def _compute_regional_shares() -> dict[str, float]:
+    """Split household land totals across regions using fixed 2025 shares.
 
     Each region's share is proportional to its total property wealth
     (dwellings × avg_house_price). The shares are then scaled so the
-    GB total matches the ONS national household land value.
+    GB total sums to 1.
     """
     csv_path = STORAGE / "regional_land_values.csv"
     df = pd.read_csv(csv_path)
@@ -53,7 +27,18 @@ def _compute_regional_targets() -> dict[str, float]:
     df["property_wealth"] = df["dwellings"] * df["avg_house_price"]
     total = df["property_wealth"].sum()
 
-    return dict(zip(df["region"], df["property_wealth"] / total * _ONS_2024_HOUSEHOLD))
+    return dict(zip(df["region"], df["property_wealth"] / total))
+
+
+def _compute_regional_targets() -> dict[str, dict[int, float]]:
+    """Scale fixed regional shares by the national household-land series."""
+    shares = _compute_regional_shares()
+    return {
+        region: {
+            year: share * HOUSEHOLD_LAND_VALUES[year] for year in HOUSEHOLD_LAND_VALUES
+        }
+        for region, share in shares.items()
+    }
 
 
 def get_targets() -> list[Target]:
@@ -73,12 +58,8 @@ def get_targets() -> list[Target]:
                 unit=Unit.GBP,
                 geographic_level=GeographicLevel.REGION,
                 geo_name=region,
-                values={
-                    2024: value,
-                    2025: value,
-                    2026: value,
-                },
-                reference_url=_ONS_REF,
+                values=value,
+                reference_url=_REF_URL,
             )
         )
 

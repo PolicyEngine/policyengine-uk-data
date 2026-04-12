@@ -120,3 +120,12 @@ def test_savings_interest():
     targets = get_all_targets(year=2025)
     names = {t.name for t in targets}
     assert "ons/savings_interest_income" in names
+
+
+def test_land_targets_exist():
+    """National ONS land targets should exist."""
+    targets = get_all_targets(year=2025)
+    names = {t.name for t in targets}
+    assert "ons/household_land_value" in names
+    assert "ons/corporate_land_value" in names
+    assert "ons/land_value" in names
