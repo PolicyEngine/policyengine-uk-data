@@ -1,11 +1,14 @@
+import logging
+
 import torch
-from policyengine_uk import Microsimulation
 import pandas as pd
 import numpy as np
 import h5py
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk_data.utils.progress import ProcessingProgress
+
+logger = logging.getLogger(__name__)
 
 
 def calibrate_local_areas(
@@ -94,9 +97,12 @@ def calibrate_local_areas(
     r = torch.tensor(r, dtype=torch.float32)
 
     def sre(x, y):
-        one_way = ((1 + x) / (1 + y) - 1) ** 2
-        other_way = ((1 + y) / (1 + x) - 1) ** 2
-        return torch.min(one_way, other_way)
+        """Squared log-ratio loss — symmetric so overshoot and undershoot
+        of the same magnitude incur identical cost.  The previous
+        min-of-two-ratios formulation penalised undershoot more than
+        overshoot, which systematically biased the optimiser toward
+        inflating weights (root cause of the ~6 % population overshoot)."""
+        return torch.log((1 + x) / (1 + y)) ** 2
 
     def loss(w, validation: bool = False):
         pred_local = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
@@ -171,8 +177,8 @@ def calibrate_local_areas(
 
                 optimizer.zero_grad()
                 weights_ = torch.exp(dropout_weights(weights, 0.05)) * r
-                l = loss(weights_)
-                l.backward()
+                loss_val = loss(weights_)
+                loss_val.backward()
                 optimizer.step()
 
                 local_close = pct_close(weights_, local=True, national=False)
@@ -187,7 +193,7 @@ def calibrate_local_areas(
                     )
                 else:
                     update_calibration(
-                        epoch + 1, loss_value=l.item(), calculating_loss=False
+                        epoch + 1, loss_value=loss_val.item(), calculating_loss=False
                     )
 
                 if epoch % 10 == 0:
@@ -225,8 +231,8 @@ def calibrate_local_areas(
         for epoch in range(epochs):
             optimizer.zero_grad()
             weights_ = torch.exp(dropout_weights(weights, 0.05)) * r
-            l = loss(weights_)
-            l.backward()
+            loss_val = loss(weights_)
+            loss_val.backward()
             optimizer.step()
 
             local_close = pct_close(weights_, local=True, national=False)
@@ -236,12 +242,12 @@ def calibrate_local_areas(
                 if dropout_targets:
                     validation_loss = loss(weights_, validation=True)
                     print(
-                        f"Training loss: {l.item():,.3f}, Validation loss: {validation_loss.item():,.3f}, Epoch: {epoch}, "
+                        f"Training loss: {loss_val.item():,.3f}, Validation loss: {validation_loss.item():,.3f}, Epoch: {epoch}, "
                         f"{area_name}<10%: {local_close:.1%}, National<10%: {national_close:.1%}"
                     )
                 else:
                     print(
-                        f"Loss: {l.item()}, Epoch: {epoch}, {area_name}<10%: {local_close:.1%}, National<10%: {national_close:.1%}"
+                        f"Loss: {loss_val.item()}, Epoch: {epoch}, {area_name}<10%: {local_close:.1%}, National<10%: {national_close:.1%}"
                     )
 
         if epoch % 10 == 0:
