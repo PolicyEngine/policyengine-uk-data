@@ -11,6 +11,7 @@ from policyengine_uk_data.datasets.frs import (
     derive_esa_health_condition_proxy,
     derive_esa_support_group_proxy,
     derive_legacy_jobseeker_proxy,
+    load_legacy_jobseeker_max_annual_hours,
 )
 
 
@@ -24,6 +25,7 @@ class FakeSim:
 
 
 def test_legacy_jobseeker_proxy_tracks_unemployed_working_age_low_hours():
+    max_annual_hours = load_legacy_jobseeker_max_annual_hours(2025)
     result = derive_legacy_jobseeker_proxy(
         age=np.array([18, 30, 30, 66, 17, 25, 25, 66, 30, 30]),
         employment_status=np.array(
@@ -59,6 +61,7 @@ def test_legacy_jobseeker_proxy_tracks_unemployed_working_age_low_hours():
             [True, True, True, True, True, True, True, True, True, False]
         ),
         state_pension_age=np.array([66, 66, 66, 66, 66, 66, 66, 67, 66, 66]),
+        max_annual_hours=max_annual_hours,
     )
 
     assert result.tolist() == [
@@ -146,11 +149,18 @@ def test_add_legacy_benefit_proxies_wires_all_three_columns():
         pe_person.copy(),
         employment_status_reported=np.array([True, True, True, False]),
         state_pension_age=np.array([66, 66, 66, 66]),
+        legacy_jobseeker_max_annual_hours=load_legacy_jobseeker_max_annual_hours(
+            2025
+        ),
     )
 
     assert result["legacy_jobseeker_proxy"].tolist() == [True, False, False, False]
     assert result["esa_health_condition_proxy"].tolist() == [False, True, True, False]
     assert result["esa_support_group_proxy"].tolist() == [False, True, False, False]
+
+
+def test_legacy_jobseeker_hours_limit_matches_policyengine_uk_parameter():
+    assert load_legacy_jobseeker_max_annual_hours(2025) == 16 * 52
 
 
 def test_apply_legacy_benefit_proxies_uses_sim_state_pension_age():

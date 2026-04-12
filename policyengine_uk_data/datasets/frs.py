@@ -7,10 +7,13 @@ The FRS is the primary source of UK household survey data used for tax-benefit
 modelling and policy analysis.
 """
 
-from policyengine_uk.data import UKSingleYearDataset
+from functools import lru_cache
 from pathlib import Path
-import pandas as pd
+
 import numpy as np
+import pandas as pd
+from policyengine_uk import CountryTaxBenefitSystem
+from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk_data.utils.datasets import (
     sum_to_entity,
     categorical,
@@ -24,15 +27,20 @@ from policyengine_uk_data.parameters import load_take_up_rate, load_parameter
 
 LEGACY_JOBSEEKER_MIN_AGE = 18
 HOURS_WORKED_WEEKS_PER_YEAR = 52
-LEGACY_JOBSEEKER_MAX_WEEKLY_HOURS = 16
-LEGACY_JOBSEEKER_MAX_ANNUAL_HOURS = (
-    LEGACY_JOBSEEKER_MAX_WEEKLY_HOURS * HOURS_WORKED_WEEKS_PER_YEAR
-)
 ESA_MIN_AGE = 16
 ESA_HEALTH_EMPLOYMENT_STATUSES = (
     "LONG_TERM_DISABLED",
     "SHORT_TERM_DISABLED",
 )
+
+
+@lru_cache(maxsize=None)
+def load_legacy_jobseeker_max_annual_hours(year: int) -> int:
+    """Read the JSA single-claimant hours rule from policyengine-uk."""
+
+    system = CountryTaxBenefitSystem()
+    max_weekly_hours = int(system.parameters.gov.dwp.JSA.hours.single(str(year)))
+    return max_weekly_hours * HOURS_WORKED_WEEKS_PER_YEAR
 
 
 def derive_legacy_jobseeker_proxy(
@@ -42,6 +50,7 @@ def derive_legacy_jobseeker_proxy(
     current_education,
     employment_status_reported,
     state_pension_age,
+    max_annual_hours,
 ) -> np.ndarray:
     """Approximate legacy JSA claimant-state from observed survey data.
 
@@ -64,7 +73,7 @@ def derive_legacy_jobseeker_proxy(
         & (age >= LEGACY_JOBSEEKER_MIN_AGE)
         & (age < state_pension_age)
         & (employment_status == "UNEMPLOYED")
-        & (hours_worked < LEGACY_JOBSEEKER_MAX_ANNUAL_HOURS)
+        & (hours_worked < max_annual_hours)
         & (current_education == "NOT_IN_EDUCATION")
     )
 
@@ -134,7 +143,10 @@ def derive_esa_support_group_proxy(
 
 
 def add_legacy_benefit_proxies(
-    pe_person: pd.DataFrame, employment_status_reported, state_pension_age
+    pe_person: pd.DataFrame,
+    employment_status_reported,
+    state_pension_age,
+    legacy_jobseeker_max_annual_hours,
 ) -> pd.DataFrame:
     """Populate person-scoped ESA/JSA proxy columns on the person frame.
 
@@ -151,6 +163,7 @@ def add_legacy_benefit_proxies(
         current_education=pe_person.current_education,
         employment_status_reported=employment_status_reported,
         state_pension_age=state_pension_age,
+        max_annual_hours=legacy_jobseeker_max_annual_hours,
     )
     pe_person["esa_health_condition_proxy"] = derive_esa_health_condition_proxy(
         age=pe_person.age,
@@ -175,10 +188,12 @@ def apply_legacy_benefit_proxies(
     """Attach legacy ESA/JSA proxies using post-build simulation context."""
 
     state_pension_age = sim.calculate("state_pension_age", year).values
+    legacy_jobseeker_max_annual_hours = load_legacy_jobseeker_max_annual_hours(year)
     return add_legacy_benefit_proxies(
         pe_person,
         employment_status_reported=employment_status_reported,
         state_pension_age=state_pension_age,
+        legacy_jobseeker_max_annual_hours=legacy_jobseeker_max_annual_hours,
     )
 
 
