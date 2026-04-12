@@ -13,6 +13,12 @@ LAND_TARGETS = {
     "corporate_land_value": CORPORATE_LAND_VALUES,
 }
 
+# The target series is backfilled to 2021, but the enhanced 2023/24 simulation
+# fixture is only a stable regression base from its dataset year onward.
+# Keep the broader year coverage in the target-registry tests, and only run the
+# simulation-vs-target aggregate check for years the fixture can represent.
+MODEL_CHECK_YEARS = [2023, 2025]
+
 TOLERANCES = {
     "land_value": 0.65,
     "household_land_value": 0.65,
@@ -22,7 +28,7 @@ TOLERANCES = {
 }
 
 
-@pytest.mark.parametrize("year", [2021, 2023, 2025], ids=["2021", "2023", "2025"])
+@pytest.mark.parametrize("year", MODEL_CHECK_YEARS, ids=["2023", "2025"])
 @pytest.mark.parametrize("variable", list(LAND_TARGETS), ids=list(LAND_TARGETS))
 def test_land_value_aggregate(baseline, variable, year):
     """Check weighted aggregate land values against ONS targets."""
