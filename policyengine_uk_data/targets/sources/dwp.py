@@ -7,6 +7,7 @@ households with child under 1.
 
 Sources:
 - DWP benefit statistics: https://www.gov.uk/government/statistics/dwp-benefit-statistics-february-2026/dwp-benefit-statistics-february-2026
+- DWP PIP statistics: https://www.gov.uk/government/statistics/personal-independence-payment-statistics-to-january-2026
 - DWP Stat-Xplore: https://stat-xplore.dwp.gov.uk
 - DWP benefit cap: https://www.gov.uk/government/statistics/benefit-cap-number-of-households-capped-to-november-2025
 - DWP two-child limit: https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025
@@ -20,13 +21,18 @@ _DWP_BENEFIT_STATS_FEB_2026 = (
     "dwp-benefit-statistics-february-2026/"
     "dwp-benefit-statistics-february-2026"
 )
+_PIP_STATS_JAN_2026 = (
+    "https://www.gov.uk/government/statistics/"
+    "personal-independence-payment-statistics-to-january-2026"
+)
 
 
 def get_targets() -> list[Target]:
     targets = []
 
-    # PIP daily living standard and enhanced claimant counts
-    # From Disability Rights UK analysis of DWP data
+    # PIP daily living standard and enhanced claimant counts.
+    # These are England and Wales cases with entitlement from the
+    # January 2026 official PIP statistics / linked Stat-Xplore series.
     targets.append(
         Target(
             name="dwp/pip_dl_standard_claimants",
@@ -35,7 +41,7 @@ def get_targets() -> list[Target]:
             unit=Unit.COUNT,
             values={2025: 1_283_000},
             is_count=True,
-            reference_url="https://www.disabilityrightsuk.org/news/90-pip-standard-daily-living-component-recipients-would-fail-new-green-paper-test",
+            reference_url=_PIP_STATS_JAN_2026,
         )
     )
     targets.append(
@@ -46,7 +52,7 @@ def get_targets() -> list[Target]:
             unit=Unit.COUNT,
             values={2025: 1_608_000},
             is_count=True,
-            reference_url="https://www.disabilityrightsuk.org/news/90-pip-standard-daily-living-component-recipients-would-fail-new-green-paper-test",
+            reference_url=_PIP_STATS_JAN_2026,
         )
     )
 

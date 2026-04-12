@@ -28,7 +28,7 @@ ons:
   la_income: "https://www.ons.gov.uk/employmentandlabourmarket/peopleinwork/earningsandworkinghours/datasets/smallareaincomeestimatesformiddlelayersuperoutputareasenglandandwales"
 
 voa:
-  council_tax: "https://www.gov.uk/government/statistics/council-tax-stock-of-properties-2024"
+  council_tax: "https://www.gov.uk/government/statistics/council-tax-stock-of-properties-2025"
 
 nts:
   vehicle_ownership: "https://www.gov.uk/government/statistics/national-travel-survey-2024"
