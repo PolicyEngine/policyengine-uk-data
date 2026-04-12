@@ -1,14 +1,8 @@
-from policyengine_uk.data import UKSingleYearDataset
-from policyengine_uk_data.datasets.frs import create_frs
-from policyengine_uk_data.storage import STORAGE_FOLDER
 import logging
 import os
-from policyengine_uk_data.utils.uprating import uprate_dataset
-from policyengine_uk_data.utils.subsample import subsample_dataset
-from policyengine_uk_data.utils.progress import (
-    ProcessingProgress,
-    display_success_panel,
-    display_error_panel,
+
+from policyengine_uk_data.utils.build_environment import (
+    assert_local_build_environment,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -17,6 +11,19 @@ logging.basicConfig(level=logging.INFO)
 def main():
     """Create enhanced FRS dataset with rich progress tracking."""
     try:
+        assert_local_build_environment()
+
+        from policyengine_uk.data import UKSingleYearDataset
+        from policyengine_uk_data.datasets.frs import create_frs
+        from policyengine_uk_data.storage import STORAGE_FOLDER
+        from policyengine_uk_data.utils.progress import (
+            ProcessingProgress,
+            display_success_panel,
+            display_error_panel,
+        )
+        from policyengine_uk_data.utils.subsample import subsample_dataset
+        from policyengine_uk_data.utils.uprating import uprate_dataset
+
         # Use reduced epochs and fidelity for testing
         is_testing = os.environ.get("TESTING", "0") == "1"
         epochs = 32 if is_testing else 512
@@ -142,6 +149,7 @@ def main():
                 get_performance=get_performance,
                 nested_progress=nested_progress,  # Pass the nested progress manager
             )
+            update_dataset("Calibrate constituency weights", "completed")
 
             from policyengine_uk_data.datasets.local_areas.local_authorities.calibrate import (
                 get_performance as get_la_performance,
@@ -151,6 +159,7 @@ def main():
             )
 
             # Run calibration with verbose progress
+            update_dataset("Calibrate local authority weights", "processing")
             calibrate_local_areas(
                 dataset=frs,
                 epochs=epochs,
@@ -165,8 +174,7 @@ def main():
                 get_performance=get_la_performance,
                 nested_progress=nested_progress,  # Pass the nested progress manager
             )
-
-            update_dataset("Calibrate dataset", "completed")
+            update_dataset("Calibrate local authority weights", "completed")
 
             # Downrate and save
             update_dataset("Downrate to 2023", "processing")
