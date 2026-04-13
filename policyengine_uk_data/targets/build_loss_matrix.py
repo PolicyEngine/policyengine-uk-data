@@ -39,6 +39,7 @@ from policyengine_uk_data.targets.compute import (
     compute_scotland_demographics,
     compute_scotland_uc_child,
     compute_scottish_child_payment,
+    compute_student_loan_repayment,
     compute_student_loan_plan,
     compute_student_loan_plan_liable,
     compute_ss_contributions,
@@ -317,6 +318,8 @@ def _compute_column(target: Target, ctx: _SimContext, year: int) -> np.ndarray |
         return compute_scottish_child_payment(target, ctx)
 
     # Student loan plan borrower counts (SLC)
+    if name.startswith("slc/student_loan_repayment/"):
+        return compute_student_loan_repayment(target, ctx)
     if name.startswith("slc/plan_") and "above_threshold" in name:
         return compute_student_loan_plan(target, ctx)
     if name.startswith("slc/plan_") and "liable" in name:
