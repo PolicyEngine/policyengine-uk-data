@@ -73,8 +73,6 @@ def compute_tenure(target, ctx) -> np.ndarray | None:
             ],
             "ENGLAND",
         ),
-        "tenure_wales_rented_privately": ("RENT_PRIVATELY", "WALES"),
-        "tenure_scotland_rented_privately": ("RENT_PRIVATELY", "SCOTLAND"),
         "tenure_england_total": (None, "ENGLAND"),
     }
     suffix = target.name.split("/", 1)[-1]
