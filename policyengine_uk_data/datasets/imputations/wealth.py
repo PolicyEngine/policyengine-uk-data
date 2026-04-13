@@ -10,6 +10,7 @@ import pandas as pd
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk import Microsimulation
+from policyengine_uk_data.utils.qrf import QRF
 
 WAS_TAB_FOLDER = STORAGE_FOLDER / "was_2006_20"
 
@@ -52,7 +53,50 @@ IMPUTE_VARIABLES = [
     "non_residential_property_value",
     "savings",
     "num_vehicles",
+    "student_loan_balance",
 ]
+
+WAS_RENAMES = {
+    "R7xshhwgt": "household_weight",
+    # Components for estimating land holdings.
+    "DVLUKValR7_sum": "owned_land",  # In the UK.
+    "DVPropertyR7": "property_wealth",
+    "DVFESHARESR7_aggr": "emp_shares_options",
+    "DVFShUKVR7_aggr": "uk_shares",
+    "DVIISAVR7_aggr": "investment_isas",
+    "DVFCollVR7_aggr": "unit_investment_trusts",
+    "TotpenR7_aggr": "pensions",
+    "DvvalDBTR7_aggr": "db_pensions",
+    # Predictors for fusing to FRS.
+    "dvtotgirR7": "gross_income",
+    "NumAdultW7": "num_adults",
+    "NumCh18W7": "num_children",
+    # Household Gross Annual income from occupational or private pensions
+    "DVGIPPENR7_AGGR": "private_pension_income",
+    "DVGISER7_AGGR": "self_employment_income",
+    # Household Gross annual income from investments
+    "DVGIINVR7_aggr": "capital_income",
+    # Household Total Annual Gross employee income
+    "DVGIEMPR7_AGGR": "employment_income",
+    "HBedrmW7": "num_bedrooms",
+    "GORR7": "region",
+    "DVPriRntW7": "is_renter",  # {1, 2} TODO: Get codebook values.
+    "CTAmtW7": "council_tax",
+    # Other columns for reference.
+    "DVLOSValR7_sum": "non_uk_land",
+    "HFINWNTR7_Sum": "net_financial_wealth",
+    "DVLUKDebtR7_sum": "uk_land_debt",
+    "HFINWR7_Sum": "gross_financial_wealth",
+    "TotWlthR7": "wealth",
+    "DVhvalueR7": "main_residence_value",
+    "DVHseValR7_sum": "other_residential_property_value",
+    "DVBlDValR7_sum": "non_residential_property_value",
+    "DVTotinc_bhcR7": "household_net_income",
+    "DVSaValR7_aggr": "savings",
+    "vcarnr7": "num_vehicles",
+    "Tot_LosR7_aggr": "total_loans",
+    "Tot_los_exc_SLCR7_aggr": "total_loans_exc_slc",
+}
 
 
 def generate_was_table(was: pd.DataFrame):
@@ -70,47 +114,7 @@ def generate_was_table(was: pd.DataFrame):
     to_remove = []
     to_add = {}
 
-    RENAMES = {
-        "R7xshhwgt": "household_weight",
-        # Components for estimating land holdings.
-        "DVLUKValR7_sum": "owned_land",  # In the UK.
-        "DVPropertyR7": "property_wealth",
-        "DVFESHARESR7_aggr": "emp_shares_options",
-        "DVFShUKVR7_aggr": "uk_shares",
-        "DVIISAVR7_aggr": "investment_isas",
-        "DVFCollVR7_aggr": "unit_investment_trusts",
-        "TotpenR7_aggr": "pensions",
-        "DvvalDBTR7_aggr": "db_pensions",
-        # Predictors for fusing to FRS.
-        "dvtotgirR7": "gross_income",
-        "NumAdultW7": "num_adults",
-        "NumCh18W7": "num_children",
-        # Household Gross Annual income from occupational or private pensions
-        "DVGIPPENR7_AGGR": "private_pension_income",
-        "DVGISER7_AGGR": "self_employment_income",
-        # Household Gross annual income from investments
-        "DVGIINVR7_aggr": "capital_income",
-        # Household Total Annual Gross employee income
-        "DVGIEMPR7_AGGR": "employment_income",
-        "HBedrmW7": "num_bedrooms",
-        "GORR7": "region",
-        "DVPriRntW7": "is_renter",  # {1, 2} TODO: Get codebook values.
-        "CTAmtW7": "council_tax",
-        # Other columns for reference.
-        "DVLOSValR7_sum": "non_uk_land",
-        "HFINWNTR7_Sum": "net_financial_wealth",
-        "DVLUKDebtR7_sum": "uk_land_debt",
-        "HFINWR7_Sum": "gross_financial_wealth",
-        "TotWlthR7": "wealth",
-        "DVhvalueR7": "main_residence_value",
-        "DVHseValR7_sum": "other_residential_property_value",
-        "DVBlDValR7_sum": "non_residential_property_value",
-        "DVTotinc_bhcR7": "household_net_income",
-        "DVSaValR7_aggr": "savings",
-        "vcarnr7": "num_vehicles",
-    }
-
-    RENAMES = {x.lower(): y for x, y in RENAMES.items()}
+    RENAMES = {x.lower(): y for x, y in WAS_RENAMES.items()}
 
     for key in RENAMES:
         key = key.lower()
@@ -145,8 +149,15 @@ def generate_was_table(was: pd.DataFrame):
             "unit_investment_trusts",
         ]
     ].sum(axis=1)
+    was["student_loan_balance"] = was["total_loans"] - was["total_loans_exc_slc"]
     was["region"] = was["region"].map(REGIONS)
     return was
+
+
+def _wealth_model_outputs_are_current(model: QRF) -> bool:
+    """Check whether a cached wealth model includes all current output columns."""
+    trained_outputs = getattr(model.model, "imputed_variables", None)
+    return list(trained_outputs) == IMPUTE_VARIABLES
 
 
 def save_imputation_models():
@@ -156,8 +167,6 @@ def save_imputation_models():
     Returns:
         Trained QRF model.
     """
-    from policyengine_uk_data.utils.qrf import QRF
-
     was = pd.read_csv(
         WAS_TAB_FOLDER / "was_round_7_hhold_eul_march_2022.tab",
         sep="\t",
@@ -185,10 +194,10 @@ def create_wealth_model(overwrite_existing: bool = False):
     Returns:
         QRF model for wealth imputation.
     """
-    from policyengine_uk_data.utils.qrf import QRF
-
     if (STORAGE_FOLDER / "wealth.pkl").exists() and not overwrite_existing:
-        return QRF(file_path=STORAGE_FOLDER / "wealth.pkl")
+        wealth = QRF(file_path=STORAGE_FOLDER / "wealth.pkl")
+        if _wealth_model_outputs_are_current(wealth):
+            return wealth
     return save_imputation_models()
 
 
