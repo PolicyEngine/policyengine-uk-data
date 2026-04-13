@@ -1,19 +1,6 @@
-"""Miscellaneous compute functions (vehicles, housing, savings, SCP,
-student loans)."""
+"""Miscellaneous compute functions (vehicles, housing, savings, SCP, student loans)."""
 
 import numpy as np
-
-_ENGLAND_REGIONS = {
-    "NORTH_EAST",
-    "NORTH_WEST",
-    "YORKSHIRE",
-    "EAST_MIDLANDS",
-    "WEST_MIDLANDS",
-    "EAST_OF_ENGLAND",
-    "LONDON",
-    "SOUTH_EAST",
-    "SOUTH_WEST",
-}
 
 
 def compute_vehicles(target, ctx) -> np.ndarray:
@@ -78,9 +65,26 @@ def compute_student_loan_plan(target, ctx) -> np.ndarray:
     else:
         return None
 
-    plan = ctx.sim.calculate("student_loan_plan").values
-    region = ctx.sim.calculate("region", map_to="person").values
-    is_england = np.isin(region, list(_ENGLAND_REGIONS))
-    on_plan = (plan == plan_value) & is_england
+    plan = ctx.pe_person("student_loan_plan")
+    repayments = ctx.pe_person("student_loan_repayments")
+    person_country = ctx.sim.calculate("country", map_to="person").values
+    on_plan = (plan == plan_value) & (person_country == "ENGLAND") & (repayments > 0)
+
+    return ctx.household_from_person(on_plan.astype(float))
+
+
+def compute_student_loan_plan_liable(target, ctx) -> np.ndarray:
+    """Count all England borrowers on a given plan, including non-repayers."""
+    plan_name = target.name  # e.g. "slc/plan_2_borrowers_liable"
+    if "plan_2" in plan_name:
+        plan_value = "PLAN_2"
+    elif "plan_5" in plan_name:
+        plan_value = "PLAN_5"
+    else:
+        return None
+
+    plan = ctx.pe_person("student_loan_plan")
+    person_country = ctx.sim.calculate("country", map_to="person").values
+    on_plan = (plan == plan_value) & (person_country == "ENGLAND")
 
     return ctx.household_from_person(on_plan.astype(float))
