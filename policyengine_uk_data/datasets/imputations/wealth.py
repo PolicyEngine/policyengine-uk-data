@@ -149,9 +149,7 @@ def generate_was_table(was: pd.DataFrame):
             "unit_investment_trusts",
         ]
     ].sum(axis=1)
-    was["student_loan_balance"] = (
-        was["total_loans"] - was["total_loans_exc_slc"]
-    )
+    was["student_loan_balance"] = was["total_loans"] - was["total_loans_exc_slc"]
     was["region"] = was["region"].map(REGIONS)
     return was
 

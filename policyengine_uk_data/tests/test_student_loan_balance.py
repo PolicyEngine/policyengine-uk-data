@@ -56,9 +56,7 @@ def test_create_wealth_model_reuses_current_cached_model(tmp_path, monkeypatch):
     assert model.model.imputed_variables == list(wealth.IMPUTE_VARIABLES)
 
 
-def test_create_wealth_model_retrains_when_cached_outputs_stale(
-    tmp_path, monkeypatch
-):
+def test_create_wealth_model_retrains_when_cached_outputs_stale(tmp_path, monkeypatch):
     model_path = tmp_path / "wealth.pkl"
     model_path.write_bytes(b"placeholder")
 
