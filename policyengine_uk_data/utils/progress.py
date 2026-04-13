@@ -188,8 +188,7 @@ class ProcessingProgress:
         self.console = console or Console()
         self.progress_manager: Optional[RichProgress] = None
         self._plain_output = (
-            os.environ.get("GITHUB_ACTIONS") == "true"
-            or os.environ.get("CI") == "true"
+            os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CI") == "true"
         )
 
     def _emit(self, message: str):
@@ -290,6 +289,7 @@ class ProcessingProgress:
             Function to update calibration progress.
         """
         if self._plain_output:
+
             def update_calibration(
                 iteration: int,
                 loss_value: Optional[float] = None,
@@ -299,9 +299,8 @@ class ProcessingProgress:
                     self._emit(
                         f"[calibration] epoch {iteration}/{iterations}: calculating loss"
                     )
-                elif (
-                    loss_value is not None
-                    and (iteration == 1 or iteration == iterations or iteration % 10 == 0)
+                elif loss_value is not None and (
+                    iteration == 1 or iteration == iterations or iteration % 10 == 0
                 ):
                     self._emit(
                         f"[calibration] epoch {iteration}/{iterations}: loss={loss_value:.6f}"
