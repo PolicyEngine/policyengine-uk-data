@@ -1,8 +1,10 @@
 """Student Loans Company (SLC) calibration targets.
 
-Borrower counts for England only: Plan 2 and Plan 5, restricted to
-borrowers liable to repay and earning above the repayment threshold.
-This matches the FRS coverage (PAYE deductions only).
+Borrower counts for England only: Plan 2 and Plan 5.
+
+Two target types are exposed:
+- `above_threshold`: borrowers liable to repay and earning above threshold
+- `liable`: all borrowers liable to repay, including below-threshold holders
 
 Source: Explore Education Statistics — Student loan forecasts for England,
 Table 6a: Forecast number of student borrowers liable to repay and number
@@ -17,8 +19,9 @@ https://explore-education-statistics.service.gov.uk/data-tables/permalink/6ff755
 import json
 import os
 import re
-import requests
 from functools import lru_cache
+
+import requests
 
 from policyengine_uk_data.targets.schema import Target, Unit
 
@@ -29,21 +32,51 @@ _PERMALINK_URL = (
 )
 _TESTING_DATA = {
     "plan_2": {
-        2025: 3_670_000,
-        2026: 4_130_000,
-        2027: 4_480_000,
-        2028: 4_700_000,
-        2029: 4_820_000,
-        2030: 4_870_000,
+        "above_threshold": {
+            2025: 3_985_000,
+            2026: 4_460_000,
+            2027: 4_825_000,
+            2028: 5_045_000,
+            2029: 5_160_000,
+            2030: 5_205_000,
+        },
+        "liable": {
+            2025: 8_940_000,
+            2026: 9_710_000,
+            2027: 10_360_000,
+            2028: 10_615_000,
+            2029: 10_600_000,
+            2030: 10_525_000,
+        },
     },
     "plan_5": {
-        2026: 25_000,
-        2027: 115_000,
-        2028: 340_000,
-        2029: 700_000,
-        2030: 1_140_000,
+        "above_threshold": {
+            2026: 35_000,
+            2027: 145_000,
+            2028: 390_000,
+            2029: 770_000,
+            2030: 1_235_000,
+        },
+        "liable": {
+            2025: 10_000,
+            2026: 230_000,
+            2027: 630_000,
+            2028: 1_380_000,
+            2029: 2_360_000,
+            2030: 3_400_000,
+        },
     },
 }
+
+
+def get_snapshot_data() -> dict:
+    """Return the checked-in SLC snapshot used for tests and deterministic builds."""
+    return {
+        plan: {
+            target_type: values.copy() for target_type, values in target_data.items()
+        }
+        for plan, target_data in _TESTING_DATA.items()
+    }
 
 
 @lru_cache(maxsize=1)
@@ -51,11 +84,10 @@ def _fetch_slc_data() -> dict:
     """Fetch and parse SLC Table 6a data from Explore Education Statistics.
 
     Returns:
-        Dict with keys 'plan_2' and 'plan_5', each containing a dict
-        mapping calendar year (int) to borrower count above threshold (int).
+        Nested dict of plan -> target type -> year -> count.
     """
     if os.environ.get("TESTING", "0") == "1":
-        return _TESTING_DATA
+        return get_snapshot_data()
 
     response = requests.get(_PERMALINK_URL, timeout=30)
     response.raise_for_status()
@@ -75,59 +107,62 @@ def _fetch_slc_data() -> dict:
     # Structure: Plan 2 (6 years), Plan 5 (6 years), Plan 3 (5 years)
     header_row = table_json["thead"][1]
 
-    # Get Plan 2 years (first 6 columns)
     plan_2_years = []
     for i in range(6):
         year_text = header_row[i]["text"]  # e.g., "2029-30"
         start_year = int(year_text.split("-")[0])
-        calendar_year = start_year + 1  # 2029-30 → 2030
-        plan_2_years.append(calendar_year)
+        plan_2_years.append(start_year + 1)  # 2029-30 → 2030
 
-    # Get Plan 5 years (next 6 columns)
     plan_5_years = []
     for i in range(6, 12):
         year_text = header_row[i]["text"]
         start_year = int(year_text.split("-")[0])
-        calendar_year = start_year + 1
-        plan_5_years.append(calendar_year)
+        plan_5_years.append(start_year + 1)
 
-    # Find the "Higher education total" / "earning above threshold" row
-    # This is the row following "Higher education total" with "liable to repay"
     tbody = table_json["tbody"]
-
-    # Row 11 contains: header + 6 Plan 2 values + 6 Plan 5 values + 5 Plan 3
-    target_row = None
-    for row in tbody:
+    liable_row = None
+    above_threshold_row = None
+    for index, row in enumerate(tbody):
         header_text = row[0].get("text", "")
-        if "earning above repayment threshold" in header_text:
-            # Check if previous context was "Higher education total"
-            # Actually, row 11 is after HE total row 10, and starts with
-            # the "earning above" header (no group header due to rowSpan)
-            target_row = row
+        if header_text == "Higher education total":
+            liable_row = row
+            if index + 1 < len(tbody):
+                next_row = tbody[index + 1]
+                next_header = next_row[0].get("text", "")
+                if "earning above repayment threshold" in next_header:
+                    above_threshold_row = next_row
             break
 
-    if target_row is None:
+    if liable_row is None:
+        raise ValueError("Could not find 'Higher education total' row")
+    if above_threshold_row is None:
         raise ValueError("Could not find 'earning above threshold' row")
 
-    # Parse Plan 2 data (cells 1-6, mapping to plan_2_years)
-    plan_2_data = {}
-    for i, year in enumerate(plan_2_years):
-        cell_idx = 1 + i  # Skip header cell
-        value_text = target_row[cell_idx].get("text", "")
-        if value_text and value_text not in ("no data", "0"):
-            value = int(value_text.replace(",", ""))
-            plan_2_data[year] = value
+    def parse_values(row, start_index, years):
+        data = {}
+        for offset, year in enumerate(years):
+            cell_idx = start_index + offset
+            if cell_idx >= len(row):
+                continue
+            value_text = row[cell_idx].get("text", "")
+            if value_text and value_text not in ("no data", "0"):
+                data[year] = int(value_text.replace(",", ""))
+        return data
 
-    # Parse Plan 5 data (cells 7-12, mapping to plan_5_years)
-    plan_5_data = {}
-    for i, year in enumerate(plan_5_years):
-        cell_idx = 7 + i  # Skip header + Plan 2 cells
-        value_text = target_row[cell_idx].get("text", "")
-        if value_text and value_text not in ("no data", "0"):
-            value = int(value_text.replace(",", ""))
-            plan_5_data[year] = value
-
-    return {"plan_2": plan_2_data, "plan_5": plan_5_data}
+    return {
+        "plan_2": {
+            "above_threshold": parse_values(
+                above_threshold_row, start_index=1, years=plan_2_years
+            ),
+            "liable": parse_values(liable_row, start_index=2, years=plan_2_years),
+        },
+        "plan_5": {
+            "above_threshold": parse_values(
+                above_threshold_row, start_index=7, years=plan_5_years
+            ),
+            "liable": parse_values(liable_row, start_index=8, years=plan_5_years),
+        },
+    }
 
 
 def get_targets() -> list[Target]:
@@ -136,28 +171,21 @@ def get_targets() -> list[Target]:
 
     targets = []
 
-    targets.append(
-        Target(
-            name="slc/plan_2_borrowers_above_threshold",
-            variable="student_loan_plan",
-            source="slc",
-            unit=Unit.COUNT,
-            is_count=True,
-            values=slc_data["plan_2"],
-            reference_url=_PERMALINK_URL,
-        )
-    )
-
-    targets.append(
-        Target(
-            name="slc/plan_5_borrowers_above_threshold",
-            variable="student_loan_plan",
-            source="slc",
-            unit=Unit.COUNT,
-            is_count=True,
-            values=slc_data["plan_5"],
-            reference_url=_PERMALINK_URL,
-        )
-    )
+    for plan, plan_label in (("plan_2", "2"), ("plan_5", "5")):
+        for target_type, suffix in (
+            ("above_threshold", "above_threshold"),
+            ("liable", "liable"),
+        ):
+            targets.append(
+                Target(
+                    name=f"slc/plan_{plan_label}_borrowers_{suffix}",
+                    variable="student_loan_plan",
+                    source="slc",
+                    unit=Unit.COUNT,
+                    is_count=True,
+                    values=slc_data[plan][target_type],
+                    reference_url=_PERMALINK_URL,
+                )
+            )
 
     return targets
