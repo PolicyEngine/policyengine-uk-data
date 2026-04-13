@@ -1,3 +1,10 @@
+## [1.46.4] - 2026-04-13
+
+### Fixed
+
+- Make long-running dataset builds emit plain CI heartbeat logs so release workflows are less likely to die silently during calibration.
+
+
 ## [1.46.3] - 2026-04-12
 
 ### Changed
