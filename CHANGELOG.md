@@ -1,3 +1,10 @@
+## [1.46.6] - 2026-04-13
+
+### Fixed
+
+- Preserve zero-valued SLC borrower targets so calibration can enforce explicit zero years.
+
+
 ## [1.46.5] - 2026-04-13
 
 No significant changes.
