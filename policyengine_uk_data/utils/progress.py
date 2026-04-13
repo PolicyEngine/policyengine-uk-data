@@ -6,8 +6,8 @@ for dataset processing, calibration, and other computationally intensive tasks.
 """
 
 from contextlib import contextmanager
+import os
 from typing import Any, Dict, List, Optional, Union
-import time
 
 from rich.console import Console
 from rich.progress import (
@@ -187,6 +187,12 @@ class ProcessingProgress:
         """
         self.console = console or Console()
         self.progress_manager: Optional[RichProgress] = None
+        self._plain_output = (
+            os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CI") == "true"
+        )
+
+    def _emit(self, message: str):
+        print(message, flush=True)
 
     @contextmanager
     def track_dataset_creation(self, datasets: List[str]):
@@ -198,6 +204,23 @@ class ProcessingProgress:
         Yields:
             Tuple of (update_dataset function, progress manager for nested tasks).
         """
+        if self._plain_output:
+            completed_count = 0
+
+            def update_dataset(dataset_name: str, status: str = "processing"):
+                nonlocal completed_count
+
+                if status == "processing":
+                    self._emit(f"[dataset] starting: {dataset_name}")
+                elif status == "completed":
+                    completed_count += 1
+                    self._emit(
+                        f"[dataset] completed ({completed_count}/{len(datasets)}): {dataset_name}"
+                    )
+
+            yield update_dataset, None
+            return
+
         with create_progress(self.console) as progress:
             # Main dataset creation progress
             main_task = progress.add_task(
@@ -265,6 +288,27 @@ class ProcessingProgress:
         Yields:
             Function to update calibration progress.
         """
+        if self._plain_output:
+
+            def update_calibration(
+                iteration: int,
+                loss_value: Optional[float] = None,
+                calculating_loss: bool = False,
+            ):
+                if calculating_loss:
+                    self._emit(
+                        f"[calibration] epoch {iteration}/{iterations}: calculating loss"
+                    )
+                elif loss_value is not None and (
+                    iteration == 1 or iteration == iterations or iteration % 10 == 0
+                ):
+                    self._emit(
+                        f"[calibration] epoch {iteration}/{iterations}: loss={loss_value:.6f}"
+                    )
+
+            yield update_calibration
+            return
+
         if nested_progress:
             # Add calibration as a nested task in existing progress
             calibration_task = nested_progress.add_task(
