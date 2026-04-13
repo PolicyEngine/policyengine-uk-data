@@ -35,6 +35,7 @@ jobs:
       id-token: "write"
     env:
       HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+      PYTHONUNBUFFERED: "1"
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
