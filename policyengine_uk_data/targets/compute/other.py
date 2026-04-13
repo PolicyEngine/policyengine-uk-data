@@ -2,6 +2,20 @@
 
 import numpy as np
 
+_STUDENT_LOAN_COUNTRIES = {
+    "england": "ENGLAND",
+    "scotland": "SCOTLAND",
+    "wales": "WALES",
+    "northern_ireland": "NORTHERN_IRELAND",
+}
+
+_STUDENT_LOAN_PLAN_MAP = {
+    "plan_1": "PLAN_1",
+    "plan_2": "PLAN_2",
+    "postgraduate": "POSTGRADUATE",
+    "plan_5": "PLAN_5",
+}
+
 
 def compute_vehicles(target, ctx) -> np.ndarray:
     """Compute vehicle ownership targets."""
@@ -88,3 +102,27 @@ def compute_student_loan_plan_liable(target, ctx) -> np.ndarray:
     on_plan = (plan == plan_value) & (person_country == "ENGLAND")
 
     return ctx.household_from_person(on_plan.astype(float))
+
+
+def compute_student_loan_repayment(target, ctx) -> np.ndarray:
+    """Compute SLC repayment amount targets by country and optional plan."""
+    parts = target.name.split("/")
+    if len(parts) < 3 or parts[:2] != ["slc", "student_loan_repayment"]:
+        return None
+
+    country = _STUDENT_LOAN_COUNTRIES.get(parts[2])
+    if country is None:
+        return None
+
+    person_country = ctx.sim.calculate("country", map_to="person").values
+    repayments = ctx.pe_person("student_loan_repayment")
+    mask = person_country == country
+
+    if len(parts) == 4:
+        plan_value = _STUDENT_LOAN_PLAN_MAP.get(parts[3])
+        if plan_value is None:
+            return None
+        plan = ctx.pe_person("student_loan_plan")
+        mask &= plan == plan_value
+
+    return ctx.household_from_person(repayments * mask)
