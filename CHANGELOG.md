@@ -1,3 +1,10 @@
+## [1.48.0] - 2026-04-13
+
+### Added
+
+- Impute `student_loan_balance` from WAS loan aggregates and retrain stale cached wealth models when that new output is missing.
+
+
 ## [1.47.0] - 2026-04-13
 
 ### Added
