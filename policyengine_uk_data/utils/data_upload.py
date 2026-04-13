@@ -14,6 +14,11 @@ from policyengine_uk_data.utils.release_manifest import (
     build_release_manifest,
     serialize_release_manifest,
 )
+from policyengine_uk_data.utils.trace_tro import (
+    TRACE_TRO_FILENAME,
+    build_trace_tro_from_release_manifest,
+    serialize_trace_tro,
+)
 
 RELEASE_MANIFEST_PATH = "release_manifest.json"
 
@@ -121,6 +126,9 @@ def create_release_manifest_commit_operations(
         existing_manifest=existing_manifest,
     )
     manifest_payload = serialize_release_manifest(manifest)
+    trace_tro_payload = serialize_trace_tro(
+        build_trace_tro_from_release_manifest(manifest)
+    )
     operations = [
         CommitOperationAdd(
             path_in_repo=RELEASE_MANIFEST_PATH,
@@ -129,6 +137,14 @@ def create_release_manifest_commit_operations(
         CommitOperationAdd(
             path_in_repo=f"releases/{version}/{RELEASE_MANIFEST_PATH}",
             path_or_fileobj=BytesIO(manifest_payload),
+        ),
+        CommitOperationAdd(
+            path_in_repo=TRACE_TRO_FILENAME,
+            path_or_fileobj=BytesIO(trace_tro_payload),
+        ),
+        CommitOperationAdd(
+            path_in_repo=f"releases/{version}/{TRACE_TRO_FILENAME}",
+            path_or_fileobj=BytesIO(trace_tro_payload),
         ),
     ]
     return manifest, operations
