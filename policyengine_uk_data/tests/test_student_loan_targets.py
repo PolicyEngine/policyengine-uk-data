@@ -56,8 +56,7 @@ def test_slc_repayment_targets_match_official_2025_values():
     targets = {t.name: t for t in get_all_targets()}
 
     assert (
-        targets["slc/student_loan_repayment/england"].values[2025]
-        == 5_018_231_834.95
+        targets["slc/student_loan_repayment/england"].values[2025] == 5_018_231_834.95
     )
     assert (
         targets["slc/student_loan_repayment/england/plan_1"].values[2025]
@@ -75,10 +74,7 @@ def test_slc_repayment_targets_match_official_2025_values():
         targets["slc/student_loan_repayment/england/plan_5"].values[2025]
         == 40_869_580.81
     )
-    assert (
-        targets["slc/student_loan_repayment/scotland"].values[2025]
-        == 203_300_000
-    )
+    assert targets["slc/student_loan_repayment/scotland"].values[2025] == 203_300_000
     assert targets["slc/student_loan_repayment/wales"].values[2025] == 229_100_000
     assert (
         targets["slc/student_loan_repayment/northern_ireland"].values[2025]
@@ -268,7 +264,9 @@ def test_student_loan_target_compute_distinguishes_liable_from_repaying():
 
 def test_student_loan_repayment_target_compute_filters_country_and_plan():
     """Repayment amount targets should filter on modeled plan and country."""
-    from policyengine_uk_data.targets.compute.other import compute_student_loan_repayment
+    from policyengine_uk_data.targets.compute.other import (
+        compute_student_loan_repayment,
+    )
 
     class DummyCtx:
         class sim:
