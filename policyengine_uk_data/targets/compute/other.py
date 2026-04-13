@@ -67,7 +67,8 @@ def compute_student_loan_plan(target, ctx) -> np.ndarray:
 
     plan = ctx.pe_person("student_loan_plan")
     repayments = ctx.pe_person("student_loan_repayments")
-    on_plan = (plan == plan_value) & (ctx.country == "ENGLAND") & (repayments > 0)
+    person_country = ctx.sim.calculate("country", map_to="person").values
+    on_plan = (plan == plan_value) & (person_country == "ENGLAND") & (repayments > 0)
 
     return ctx.household_from_person(on_plan.astype(float))
 
@@ -83,6 +84,7 @@ def compute_student_loan_plan_liable(target, ctx) -> np.ndarray:
         return None
 
     plan = ctx.pe_person("student_loan_plan")
-    on_plan = (plan == plan_value) & (ctx.country == "ENGLAND")
+    person_country = ctx.sim.calculate("country", map_to="person").values
+    on_plan = (plan == plan_value) & (person_country == "ENGLAND")
 
     return ctx.household_from_person(on_plan.astype(float))

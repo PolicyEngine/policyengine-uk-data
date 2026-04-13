@@ -71,6 +71,9 @@ def _impute_student_loan_plan_values(
     estimated_uni_start_year = year - age + 18
 
     plan_1_cohort = estimated_uni_start_year < 2012
+    plan_2_cohort = (estimated_uni_start_year >= 2012) & (
+        estimated_uni_start_year < 2023
+    )
     plan_5_cohort = estimated_uni_start_year >= 2023
     plan_2_age_band = (age >= _PLAN_2_MIN_AGE) & (age <= _PLAN_2_MAX_AGE)
     plan_5_age_band = (age >= 18) & (age <= _PLAN_5_MAX_AGE)
@@ -105,7 +108,9 @@ def _impute_student_loan_plan_values(
         0.0,
         plan_2_target - _weighted_count((plan == "PLAN_2") & is_england, person_weight),
     )
-    plan_2_eligible = (plan == "NONE") & is_england & is_tertiary & plan_2_age_band
+    plan_2_eligible = (
+        (plan == "NONE") & is_england & is_tertiary & plan_2_age_band & plan_2_cohort
+    )
     _assign_probabilistically(
         plan,
         plan_2_eligible,

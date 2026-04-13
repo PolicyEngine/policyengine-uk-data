@@ -128,7 +128,16 @@ def test_student_loan_target_compute_distinguishes_liable_from_repaying():
     )
 
     class DummyCtx:
-        country = np.array(["ENGLAND", "ENGLAND", "WALES", "ENGLAND"])
+        country = np.array(["ENGLAND", "WALES"])
+
+        class sim:
+            @staticmethod
+            def calculate(variable, map_to=None):
+                if variable == "country" and map_to == "person":
+                    return SimpleNamespace(
+                        values=np.array(["ENGLAND", "ENGLAND", "WALES", "ENGLAND"])
+                    )
+                raise AssertionError(f"Unexpected calculate call: {variable}, {map_to}")
 
         @staticmethod
         def pe_person(variable):

@@ -77,6 +77,28 @@ def test_plan5_assignment_has_priority_over_plan2_for_recent_cohort():
     assert plans.tolist() == ["PLAN_5"]
 
 
+def test_plan2_below_threshold_imputation_respects_estimated_cohort():
+    """Pre-2012 cohorts should not be assigned Plan 2 just because they fit the age band."""
+    from policyengine_uk_data.datasets.imputations.student_loans import (
+        _impute_student_loan_plan_values,
+    )
+
+    plans = _impute_student_loan_plan_values(
+        age=np.array([40]),
+        student_loan_repayments=np.array([0.0]),
+        country=np.array(["ENGLAND"]),
+        highest_education=np.array(["TERTIARY"]),
+        person_weight=np.ones(1),
+        year=2025,
+        slc_data={
+            "plan_2": {"liable": {2025: 1}},
+            "plan_5": {"liable": {2025: 0}},
+        },
+    )
+
+    assert plans.tolist() == ["NONE"]
+
+
 def test_student_loan_plan_enum_values():
     """Student-loan plan strings should still match policyengine-uk's enum."""
     from policyengine_uk.variables.gov.hmrc.student_loans.student_loan_plan import (
