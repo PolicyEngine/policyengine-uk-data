@@ -7,6 +7,8 @@ for dataset processing, calibration, and other computationally intensive tasks.
 
 from contextlib import contextmanager
 import os
+import threading
+import time
 from typing import Any, Dict, List, Optional, Union
 
 from rich.console import Console
@@ -190,9 +192,48 @@ class ProcessingProgress:
         self._plain_output = (
             os.environ.get("GITHUB_ACTIONS") == "true" or os.environ.get("CI") == "true"
         )
+        self._heartbeat_seconds = float(
+            os.environ.get("POLICYENGINE_PROGRESS_HEARTBEAT_SECONDS", "60")
+        )
 
     def _emit(self, message: str):
         print(message, flush=True)
+
+    @contextmanager
+    def track_stage(self, stage_name: str, category: str = "calibration"):
+        """Track a long-running stage with periodic CI heartbeats."""
+        if not self._plain_output:
+            yield
+            return
+
+        self._emit(f"[{category}] starting: {stage_name}")
+        started_at = time.monotonic()
+        stop_event = threading.Event()
+
+        def emit_heartbeats():
+            while not stop_event.wait(self._heartbeat_seconds):
+                elapsed = int(time.monotonic() - started_at)
+                self._emit(f"[{category}] heartbeat: {stage_name} ({elapsed}s elapsed)")
+
+        heartbeat_thread = threading.Thread(
+            target=emit_heartbeats,
+            name=f"{category}-heartbeat",
+            daemon=True,
+        )
+        heartbeat_thread.start()
+
+        try:
+            yield
+        except Exception:
+            elapsed = int(time.monotonic() - started_at)
+            self._emit(f"[{category}] failed: {stage_name} ({elapsed}s elapsed)")
+            raise
+        else:
+            elapsed = int(time.monotonic() - started_at)
+            self._emit(f"[{category}] completed: {stage_name} ({elapsed}s elapsed)")
+        finally:
+            stop_event.set()
+            heartbeat_thread.join(timeout=1)
 
     @contextmanager
     def track_dataset_creation(self, datasets: List[str]):
