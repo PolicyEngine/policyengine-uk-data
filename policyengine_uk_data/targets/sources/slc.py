@@ -51,6 +51,7 @@ _TESTING_DATA = {
     },
     "plan_5": {
         "above_threshold": {
+            2025: 0,
             2026: 35_000,
             2027: 145_000,
             2028: 390_000,
@@ -145,7 +146,7 @@ def _fetch_slc_data() -> dict:
             if cell_idx >= len(row):
                 continue
             value_text = row[cell_idx].get("text", "")
-            if value_text and value_text not in ("no data", "0"):
+            if value_text and value_text != "no data":
                 data[year] = int(value_text.replace(",", ""))
         return data
 

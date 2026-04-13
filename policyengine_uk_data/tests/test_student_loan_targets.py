@@ -28,7 +28,7 @@ def test_slc_snapshot_values_match_higher_education_total_rows():
     assert targets["slc/plan_2_borrowers_liable"].values[2025] == 8_940_000
     assert targets["slc/plan_2_borrowers_liable"].values[2030] == 10_525_000
 
-    assert 2025 not in targets["slc/plan_5_borrowers_above_threshold"].values
+    assert targets["slc/plan_5_borrowers_above_threshold"].values[2025] == 0
     assert targets["slc/plan_5_borrowers_above_threshold"].values[2026] == 35_000
     assert targets["slc/plan_5_borrowers_above_threshold"].values[2030] == 1_235_000
     assert targets["slc/plan_5_borrowers_liable"].values[2025] == 10_000
@@ -116,6 +116,53 @@ def test_slc_parser_uses_higher_education_total_rows(monkeypatch):
     assert data["plan_2"]["above_threshold"][2025] == 3_985_000
     assert data["plan_5"]["liable"][2025] == 10_000
     assert data["plan_5"]["above_threshold"][2025] == 35_000
+
+    slc._fetch_slc_data.cache_clear()
+
+
+def test_slc_parser_preserves_zero_value_years(monkeypatch):
+    """A literal zero should remain a real target year, not be dropped."""
+    from policyengine_uk_data.targets.sources import slc
+
+    table_json = {
+        "thead": [
+            [],
+            [{"text": "2024-25"}] * 6 + [{"text": "2024-25"}] * 6,
+        ],
+        "tbody": [
+            [{"text": "Higher education total"}, {"text": "liable"}]
+            + [{"text": "8,940,000"}] * 6
+            + [{"text": "10,000"}] * 6,
+            [
+                {
+                    "text": "Number of borrowers liable to repay and earning above repayment threshold"
+                }
+            ]
+            + [{"text": "3,985,000"}] * 6
+            + [{"text": "0"}] * 6,
+        ],
+    }
+    html = (
+        '<script id="__NEXT_DATA__" type="application/json">'
+        + json.dumps(
+            {"props": {"pageProps": {"data": {"table": {"json": table_json}}}}}
+        )
+        + "</script>"
+    )
+
+    class DummyResponse:
+        text = html
+
+        @staticmethod
+        def raise_for_status():
+            return None
+
+    slc._fetch_slc_data.cache_clear()
+    monkeypatch.delenv("TESTING", raising=False)
+    monkeypatch.setattr(slc.requests, "get", lambda *args, **kwargs: DummyResponse())
+
+    data = slc._fetch_slc_data()
+    assert data["plan_5"]["above_threshold"][2025] == 0
 
     slc._fetch_slc_data.cache_clear()
 
