@@ -1,3 +1,14 @@
+## [1.47.0] - 2026-04-13
+
+### Added
+
+- Add 2025 Student Loans Company repayment amount calibration targets by UK country and by England repayment plan.
+
+### Fixed
+
+- Preserve zero-valued SLC borrower targets so calibration can enforce explicit zero years.
+
+
 ## [1.46.6] - 2026-04-13
 
 ### Fixed
