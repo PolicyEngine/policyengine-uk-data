@@ -72,3 +72,106 @@ def test_create_wealth_model_retrains_when_cached_outputs_stale(tmp_path, monkey
     monkeypatch.setattr(wealth, "save_imputation_models", lambda: fresh_model)
 
     assert wealth.create_wealth_model() is fresh_model
+
+
+def test_allocate_student_loan_balance_prefers_repayers_then_tertiary():
+    person = pd.DataFrame(
+        {
+            "person_household_id": [1, 1, 2, 2],
+            "age": [30, 28, 20, 32],
+            "student_loan_repayments": [200, 0, 0, 0],
+            "student_loans": [0, 0, 0, 0],
+            "current_education": [
+                "NOT_IN_EDUCATION",
+                "NOT_IN_EDUCATION",
+                "TERTIARY",
+                "NOT_IN_EDUCATION",
+            ],
+            "highest_education": [
+                "UPPER_SECONDARY",
+                "UPPER_SECONDARY",
+                "UPPER_SECONDARY",
+                "TERTIARY",
+            ],
+        }
+    )
+
+    result = wealth._allocate_student_loan_balance_to_people(
+        pd.Series({1: 1_000.0, 2: 600.0}),
+        person,
+    )
+
+    assert result.tolist() == [1_000.0, 0.0, 0.0, 600.0]
+
+
+def test_impute_wealth_routes_student_loan_balance_to_people(monkeypatch):
+    class DummyDataset:
+        def __init__(self):
+            self.person = pd.DataFrame(
+                {
+                    "person_household_id": [1, 1, 2],
+                    "age": [29, 27, 21],
+                    "student_loan_repayments": [150, 0, 0],
+                    "student_loans": [0, 0, 0],
+                    "current_education": [
+                        "NOT_IN_EDUCATION",
+                        "NOT_IN_EDUCATION",
+                        "TERTIARY",
+                    ],
+                    "highest_education": [
+                        "TERTIARY",
+                        "UPPER_SECONDARY",
+                        "UPPER_SECONDARY",
+                    ],
+                }
+            )
+            self.household = pd.DataFrame(index=[1, 2])
+            self.validated = False
+
+        def copy(self):
+            copied = DummyDataset()
+            copied.person = self.person.copy()
+            copied.household = self.household.copy()
+            copied.validated = self.validated
+            return copied
+
+        def validate(self):
+            self.validated = True
+
+    class DummyModel:
+        input_columns = ["household_net_income", "region"]
+
+        @staticmethod
+        def predict(_input_df):
+            return pd.DataFrame(
+                {
+                    "owned_land": [10.0, 20.0],
+                    "student_loan_balance": [900.0, 300.0],
+                },
+                index=[1, 2],
+            )
+
+    class DummyMicrosimulation:
+        def __init__(self, dataset):
+            self.dataset = dataset
+
+        def calculate_dataframe(self, predictors, map_to):
+            assert predictors == ["household_net_income", "region"]
+            assert map_to == "household"
+            return pd.DataFrame(
+                {
+                    "household_net_income": [1.0, 2.0],
+                    "region": ["LONDON", "WALES"],
+                },
+                index=[1, 2],
+            )
+
+    monkeypatch.setattr(wealth, "create_wealth_model", lambda: DummyModel())
+    monkeypatch.setattr(wealth, "Microsimulation", DummyMicrosimulation)
+
+    imputed = wealth.impute_wealth(DummyDataset())
+
+    assert imputed.household["owned_land"].tolist() == [10.0, 20.0]
+    assert "student_loan_balance" not in imputed.household.columns
+    assert imputed.person["student_loan_balance"].tolist() == [900.0, 0.0, 300.0]
+    assert imputed.validated

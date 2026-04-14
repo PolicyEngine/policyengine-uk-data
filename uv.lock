@@ -1351,7 +1351,7 @@ wheels = [
 
 [[package]]
 name = "policyengine-uk"
-version = "2.74.0"
+version = "2.81.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "microdf-python" },
@@ -1359,14 +1359,14 @@ dependencies = [
     { name = "pydantic" },
     { name = "tables" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/60/12/c87f64560a922b7982e417220abdabe28a0c7d682a8fa81ca16797c143b2/policyengine_uk-2.74.0.tar.gz", hash = "sha256:aebeac8c67a80d042d1ab411c9c16f9b81525639488d04682f35638a11996565", size = 1100162, upload-time = "2026-02-23T13:46:04.588Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b9/bf/631ff06a5cbac23c340e227b4f8531a6cfbc63a4f82857b82a06db0d1575/policyengine_uk-2.81.0.tar.gz", hash = "sha256:1630e8e2d5b2c529ce25e9d4d148efc98bac52a10216c1b7896e4a64d902b539", size = 1142766, upload-time = "2026-04-14T01:05:20.949Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4b/ba/7c11a21d9ba528ae602ed69db5bdd5667ab3fa6f58d97df7242b9764e3bf/policyengine_uk-2.74.0-py3-none-any.whl", hash = "sha256:395263be4cabdec477b692cd32766843ac097c5e54d3568773a4b572e40450c7", size = 1697261, upload-time = "2026-02-23T13:46:02.912Z" },
+    { url = "https://files.pythonhosted.org/packages/ac/86/24e36797ad31d8777d3f221933ead3bf35bc0dba8a74f64446fb32fb56db/policyengine_uk-2.81.0-py3-none-any.whl", hash = "sha256:9d03f4242e3df736d99d8ea3a58fb8977da24dd41bfe451377d6dfbe6f623f80", size = 1788129, upload-time = "2026-04-14T01:05:19.077Z" },
 ]
 
 [[package]]
 name = "policyengine-uk-data"
-version = "1.40.3"
+version = "1.48.0"
 source = { editable = "." }
 dependencies = [
     { name = "google-auth" },
@@ -1385,6 +1385,7 @@ dependencies = [
     { name = "requests" },
     { name = "rich" },
     { name = "ruff" },
+    { name = "sqlmodel" },
     { name = "tabulate" },
     { name = "tqdm" },
 ]
@@ -1394,6 +1395,7 @@ dev = [
     { name = "build" },
     { name = "furo" },
     { name = "itables" },
+    { name = "l0-python" },
     { name = "pytest" },
     { name = "quantile-forest" },
     { name = "ruff" },
@@ -1411,6 +1413,7 @@ requires-dist = [
     { name = "google-cloud-storage" },
     { name = "huggingface-hub" },
     { name = "itables", marker = "extra == 'dev'" },
+    { name = "l0-python", marker = "extra == 'dev'", specifier = ">=0.4.0" },
     { name = "microcalibrate", specifier = ">=0.18.0" },
     { name = "microimpute", specifier = ">=1.0.1" },
     { name = "odfpy" },
@@ -1418,7 +1421,7 @@ requires-dist = [
     { name = "pandas" },
     { name = "policyengine" },
     { name = "policyengine-core", specifier = ">=3.19.4" },
-    { name = "policyengine-uk", specifier = ">=2.74.0" },
+    { name = "policyengine-uk", specifier = ">=2.81.0" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pyyaml" },
@@ -1427,6 +1430,7 @@ requires-dist = [
     { name = "rich", specifier = ">=13.0.0" },
     { name = "ruff", specifier = ">=0.9.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9.0" },
+    { name = "sqlmodel", specifier = ">=0.0.16" },
     { name = "tables", marker = "extra == 'dev'" },
     { name = "tabulate" },
     { name = "torch", marker = "extra == 'dev'" },
@@ -2059,6 +2063,20 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/32/d5/0e66097fc64fa266f29a7963296b40a80d6a997b7ac13806183700676f86/sqlalchemy-2.0.44-cp313-cp313-win32.whl", hash = "sha256:ee51625c2d51f8baadf2829fae817ad0b66b140573939dd69284d2ba3553ae73", size = 2101275, upload-time = "2025-10-10T15:03:26.096Z" },
     { url = "https://files.pythonhosted.org/packages/03/51/665617fe4f8c6450f42a6d8d69243f9420f5677395572c2fe9d21b493b7b/sqlalchemy-2.0.44-cp313-cp313-win_amd64.whl", hash = "sha256:c1c80faaee1a6c3428cecf40d16a2365bcf56c424c92c2b6f0f9ad204b899e9e", size = 2127901, upload-time = "2025-10-10T15:03:27.548Z" },
     { url = "https://files.pythonhosted.org/packages/9c/5e/6a29fa884d9fb7ddadf6b69490a9d45fded3b38541713010dad16b77d015/sqlalchemy-2.0.44-py3-none-any.whl", hash = "sha256:19de7ca1246fbef9f9d1bff8f1ab25641569df226364a0e40457dc5457c54b05", size = 1928718, upload-time = "2025-10-10T15:29:45.32Z" },
+]
+
+[[package]]
+name = "sqlmodel"
+version = "0.0.38"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "sqlalchemy" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/64/0d/26ec1329960ea9430131fe63f63a95ea4cb8971d49c891ff7e1f3255421c/sqlmodel-0.0.38.tar.gz", hash = "sha256:d583ec237b14103809f74e8630032bc40ab68cd6b754a610f0813c56911a547b", size = 86710, upload-time = "2026-04-02T21:03:55.571Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/72/c7/10c60af0607ab6fa136264f7f39d205932218516226d38585324ffda705d/sqlmodel-0.0.38-py3-none-any.whl", hash = "sha256:84e3fa990a77395461ded72a6c73173438ce8449d5c1c4d97fbff1b1df692649", size = 27294, upload-time = "2026-04-02T21:03:56.406Z" },
 ]
 
 [[package]]

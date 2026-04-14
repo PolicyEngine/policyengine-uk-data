@@ -6,6 +6,7 @@ corporate) using machine learning models trained on the UK Wealth and Assets
 Survey (WAS) data.
 """
 
+import numpy as np
 import pandas as pd
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
@@ -160,6 +161,93 @@ def _wealth_model_outputs_are_current(model: QRF) -> bool:
     return list(trained_outputs) == IMPUTE_VARIABLES
 
 
+def _person_column(person: pd.DataFrame, name: str, default) -> pd.Series:
+    if name in person:
+        return person[name]
+    return pd.Series(default, index=person.index)
+
+
+def _allocate_student_loan_balance_to_people(
+    household_balances: pd.Series,
+    person: pd.DataFrame,
+) -> np.ndarray:
+    """
+    Allocate household-imputed student loan balances to plausible holders.
+
+    The WAS target is household-level, but `student_loan_balance` is a person-
+    level input in `policyengine-uk`. We therefore allocate each household's
+    imputed balance to the most plausible holder set in priority order:
+    current repayers, reported borrowers, tertiary-qualified adults, current
+    tertiary students, then working-age adults as a final fallback.
+    """
+    balances = np.zeros(len(person), dtype=float)
+    if len(person) == 0:
+        return balances
+
+    age = (
+        pd.to_numeric(_person_column(person, "age", 0), errors="coerce")
+        .fillna(0)
+        .to_numpy()
+    )
+    repayments = (
+        pd.to_numeric(
+            _person_column(person, "student_loan_repayments", 0), errors="coerce"
+        )
+        .fillna(0)
+        .to_numpy()
+    )
+    reported_loans = (
+        pd.to_numeric(_person_column(person, "student_loans", 0), errors="coerce")
+        .fillna(0)
+        .to_numpy()
+    )
+    current_education = (
+        _person_column(person, "current_education", "NOT_IN_EDUCATION")
+        .fillna("NOT_IN_EDUCATION")
+        .astype(str)
+        .to_numpy()
+    )
+    highest_education = (
+        _person_column(person, "highest_education", "UPPER_SECONDARY")
+        .fillna("UPPER_SECONDARY")
+        .astype(str)
+        .to_numpy()
+    )
+
+    group_indices = person.groupby("person_household_id").indices
+
+    for household_id, household_balance in household_balances.items():
+        if household_balance <= 0 or household_id not in group_indices:
+            continue
+
+        idx = np.asarray(group_indices[household_id], dtype=int)
+        repayer_mask = repayments[idx] > 0
+        borrower_mask = reported_loans[idx] > 0
+        tertiary_grad_mask = highest_education[idx] == "TERTIARY"
+        current_student_mask = current_education[idx] == "TERTIARY"
+        working_age_mask = (age[idx] >= 18) & (age[idx] <= 55)
+
+        for mask in (
+            repayer_mask,
+            borrower_mask,
+            tertiary_grad_mask,
+            current_student_mask,
+            working_age_mask,
+            np.ones(len(idx), dtype=bool),
+        ):
+            if mask.any():
+                chosen = idx[mask]
+                break
+
+        if repayer_mask.any() and np.sum(repayments[idx][repayer_mask]) > 0:
+            weights = repayments[idx][repayer_mask]
+            balances[idx[repayer_mask]] += household_balance * (weights / weights.sum())
+        else:
+            balances[chosen] += household_balance / len(chosen)
+
+    return balances
+
+
 def save_imputation_models():
     """
     Train and save wealth imputation model.
@@ -213,7 +301,8 @@ def impute_wealth(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         dataset: PolicyEngine UK dataset to augment with wealth data.
 
     Returns:
-        Dataset with imputed wealth variables added to household table.
+        Dataset with household wealth variables added to the household table and
+        `student_loan_balance` allocated to people.
     """
     dataset = dataset.copy()
 
@@ -229,6 +318,12 @@ def impute_wealth(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     output_df = model.predict(input_df)
 
     for column in output_df.columns:
+        if column == "student_loan_balance":
+            dataset.person[column] = _allocate_student_loan_balance_to_people(
+                household_balances=output_df[column].clip(lower=0),
+                person=dataset.person,
+            )
+            continue
         dataset.household[column] = output_df[column].values
 
     dataset.validate()
