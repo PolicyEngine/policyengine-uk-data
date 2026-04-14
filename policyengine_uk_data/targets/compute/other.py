@@ -126,3 +126,13 @@ def compute_student_loan_repayment(target, ctx) -> np.ndarray:
         mask &= plan == plan_value
 
     return ctx.household_from_person(repayments * mask)
+
+
+def compute_maintenance_loan(target, ctx) -> np.ndarray:
+    """Compute maintenance-loan recipient-count and spend targets."""
+    maintenance_loan = ctx.pe_person("maintenance_loan")
+    if target.name == "slc/maintenance_loan_recipients":
+        return ctx.household_from_person((maintenance_loan > 0).astype(float))
+    if target.name == "slc/maintenance_loan_spend":
+        return ctx.household_from_person(maintenance_loan)
+    return None

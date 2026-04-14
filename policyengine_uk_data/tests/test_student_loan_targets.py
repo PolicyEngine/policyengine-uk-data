@@ -18,6 +18,16 @@ def test_slc_targets_registered():
     assert "slc/student_loan_repayment/england" in targets
     assert "slc/student_loan_repayment/scotland" in targets
     assert "slc/student_loan_repayment/england/plan_2" in targets
+    assert "slc/maintenance_loan_recipients" in targets
+    assert "slc/maintenance_loan_spend" in targets
+
+
+def test_policyengine_uk_release_exposes_maintenance_loan_variable():
+    """The lockfile should point at a policyengine-uk release with maintenance loans."""
+    from policyengine_uk import CountryTaxBenefitSystem
+
+    system = CountryTaxBenefitSystem()
+    assert "maintenance_loan" in system.variables
 
 
 def test_slc_snapshot_values_match_higher_education_total_rows():
@@ -97,6 +107,28 @@ def test_slc_england_plan_repayments_sum_to_england_total():
     assert england_plans == england_total
 
 
+def test_slc_maintenance_loan_targets_match_official_2025_values():
+    """Maintenance-loan targets should match Table 3A for 2024/25."""
+    from policyengine_uk_data.targets.registry import get_all_targets
+
+    targets = {t.name: t for t in get_all_targets()}
+
+    assert targets["slc/maintenance_loan_recipients"].values[2025] == 1_159_761
+    assert targets["slc/maintenance_loan_spend"].values[2025] == 8_591_659_718
+
+
+def test_slc_maintenance_loan_snapshot_matches_known_series_points():
+    """Snapshot should preserve the published maintenance-loan time series."""
+    from policyengine_uk_data.targets.sources import slc
+
+    data = slc.get_maintenance_loan_snapshot_data()
+
+    assert data["recipients"][2014] == 972_830
+    assert data["recipients"][2024] == 1_154_427
+    assert data["amount_paid"][2017] == 4_870_158_274
+    assert data["amount_paid"][2025] == 8_591_659_718
+
+
 def test_slc_testing_mode_uses_snapshot_without_network(monkeypatch):
     """Dataset-build CI should not depend on a live SLC endpoint."""
     from policyengine_uk_data.targets.sources import slc
@@ -111,6 +143,24 @@ def test_slc_testing_mode_uses_snapshot_without_network(monkeypatch):
 
     assert slc._fetch_slc_data() == slc.get_snapshot_data()
     slc._fetch_slc_data.cache_clear()
+
+
+def test_slc_maintenance_loan_testing_mode_uses_snapshot_without_network(monkeypatch):
+    """Maintenance-loan targets should also avoid network in TESTING mode."""
+    from policyengine_uk_data.targets.sources import slc
+
+    slc._fetch_maintenance_loan_data.cache_clear()
+    monkeypatch.setenv("TESTING", "1")
+
+    def fail_excel(*args, **kwargs):
+        raise AssertionError("network should not be used in TESTING mode")
+
+    monkeypatch.setattr(slc.pd, "read_excel", fail_excel)
+
+    assert (
+        slc._fetch_maintenance_loan_data() == slc.get_maintenance_loan_snapshot_data()
+    )
+    slc._fetch_maintenance_loan_data.cache_clear()
 
 
 def test_slc_parser_uses_higher_education_total_rows(monkeypatch):
@@ -218,6 +268,43 @@ def test_slc_parser_preserves_zero_value_years(monkeypatch):
     slc._fetch_slc_data.cache_clear()
 
 
+def test_slc_maintenance_loan_parser_uses_grand_total_rows(monkeypatch):
+    """Maintenance-loan parser should read the grand-total rows from Table 3A."""
+    from policyengine_uk_data.targets.sources import slc
+
+    table = np.full((24, 16), np.nan, dtype=object)
+    table[6, 4] = "Number of students paid (000s) [27]"
+    table[7, 4] = "2013/14"
+    table[7, 5] = "2024/25"
+    table[12, 1] = "Grand total"
+    table[12, 4] = 972.830
+    table[12, 5] = 1159.761
+    table[15, 4] = "Amount paid (£m)"
+    table[16, 4] = "2013/14"
+    table[16, 5] = "2024/25"
+    table[21, 1] = "Grand total"
+    table[21, 4] = 3783.626551
+    table[21, 5] = 8591.659718
+
+    df = np.array(table, dtype=object)
+
+    slc._fetch_maintenance_loan_data.cache_clear()
+    monkeypatch.delenv("TESTING", raising=False)
+    monkeypatch.setattr(
+        slc.pd,
+        "read_excel",
+        lambda *args, **kwargs: __import__("pandas").DataFrame(df),
+    )
+
+    data = slc._fetch_maintenance_loan_data()
+    assert data["recipients"][2014] == 972_830
+    assert data["recipients"][2025] == 1_159_761
+    assert data["amount_paid"][2014] == 3_783_626_551
+    assert data["amount_paid"][2025] == 8_591_659_718
+
+    slc._fetch_maintenance_loan_data.cache_clear()
+
+
 def test_student_loan_target_compute_distinguishes_liable_from_repaying():
     """Above-threshold counts should require repayments, while liable counts should not."""
     from policyengine_uk_data.targets.compute.other import (
@@ -260,6 +347,50 @@ def test_student_loan_target_compute_distinguishes_liable_from_repaying():
 
     assert above_threshold.tolist() == [1.0, 0.0, 0.0, 0.0]
     assert liable.tolist() == [1.0, 1.0, 0.0, 0.0]
+
+
+def test_maintenance_loan_target_compute_handles_count_and_spend():
+    """Maintenance-loan targets should bind through the shared compute path."""
+    from policyengine_uk_data.targets.build_loss_matrix import _compute_column
+    from policyengine_uk_data.targets.schema import GeographicLevel, Target, Unit
+
+    class DummyCtx:
+        @staticmethod
+        def pe_person(variable):
+            assert variable == "maintenance_loan"
+            return np.array([0.0, 5_000.0, 7_500.0])
+
+        @staticmethod
+        def household_from_person(values):
+            return values
+
+    recipients = _compute_column(
+        Target(
+            name="slc/maintenance_loan_recipients",
+            variable="maintenance_loan",
+            source="slc",
+            unit=Unit.COUNT,
+            geographic_level=GeographicLevel.NATIONAL,
+            values={2025: 1_159_761},
+        ),
+        DummyCtx(),
+        2025,
+    )
+    spend = _compute_column(
+        Target(
+            name="slc/maintenance_loan_spend",
+            variable="maintenance_loan",
+            source="slc",
+            unit=Unit.GBP,
+            geographic_level=GeographicLevel.NATIONAL,
+            values={2025: 8_591_659_718},
+        ),
+        DummyCtx(),
+        2025,
+    )
+
+    assert recipients.tolist() == [0.0, 1.0, 1.0]
+    assert spend.tolist() == [0.0, 5_000.0, 7_500.0]
 
 
 def test_student_loan_repayment_target_compute_filters_country_and_plan():

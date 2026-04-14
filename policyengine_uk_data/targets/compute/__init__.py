@@ -34,6 +34,7 @@ from policyengine_uk_data.targets.compute.income import (
     compute_ss_ni_relief,
 )
 from policyengine_uk_data.targets.compute.other import (
+    compute_maintenance_loan,
     compute_housing,
     compute_land_value,
     compute_regional_land_value,
@@ -53,6 +54,7 @@ __all__ = [
     "compute_household_type",
     "compute_housing",
     "compute_land_value",
+    "compute_maintenance_loan",
     "compute_regional_land_value",
     "compute_income_band",
     "compute_obr_council_tax",
