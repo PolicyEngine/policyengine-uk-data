@@ -349,6 +349,50 @@ def test_student_loan_target_compute_distinguishes_liable_from_repaying():
     assert liable.tolist() == [1.0, 1.0, 0.0, 0.0]
 
 
+def test_maintenance_loan_target_compute_handles_count_and_spend():
+    """Maintenance-loan targets should bind through the shared compute path."""
+    from policyengine_uk_data.targets.build_loss_matrix import _compute_column
+    from policyengine_uk_data.targets.schema import GeographicLevel, Target, Unit
+
+    class DummyCtx:
+        @staticmethod
+        def pe_person(variable):
+            assert variable == "maintenance_loan"
+            return np.array([0.0, 5_000.0, 7_500.0])
+
+        @staticmethod
+        def household_from_person(values):
+            return values
+
+    recipients = _compute_column(
+        Target(
+            name="slc/maintenance_loan_recipients",
+            variable="maintenance_loan",
+            source="slc",
+            unit=Unit.COUNT,
+            geographic_level=GeographicLevel.NATIONAL,
+            values={2025: 1_159_761},
+        ),
+        DummyCtx(),
+        2025,
+    )
+    spend = _compute_column(
+        Target(
+            name="slc/maintenance_loan_spend",
+            variable="maintenance_loan",
+            source="slc",
+            unit=Unit.GBP,
+            geographic_level=GeographicLevel.NATIONAL,
+            values={2025: 8_591_659_718},
+        ),
+        DummyCtx(),
+        2025,
+    )
+
+    assert recipients.tolist() == [0.0, 1.0, 1.0]
+    assert spend.tolist() == [0.0, 5_000.0, 7_500.0]
+
+
 def test_student_loan_repayment_target_compute_filters_country_and_plan():
     """Repayment amount targets should filter on modeled plan and country."""
     from policyengine_uk_data.targets.compute.other import (
