@@ -1,3 +1,10 @@
+## [1.49.0] - 2026-04-14
+
+### Added
+
+- Add Student Loans Company maintenance-loan recipient-count and spend targets for England full-time undergraduates.
+
+
 ## [1.48.0] - 2026-04-13
 
 ### Added
