@@ -35,6 +35,19 @@ ESA_HEALTH_EMPLOYMENT_STATUSES = (
     EmploymentStatus.LONG_TERM_DISABLED.name,
     EmploymentStatus.SHORT_TERM_DISABLED.name,
 )
+REPORTED_EDUCATION_GRANT_VARIABLES = (
+    "childcare_grant",
+    "parents_learning_allowance",
+    "adult_dependants_grant",
+)
+DISABLED_STUDENTS_ALLOWANCE_EXPENSE_INPUT = (
+    "disabled_students_allowance_eligible_expenses"
+)
+DISABLED_STUDENTS_ALLOWANCE_ELIGIBILITY_VARIABLES = (
+    "maintenance_loan_in_england_system",
+    "disabled_students_allowance_course_eligible",
+    "disabled_students_allowance_has_qualifying_condition",
+)
 
 
 @lru_cache(maxsize=None)
@@ -212,6 +225,97 @@ def attach_legacy_benefit_proxies_from_frs_person(
         year,
         employment_status_reported=employment_status_reported,
     )
+
+
+def _as_non_negative_array(values) -> np.ndarray:
+    values = np.asarray(values, dtype=float)
+    return np.maximum(np.nan_to_num(values, nan=0.0), 0.0)
+
+
+def allocate_reported_education_grants(
+    reported_grants, grant_capacities: dict[str, np.ndarray]
+) -> dict[str, np.ndarray]:
+    """Split aggregate FRS education grants across modelled grant capacity.
+
+    The FRS reports several direct education grants in one aggregate field. When
+    several modelled grants are plausible for the same person, allocate the
+    reported amount proportionally to each grant's modelled capacity and keep any
+    excess in the generic ``education_grants`` residual.
+    """
+
+    reported_grants = _as_non_negative_array(reported_grants)
+    capacities = {
+        variable: _as_non_negative_array(capacity)
+        for variable, capacity in grant_capacities.items()
+    }
+    total_capacity = np.zeros_like(reported_grants, dtype=float)
+    for variable, capacity in capacities.items():
+        if capacity.shape != reported_grants.shape:
+            raise ValueError(
+                f"{variable} capacity has shape {capacity.shape}, "
+                f"expected {reported_grants.shape}."
+            )
+        total_capacity += capacity
+
+    allocation_fraction = np.divide(
+        reported_grants,
+        total_capacity,
+        out=np.zeros_like(reported_grants, dtype=float),
+        where=total_capacity > 0,
+    )
+    allocation_fraction = np.minimum(allocation_fraction, 1)
+
+    allocations = {}
+    allocated_total = np.zeros_like(reported_grants, dtype=float)
+    for variable, capacity in capacities.items():
+        allocation = capacity * allocation_fraction
+        allocations[variable] = allocation
+        allocated_total += allocation
+
+    allocations["education_grants"] = np.maximum(reported_grants - allocated_total, 0)
+    return allocations
+
+
+def calculate_disabled_students_allowance_reported_grant_capacity(
+    sim, year: int, maximum: float
+) -> np.ndarray:
+    eligible = None
+    for variable in DISABLED_STUDENTS_ALLOWANCE_ELIGIBILITY_VARIABLES:
+        variable_eligible = np.asarray(sim.calculate(variable, year), dtype=bool)
+        eligible = (
+            variable_eligible if eligible is None else eligible & variable_eligible
+        )
+    equivalent_support = np.asarray(
+        sim.calculate("disabled_students_allowance_receives_equivalent_support", year),
+        dtype=bool,
+    )
+    return np.where(eligible & ~equivalent_support, float(maximum), 0.0)
+
+
+def split_reported_education_grants(
+    pe_person: pd.DataFrame, sim, year: int, dsa_maximum: float
+) -> pd.DataFrame:
+    """Move specific modelled grants out of the generic education-grant residual."""
+
+    grant_capacities = {
+        variable: sim.calculate(variable, year)
+        for variable in REPORTED_EDUCATION_GRANT_VARIABLES
+    }
+    grant_capacities[DISABLED_STUDENTS_ALLOWANCE_EXPENSE_INPUT] = (
+        calculate_disabled_students_allowance_reported_grant_capacity(
+            sim, year, dsa_maximum
+        )
+    )
+    allocations = allocate_reported_education_grants(
+        pe_person["education_grants"], grant_capacities
+    )
+
+    pe_person["education_grants"] = allocations["education_grants"]
+    pe_person[DISABLED_STUDENTS_ALLOWANCE_EXPENSE_INPUT] = allocations[
+        DISABLED_STUDENTS_ALLOWANCE_EXPENSE_INPUT
+    ]
+
+    return pe_person
 
 
 def create_frs(
@@ -1005,6 +1109,21 @@ def create_frs(
     pe_person = attach_legacy_benefit_proxies_from_frs_person(
         pe_person, person, sim, year
     )
+
+    if (pe_person["education_grants"] > 0).any():
+        student_support_dataset = UKSingleYearDataset(
+            person=pe_person,
+            benunit=pe_benunit,
+            household=pe_household,
+            fiscal_year=year,
+        )
+        student_support_sim = Microsimulation(dataset=student_support_dataset)
+        dsa_maximum = student_support_sim.tax_benefit_system.parameters(
+            year
+        ).gov.dfe.disabled_students_allowance.maximum
+        pe_person = split_reported_education_grants(
+            pe_person, student_support_sim, year, dsa_maximum
+        )
 
     # Generate stochastic take-up decisions
     # All randomness is generated here in the data package using take-up rates

@@ -1351,7 +1351,7 @@ wheels = [
 
 [[package]]
 name = "policyengine-uk"
-version = "2.85.0"
+version = "2.86.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "microdf-python" },
@@ -1359,14 +1359,14 @@ dependencies = [
     { name = "pydantic" },
     { name = "tables" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/23/3d/ad2c4f0f702c9027f9b0b90db0226c3c03cc2f30a2a360e6be0de3babd46/policyengine_uk-2.85.0.tar.gz", hash = "sha256:8619045b2005dd80ffbe5f1ab29acd4151cb149de7b307ae4167df8d10cc7338", size = 1155602, upload-time = "2026-04-15T03:21:30.941Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f0/27/64dbdf03de42d8ae2a576024ba566a800e0e320350ade118dbd7275f2bca/policyengine_uk-2.86.0.tar.gz", hash = "sha256:955a99dbc962607173eed3442ef459c13b24c34bf0a4ae88a42ded41b1289cca", size = 1157557, upload-time = "2026-04-15T03:54:32.39Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/68/7f/45b29a916a67a77d045407a1e9d0c73bde2b6afe005bbe286d2c107afa9f/policyengine_uk-2.85.0-py3-none-any.whl", hash = "sha256:9c76893051529d45c2cbae49a1f8c46e81aae8464bb00b56a06b2ef56fc2c3b4", size = 1836001, upload-time = "2026-04-15T03:21:29.241Z" },
+    { url = "https://files.pythonhosted.org/packages/c8/5c/91ba805a80c7932013d54adcd9e444d3d136cb2b650c9320077d6efbadc8/policyengine_uk-2.86.0-py3-none-any.whl", hash = "sha256:0ecf117eea68eadaab24dde712e7025a71f0a9a6e5a7b06a347444d51b1fa1c8", size = 1842731, upload-time = "2026-04-15T03:54:30.3Z" },
 ]
 
 [[package]]
 name = "policyengine-uk-data"
-version = "1.49.0"
+version = "1.50.0"
 source = { editable = "." }
 dependencies = [
     { name = "google-auth" },
@@ -1421,7 +1421,7 @@ requires-dist = [
     { name = "pandas" },
     { name = "policyengine" },
     { name = "policyengine-core", specifier = ">=3.19.4" },
-    { name = "policyengine-uk", specifier = ">=2.85.0" },
+    { name = "policyengine-uk", specifier = ">=2.86.0" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pyyaml" },
