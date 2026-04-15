@@ -1,6 +1,7 @@
 """Miscellaneous compute functions (vehicles, housing, savings, SCP, student loans)."""
 
 import numpy as np
+from policyengine_uk_data.targets.schema import Unit
 
 _STUDENT_LOAN_COUNTRIES = {
     "england": "ENGLAND",
@@ -128,11 +129,11 @@ def compute_student_loan_repayment(target, ctx) -> np.ndarray:
     return ctx.household_from_person(repayments * mask)
 
 
-def compute_maintenance_loan(target, ctx) -> np.ndarray:
-    """Compute maintenance-loan recipient-count and spend targets."""
-    maintenance_loan = ctx.pe_person("maintenance_loan")
-    if target.name == "slc/maintenance_loan_recipients":
-        return ctx.household_from_person((maintenance_loan > 0).astype(float))
-    if target.name == "slc/maintenance_loan_spend":
-        return ctx.household_from_person(maintenance_loan)
+def compute_person_support(target, ctx) -> np.ndarray:
+    """Compute recipient-count and spend targets for person-level support variables."""
+    values = ctx.pe_person(target.variable)
+    if target.is_count or target.unit == Unit.COUNT:
+        return ctx.household_from_person((values > 0).astype(float))
+    if target.unit == Unit.GBP:
+        return ctx.household_from_person(values)
     return None

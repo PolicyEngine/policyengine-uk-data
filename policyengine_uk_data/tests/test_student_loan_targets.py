@@ -20,14 +20,20 @@ def test_slc_targets_registered():
     assert "slc/student_loan_repayment/england/plan_2" in targets
     assert "slc/maintenance_loan_recipients" in targets
     assert "slc/maintenance_loan_spend" in targets
+    assert "slc/parents_learning_allowance_recipients" in targets
+    assert "slc/parents_learning_allowance_spend" in targets
+    assert "slc/adult_dependants_grant_recipients" in targets
+    assert "slc/adult_dependants_grant_spend" in targets
 
 
 def test_policyengine_uk_release_exposes_maintenance_loan_variable():
-    """The lockfile should point at a policyengine-uk release with maintenance loans."""
+    """The lockfile should point at a release with the student-support variables."""
     from policyengine_uk import CountryTaxBenefitSystem
 
     system = CountryTaxBenefitSystem()
     assert "maintenance_loan" in system.variables
+    assert "parents_learning_allowance" in system.variables
+    assert "adult_dependants_grant" in system.variables
 
 
 def test_slc_snapshot_values_match_higher_education_total_rows():
@@ -117,6 +123,18 @@ def test_slc_maintenance_loan_targets_match_official_2025_values():
     assert targets["slc/maintenance_loan_spend"].values[2025] == 8_591_659_718
 
 
+def test_slc_targeted_support_targets_match_official_2025_values():
+    """PLA and ADG targets should match Table 4C(i) for 2024/25."""
+    from policyengine_uk_data.targets.registry import get_all_targets
+
+    targets = {t.name: t for t in get_all_targets()}
+
+    assert targets["slc/parents_learning_allowance_recipients"].values[2025] == 99_645
+    assert targets["slc/parents_learning_allowance_spend"].values[2025] == 181_421_659
+    assert targets["slc/adult_dependants_grant_recipients"].values[2025] == 18_611
+    assert targets["slc/adult_dependants_grant_spend"].values[2025] == 55_364_917
+
+
 def test_slc_maintenance_loan_snapshot_matches_known_series_points():
     """Snapshot should preserve the published maintenance-loan time series."""
     from policyengine_uk_data.targets.sources import slc
@@ -127,6 +145,18 @@ def test_slc_maintenance_loan_snapshot_matches_known_series_points():
     assert data["recipients"][2024] == 1_154_427
     assert data["amount_paid"][2017] == 4_870_158_274
     assert data["amount_paid"][2025] == 8_591_659_718
+
+
+def test_slc_targeted_support_snapshot_matches_known_series_points():
+    """Snapshot should preserve the published PLA and ADG series."""
+    from policyengine_uk_data.targets.sources import slc
+
+    data = slc.get_targeted_support_snapshot_data()
+
+    assert data["adult_dependants_grant"]["recipients"][2014] == 13_836
+    assert data["adult_dependants_grant"]["amount_paid"][2025] == 55_364_917
+    assert data["parents_learning_allowance"]["recipients"][2021] == 76_740
+    assert data["parents_learning_allowance"]["amount_paid"][2025] == 181_421_659
 
 
 def test_slc_testing_mode_uses_snapshot_without_network(monkeypatch):
@@ -161,6 +191,24 @@ def test_slc_maintenance_loan_testing_mode_uses_snapshot_without_network(monkeyp
         slc._fetch_maintenance_loan_data() == slc.get_maintenance_loan_snapshot_data()
     )
     slc._fetch_maintenance_loan_data.cache_clear()
+
+
+def test_slc_targeted_support_testing_mode_uses_snapshot_without_network(monkeypatch):
+    """Targeted-support SLC data should also avoid network in TESTING mode."""
+    from policyengine_uk_data.targets.sources import slc
+
+    slc._fetch_targeted_support_data.cache_clear()
+    monkeypatch.setenv("TESTING", "1")
+
+    def fail_excel(*args, **kwargs):
+        raise AssertionError("network should not be used in TESTING mode")
+
+    monkeypatch.setattr(slc.pd, "read_excel", fail_excel)
+
+    assert (
+        slc._fetch_targeted_support_data() == slc.get_targeted_support_snapshot_data()
+    )
+    slc._fetch_targeted_support_data.cache_clear()
 
 
 def test_slc_parser_uses_higher_education_total_rows(monkeypatch):
@@ -305,6 +353,45 @@ def test_slc_maintenance_loan_parser_uses_grand_total_rows(monkeypatch):
     slc._fetch_maintenance_loan_data.cache_clear()
 
 
+def test_slc_targeted_support_parser_uses_table_4c_rows(monkeypatch):
+    """Targeted-support parser should read the published Table 4C rows."""
+    from policyengine_uk_data.targets.sources import slc
+
+    table = np.full((24, 15), np.nan, dtype=object)
+    table[7, 3] = "2013/14"
+    table[7, 14] = "2024/25"
+    table[9, 1] = "Adult Dependents Grant"
+    table[9, 3] = 13.836
+    table[9, 14] = 18.611
+    table[10, 1] = "Parents Learning Allowance"
+    table[10, 3] = 49.219
+    table[10, 14] = 99.645
+    table[17, 3] = "2013/14"
+    table[17, 14] = "2024/25"
+    table[19, 1] = "Adult Dependents Grant"
+    table[19, 3] = 33.05009068
+    table[19, 14] = 55.36491681
+    table[20, 1] = "Parents Learning Allowance"
+    table[20, 3] = 70.52488619
+    table[20, 14] = 181.42165932
+
+    slc._fetch_targeted_support_data.cache_clear()
+    monkeypatch.delenv("TESTING", raising=False)
+    monkeypatch.setattr(
+        slc.pd,
+        "read_excel",
+        lambda *args, **kwargs: __import__("pandas").DataFrame(table),
+    )
+
+    data = slc._fetch_targeted_support_data()
+    assert data["adult_dependants_grant"]["recipients"][2014] == 13_836
+    assert data["adult_dependants_grant"]["amount_paid"][2025] == 55_364_917
+    assert data["parents_learning_allowance"]["recipients"][2025] == 99_645
+    assert data["parents_learning_allowance"]["amount_paid"][2014] == 70_524_886
+
+    slc._fetch_targeted_support_data.cache_clear()
+
+
 def test_student_loan_target_compute_distinguishes_liable_from_repaying():
     """Above-threshold counts should require repayments, while liable counts should not."""
     from policyengine_uk_data.targets.compute.other import (
@@ -349,16 +436,19 @@ def test_student_loan_target_compute_distinguishes_liable_from_repaying():
     assert liable.tolist() == [1.0, 1.0, 0.0, 0.0]
 
 
-def test_maintenance_loan_target_compute_handles_count_and_spend():
-    """Maintenance-loan targets should bind through the shared compute path."""
+def test_person_support_target_compute_handles_count_and_spend():
+    """Person-level support targets should bind through the shared compute path."""
     from policyengine_uk_data.targets.build_loss_matrix import _compute_column
     from policyengine_uk_data.targets.schema import GeographicLevel, Target, Unit
 
     class DummyCtx:
         @staticmethod
         def pe_person(variable):
-            assert variable == "maintenance_loan"
-            return np.array([0.0, 5_000.0, 7_500.0])
+            values = {
+                "maintenance_loan": np.array([0.0, 5_000.0, 7_500.0]),
+                "parents_learning_allowance": np.array([0.0, 2_024.0, 2_024.0]),
+            }
+            return values[variable]
 
         @staticmethod
         def household_from_person(values):
@@ -388,9 +478,36 @@ def test_maintenance_loan_target_compute_handles_count_and_spend():
         DummyCtx(),
         2025,
     )
+    pla_recipients = _compute_column(
+        Target(
+            name="slc/parents_learning_allowance_recipients",
+            variable="parents_learning_allowance",
+            source="slc",
+            unit=Unit.COUNT,
+            geographic_level=GeographicLevel.NATIONAL,
+            values={2025: 99_645},
+            is_count=True,
+        ),
+        DummyCtx(),
+        2025,
+    )
+    pla_spend = _compute_column(
+        Target(
+            name="slc/parents_learning_allowance_spend",
+            variable="parents_learning_allowance",
+            source="slc",
+            unit=Unit.GBP,
+            geographic_level=GeographicLevel.NATIONAL,
+            values={2025: 181_421_659},
+        ),
+        DummyCtx(),
+        2025,
+    )
 
     assert recipients.tolist() == [0.0, 1.0, 1.0]
     assert spend.tolist() == [0.0, 5_000.0, 7_500.0]
+    assert pla_recipients.tolist() == [0.0, 1.0, 1.0]
+    assert pla_spend.tolist() == [0.0, 2_024.0, 2_024.0]
 
 
 def test_student_loan_repayment_target_compute_filters_country_and_plan():

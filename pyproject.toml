@@ -21,7 +21,7 @@ dependencies = [
     "policyengine",
     "google-cloud-storage",
     "google-auth",
-    "policyengine-uk>=2.81.0",
+    "policyengine-uk>=2.85.0",
     "microcalibrate>=0.18.0",
     "microimpute>=1.0.1",
     "ruff>=0.9.0",
