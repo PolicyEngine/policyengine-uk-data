@@ -34,9 +34,9 @@ from policyengine_uk_data.targets.compute.income import (
     compute_ss_ni_relief,
 )
 from policyengine_uk_data.targets.compute.other import (
-    compute_maintenance_loan,
     compute_housing,
     compute_land_value,
+    compute_person_support,
     compute_regional_land_value,
     compute_savings_interest,
     compute_scottish_child_payment,
@@ -54,10 +54,10 @@ __all__ = [
     "compute_household_type",
     "compute_housing",
     "compute_land_value",
-    "compute_maintenance_loan",
     "compute_regional_land_value",
     "compute_income_band",
     "compute_obr_council_tax",
+    "compute_person_support",
     "compute_pip_claimants",
     "compute_regional_age",
     "compute_savings_interest",
