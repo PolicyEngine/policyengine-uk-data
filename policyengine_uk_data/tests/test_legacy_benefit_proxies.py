@@ -232,6 +232,17 @@ class FakeMicrosimulation:
                             "FakeGov",
                             (),
                             {
+                                "dfe": type(
+                                    "FakeDfe",
+                                    (),
+                                    {
+                                        "disabled_students_allowance": type(
+                                            "FakeDsa",
+                                            (),
+                                            {"maximum": 27_783},
+                                        )()
+                                    },
+                                )(),
                                 "dwp": type(
                                     "FakeDwp",
                                     (),
@@ -259,7 +270,7 @@ class FakeMicrosimulation:
                                             },
                                         )(),
                                     },
-                                )()
+                                )(),
                             },
                         )()
                     },
@@ -274,6 +285,16 @@ class FakeMicrosimulation:
             return np.array([100])
         if variable == "state_pension_age":
             return pd.Series([66])
+        if variable in (
+            "childcare_grant",
+            "parents_learning_allowance",
+            "adult_dependants_grant",
+            "disabled_students_allowance_receives_equivalent_support",
+            "maintenance_loan_in_england_system",
+            "disabled_students_allowance_course_eligible",
+            "disabled_students_allowance_has_qualifying_condition",
+        ):
+            return np.zeros(len(self.dataset.person))
         raise KeyError(variable)
 
 
@@ -365,7 +386,7 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
                 "pareamt": 0,
                 "allpay3": 0,
                 "allpay4": 0,
-                "grtdir1": 0,
+                "grtdir1": 100,
                 "grtdir2": 0,
             }
         ]
@@ -445,3 +466,5 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
         "esa_health_condition_proxy",
         "esa_support_group_proxy",
     }.issubset(dataset.person.columns)
+    assert dataset.person["education_grants"].iloc[0] == 100
+    assert dataset.person["disabled_students_allowance_eligible_expenses"].iloc[0] == 0
