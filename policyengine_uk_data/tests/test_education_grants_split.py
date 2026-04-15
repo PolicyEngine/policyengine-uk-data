@@ -59,3 +59,22 @@ def test_split_reported_education_grants_updates_residual_and_dsa_expenses():
         result["disabled_students_allowance_eligible_expenses"], [0, 0, 100]
     )
     np.testing.assert_allclose(result["education_grants"], [0, 200, 0])
+
+
+def test_split_reported_education_grants_does_not_seed_dsa_before_model_year():
+    pe_person = pd.DataFrame({"education_grants": [100]})
+    sim = FakeStudentSupportSim(
+        {
+            "childcare_grant": np.array([0]),
+            "parents_learning_allowance": np.array([0]),
+            "adult_dependants_grant": np.array([0]),
+            "maintenance_loan_in_england_system": np.array([True]),
+        }
+    )
+
+    result = split_reported_education_grants(pe_person, sim, 2024, dsa_maximum=500)
+
+    np.testing.assert_allclose(
+        result["disabled_students_allowance_eligible_expenses"], [0]
+    )
+    np.testing.assert_allclose(result["education_grants"], [100])

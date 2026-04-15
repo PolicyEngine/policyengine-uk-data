@@ -35,7 +35,7 @@ ESA_HEALTH_EMPLOYMENT_STATUSES = (
     EmploymentStatus.LONG_TERM_DISABLED.name,
     EmploymentStatus.SHORT_TERM_DISABLED.name,
 )
-REPORTED_EDUCATION_GRANT_VARIABLES = (
+FORMULA_MODELED_EDUCATION_GRANT_VARIABLES = (
     "childcare_grant",
     "parents_learning_allowance",
     "adult_dependants_grant",
@@ -43,6 +43,7 @@ REPORTED_EDUCATION_GRANT_VARIABLES = (
 DISABLED_STUDENTS_ALLOWANCE_EXPENSE_INPUT = (
     "disabled_students_allowance_eligible_expenses"
 )
+DISABLED_STUDENTS_ALLOWANCE_FIRST_MODELED_YEAR = 2025
 DISABLED_STUDENTS_ALLOWANCE_ELIGIBILITY_VARIABLES = (
     "maintenance_loan_in_england_system",
     "disabled_students_allowance_course_eligible",
@@ -279,6 +280,16 @@ def allocate_reported_education_grants(
 def calculate_disabled_students_allowance_reported_grant_capacity(
     sim, year: int, maximum: float
 ) -> np.ndarray:
+    if year < DISABLED_STUDENTS_ALLOWANCE_FIRST_MODELED_YEAR:
+        return np.zeros_like(
+            np.asarray(
+                sim.calculate(
+                    DISABLED_STUDENTS_ALLOWANCE_ELIGIBILITY_VARIABLES[0], year
+                )
+            ),
+            dtype=float,
+        )
+
     eligible = None
     for variable in DISABLED_STUDENTS_ALLOWANCE_ELIGIBILITY_VARIABLES:
         variable_eligible = np.asarray(sim.calculate(variable, year), dtype=bool)
@@ -295,11 +306,18 @@ def calculate_disabled_students_allowance_reported_grant_capacity(
 def split_reported_education_grants(
     pe_person: pd.DataFrame, sim, year: int, dsa_maximum: float
 ) -> pd.DataFrame:
-    """Move specific modelled grants out of the generic education-grant residual."""
+    """Move specific modelled grants out of the generic education-grant residual.
+
+    PLA, ADG, and Childcare Grant remain formula-driven because they are
+    calibration targets. Their modelled capacity is only used to avoid also
+    counting the same reported FRS grant amount in the generic residual.
+    DSA lacks a modelled amount signal, so its allocation seeds eligible
+    expenses directly where the DSA parameter is available.
+    """
 
     grant_capacities = {
         variable: sim.calculate(variable, year)
-        for variable in REPORTED_EDUCATION_GRANT_VARIABLES
+        for variable in FORMULA_MODELED_EDUCATION_GRANT_VARIABLES
     }
     grant_capacities[DISABLED_STUDENTS_ALLOWANCE_EXPENSE_INPUT] = (
         calculate_disabled_students_allowance_reported_grant_capacity(
