@@ -465,6 +465,8 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
         "legacy_jobseeker_proxy",
         "esa_health_condition_proxy",
         "esa_support_group_proxy",
+        "is_parent",
     }.issubset(dataset.person.columns)
+    assert not dataset.person["is_parent"].iloc[0]
     assert dataset.person["education_grants"].iloc[0] == 100
     assert dataset.person["disabled_students_allowance_eligible_expenses"].iloc[0] == 0
