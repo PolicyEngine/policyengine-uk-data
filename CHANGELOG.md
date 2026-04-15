@@ -1,3 +1,10 @@
+## [1.50.0] - 2026-04-15
+
+### Added
+
+- Add SLC calibration targets for Parents' Learning Allowance and Adult Dependants' Grant.
+
+
 ## [1.49.0] - 2026-04-14
 
 ### Added
