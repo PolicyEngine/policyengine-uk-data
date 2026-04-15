@@ -228,6 +228,36 @@ def attach_legacy_benefit_proxies_from_frs_person(
     )
 
 
+def derive_is_parent_from_frs_microdata(
+    person_ids,
+    person_benunit_ids,
+    adult_person_ids,
+    benunit_ids,
+    dependent_children,
+) -> np.ndarray:
+    """Identify FRS adults in benefit units with dependent children.
+
+    FRS benefit units contain either one adult or a couple plus any dependent
+    children. Using the raw adult table and benefit-unit dependent-child count
+    avoids ranking adults across the whole household when multiple benefit
+    units share a household.
+    """
+
+    dependent_children_by_benunit = pd.Series(
+        np.asarray(dependent_children, dtype=float),
+        index=np.asarray(benunit_ids),
+    )
+    has_dependent_children = (
+        pd.Series(np.asarray(person_benunit_ids))
+        .map(dependent_children_by_benunit)
+        .fillna(0)
+        .to_numpy()
+        > 0
+    )
+    is_adult_record = np.isin(np.asarray(person_ids), np.asarray(adult_person_ids))
+    return is_adult_record & has_dependent_children
+
+
 def _as_non_negative_array(values) -> np.ndarray:
     values = np.asarray(values, dtype=float)
     return np.maximum(np.nan_to_num(values, nan=0.0), 0.0)
@@ -443,6 +473,23 @@ def create_frs(
     pe_person["hours_worked"] = np.maximum(person.tothours, 0) * 52
     pe_person["is_household_head"] = person.hrpid == 1
     pe_person["is_benunit_head"] = person.uperson == 1
+    dependent_children = (
+        benunit.depchldb
+        if "depchldb" in benunit
+        else frs["child"]
+        .groupby("benunit_id")
+        .size()
+        .reindex(benunit.benunit_id)
+        .fillna(0)
+        .to_numpy()
+    )
+    pe_person["is_parent"] = derive_is_parent_from_frs_microdata(
+        person_ids=pe_person.person_id,
+        person_benunit_ids=pe_person.person_benunit_id,
+        adult_person_ids=frs["adult"].person_id,
+        benunit_ids=pe_benunit.benunit_id,
+        dependent_children=dependent_children,
+    )
     MARITAL = [
         "MARRIED",
         "SINGLE",
