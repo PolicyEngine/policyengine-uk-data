@@ -205,7 +205,9 @@ def test_slc_targeted_support_testing_mode_uses_snapshot_without_network(monkeyp
 
     monkeypatch.setattr(slc.pd, "read_excel", fail_excel)
 
-    assert slc._fetch_targeted_support_data() == slc.get_targeted_support_snapshot_data()
+    assert (
+        slc._fetch_targeted_support_data() == slc.get_targeted_support_snapshot_data()
+    )
     slc._fetch_targeted_support_data.cache_clear()
 
 

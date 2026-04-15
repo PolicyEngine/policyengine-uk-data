@@ -200,9 +200,7 @@ def get_maintenance_loan_snapshot_data() -> dict:
 def get_targeted_support_snapshot_data() -> dict:
     """Return the checked-in targeted-support snapshot."""
     return {
-        product: {
-            key: values.copy() for key, values in product_data.items()
-        }
+        product: {key: values.copy() for key, values in product_data.items()}
         for product, product_data in _TARGETED_SUPPORT_TESTING_DATA.items()
     }
 
@@ -449,7 +447,9 @@ def get_targets() -> list[Target]:
                 source="slc",
                 unit=Unit.COUNT,
                 is_count=True,
-                values=targeted_support_data["parents_learning_allowance"]["recipients"],
+                values=targeted_support_data["parents_learning_allowance"][
+                    "recipients"
+                ],
                 reference_url=_STUDENT_SUPPORT_URL,
             ),
             Target(
@@ -457,7 +457,9 @@ def get_targets() -> list[Target]:
                 variable="parents_learning_allowance",
                 source="slc",
                 unit=Unit.GBP,
-                values=targeted_support_data["parents_learning_allowance"]["amount_paid"],
+                values=targeted_support_data["parents_learning_allowance"][
+                    "amount_paid"
+                ],
                 reference_url=_STUDENT_SUPPORT_URL,
             ),
             Target(
