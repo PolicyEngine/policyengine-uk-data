@@ -1,3 +1,10 @@
+## [1.50.3] - 2026-04-16
+
+### Fixed
+
+- Reduce OA cloning in GitHub Actions dataset builds so publication completes on hosted runners.
+
+
 ## [1.50.2] - 2026-04-15
 
 No significant changes.
