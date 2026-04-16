@@ -8,6 +8,22 @@ from policyengine_uk_data.utils.build_environment import (
 logging.basicConfig(level=logging.INFO)
 
 
+def _get_positive_int_env(name: str, default: int) -> int:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer, got {raw_value!r}.") from exc
+
+    if value < 1:
+        raise ValueError(f"{name} must be >= 1, got {value}.")
+
+    return value
+
+
 def main():
     """Create enhanced FRS dataset with rich progress tracking."""
     try:
@@ -27,6 +43,10 @@ def main():
         # Use reduced epochs and fidelity for testing
         is_testing = os.environ.get("TESTING", "0") == "1"
         epochs = 32 if is_testing else 512
+        oa_clones = _get_positive_int_env(
+            "PE_UK_DATA_OA_CLONES",
+            2 if is_testing else 10,
+        )
 
         progress_tracker = ProcessingProgress()
 
@@ -118,8 +138,7 @@ def main():
                 clone_and_assign,
             )
 
-            n_clones = 2 if is_testing else 10
-            frs = clone_and_assign(frs, n_clones=n_clones)
+            frs = clone_and_assign(frs, n_clones=oa_clones)
             update_dataset("Clone and assign OA geography", "completed")
 
             # Uprate dataset
