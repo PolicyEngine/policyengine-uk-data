@@ -9,6 +9,53 @@ from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk_data.utils.progress import ProcessingProgress
 
 
+def compute_log_weight_smoothness_penalty(
+    log_weights: torch.Tensor,
+    prior_weights: torch.Tensor,
+    *,
+    eps: float = 1e-8,
+) -> torch.Tensor:
+    """Mean squared log-space deviation of current weights from a prior.
+
+    Used as a cross-year smoothness regulariser (step 5 of #345): when
+    calibrating a panel year ``Y`` against its own targets, this term
+    penalises households whose per-area weight swings too far from the
+    year ``Y-1`` weight, keeping trajectories statistically coherent.
+
+    Both tensors have shape ``(area_count, n_households)``. ``log_weights``
+    is the current optimisation variable (already in log-space in the
+    calibrator). ``prior_weights`` is the previous year's final weights
+    in linear space; entries equal to zero (households outside an area's
+    country) are excluded from the mean so they neither pull nor penalise
+    the optimiser.
+
+    Args:
+        log_weights: current weights in log-space, shape (A, H).
+        prior_weights: previous year's final weights in linear space,
+            same shape as ``log_weights``.
+        eps: numerical floor applied before taking the log of the prior.
+
+    Returns:
+        Scalar tensor. Zero if the masks are empty, so a caller multiplying
+        by a penalty coefficient still produces a finite loss.
+
+    Raises:
+        ValueError: if the two tensors have different shapes.
+    """
+    if log_weights.shape != prior_weights.shape:
+        raise ValueError(
+            f"log_weights and prior_weights must share a shape; got "
+            f"{tuple(log_weights.shape)} vs {tuple(prior_weights.shape)}."
+        )
+    mask = prior_weights > 0
+    valid = mask.sum()
+    if valid.item() == 0:
+        return torch.zeros((), dtype=log_weights.dtype, device=log_weights.device)
+    log_prior = torch.log(prior_weights.clamp(min=eps))
+    diff = (log_weights - log_prior) * mask.to(log_weights.dtype)
+    return (diff**2).sum() / valid.to(log_weights.dtype)
+
+
 def calibrate_local_areas(
     dataset: UKSingleYearDataset,
     matrix_fn,
@@ -23,6 +70,9 @@ def calibrate_local_areas(
     area_name: str = "area",
     get_performance=None,
     nested_progress=None,
+    *,
+    prior_weights: np.ndarray | None = None,
+    smoothness_penalty: float = 0.0,
 ):
     """
     Generic calibration function for local areas (constituencies, local authorities, etc.)
@@ -39,6 +89,14 @@ def calibrate_local_areas(
         log_csv: CSV file to log performance to
         verbose: Whether to print progress
         area_name: Name of the area type for logging
+        prior_weights: previous year's final weights as a numpy array of
+            shape ``(area_count, n_households)``. When supplied together
+            with a non-zero ``smoothness_penalty``, the training loss is
+            augmented with a log-space L2 penalty pulling the current
+            weights towards the prior (step 5 of #345). Defaults to
+            ``None`` which disables the penalty.
+        smoothness_penalty: non-negative coefficient applied to the
+            smoothness term. ``0.0`` reproduces the pre-#345 behaviour.
     """
     progress_tracker = ProcessingProgress() if verbose else None
 
@@ -176,6 +234,20 @@ def calibrate_local_areas(
     final_weights = (torch.exp(weights) * r).detach().numpy()
     performance = pd.DataFrame()
 
+    # Validate and stage the cross-year smoothness prior, if any. Done
+    # once here so the training loop only pays a tensor-constant lookup
+    # each step instead of re-allocating the prior every epoch.
+    smoothness_active = smoothness_penalty > 0 and prior_weights is not None
+    prior_weights_tensor: torch.Tensor | None = None
+    if smoothness_active:
+        if prior_weights.shape != (area_count, len(original_weights)):
+            raise ValueError(
+                f"prior_weights shape {prior_weights.shape} does not match "
+                f"expected (area_count, n_households) = "
+                f"({area_count}, {len(original_weights)})."
+            )
+        prior_weights_tensor = torch.tensor(prior_weights, dtype=torch.float32)
+
     if verbose and progress_tracker:
         with progress_tracker.track_calibration(
             epochs, nested_progress
@@ -186,6 +258,12 @@ def calibrate_local_areas(
                 optimizer.zero_grad()
                 weights_ = torch.exp(dropout_weights(weights, 0.05)) * r
                 loss_value = loss(weights_)
+                if smoothness_active:
+                    loss_value = loss_value + smoothness_penalty * (
+                        compute_log_weight_smoothness_penalty(
+                            weights, prior_weights_tensor
+                        )
+                    )
                 loss_value.backward()
                 optimizer.step()
 
@@ -242,6 +320,10 @@ def calibrate_local_areas(
             optimizer.zero_grad()
             weights_ = torch.exp(dropout_weights(weights, 0.05)) * r
             loss_value = loss(weights_)
+            if smoothness_active:
+                loss_value = loss_value + smoothness_penalty * (
+                    compute_log_weight_smoothness_penalty(weights, prior_weights_tensor)
+                )
             loss_value.backward()
             optimizer.step()
 

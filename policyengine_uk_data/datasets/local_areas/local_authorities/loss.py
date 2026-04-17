@@ -51,7 +51,12 @@ def create_local_authority_target_matrix(
     la_codes = pd.read_csv(STORAGE_FOLDER / "local_authorities_2021.csv")
 
     sim = Microsimulation(dataset=dataset, reform=reform)
-    original_weights = sim.calculate("household_weight", 2025).values
+    # Read the uncalibrated weights at the requested calibration year rather
+    # than a hard-coded 2025. The downstream national totals on lines
+    # ~160-170 are used as fall-back per-LA targets when ONS data is
+    # missing, and they must be expressed at the same year as the targets
+    # we are calibrating against.
+    original_weights = sim.calculate("household_weight", int(time_period)).values
     sim.default_calculation_period = time_period
 
     matrix = pd.DataFrame()
@@ -59,7 +64,7 @@ def create_local_authority_target_matrix(
 
     # ── Income targets ─────────────────────────────────────────────
     incomes = get_la_income_targets()
-    national_incomes = get_national_income_projections(int(dataset.time_period))
+    national_incomes = get_national_income_projections(int(time_period))
 
     for income_variable in INCOME_VARIABLES:
         income_values = sim.calculate(income_variable).values

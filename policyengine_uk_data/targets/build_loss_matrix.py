@@ -122,11 +122,47 @@ def create_target_matrix(
     return df, pd.Series(target_values, index=target_names)
 
 
-def _resolve_value(target: Target, year: int) -> float | None:
-    """Get the target value for a year, falling back to nearest year.
+YEAR_FALLBACK_TOLERANCE = 3
+"""Maximum allowed gap between the requested year and the nearest available
+target year before ``resolve_target_value`` gives up and returns ``None``.
 
-    VOA council tax targets are population-uprated when extrapolating
-    from their base year (2024).
+Three years matches the typical publication lag on HMRC/DWP/ONS series and
+the length of the OBR's rolling forecast window. It is a deliberately
+generous ceiling — the goal is to keep the calibration functional when a
+dataset runs slightly ahead of the latest published target, not to make up
+numbers several years out."""
+
+
+def resolve_target_value(
+    target: Target,
+    year: int,
+    *,
+    tolerance: int = YEAR_FALLBACK_TOLERANCE,
+) -> float | None:
+    """Return the calibration value for ``target`` at ``year``.
+
+    Policy, in order:
+
+    1. **Exact year available** → return it.
+    2. **Requested year is in the past relative to all available years**
+       (e.g. ask 2022, data starts 2024) → return ``None``. We do not
+       extrapolate backwards, because doing so would quietly misreport
+       historical reality.
+    3. **Nearest past year is within ``tolerance`` years** → use that value.
+       For VOA-sourced targets only, the value is scaled by the UK
+       population ratio between the two years so that count-type targets
+       track demographic growth.
+    4. **Nearest past year is further than ``tolerance``** → return
+       ``None`` rather than make up a number.
+
+    Args:
+        target: a ``Target`` whose ``values`` map maps year → scalar.
+        year: the calendar year being requested.
+        tolerance: maximum number of years the fallback may look back.
+            Defaults to ``YEAR_FALLBACK_TOLERANCE``.
+
+    Returns:
+        The target value, or ``None`` if no usable year is available.
     """
     if year in target.values:
         return target.values[year]
@@ -134,12 +170,11 @@ def _resolve_value(target: Target, year: int) -> float | None:
     if not available:
         return None
     closest = min(available, key=lambda y: abs(y - year))
-    if abs(closest - year) > 3:
+    if abs(closest - year) > tolerance:
         return None
     if closest > year:
         return None
     base_value = target.values[closest]
-    # VOA council tax counts scale with population
     if target.source == "voa" and year != closest:
         from policyengine_uk_data.targets.sources.local_age import (
             get_uk_total_population,
@@ -150,6 +185,11 @@ def _resolve_value(target: Target, year: int) -> float | None:
         if pop_base > 0:
             base_value *= pop_target / pop_base
     return base_value
+
+
+# Kept as a private alias so existing call sites (this module only) do not
+# need to be rewritten. New code should prefer ``resolve_target_value``.
+_resolve_value = resolve_target_value
 
 
 class _SimContext:

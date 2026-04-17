@@ -46,14 +46,18 @@ def create_constituency_target_matrix(
         time_period = dataset.time_period
 
     sim = Microsimulation(dataset=dataset, reform=reform)
-    sim.default_calculation_period = dataset.time_period
+    # Honour the explicit ``time_period`` argument so that calibrating the
+    # same base dataset to a different year (needed for panel output in
+    # #345) reads variables at the requested year rather than the dataset's
+    # stored year.
+    sim.default_calculation_period = time_period
 
     matrix = pd.DataFrame()
     y = pd.DataFrame()
 
     # ── Income targets ─────────────────────────────────────────────
     incomes = get_constituency_income_targets()
-    national_incomes = get_national_income_projections(int(dataset.time_period))
+    national_incomes = get_national_income_projections(int(time_period))
 
     for income_variable in INCOME_VARIABLES:
         income_values = sim.calculate(income_variable).values
