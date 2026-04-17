@@ -101,6 +101,13 @@ IMPUTATIONS = [
     "dividend_income",
     "private_pension_income",
     "property_income",
+    # Gift Aid is in SPI but isn't in FRS — without it in this list, the
+    # zero-weight SPI-donor rows carry a middle-income FRS donor's (always
+    # zero) Gift Aid, producing a 100% miss on the £1-1.5bn/yr Gift Aid
+    # higher-rate relief flow. Including it here means the multi-output QRF
+    # draws gift_aid jointly with income components, so high-earner donors
+    # get plausibly non-zero Gift Aid.
+    "gift_aid",
 ]
 
 
@@ -118,7 +125,7 @@ def save_imputation_models():
     spi = generate_spi_table(spi)
     spi = spi[PREDICTORS + IMPUTATIONS]
     income.fit(spi[PREDICTORS], spi[IMPUTATIONS])
-    income.save(STORAGE_FOLDER / "income.pkl")
+    income.save(STORAGE_FOLDER / "income_v2.pkl")
     return income
 
 
@@ -134,8 +141,8 @@ def create_income_model(overwrite_existing: bool = False):
     """
     from policyengine_uk_data.utils.qrf import QRF
 
-    if (STORAGE_FOLDER / "income.pkl").exists() and not overwrite_existing:
-        return QRF(file_path=STORAGE_FOLDER / "income.pkl")
+    if (STORAGE_FOLDER / "income_v2.pkl").exists() and not overwrite_existing:
+        return QRF(file_path=STORAGE_FOLDER / "income_v2.pkl")
     return save_imputation_models()
 
 
