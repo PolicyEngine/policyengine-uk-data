@@ -30,11 +30,39 @@ if importlib.util.find_spec("policyengine_uk") is None:
 
 
 SPI_COLUMNS = [
-    "SREF", "FACT", "DIVIDENDS", "GIFTAID", "GORCODE", "INCBBS", "INCPROP",
-    "PAY", "EPB", "EXPS", "PENSION", "PSAV_XS", "PENSRLF", "PROFITS",
-    "CAPALL", "LOSSBF", "AGERANGE", "SRP", "TAX_CRED", "MOTHINC", "INCPBEN",
-    "OSSBEN", "TAXTERM", "UBISJA", "OTHERINC", "GIFTINV", "OTHERINV",
-    "COVNTS", "MOTHDED", "DEFICIEN", "MCAS", "BPADUE", "MAIND",
+    "SREF",
+    "FACT",
+    "DIVIDENDS",
+    "GIFTAID",
+    "GORCODE",
+    "INCBBS",
+    "INCPROP",
+    "PAY",
+    "EPB",
+    "EXPS",
+    "PENSION",
+    "PSAV_XS",
+    "PENSRLF",
+    "PROFITS",
+    "CAPALL",
+    "LOSSBF",
+    "AGERANGE",
+    "SRP",
+    "TAX_CRED",
+    "MOTHINC",
+    "INCPBEN",
+    "OSSBEN",
+    "TAXTERM",
+    "UBISJA",
+    "OTHERINC",
+    "GIFTINV",
+    "OTHERINV",
+    "COVNTS",
+    "MOTHDED",
+    "DEFICIEN",
+    "MCAS",
+    "BPADUE",
+    "MAIND",
 ]
 
 
@@ -85,9 +113,7 @@ def test_create_spi_age_imputation_is_deterministic(tmp_path):
 
     assert (ds_a.person["age"].to_numpy() == ds_b.person["age"].to_numpy()).all()
     # Different seeds should give some variation for the (16, 25) bucket.
-    assert not (
-        ds_a.person["age"].to_numpy() == ds_c.person["age"].to_numpy()
-    ).all()
+    assert not (ds_a.person["age"].to_numpy() == ds_c.person["age"].to_numpy()).all()
 
 
 def test_create_spi_unknown_gorcode_does_not_silently_become_south_east(

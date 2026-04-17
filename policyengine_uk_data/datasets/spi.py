@@ -56,17 +56,13 @@ def _get_marriage_allowance(fiscal_year: int) -> float:
         instant
     )
     ma_cap_rate = (
-        system.parameters.gov.hmrc.income_tax.allowances.marriage_allowance.max(
-            instant
-        )
+        system.parameters.gov.hmrc.income_tax.allowances.marriage_allowance.max(instant)
     )
     # HMRC rounds to the nearest £10 downward; use the explicit rounding param
     # if it exists, otherwise leave the computed value as-is.
     try:
-        rounding_increment = (
-            system.parameters.gov.hmrc.income_tax.allowances.marriage_allowance.rounding_increment(
-                instant
-            )
+        rounding_increment = system.parameters.gov.hmrc.income_tax.allowances.marriage_allowance.rounding_increment(
+            instant
         )
     except Exception:
         rounding_increment = None
