@@ -120,6 +120,9 @@ INCOME_COMPONENTS = [
 IMPUTATIONS = INCOME_COMPONENTS + ["gift_aid", "charitable_investment_gifts"]
 
 
+INCOME_MODEL_PATH = STORAGE_FOLDER / "income.pkl"
+
+
 def save_imputation_models():
     """
     Train and save income imputation model.
@@ -134,13 +137,18 @@ def save_imputation_models():
     spi = generate_spi_table(spi)
     spi = spi[PREDICTORS + IMPUTATIONS]
     income.fit(spi[PREDICTORS], spi[IMPUTATIONS])
-    income.save(STORAGE_FOLDER / "income_v3.pkl")
+    income.save(INCOME_MODEL_PATH)
     return income
 
 
 def create_income_model(overwrite_existing: bool = False):
     """
     Create or load income imputation model.
+
+    If a cached model exists and its trained output columns don't match the
+    current ``IMPUTATIONS`` list, the cache is discarded and the model is
+    retrained. This handles the case where ``IMPUTATIONS`` is extended in
+    code but an older pickle is still on disk.
 
     Args:
         overwrite_existing: Whether to retrain model if it exists.
@@ -150,8 +158,12 @@ def create_income_model(overwrite_existing: bool = False):
     """
     from policyengine_uk_data.utils.qrf import QRF
 
-    if (STORAGE_FOLDER / "income_v3.pkl").exists() and not overwrite_existing:
-        return QRF(file_path=STORAGE_FOLDER / "income_v3.pkl")
+    if INCOME_MODEL_PATH.exists() and not overwrite_existing:
+        cached = QRF(file_path=INCOME_MODEL_PATH)
+        cached_outputs = set(getattr(cached.model, "imputed_variables", []))
+        if cached_outputs == set(IMPUTATIONS):
+            return cached
+        # Cached model was trained against a different output set; retrain.
     return save_imputation_models()
 
 
