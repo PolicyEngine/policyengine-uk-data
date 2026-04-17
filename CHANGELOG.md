@@ -1,3 +1,10 @@
+## [1.50.4] - 2026-04-17
+
+### Fixed
+
+- Add periodic CI heartbeats around long calibration setup stages so dataset release builds do not get canceled while constituency target matrices are being prepared.
+
+
 ## [1.50.3] - 2026-04-16
 
 ### Fixed
