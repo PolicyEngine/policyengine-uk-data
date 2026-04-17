@@ -1,5 +1,6 @@
+from contextlib import nullcontext
+
 import torch
-from policyengine_uk import Microsimulation
 import pandas as pd
 import numpy as np
 import h5py
@@ -39,59 +40,74 @@ def calibrate_local_areas(
         verbose: Whether to print progress
         area_name: Name of the area type for logging
     """
-    dataset = dataset.copy()
-    matrix, y, r = matrix_fn(dataset)
+    progress_tracker = ProcessingProgress() if verbose else None
+
+    def track_stage(stage_name: str):
+        if progress_tracker is None:
+            return nullcontext()
+        return progress_tracker.track_stage(stage_name)
+
+    with track_stage(f"{area_name}: copy dataset"):
+        dataset = dataset.copy()
+
+    with track_stage(f"{area_name}: build local target matrix"):
+        matrix, y, r = matrix_fn(dataset)
     m_c, y_c = matrix.copy(), y.copy()
-    m_national, y_national = national_matrix_fn(dataset)
+
+    with track_stage(f"{area_name}: build national target matrix"):
+        m_national, y_national = national_matrix_fn(dataset)
     m_n, y_n = m_national.copy(), y_national.copy()
 
-    # Weights - area_count x num_households
-    # Use country-aware initialization: divide each household's weight by the
-    # number of areas in its country, not the total area count. This ensures
-    # households start at approximately correct weight for their country's targets.
-    # The country_mask r[i,j]=1 iff household j is in same country as area i.
-    areas_per_household = r.sum(
-        axis=0
-    )  # number of areas each household can contribute to
-    areas_per_household = np.maximum(areas_per_household, 1)  # avoid division by zero
-    original_weights = np.log(
-        dataset.household.household_weight.values / areas_per_household
-        + np.random.random(len(dataset.household.household_weight.values)) * 0.01
-    )
-    weights = torch.tensor(
-        np.ones((area_count, len(original_weights))) * original_weights,
-        dtype=torch.float32,
-        requires_grad=True,
-    )
+    with track_stage(f"{area_name}: prepare tensors and optimizer"):
+        # Weights - area_count x num_households
+        # Use country-aware initialization: divide each household's weight by the
+        # number of areas in its country, not the total area count. This ensures
+        # households start at approximately correct weight for their country's targets.
+        # The country_mask r[i,j]=1 iff household j is in same country as area i.
+        areas_per_household = r.sum(
+            axis=0
+        )  # number of areas each household can contribute to
+        areas_per_household = np.maximum(
+            areas_per_household, 1
+        )  # avoid division by zero
+        original_weights = np.log(
+            dataset.household.household_weight.values / areas_per_household
+            + np.random.random(len(dataset.household.household_weight.values)) * 0.01
+        )
+        weights = torch.tensor(
+            np.ones((area_count, len(original_weights))) * original_weights,
+            dtype=torch.float32,
+            requires_grad=True,
+        )
 
-    # Set up validation targets if specified
-    validation_targets_local = (
-        matrix.columns.isin(excluded_training_targets)
-        if hasattr(matrix, "columns")
-        else None
-    )
-    validation_targets_national = (
-        m_national.columns.isin(excluded_training_targets)
-        if hasattr(m_national, "columns")
-        else None
-    )
-    dropout_targets = len(excluded_training_targets) > 0
+        # Set up validation targets if specified
+        validation_targets_local = (
+            matrix.columns.isin(excluded_training_targets)
+            if hasattr(matrix, "columns")
+            else None
+        )
+        validation_targets_national = (
+            m_national.columns.isin(excluded_training_targets)
+            if hasattr(m_national, "columns")
+            else None
+        )
+        dropout_targets = len(excluded_training_targets) > 0
 
-    # Convert to tensors
-    metrics = torch.tensor(
-        matrix.values if hasattr(matrix, "values") else matrix,
-        dtype=torch.float32,
-    )
-    y = torch.tensor(y.values if hasattr(y, "values") else y, dtype=torch.float32)
-    matrix_national = torch.tensor(
-        m_national.values if hasattr(m_national, "values") else m_national,
-        dtype=torch.float32,
-    )
-    y_national = torch.tensor(
-        y_national.values if hasattr(y_national, "values") else y_national,
-        dtype=torch.float32,
-    )
-    r = torch.tensor(r, dtype=torch.float32)
+        # Convert to tensors
+        metrics = torch.tensor(
+            matrix.values if hasattr(matrix, "values") else matrix,
+            dtype=torch.float32,
+        )
+        y = torch.tensor(y.values if hasattr(y, "values") else y, dtype=torch.float32)
+        matrix_national = torch.tensor(
+            m_national.values if hasattr(m_national, "values") else m_national,
+            dtype=torch.float32,
+        )
+        y_national = torch.tensor(
+            y_national.values if hasattr(y_national, "values") else y_national,
+            dtype=torch.float32,
+        )
+        r = torch.tensor(r, dtype=torch.float32)
 
     def sre(x, y):
         one_way = ((1 + x) / (1 + y) - 1) ** 2
@@ -160,8 +176,6 @@ def calibrate_local_areas(
     final_weights = (torch.exp(weights) * r).detach().numpy()
     performance = pd.DataFrame()
 
-    progress_tracker = ProcessingProgress() if verbose else None
-
     if verbose and progress_tracker:
         with progress_tracker.track_calibration(
             epochs, nested_progress
@@ -171,8 +185,8 @@ def calibrate_local_areas(
 
                 optimizer.zero_grad()
                 weights_ = torch.exp(dropout_weights(weights, 0.05)) * r
-                l = loss(weights_)
-                l.backward()
+                loss_value = loss(weights_)
+                loss_value.backward()
                 optimizer.step()
 
                 local_close = pct_close(weights_, local=True, national=False)
@@ -187,7 +201,9 @@ def calibrate_local_areas(
                     )
                 else:
                     update_calibration(
-                        epoch + 1, loss_value=l.item(), calculating_loss=False
+                        epoch + 1,
+                        loss_value=loss_value.item(),
+                        calculating_loss=False,
                     )
 
                 if epoch % 10 == 0:
@@ -225,8 +241,8 @@ def calibrate_local_areas(
         for epoch in range(epochs):
             optimizer.zero_grad()
             weights_ = torch.exp(dropout_weights(weights, 0.05)) * r
-            l = loss(weights_)
-            l.backward()
+            loss_value = loss(weights_)
+            loss_value.backward()
             optimizer.step()
 
             local_close = pct_close(weights_, local=True, national=False)
@@ -236,12 +252,12 @@ def calibrate_local_areas(
                 if dropout_targets:
                     validation_loss = loss(weights_, validation=True)
                     print(
-                        f"Training loss: {l.item():,.3f}, Validation loss: {validation_loss.item():,.3f}, Epoch: {epoch}, "
+                        f"Training loss: {loss_value.item():,.3f}, Validation loss: {validation_loss.item():,.3f}, Epoch: {epoch}, "
                         f"{area_name}<10%: {local_close:.1%}, National<10%: {national_close:.1%}"
                     )
                 else:
                     print(
-                        f"Loss: {l.item()}, Epoch: {epoch}, {area_name}<10%: {local_close:.1%}, National<10%: {national_close:.1%}"
+                        f"Loss: {loss_value.item()}, Epoch: {epoch}, {area_name}<10%: {local_close:.1%}, National<10%: {national_close:.1%}"
                     )
 
         if epoch % 10 == 0:

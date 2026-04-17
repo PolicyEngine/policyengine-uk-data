@@ -1,3 +1,7 @@
+import time
+
+import pytest
+
 from policyengine_uk_data.utils.progress import ProcessingProgress
 
 
@@ -36,3 +40,33 @@ def test_track_calibration_logs_heartbeats_in_ci(monkeypatch, capsys):
     assert "[calibration] epoch 1/12: calculating loss" in output
     assert "[calibration] epoch 10/12: loss=1.000000" in output
     assert "[calibration] epoch 12/12: loss=1.200000" in output
+
+
+def test_track_stage_logs_periodic_heartbeats_in_ci(monkeypatch, capsys):
+    monkeypatch.setenv("CI", "true")
+    monkeypatch.setenv("POLICYENGINE_PROGRESS_HEARTBEAT_SECONDS", "0.01")
+
+    progress = ProcessingProgress()
+
+    with progress.track_stage("Constituency: build local target matrix"):
+        time.sleep(0.03)
+
+    output = capsys.readouterr().out
+    assert "[calibration] starting: Constituency: build local target matrix" in output
+    assert "[calibration] heartbeat: Constituency: build local target matrix" in output
+    assert "[calibration] completed: Constituency: build local target matrix" in output
+
+
+def test_track_stage_logs_failures_in_ci(monkeypatch, capsys):
+    monkeypatch.setenv("CI", "true")
+    monkeypatch.setenv("POLICYENGINE_PROGRESS_HEARTBEAT_SECONDS", "0.01")
+
+    progress = ProcessingProgress()
+
+    with pytest.raises(RuntimeError, match="boom"):
+        with progress.track_stage("Constituency: build local target matrix"):
+            time.sleep(0.02)
+            raise RuntimeError("boom")
+
+    output = capsys.readouterr().out
+    assert "[calibration] failed: Constituency: build local target matrix" in output
