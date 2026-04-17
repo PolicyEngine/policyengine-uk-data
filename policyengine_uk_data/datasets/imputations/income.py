@@ -94,21 +94,24 @@ PREDICTORS = [
     "region",
 ]
 
-IMPUTATIONS = [
+INCOME_COMPONENTS = [
     "employment_income",
     "self_employment_income",
     "savings_interest_income",
     "dividend_income",
     "private_pension_income",
     "property_income",
-    # Gift Aid is in SPI but isn't in FRS — without it in this list, the
-    # zero-weight SPI-donor rows carry a middle-income FRS donor's (always
-    # zero) Gift Aid, producing a 100% miss on the £1-1.5bn/yr Gift Aid
-    # higher-rate relief flow. Including it here means the multi-output QRF
-    # draws gift_aid jointly with income components, so high-earner donors
-    # get plausibly non-zero Gift Aid.
-    "gift_aid",
 ]
+
+# Gift Aid is in SPI but isn't in FRS — without it in the model outputs,
+# the zero-weight SPI-donor rows carry a middle-income FRS donor's (always
+# zero) Gift Aid, missing the £1-1.5bn/yr Gift Aid higher-rate relief flow.
+# Including it here means the multi-output QRF draws gift_aid jointly with
+# income components, so high-earner donors get plausibly non-zero Gift Aid.
+# We keep it separate from INCOME_COMPONENTS because the rent/mortgage
+# adjustment factor downstream is built from income sums, and Gift Aid is
+# an expenditure, not income.
+IMPUTATIONS = INCOME_COMPONENTS + ["gift_aid"]
 
 
 def save_imputation_models():
@@ -162,13 +165,13 @@ def impute_over_incomes(
     dataset = dataset.copy()
     sim = Microsimulation(dataset=dataset)
     input_df = sim.calculate_dataframe(["age", "gender", "region"])
-    original_income_total = dataset.person[IMPUTATIONS].copy().sum().sum()
+    original_income_total = dataset.person[INCOME_COMPONENTS].copy().sum().sum()
     output_df = model.predict(input_df)
 
     for column in output_variables:
         dataset.person[column] = output_df[column].fillna(0).values
 
-    new_income_total = dataset.person[IMPUTATIONS].sum().sum()
+    new_income_total = dataset.person[INCOME_COMPONENTS].sum().sum()
     adjustment_factor = new_income_total / original_income_total
     # Adjust rent and mortgage interest and capital repayments proportionally
     dataset.household["rent"] = dataset.household["rent"] * adjustment_factor
@@ -198,6 +201,13 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     """
     # Impute wealth, assuming same time period as trained data
     dataset = dataset.copy()
+    # gift_aid is in IMPUTATIONS but is not a column on the raw FRS build, so
+    # initialise it to zero everywhere before imputation. Without this, the
+    # full-FRS half stays NaN for gift_aid (it's never touched by the dividend-
+    # only impute_over_incomes call below), and the eventual stacked dataset
+    # fails validate() on the gift_aid column.
+    if "gift_aid" not in dataset.person.columns:
+        dataset.person["gift_aid"] = 0.0
     zero_weight_copy = dataset.copy()
     zero_weight_copy.household.household_weight = 0
     zero_weight_copy = subsample_dataset(zero_weight_copy, 10_000)
