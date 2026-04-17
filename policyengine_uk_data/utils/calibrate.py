@@ -1,4 +1,6 @@
 from contextlib import nullcontext
+from pathlib import Path
+from typing import Optional, Union
 
 import torch
 import pandas as pd
@@ -7,6 +9,78 @@ import h5py
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk_data.utils.progress import ProcessingProgress
+
+
+def load_weights(
+    weight_file: Union[str, Path],
+    dataset_key: str = "2025",
+    n_areas: Optional[int] = None,
+    n_records: Optional[int] = None,
+) -> np.ndarray:
+    """Load calibration weights from an h5 file and normalise their shape.
+
+    Two calibration back-ends exist in this repo's history: the L2
+    calibrator in `calibrate_local_areas` (this module) saves weights as a
+    2D ``(n_areas, n_records)`` array, while the L0-regularised variant
+    (when present) sometimes saves a flat 1D ``(n_records,)`` array under
+    the same dataset key. Consumers that are not careful about axes can
+    therefore silently read the wrong shape.
+
+    This helper centralises loading and always returns a 2D
+    ``(n_areas, n_records)`` array. A 1D input is reshaped to
+    ``(1, n_records)`` so downstream ``.sum(axis=0)`` and matrix-multiply
+    operations behave consistently. Optional ``n_areas`` / ``n_records``
+    arguments raise a clear ``ValueError`` on shape mismatch instead of
+    silently producing wrong answers.
+
+    Args:
+        weight_file: Path to the h5 file written by a calibrator. If the
+            path is not absolute it is resolved relative to the package
+            ``STORAGE_FOLDER``.
+        dataset_key: H5 dataset key to read.
+        n_areas: Optional expected number of areas (first axis). When
+            provided, a 1D input is reshaped and its length checked; a 2D
+            input has its first axis checked.
+        n_records: Optional expected number of records (second axis).
+            Checked against the final axis of the loaded array.
+
+    Returns:
+        A 2D ``(n_areas, n_records)`` numpy array.
+    """
+    path = Path(weight_file)
+    if not path.is_absolute():
+        path = STORAGE_FOLDER / path
+
+    with h5py.File(path, "r") as f:
+        if dataset_key not in f:
+            available = ", ".join(sorted(f.keys()))
+            raise KeyError(
+                f"Dataset key {dataset_key!r} not found in {path}; "
+                f"available keys: {available}"
+            )
+        arr = f[dataset_key][:]
+
+    if arr.ndim == 1:
+        # Flat (n_records,) layout — promote to (1, n_records) so callers
+        # can treat all weights as a 2D matrix.
+        arr = arr.reshape(1, -1)
+    elif arr.ndim != 2:
+        raise ValueError(
+            f"Expected weights at {dataset_key!r} in {path} to be 1D or 2D; "
+            f"got shape {arr.shape}"
+        )
+
+    if n_areas is not None and arr.shape[0] != n_areas:
+        raise ValueError(
+            f"Weights at {dataset_key!r} in {path} have {arr.shape[0]} areas, "
+            f"expected {n_areas}"
+        )
+    if n_records is not None and arr.shape[-1] != n_records:
+        raise ValueError(
+            f"Weights at {dataset_key!r} in {path} have {arr.shape[-1]} "
+            f"records, expected {n_records}"
+        )
+    return arr
 
 
 def calibrate_local_areas(
