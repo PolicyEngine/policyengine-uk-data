@@ -1,1 +1,0 @@
-Add `policyengine_uk_data.utils.calibrate.load_weights`, a defensive loader that normalises calibration weights to 2D `(n_areas, n_records)` and validates expected shapes so consumers can't silently read the wrong axis layout across the L2 and L0 calibrators.

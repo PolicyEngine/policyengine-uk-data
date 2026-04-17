@@ -1,1 +1,0 @@
-Raise `UpratingYearOutOfRangeError` with a clear message when `uprate_values` or `uprate_dataset` is called with a year outside the `[START_YEAR, END_YEAR]` range of the uprating factor table, instead of surfacing a pandas `KeyError` or silently returning wrong values.

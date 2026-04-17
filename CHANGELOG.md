@@ -1,3 +1,20 @@
+## [1.51.0] - 2026-04-17
+
+### Added
+
+- Add `policyengine_uk_data.utils.hf_destinations` with `PRIVATE_REPO` / `PUBLIC_REPO` constants and an AST-based xfail test (`tests/test_hf_destinations.py`) that flags every `upload(...)`, `upload_file(...)`, `upload_files_to_hf(...)`, and `upload_data_files(...)` call site that still bypasses the shared constants.
+- Add `policyengine_uk_data.utils.calibrate.load_weights`, a defensive loader that normalises calibration weights to 2D `(n_areas, n_records)` and validates expected shapes so consumers can't silently read the wrong axis layout across the L2 and L0 calibrators.
+
+### Fixed
+
+- Fix `calibrate_local_areas` non-verbose branch silently failing to save weights because the `if epoch % 10 == 0` save block was indented outside the training loop.
+- Replace bare `* 52` weekly-to-annual conversion in LCFS imputation with the shared `WEEKS_IN_YEAR = 365.25 / 7` constant used by `datasets/frs.py`, and replace two `np.random.seed(42)` calls with local `np.random.default_rng(42)` so consumption imputation stops mutating the process-wide RNG state.
+- Add OBR calibration targets for NIC Classes 2, 3 and 4 (self-employed flat-rate, voluntary and profit-based) alongside the existing Class 1 employee/employer rows, and accept common label-wording variants in OBR EFO Table 3.4.
+- Fix `datasets/spi.py` `__main__` crash (two-arg call to three-arg `create_spi`), parameterise the hardcoded £1,250 marriage allowance from policyengine-uk parameters, seed the age imputation RNG, and surface unknown GORCODE regions as `UNKNOWN` instead of silently mapping them to `SOUTH_EAST`.
+- Raise `UpratingYearOutOfRangeError` with a clear message when `uprate_values` or `uprate_dataset` is called with a year outside the `[START_YEAR, END_YEAR]` range of the uprating factor table, instead of surfacing a pandas `KeyError` or silently returning wrong values.
+- Parameterise the VAT standard rate and reduced-rate share in ETB-based VAT imputation by reading from `policyengine_uk.parameters.gov.hmrc.vat` keyed on the training year, with a `VAT_RATE_BY_YEAR` fallback for offline use. Promote the `etb.year == 2020` filter to a `year` argument with a `DEFAULT_ETB_YEAR` default.
+
+
 ## [1.50.6] - 2026-04-17
 
 ### Fixed

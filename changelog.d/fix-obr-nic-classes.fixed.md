@@ -1,1 +1,0 @@
-Add OBR calibration targets for NIC Classes 2, 3 and 4 (self-employed flat-rate, voluntary and profit-based) alongside the existing Class 1 employee/employer rows, and accept common label-wording variants in OBR EFO Table 3.4.
