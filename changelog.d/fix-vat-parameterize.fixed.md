@@ -1,0 +1,1 @@
+Parameterise the VAT standard rate and reduced-rate share in ETB-based VAT imputation by reading from `policyengine_uk.parameters.gov.hmrc.vat` keyed on the training year, with a `VAT_RATE_BY_YEAR` fallback for offline use. Promote the `etb.year == 2020` filter to a `year` argument with a `DEFAULT_ETB_YEAR` default.
