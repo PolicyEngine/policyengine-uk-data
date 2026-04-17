@@ -205,9 +205,7 @@ def impute_over_incomes(
         dataset.person[column] = output_df[column].fillna(0).values
 
     new_income_total = dataset.person[INCOME_COMPONENTS].sum().sum()
-    adjustment_factor = _safe_rescale_factor(
-        original_income_total, new_income_total
-    )
+    adjustment_factor = _safe_rescale_factor(original_income_total, new_income_total)
     # Adjust rent and mortgage interest and capital repayments proportionally
     dataset.household["rent"] = dataset.household["rent"] * adjustment_factor
     dataset.household["mortgage_interest_repayment"] = (
