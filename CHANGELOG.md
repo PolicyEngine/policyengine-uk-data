@@ -1,3 +1,14 @@
+## [1.52.0] - 2026-04-17
+
+### Changed
+
+- Point CONTRIBUTING.md at the shared PolicyEngine contribution guide (https://github.com/PolicyEngine/.github) and trim the per-repo file to commands, repo-specific conventions, and anti-patterns. Removes the stale `changelog_entry.yaml` / `make changelog` instructions.
+
+### Removed
+
+- Remove `policyengine_uk_data/tests/test_changelog_encoding.py`. It validated UTF-8 and YAML structure of the deprecated `changelog_entry.yaml`, which was retired when the repo migrated to towncrier `changelog.d/` fragments. All three tests now unconditionally `pytest.skip` because the file no longer exists, and any fragment-format validation is already handled by the `Check changelog fragment` CI step.
+
+
 ## [1.51.1] - 2026-04-17
 
 ### Fixed
