@@ -35,6 +35,22 @@ PANEL_ID_COLUMNS: dict[str, str] = {
 
 
 @dataclass(frozen=True)
+class PanelIDTransition:
+    """Classification of how person IDs move between two snapshots.
+
+    Produced by ``classify_panel_ids`` for use in tests and diagnostics of
+    the demographic-ageing step (#345, step 3). ``assert_panel_id_consistency``
+    is the right tool for _non-ageing_ transformations (uprating, weight
+    recalibration); ageing necessarily adds births and removes deaths, and
+    this structure describes those moves explicitly.
+    """
+
+    survivors: np.ndarray  # persons present in both snapshots
+    deaths: np.ndarray  # persons in ``base`` but not in ``other``
+    births: np.ndarray  # persons in ``other`` but not in ``base``
+
+
+@dataclass(frozen=True)
 class PanelIDs:
     """Sorted, deduplicated ID arrays for the three entity tables."""
 
@@ -136,3 +152,24 @@ def assert_panel_id_consistency(
 
     if problems:
         raise AssertionError("\n".join(problems))
+
+
+def classify_panel_ids(base, other) -> PanelIDTransition:
+    """Return the survivors, deaths and births between two person tables.
+
+    Used by tests and diagnostics around the ageing step: it does not
+    assert anything, it just describes the move.
+
+    Args:
+        base: the reference dataset (typically the earlier snapshot).
+        other: the compared dataset (typically the aged snapshot).
+
+    Returns:
+        ``PanelIDTransition`` whose arrays are sorted ``int64``.
+    """
+    base_ids = get_panel_ids(base).person
+    other_ids = get_panel_ids(other).person
+    survivors = np.intersect1d(base_ids, other_ids, assume_unique=True)
+    deaths = np.setdiff1d(base_ids, other_ids, assume_unique=True)
+    births = np.setdiff1d(other_ids, base_ids, assume_unique=True)
+    return PanelIDTransition(survivors=survivors, deaths=deaths, births=births)
