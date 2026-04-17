@@ -342,6 +342,27 @@ def test_combined_mortality_and_fertility_run_cleanly():
 # ---------------------------------------------------------------------------
 
 
+def test_fertility_works_with_pandas_string_dtype():
+    """Regression test for #345: CI pandas returned StringDtype for `gender`,
+    which ``numpy.astype`` cannot parse. The fix is to use object arrays
+    internally and let pandas coerce back during concat.
+    """
+    base = _build_dataset(
+        ages=[25, 30],
+        genders=[FEMALE_VALUE, FEMALE_VALUE],
+    )
+    # Force the production dtype path: StringDtype, not object.
+    base.person["gender"] = base.person["gender"].astype("string")
+    aged = age_dataset(
+        base,
+        years=1,
+        mortality_rates={},
+        fertility_rates={age: 1.0 for age in range(15, 50)},
+    )
+    # Two mothers + two babies.
+    assert len(aged.person) == 4
+
+
 def test_classify_panel_ids_identifies_survivors_deaths_and_births():
     base = _build_dataset(
         ages=[30, 40, 50],

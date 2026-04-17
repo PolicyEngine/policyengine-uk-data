@@ -182,9 +182,13 @@ def _apply_fertility(
     max_existing_id = int(person["person_id"].max())
     new_ids = np.arange(max_existing_id + 1, max_existing_id + 1 + n_births, dtype=int)
     # Sex ratio at birth in the UK is ~1.05 boys per girl. A 50/50 split is
-    # within sampling noise for this v1 placeholder.
-    new_sex = rng.choice([MALE_VALUE, FEMALE_VALUE], size=n_births).astype(
-        person[SEX_COLUMN].dtype, copy=False
+    # within sampling noise for this v1 placeholder. We leave the array in
+    # plain Python-string form — pandas-extension dtypes (e.g. StringDtype)
+    # are not valid numpy dtypes, so matching the column dtype via
+    # ``numpy.ndarray.astype`` raises a TypeError. ``pd.concat`` will
+    # coerce the column back to the right extension dtype at the end.
+    new_sex = np.array(
+        rng.choice([MALE_VALUE, FEMALE_VALUE], size=n_births), dtype=object
     )
 
     newborns = _build_newborn_rows(
@@ -219,7 +223,10 @@ def _build_newborn_rows(
         if pd.api.types.is_numeric_dtype(series):
             data[col] = np.zeros(n, dtype=series.dtype)
         else:
-            data[col] = np.array([""] * n, dtype=series.dtype)
+            # Non-numeric columns may use pandas-extension dtypes (e.g.
+            # StringDtype) that numpy cannot parse. Initialise with plain
+            # object strings and let pandas coerce during concat below.
+            data[col] = np.array([""] * n, dtype=object)
 
     data["person_id"] = new_ids.astype(template["person_id"].dtype)
     data[AGE_COLUMN] = np.zeros(n, dtype=template[AGE_COLUMN].dtype)
