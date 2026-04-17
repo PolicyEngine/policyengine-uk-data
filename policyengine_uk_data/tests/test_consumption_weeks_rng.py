@@ -68,6 +68,7 @@ def test_consumption_does_not_perturb_global_rng_on_import():
     import importlib
 
     from policyengine_uk_data.datasets.imputations import consumption
+
     importlib.reload(consumption)
 
     np.random.seed(1234)

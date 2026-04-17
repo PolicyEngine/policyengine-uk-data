@@ -505,8 +505,7 @@ def generate_lcfs_table(lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame)
         household[variable] = household[variable] * WEEKS_IN_YEAR
     for variable in PERSON_LCF_RENAMES.values():
         household[variable] = (
-            person[variable].groupby(person.case).sum()[household.case]
-            * WEEKS_IN_YEAR
+            person[variable].groupby(person.case).sum()[household.case] * WEEKS_IN_YEAR
         )
     household.household_weight *= 1_000
 
