@@ -124,9 +124,7 @@ def test_assert_consistency_respects_entities_filter():
     with pytest.raises(AssertionError):
         assert_panel_id_consistency(base, other)
     # ...but skipping the person entity should pass.
-    assert_panel_id_consistency(
-        base, other, entities=("household", "benunit")
-    )
+    assert_panel_id_consistency(base, other, entities=("household", "benunit"))
 
 
 def test_assert_consistency_uses_provided_labels_in_message():
