@@ -1,0 +1,1 @@
+Replace bare `* 52` weekly-to-annual conversion in LCFS imputation with the shared `WEEKS_IN_YEAR = 365.25 / 7` constant used by `datasets/frs.py`, and replace two `np.random.seed(42)` calls with local `np.random.default_rng(42)` so consumption imputation stops mutating the process-wide RNG state.

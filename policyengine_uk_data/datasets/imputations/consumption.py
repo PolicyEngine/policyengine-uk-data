@@ -25,8 +25,15 @@ import numpy as np
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk import Microsimulation
+from policyengine_uk_data.datasets.frs import WEEKS_IN_YEAR
 
 LCFS_TAB_FOLDER = STORAGE_FOLDER / "lcfs_2021_22"
+
+# Default seed for the stochastic ICE-vehicle flag drawn from
+# `NTS_2024_ICE_VEHICLE_SHARE`. Kept at 42 for backward compatibility with
+# existing artefact fingerprints; callers can override via the fixture's
+# local RNG rather than the process-wide np.random global.
+_HAS_FUEL_SEED = 42
 
 # EV/ICE vehicle mix from NTS 2024
 NTS_2024_ICE_VEHICLE_SHARE = 0.90
@@ -406,9 +413,12 @@ def create_has_fuel_model():
 
     num_vehicles = was["vcarnr7"].fillna(0).clip(lower=0)
     has_vehicle = num_vehicles > 0
-    np.random.seed(42)
+    # Use a local RNG so we don't mutate the global np.random state (which
+    # would silently change any unrelated consumer of np.random that runs
+    # after this function).
+    rng = np.random.default_rng(_HAS_FUEL_SEED)
     has_fuel = (
-        has_vehicle & (np.random.random(len(was)) < NTS_2024_ICE_VEHICLE_SHARE)
+        has_vehicle & (rng.random(len(was)) < NTS_2024_ICE_VEHICLE_SHARE)
     ).astype(float)
 
     was_df = pd.DataFrame(
@@ -481,7 +491,10 @@ def generate_lcfs_table(lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame)
 
     household = household.rename(columns=CONSUMPTION_VARIABLE_RENAMES)
 
-    # Annualise weekly LCFS values (× 52)
+    # Annualise weekly LCFS values. Use the same WEEKS_IN_YEAR constant
+    # (365.25 / 7 ≈ 52.1786) as `datasets/frs.py` rather than a bare `* 52`,
+    # which underestimates annual totals by ~0.34% and skews VAT / energy
+    # imputation targets against FRS income.
     annualise = list(CONSUMPTION_VARIABLE_RENAMES.values()) + [
         "hbai_household_net_income",
         "household_gross_income",
@@ -489,10 +502,10 @@ def generate_lcfs_table(lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame)
         "gas_consumption",
     ]
     for variable in annualise:
-        household[variable] = household[variable] * 52
+        household[variable] = household[variable] * WEEKS_IN_YEAR
     for variable in PERSON_LCF_RENAMES.values():
         household[variable] = (
-            person[variable].groupby(person.case).sum()[household.case] * 52
+            person[variable].groupby(person.case).sum()[household.case] * WEEKS_IN_YEAR
         )
     household.household_weight *= 1_000
 
@@ -577,9 +590,10 @@ def impute_consumption(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     sim = Microsimulation(dataset=dataset)
     num_vehicles = sim.calculate("num_vehicles", map_to="household").values
 
-    np.random.seed(42)
+    # Local RNG — see note at module level (_HAS_FUEL_SEED).
+    rng = np.random.default_rng(_HAS_FUEL_SEED)
     has_vehicle = num_vehicles > 0
-    is_ice = np.random.random(len(num_vehicles)) < NTS_2024_ICE_VEHICLE_SHARE
+    is_ice = rng.random(len(num_vehicles)) < NTS_2024_ICE_VEHICLE_SHARE
     has_fuel_consumption = (has_vehicle & is_ice).astype(float)
     dataset.household["has_fuel_consumption"] = has_fuel_consumption
 
