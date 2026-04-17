@@ -94,7 +94,7 @@ PREDICTORS = [
     "region",
 ]
 
-IMPUTATIONS = [
+INCOME_COMPONENTS = [
     "employment_income",
     "self_employment_income",
     "savings_interest_income",
@@ -102,6 +102,25 @@ IMPUTATIONS = [
     "private_pension_income",
     "property_income",
 ]
+
+# Gift Aid (SPI GIFTAID) and charitable investment gifts (SPI GIFTINV) are
+# separate reliefs on the UK side but both absent from the FRS — without them
+# in the model outputs, the zero-weight SPI-donor rows carry a middle-income
+# FRS donor's (always zero) charitable giving, missing the £1-1.5bn/yr Gift
+# Aid higher-rate relief flow and an additional ~£0.1bn of qualifying-
+# investment gifts. Including them here means the multi-output QRF draws
+# them jointly with income components, so high-earner donors get plausibly
+# non-zero values. Kept separate from INCOME_COMPONENTS because the
+# rent/mortgage adjustment factor downstream is built from income sums, and
+# these are expenditures, not income. The standalone SPI dataset in
+# `datasets/spi.py` sums GIFTAID + GIFTINV into a single `gift_aid` column
+# because that path doesn't carry a separate `charitable_investment_gifts`
+# variable; the enhanced-FRS path here keeps them separate so each maps to
+# its own policyengine-uk variable.
+IMPUTATIONS = INCOME_COMPONENTS + ["gift_aid", "charitable_investment_gifts"]
+
+
+INCOME_MODEL_PATH = STORAGE_FOLDER / "income.pkl"
 
 
 def save_imputation_models():
@@ -118,13 +137,18 @@ def save_imputation_models():
     spi = generate_spi_table(spi)
     spi = spi[PREDICTORS + IMPUTATIONS]
     income.fit(spi[PREDICTORS], spi[IMPUTATIONS])
-    income.save(STORAGE_FOLDER / "income.pkl")
+    income.save(INCOME_MODEL_PATH)
     return income
 
 
 def create_income_model(overwrite_existing: bool = False):
     """
     Create or load income imputation model.
+
+    If a cached model exists and its trained output columns don't match the
+    current ``IMPUTATIONS`` list, the cache is discarded and the model is
+    retrained. This handles the case where ``IMPUTATIONS`` is extended in
+    code but an older pickle is still on disk.
 
     Args:
         overwrite_existing: Whether to retrain model if it exists.
@@ -134,8 +158,12 @@ def create_income_model(overwrite_existing: bool = False):
     """
     from policyengine_uk_data.utils.qrf import QRF
 
-    if (STORAGE_FOLDER / "income.pkl").exists() and not overwrite_existing:
-        return QRF(file_path=STORAGE_FOLDER / "income.pkl")
+    if INCOME_MODEL_PATH.exists() and not overwrite_existing:
+        cached = QRF(file_path=INCOME_MODEL_PATH)
+        cached_outputs = set(getattr(cached.model, "imputed_variables", []))
+        if cached_outputs == set(IMPUTATIONS):
+            return cached
+        # Cached model was trained against a different output set; retrain.
     return save_imputation_models()
 
 
@@ -155,13 +183,13 @@ def impute_over_incomes(
     dataset = dataset.copy()
     sim = Microsimulation(dataset=dataset)
     input_df = sim.calculate_dataframe(["age", "gender", "region"])
-    original_income_total = dataset.person[IMPUTATIONS].copy().sum().sum()
+    original_income_total = dataset.person[INCOME_COMPONENTS].copy().sum().sum()
     output_df = model.predict(input_df)
 
     for column in output_variables:
         dataset.person[column] = output_df[column].fillna(0).values
 
-    new_income_total = dataset.person[IMPUTATIONS].sum().sum()
+    new_income_total = dataset.person[INCOME_COMPONENTS].sum().sum()
     adjustment_factor = new_income_total / original_income_total
     # Adjust rent and mortgage interest and capital repayments proportionally
     dataset.household["rent"] = dataset.household["rent"] * adjustment_factor
@@ -191,6 +219,14 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     """
     # Impute wealth, assuming same time period as trained data
     dataset = dataset.copy()
+    # gift_aid and charitable_investment_gifts are in IMPUTATIONS but are not
+    # columns on the raw FRS build, so initialise them to zero everywhere
+    # before imputation. Without this, the full-FRS half stays NaN for these
+    # columns (they're never touched by the dividend-only impute_over_incomes
+    # call below), and the eventual stacked dataset fails validate().
+    for column in ("gift_aid", "charitable_investment_gifts"):
+        if column not in dataset.person.columns:
+            dataset.person[column] = 0.0
     zero_weight_copy = dataset.copy()
     zero_weight_copy.household.household_weight = 0
     zero_weight_copy = subsample_dataset(zero_weight_copy, 10_000)
