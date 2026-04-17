@@ -68,14 +68,10 @@ def test_uprate_values_rejects_years_outside_range(tmp_path, monkeypatch):
     monkeypatch.setattr(uprating_module, "STORAGE_FOLDER", storage)
 
     with pytest.raises(UpratingYearOutOfRangeError, match="end_year=2099"):
-        uprate_values(
-            100.0, "employment_income", start_year=2020, end_year=2099
-        )
+        uprate_values(100.0, "employment_income", start_year=2020, end_year=2099)
 
     with pytest.raises(UpratingYearOutOfRangeError, match="start_year=1999"):
-        uprate_values(
-            100.0, "employment_income", start_year=1999, end_year=2034
-        )
+        uprate_values(100.0, "employment_income", start_year=1999, end_year=2034)
 
 
 def test_uprate_values_accepts_supported_range(tmp_path, monkeypatch):
@@ -86,9 +82,7 @@ def test_uprate_values_accepts_supported_range(tmp_path, monkeypatch):
     monkeypatch.setattr(uprating_module, "STORAGE_FOLDER", storage)
 
     # A supported year range still works and returns a sensible factor.
-    result = uprate_values(
-        100.0, "employment_income", start_year=2020, end_year=2034
-    )
+    result = uprate_values(100.0, "employment_income", start_year=2020, end_year=2034)
     # Seed table has linear growth 0.02 per year; 2020→2034 = 14 years ×
     # 0.02 = 1.28 multiplier off a 1.0 base.
     assert result == pytest.approx(128.0)
