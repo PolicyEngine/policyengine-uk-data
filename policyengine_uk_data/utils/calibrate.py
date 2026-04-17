@@ -260,36 +260,38 @@ def calibrate_local_areas(
                         f"Loss: {loss_value.item()}, Epoch: {epoch}, {area_name}<10%: {local_close:.1%}, National<10%: {national_close:.1%}"
                     )
 
-        if epoch % 10 == 0:
-            final_weights = (torch.exp(weights) * r).detach().numpy()
+            if epoch % 10 == 0:
+                final_weights = (torch.exp(weights) * r).detach().numpy()
 
-            # Log performance if requested and get_performance function is available
-            if log_csv:
-                performance_step = get_performance(
-                    final_weights,
-                    m_c,
-                    y_c,
-                    m_n,
-                    y_n,
-                    excluded_training_targets,
-                )
-                performance_step["epoch"] = epoch
-                performance_step["loss"] = performance_step.rel_abs_error**2
-                performance_step["target_name"] = [
-                    f"{area}/{metric}"
-                    for area, metric in zip(
-                        performance_step.name, performance_step.metric
+                # Log performance if requested and get_performance function is available
+                if log_csv:
+                    performance_step = get_performance(
+                        final_weights,
+                        m_c,
+                        y_c,
+                        m_n,
+                        y_n,
+                        excluded_training_targets,
                     )
-                ]
-                performance = pd.concat(
-                    [performance, performance_step], ignore_index=True
-                )
-                performance.to_csv(log_csv, index=False)
+                    performance_step["epoch"] = epoch
+                    performance_step["loss"] = (
+                        performance_step.rel_abs_error**2
+                    )
+                    performance_step["target_name"] = [
+                        f"{area}/{metric}"
+                        for area, metric in zip(
+                            performance_step.name, performance_step.metric
+                        )
+                    ]
+                    performance = pd.concat(
+                        [performance, performance_step], ignore_index=True
+                    )
+                    performance.to_csv(log_csv, index=False)
 
-            # Save weights
-            with h5py.File(STORAGE_FOLDER / weight_file, "w") as f:
-                f.create_dataset(dataset_key, data=final_weights)
+                # Save weights
+                with h5py.File(STORAGE_FOLDER / weight_file, "w") as f:
+                    f.create_dataset(dataset_key, data=final_weights)
 
-            dataset.household.household_weight = final_weights.sum(axis=0)
+                dataset.household.household_weight = final_weights.sum(axis=0)
 
     return dataset
