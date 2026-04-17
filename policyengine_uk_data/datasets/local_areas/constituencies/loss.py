@@ -32,6 +32,9 @@ from policyengine_uk_data.targets.sources.local_uc import (
     get_constituency_uc_targets,
     get_constituency_uc_by_children_targets,
 )
+from policyengine_uk_data.datasets.local_areas.constituencies.devolved_housing import (
+    add_private_rent_targets,
+)
 
 
 def create_constituency_target_matrix(
@@ -113,6 +116,16 @@ def create_constituency_target_matrix(
     uc_by_children = get_constituency_uc_by_children_targets()
     for col in uc_by_children.columns:
         y[col] = uc_by_children[col].values
+
+    # ── Wales/Scotland housing anchors ───────────────────────────────
+    add_private_rent_targets(
+        matrix,
+        y,
+        age_targets,
+        country=sim.calculate("country").values,
+        tenure_type=sim.calculate("tenure_type").values,
+        rent=sim.calculate("rent").values,
+    )
 
     # ── Boundary mapping (2010 → 2024) ────────────────────────────
     const_2024 = pd.read_csv(STORAGE_FOLDER / "constituencies_2024.csv")

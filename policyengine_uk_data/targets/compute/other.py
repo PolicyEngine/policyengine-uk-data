@@ -35,6 +35,7 @@ def compute_housing(target, ctx) -> np.ndarray:
         return ctx.pe("mortgage_capital_repayment") + ctx.pe(
             "mortgage_interest_repayment"
         )
+
     tenure = ctx.sim.calculate("tenure_type", map_to="household").values
     if name == "housing/rent_social":
         is_social = (tenure == "RENT_FROM_COUNCIL") | (tenure == "RENT_FROM_HA")
