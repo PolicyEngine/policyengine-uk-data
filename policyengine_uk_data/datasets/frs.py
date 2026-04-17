@@ -28,6 +28,13 @@ from policyengine_uk_data.utils.datasets import (
 from policyengine_uk_data.parameters import load_take_up_rate, load_parameter
 
 
+# Canonical weeks-per-year conversion factor for annualising weekly survey
+# variables. 365.25 / 7 ≈ 52.1786 accounts for leap years; using the rounded
+# integer 52 would under-count by ~0.34%. Exposed at module level so sibling
+# loaders (e.g. LCFS/ETB in `datasets/imputations/consumption.py`) can import
+# the same value rather than re-defining `* 52` locally and drifting.
+WEEKS_IN_YEAR = 365.25 / 7
+
 LEGACY_JOBSEEKER_MIN_AGE = 18
 HOURS_WORKED_WEEKS_PER_YEAR = 52
 ESA_MIN_AGE = 16
