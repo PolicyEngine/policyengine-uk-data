@@ -1,0 +1,1 @@
+Fix `datasets/spi.py` `__main__` crash (two-arg call to three-arg `create_spi`), parameterise the hardcoded £1,250 marriage allowance from policyengine-uk parameters, seed the age imputation RNG, and surface unknown GORCODE regions as `UNKNOWN` instead of silently mapping them to `SOUTH_EAST`.
