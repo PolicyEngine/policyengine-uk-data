@@ -219,43 +219,95 @@ def _parse_council_tax(wb: openpyxl.Workbook) -> list[Target]:
 
 
 def _parse_nics(wb: openpyxl.Workbook) -> list[Target]:
-    """Parse Table 3.4 (income tax and NICs detail) for employee/employer."""
+    """Parse Table 3.4 (income tax and NICs detail) for all NIC classes.
+
+    Covers Class 1 employee and employer (PAYE), plus Classes 2, 3 and 4
+    (self-employed flat-rate, voluntary, and self-employed profit-based).
+    Omitting Classes 2/3/4 biased calibration by ~£2-5B/yr of NIC receipts
+    — the omission pushed self-employment income downward to compensate,
+    distorting reforms that touch SE income.
+
+    Where a row label is not found the parser logs a warning and skips that
+    variable, so partial matches still produce useful targets.
+    """
     config = load_config()
     vintage = config["obr"]["vintage"]
     ref = config["obr"]["efo_receipts"]
     ws = wb["3.4"]
     cols = list(_FY_COL_TO_YEAR.keys())
 
-    nic_rows = {
+    # Map of target name → (list of candidate labels to search, variable
+    # name). Candidates let us accept minor wording variation in OBR EFOs
+    # (e.g. "Class 2 NICs" vs "Class 2 Self-Employed NICs") without
+    # failing the whole parse.
+    nic_rows: dict[str, tuple[list[str], str]] = {
         "ni_employee": (
-            "Class 1 Employee NICs",
+            ["Class 1 Employee NICs"],
             "ni_employee",
         ),
         "ni_employer": (
-            "Class 1 Employer NICs",
+            ["Class 1 Employer NICs"],
             "ni_employer",
+        ),
+        "ni_class_2": (
+            [
+                "Class 2 NICs",
+                "Class 2 Self-Employed NICs",
+                "Class 2 self-employed NICs",
+            ],
+            "ni_class_2",
+        ),
+        "ni_class_3": (
+            [
+                "Class 3 NICs",
+                "Class 3 Voluntary NICs",
+                "Class 3 voluntary NICs",
+            ],
+            "ni_class_3",
+        ),
+        "ni_class_4": (
+            [
+                "Class 4 NICs",
+                "Class 4 Self-Employed NICs",
+                "Class 4 self-employed NICs",
+            ],
+            "ni_class_4",
         ),
     }
 
     targets = []
-    for name, (label, variable) in nic_rows.items():
-        try:
-            row_num = _find_row(ws, label, col="B", max_row=30)
-            values = _read_row_values(ws, row_num, cols)
-            if values:
-                targets.append(
-                    Target(
-                        name=f"obr/{name}",
-                        variable=variable,
-                        source="obr",
-                        unit=Unit.GBP,
-                        values=values,
-                        reference_url=ref,
-                        forecast_vintage=vintage,
-                    )
+    for name, (labels, variable) in nic_rows.items():
+        row_num = None
+        last_error = None
+        for label in labels:
+            try:
+                row_num = _find_row(ws, label, col="B", max_row=40)
+                break
+            except ValueError as e:
+                last_error = e
+                continue
+        if row_num is None:
+            logger.warning(
+                "OBR NICs: no row matched labels %s for %s: %s",
+                labels,
+                variable,
+                last_error,
+            )
+            continue
+
+        values = _read_row_values(ws, row_num, cols)
+        if values:
+            targets.append(
+                Target(
+                    name=f"obr/{name}",
+                    variable=variable,
+                    source="obr",
+                    unit=Unit.GBP,
+                    values=values,
+                    reference_url=ref,
+                    forecast_vintage=vintage,
                 )
-        except ValueError:
-            logger.warning("OBR NICs: row '%s' not found", label)
+            )
 
     return targets
 
