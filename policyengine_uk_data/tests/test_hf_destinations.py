@@ -125,9 +125,7 @@ def _collect_violations() -> list[str]:
                 value = _kwarg_value(node, kwarg)
                 if value is None:
                     continue
-                if isinstance(value, ast.Constant) and isinstance(
-                    value.value, str
-                ):
+                if isinstance(value, ast.Constant) and isinstance(value.value, str):
                     # A raw string literal — flag it.
                     violations.append(
                         f"{path}:{node.lineno} "
@@ -158,8 +156,7 @@ def test_every_hf_upload_routes_through_guard_constants() -> None:
         pytest.fail(
             "The following upload-site call arguments bypass the shared "
             "PRIVATE_REPO / PUBLIC_REPO constants in "
-            "policyengine_uk_data.utils.hf_destinations:\n  "
-            + formatted
+            "policyengine_uk_data.utils.hf_destinations:\n  " + formatted
         )
 
 
