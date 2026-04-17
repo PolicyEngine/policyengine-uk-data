@@ -38,9 +38,7 @@ def _make_toy_inputs(n_households: int = 4, area_count: int = 2, n_targets: int 
     # target with matching index (rest zero).
     matrix = pd.DataFrame(np.eye(n_households, n_targets, dtype=float))
     # Per-area local targets — identical rows are fine for a smoke test.
-    local_targets = pd.DataFrame(
-        np.tile([100.0, 200.0][:n_targets], (area_count, 1))
-    )
+    local_targets = pd.DataFrame(np.tile([100.0, 200.0][:n_targets], (area_count, 1)))
     # Country mask: every area includes every household (simple case).
     country_mask = np.ones((area_count, n_households), dtype=float)
 
