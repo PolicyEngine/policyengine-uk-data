@@ -1,3 +1,10 @@
+## [1.50.6] - 2026-04-17
+
+### Fixed
+
+- Include `gift_aid` (SPI `GIFTAID`) and `charitable_investment_gifts` (SPI `GIFTINV`) in the SPI income imputation model so synthetic high-earner rows carry plausible charitable giving drawn jointly with income, instead of a flat zero. Previously the 6-variable QRF ran over only the core income components; both charitable relief columns were in `SPI_RENAMES` but never reached the predicted output, so the SPI-donor half of the enhanced FRS carried its FRS donor's (always-zero) charitable giving. Adds both columns to the model's output list, renames the cache file to force retraining, and initialises the FRS-side columns to zero to keep the stacked dataset valid.
+
+
 ## [1.50.5] - 2026-04-17
 
 No significant changes.
