@@ -24,12 +24,8 @@ def test_get_vat_parameters_reads_from_policyengine_uk():
         _get_vat_parameters,
     )
 
-    expected_standard = float(
-        system.parameters.gov.hmrc.vat.standard_rate("2020")
-    )
-    expected_reduced = float(
-        system.parameters.gov.hmrc.vat.reduced_rate_share("2020")
-    )
+    expected_standard = float(system.parameters.gov.hmrc.vat.standard_rate("2020"))
+    expected_reduced = float(system.parameters.gov.hmrc.vat.reduced_rate_share("2020"))
     standard, reduced = _get_vat_parameters(2020)
     assert standard == pytest.approx(expected_standard)
     assert reduced == pytest.approx(expected_reduced)
@@ -104,6 +100,7 @@ def test_generate_etb_table_uses_year_specific_vat_rate(monkeypatch):
 
     # Higher standard rate → lower implied full-rate expenditure (divide
     # totvat by a bigger denominator), so the computed rate must drop.
-    assert out_hypothetical["full_rate_vat_expenditure_rate"].iloc[0] < (
-        out_2020["full_rate_vat_expenditure_rate"].iloc[0]
+    assert (
+        out_hypothetical["full_rate_vat_expenditure_rate"].iloc[0]
+        < (out_2020["full_rate_vat_expenditure_rate"].iloc[0])
     )

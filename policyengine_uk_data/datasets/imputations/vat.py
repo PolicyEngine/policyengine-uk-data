@@ -57,9 +57,7 @@ def _get_vat_parameters(year: int) -> tuple[float, float]:
     try:
         from policyengine_uk.system import system
 
-        standard_rate = float(
-            system.parameters.gov.hmrc.vat.standard_rate(str(year))
-        )
+        standard_rate = float(system.parameters.gov.hmrc.vat.standard_rate(str(year)))
         reduced_rate_share = float(
             system.parameters.gov.hmrc.vat.reduced_rate_share(str(year))
         )
@@ -70,9 +68,7 @@ def _get_vat_parameters(year: int) -> tuple[float, float]:
         return _FALLBACK_VAT_STANDARD_RATE, _FALLBACK_REDUCED_RATE_SHARE
 
 
-def generate_etb_table(
-    etb: pd.DataFrame, year: int = DEFAULT_ETB_YEAR
-) -> pd.DataFrame:
+def generate_etb_table(etb: pd.DataFrame, year: int = DEFAULT_ETB_YEAR) -> pd.DataFrame:
     """
     Clean and transform ETB data for VAT imputation model training.
 
