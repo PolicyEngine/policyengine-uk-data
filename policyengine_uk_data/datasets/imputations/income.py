@@ -103,15 +103,21 @@ INCOME_COMPONENTS = [
     "property_income",
 ]
 
-# Gift Aid is in SPI but isn't in FRS — without it in the model outputs,
-# the zero-weight SPI-donor rows carry a middle-income FRS donor's (always
-# zero) Gift Aid, missing the £1-1.5bn/yr Gift Aid higher-rate relief flow.
-# Including it here means the multi-output QRF draws gift_aid jointly with
-# income components, so high-earner donors get plausibly non-zero Gift Aid.
-# We keep it separate from INCOME_COMPONENTS because the rent/mortgage
-# adjustment factor downstream is built from income sums, and Gift Aid is
-# an expenditure, not income.
-IMPUTATIONS = INCOME_COMPONENTS + ["gift_aid"]
+# Gift Aid (SPI GIFTAID) and charitable investment gifts (SPI GIFTINV) are
+# separate reliefs on the UK side but both absent from the FRS — without them
+# in the model outputs, the zero-weight SPI-donor rows carry a middle-income
+# FRS donor's (always zero) charitable giving, missing the £1-1.5bn/yr Gift
+# Aid higher-rate relief flow and an additional ~£0.1bn of qualifying-
+# investment gifts. Including them here means the multi-output QRF draws
+# them jointly with income components, so high-earner donors get plausibly
+# non-zero values. Kept separate from INCOME_COMPONENTS because the
+# rent/mortgage adjustment factor downstream is built from income sums, and
+# these are expenditures, not income. The standalone SPI dataset in
+# `datasets/spi.py` sums GIFTAID + GIFTINV into a single `gift_aid` column
+# because that path doesn't carry a separate `charitable_investment_gifts`
+# variable; the enhanced-FRS path here keeps them separate so each maps to
+# its own policyengine-uk variable.
+IMPUTATIONS = INCOME_COMPONENTS + ["gift_aid", "charitable_investment_gifts"]
 
 
 def save_imputation_models():
@@ -128,7 +134,7 @@ def save_imputation_models():
     spi = generate_spi_table(spi)
     spi = spi[PREDICTORS + IMPUTATIONS]
     income.fit(spi[PREDICTORS], spi[IMPUTATIONS])
-    income.save(STORAGE_FOLDER / "income_v2.pkl")
+    income.save(STORAGE_FOLDER / "income_v3.pkl")
     return income
 
 
@@ -144,8 +150,8 @@ def create_income_model(overwrite_existing: bool = False):
     """
     from policyengine_uk_data.utils.qrf import QRF
 
-    if (STORAGE_FOLDER / "income_v2.pkl").exists() and not overwrite_existing:
-        return QRF(file_path=STORAGE_FOLDER / "income_v2.pkl")
+    if (STORAGE_FOLDER / "income_v3.pkl").exists() and not overwrite_existing:
+        return QRF(file_path=STORAGE_FOLDER / "income_v3.pkl")
     return save_imputation_models()
 
 
@@ -201,13 +207,14 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     """
     # Impute wealth, assuming same time period as trained data
     dataset = dataset.copy()
-    # gift_aid is in IMPUTATIONS but is not a column on the raw FRS build, so
-    # initialise it to zero everywhere before imputation. Without this, the
-    # full-FRS half stays NaN for gift_aid (it's never touched by the dividend-
-    # only impute_over_incomes call below), and the eventual stacked dataset
-    # fails validate() on the gift_aid column.
-    if "gift_aid" not in dataset.person.columns:
-        dataset.person["gift_aid"] = 0.0
+    # gift_aid and charitable_investment_gifts are in IMPUTATIONS but are not
+    # columns on the raw FRS build, so initialise them to zero everywhere
+    # before imputation. Without this, the full-FRS half stays NaN for these
+    # columns (they're never touched by the dividend-only impute_over_incomes
+    # call below), and the eventual stacked dataset fails validate().
+    for column in ("gift_aid", "charitable_investment_gifts"):
+        if column not in dataset.person.columns:
+            dataset.person[column] = 0.0
     zero_weight_copy = dataset.copy()
     zero_weight_copy.household.household_weight = 0
     zero_weight_copy = subsample_dataset(zero_weight_copy, 10_000)
