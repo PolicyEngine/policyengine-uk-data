@@ -1,3 +1,15 @@
+## [1.52.2] - 2026-04-18
+
+### Changed
+
+- Add second-stage QRF imputation of FRS-only variables on SPI-donor rows. After the first-stage SPI-trained QRF overwrites income components on the zero-weight subsample, a new second-stage QRF trained on the full FRS rewrites benefit `_reported` columns, pension contributions, and savings-income so they correlate with the freshly-imputed incomes instead of staying as whatever middle-income FRS donor was sampled. Mirrors the `policyengine-us-data#589` pattern. Prevents synthetic £2 M earners from carrying a middle-income donor's UC / housing-benefit receipt into calibration, which was blowing up benefit aggregates under upweight.
+- Anchor stochastic takeup assignment for Universal Credit, Pension Credit, and Child Benefit to the FRS-reported receipt columns, matching the `policyengine-us-data` pattern. Respondents who report positive receipt in the FRS benefits table now receive `would_claim_* = True` with certainty, and non-reporters are filled probabilistically to hit the aggregate target rate. Removes a source of calibration noise where respondents who clearly took up a benefit could be randomly assigned `would_claim = False`.
+
+### Fixed
+
+- Refresh Tax-Free Childcare calibration targets and take-up rate using HMRC's June 2025 release (covering 2024-25 outturn: £632 m spending, 985 k children reached). The prior target set was calibrated against the September 2024 release and undershot current TFC spending by roughly a third. Bumps the default TFC take-up rate from 0.586 to 0.88 on 2024-04-06 to close most of the gap pending a full recalibration run.
+
+
 ## [1.52.1] - 2026-04-18
 
 ### Fixed
