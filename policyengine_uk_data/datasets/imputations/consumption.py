@@ -345,6 +345,13 @@ def _derive_energy_from_lcfs(household: pd.DataFrame) -> pd.DataFrame:
     electricity[mask4] = p537[mask4] * mean_elec_share
     gas[mask4] = p537[mask4] * (1 - mean_elec_share)
 
+    # Clamp to non-negative; raw LCFS bill variables occasionally produce
+    # small negatives (e.g. B490 > B489 inconsistency, or implausible
+    # negative P537 entries). Consumption totals can't be negative by
+    # definition and downstream NEED calibration preserves zero.
+    electricity = np.maximum(electricity, 0.0)
+    gas = np.maximum(gas, 0.0)
+
     household = household.copy()
     household["electricity_consumption"] = electricity
     household["gas_consumption"] = gas
