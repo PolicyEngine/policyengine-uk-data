@@ -13,6 +13,7 @@ from policyengine_uk_data.utils.progress import ProcessingProgress
 
 logger = logging.getLogger(__name__)
 
+
 def load_weights(
     weight_file: Union[str, Path],
     dataset_key: str = "2025",
@@ -83,7 +84,6 @@ def load_weights(
             f"records, expected {n_records}"
         )
     return arr
-
 
 
 def calibrate_local_areas(
