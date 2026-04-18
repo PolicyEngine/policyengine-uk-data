@@ -256,6 +256,21 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         IMPUTATIONS,
     )
 
+    # Second-stage QRF: rewrite FRS-only variables (benefit `_reported`
+    # columns, pension contributions, savings, etc.) on the SPI-donor rows
+    # so they correlate with the freshly-imputed incomes instead of staying
+    # as whatever middle-income FRS donor was sampled. Without this the
+    # £2M imputed earners keep their donor's £120 UC receipt, blowing up
+    # benefit aggregates under calibration upweight.
+    from policyengine_uk_data.datasets.imputations.frs_only import (
+        impute_frs_only_variables,
+    )
+
+    zero_weight_copy = impute_frs_only_variables(
+        train_dataset=dataset,
+        target_dataset=zero_weight_copy,
+    )
+
     dataset = impute_over_incomes(
         dataset,
         model,
