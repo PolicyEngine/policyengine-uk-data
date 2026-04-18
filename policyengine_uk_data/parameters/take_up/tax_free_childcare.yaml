@@ -5,5 +5,14 @@ metadata:
   reference:
     - title: Empirical estimate from FRS data
       href: https://github.com/PolicyEngine/policyengine-uk-data
+    - title: "HMRC Tax-Free Childcare statistics (June 2025 release)"
+      href: https://www.gov.uk/government/statistics/tax-free-childcare-statistics-june-2025
 values:
   2015-01-01: 0.586
+  # Bumped from the 2020-21 FRS-calibrated 0.586 level to reflect HMRC's
+  # reported 2024-25 TFC spending (£632 m) and children-reached caseload
+  # (985 k annual unique). The prior rate undershot spending by roughly a
+  # third under the current FRS-based pipeline. A full recalibration via
+  # `datasets/childcare/takeup_rate.py` against the refreshed targets is
+  # planned; this manual bump closes most of the gap in the interim.
+  2024-04-06: 0.88
