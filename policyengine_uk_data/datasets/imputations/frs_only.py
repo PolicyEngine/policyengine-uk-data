@@ -125,6 +125,38 @@ def _align_columns(
     )
 
 
+def _build_predictor_frame(dataset: UKSingleYearDataset) -> pd.DataFrame:
+    """Return a person-indexed DataFrame of stage-2 predictor columns.
+
+    ``region`` lives on the household frame in the enhanced-FRS build,
+    so it is joined onto each person row via ``person_household_id``.
+    Remaining predictors (age, gender, the six income components) are
+    read directly from the person frame. If the person frame already
+    carries ``region`` (as in some test fixtures and the standalone SPI
+    build) that value wins and no join is performed.
+    """
+    person = dataset.person
+    predictors = STAGE2_DEMOGRAPHIC_PREDICTORS + STAGE2_INCOME_PREDICTORS
+
+    if "region" in person.columns:
+        frame = person[predictors].copy()
+    elif (
+        "region" in dataset.household.columns
+        and "person_household_id" in person.columns
+    ):
+        hh_region = dataset.household.set_index("household_id")["region"]
+        person_region = person["person_household_id"].map(hh_region)
+        frame = person[[c for c in predictors if c != "region"]].copy()
+        frame["region"] = person_region.values
+        frame = frame[predictors]
+    else:
+        raise KeyError(
+            "Stage-2 imputation needs 'region' either on the person frame "
+            "or on the household frame with a 'person_household_id' join key."
+        )
+    return frame
+
+
 def impute_frs_only_variables(
     train_dataset: UKSingleYearDataset,
     target_dataset: UKSingleYearDataset,
@@ -171,10 +203,8 @@ def impute_frs_only_variables(
         )
         return target_dataset
 
-    predictors = STAGE2_DEMOGRAPHIC_PREDICTORS + STAGE2_INCOME_PREDICTORS
-
-    train_inputs_raw = train_person[predictors].copy()
-    target_inputs_raw = target_person[predictors].copy()
+    train_inputs_raw = _build_predictor_frame(train_dataset)
+    target_inputs_raw = _build_predictor_frame(target_dataset)
 
     train_inputs = _one_hot_encode(train_inputs_raw, columns=["gender", "region"])
     target_inputs = _one_hot_encode(target_inputs_raw, columns=["gender", "region"])
