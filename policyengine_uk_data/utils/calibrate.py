@@ -1,3 +1,4 @@
+import logging
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Optional, Union
@@ -9,6 +10,8 @@ import h5py
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk_data.utils.progress import ProcessingProgress
+
+logger = logging.getLogger(__name__)
 
 
 def load_weights(
@@ -184,9 +187,12 @@ def calibrate_local_areas(
         r = torch.tensor(r, dtype=torch.float32)
 
     def sre(x, y):
-        one_way = ((1 + x) / (1 + y) - 1) ** 2
-        other_way = ((1 + y) / (1 + x) - 1) ** 2
-        return torch.min(one_way, other_way)
+        """Squared log-ratio loss — symmetric so overshoot and undershoot
+        of the same magnitude incur identical cost.  The previous
+        min-of-two-ratios formulation penalised undershoot more than
+        overshoot, which systematically biased the optimiser toward
+        inflating weights (root cause of the ~6 % population overshoot)."""
+        return torch.log((1 + x) / (1 + y)) ** 2
 
     def loss(w, validation: bool = False):
         pred_local = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
