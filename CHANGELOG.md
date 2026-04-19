@@ -1,3 +1,10 @@
+## [1.53.0] - 2026-04-19
+
+### Added
+
+- Tightened `test_population` tolerance from 7% to 3% now that the stage-2 QRF (#362), TFC target refresh (#363), and reported-anchor takeup (#359) pulled the weighted UK population overshoot from ~6.5% down to ~1.6%. Added four regression tests in `test_population_fidelity.py` (weighted-total match, household-count range, non-inflation guard, country-sum consistency) extracted from the earlier #310 draft so any future calibration drift back toward the pre-April-2026 overshoot trips CI.
+
+
 ## [1.52.2] - 2026-04-18
 
 ### Changed
