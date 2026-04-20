@@ -94,9 +94,9 @@ def test_targets_sum_to_national():
 
 def test_kensington_and_chelsea_above_blackpool():
     """K&C avg household land value should exceed Blackpool's."""
-    kc_code = LA_INPUTS.loc[
-        LA_INPUTS["name"] == "Kensington and Chelsea", "code"
-    ].iloc[0]
+    kc_code = LA_INPUTS.loc[LA_INPUTS["name"] == "Kensington and Chelsea", "code"].iloc[
+        0
+    ]
     blackpool_code = LA_INPUTS.loc[LA_INPUTS["name"] == "Blackpool", "code"].iloc[0]
     kc_hh = LA_INPUTS.set_index("code").loc[kc_code, "households"]
     bp_hh = LA_INPUTS.set_index("code").loc[blackpool_code, "households"]
@@ -127,9 +127,20 @@ def test_london_total_land_dwarfs_north_east():
     """Sum of London LA targets should exceed sum of North-East LA targets."""
     inputs = LA_INPUTS.set_index("code")
     london_codes = inputs.loc[inputs.index.str.startswith("E09"), :].index
-    ne_prefixes = ("E06000001", "E06000002", "E06000003", "E06000004", "E06000005",
-                   "E06000047", "E08000021", "E08000022", "E08000023", "E08000024",
-                   "E08000037", "E06000057")
+    ne_prefixes = (
+        "E06000001",
+        "E06000002",
+        "E06000003",
+        "E06000004",
+        "E06000005",
+        "E06000047",
+        "E08000021",
+        "E08000022",
+        "E08000023",
+        "E08000024",
+        "E08000037",
+        "E06000057",
+    )
     ne_codes = [c for c in inputs.index if c in ne_prefixes]
     london_total = sum(LA_TARGETS[c][2024] for c in london_codes)
     ne_total = sum(LA_TARGETS[c][2024] for c in ne_codes)
@@ -167,8 +178,7 @@ def test_targets_have_values_for_all_known_years():
     expected_years = set(HOUSEHOLD_LAND_VALUES)
     for t in get_targets():
         assert set(t.values) == expected_years, (
-            f"{t.name} missing years: "
-            f"{expected_years - set(t.values)}"
+            f"{t.name} missing years: {expected_years - set(t.values)}"
         )
 
 
