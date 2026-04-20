@@ -130,9 +130,9 @@ def test_targets_have_values_for_2021_to_2026():
 
 def test_target_registry_includes_regional():
     """Regional land targets should appear in the global registry."""
-    from policyengine_uk_data.targets import get_all_targets
+    from policyengine_uk_data.targets import get_all_targets, GeographicLevel
 
-    targets = get_all_targets(year=2025)
+    targets = get_all_targets(year=2025, geographic_level=GeographicLevel.REGION)
     regional = [t for t in targets if t.name.startswith("ons/household_land_value/")]
     assert len(regional) == 11, (
         f"Expected 11 regional land targets, got {len(regional)}"
