@@ -17,12 +17,17 @@ person IDs of *survivors* are preserved byte-for-byte, deaths remove IDs
 and births add IDs. Consumers reasoning about the transition should use
 ``policyengine_uk_data.utils.panel_ids.classify_panel_ids``.
 
+Mortality rates can be supplied in two shapes — an age-only
+``Mapping[int, float]`` (the placeholder format) or a sex-specific
+``Mapping[str, Mapping[int, float]]`` keyed by ``"MALE"`` / ``"FEMALE"``.
+Real ONS life-table rates are available via
+``targets.sources.ons_mortality.get_mortality_rates``; pass its output
+directly to ``age_dataset(mortality_rates=...)``.
+
 Out of scope for this module (tracked in #345):
 
-- Real ONS life tables and fertility rates. The defaults shipped here are
-  reasonable-shape **placeholders** and are clearly named as such. Callers
-  supply the real rates via the ``mortality_rates`` and ``fertility_rates``
-  arguments.
+- Real fertility rates by age of mother from ONS ASFR — the fertility
+  default is still a placeholder until that follow-up lands.
 - Household and benefit unit formation beyond attaching newborns to their
   mother's existing unit. Children reaching adulthood, marriage, separation,
   leaving home — all deferred.
@@ -31,12 +36,18 @@ Out of scope for this module (tracked in #345):
 
 from __future__ import annotations
 
-from typing import Mapping
+from typing import Mapping, Union
 
 import numpy as np
 import pandas as pd
 
 from policyengine_uk.data import UKSingleYearDataset
+
+
+# Type aliases — either age-only or sex-specific age-indexed rates.
+AgeOnlyRates = Mapping[int, float]
+SexSpecificRates = Mapping[str, Mapping[int, float]]
+MortalityRates = Union[AgeOnlyRates, SexSpecificRates]
 
 
 AGE_COLUMN = "age"
@@ -79,7 +90,7 @@ def age_dataset(
     years: int,
     *,
     seed: int = 0,
-    mortality_rates: Mapping[int, float] | None = None,
+    mortality_rates: MortalityRates | None = None,
     fertility_rates: Mapping[int, float] | None = None,
 ) -> UKSingleYearDataset:
     """Return a demographically-aged copy of ``base``, ``years`` forward.
@@ -93,9 +104,14 @@ def age_dataset(
         years: non-negative number of whole years to advance. ``0`` returns
             a straight copy.
         seed: random seed. Identical seeds produce identical outputs.
-        mortality_rates: map from age to per-year death probability. Pass an
-            empty dict to disable mortality. Pass ``None`` to use the
-            placeholder defaults. Ages not in the table default to ``0``.
+        mortality_rates: per-year death probabilities. Accepts either an
+            age-only ``{age: qx}`` mapping (applied to every person
+            regardless of sex) or a sex-specific
+            ``{"MALE": {age: qx}, "FEMALE": {age: qx}}`` mapping (e.g. the
+            output of ``targets.sources.ons_mortality.get_mortality_rates``).
+            Pass an empty dict to disable mortality. Pass ``None`` to use
+            the placeholder defaults. Ages not in the table default to
+            ``0``.
         fertility_rates: map from age of mother to per-year birth
             probability. Pass an empty dict to disable fertility. Pass
             ``None`` to use the placeholder defaults. Only applied to
@@ -134,16 +150,51 @@ def age_dataset(
     return aged
 
 
+def _is_sex_specific(rates: MortalityRates) -> bool:
+    """Detect whether ``rates`` is keyed by sex label or by age.
+
+    A sex-specific rate table has string keys at the top level and dict
+    values; an age-only table has integer-like keys at the top level and
+    float values. Empty mappings are treated as age-only (disabled).
+    """
+    if not rates:
+        return False
+    sample_key = next(iter(rates))
+    return isinstance(sample_key, str)
+
+
 def _apply_mortality(
     dataset: UKSingleYearDataset,
-    mortality_rates: Mapping[int, float],
+    mortality_rates: MortalityRates,
     rng: np.random.Generator,
 ) -> UKSingleYearDataset:
     if not mortality_rates:
         return dataset
     person = dataset.person
     ages = person[AGE_COLUMN].astype(int).to_numpy()
-    rates = np.array([mortality_rates.get(int(a), 0.0) for a in ages], dtype=float)
+
+    if _is_sex_specific(mortality_rates):
+        # Unknown sex labels fall through to 0 (no mortality) so extra
+        # categories in the dataset do not silently crash; missing ages
+        # inside a known sex block also default to 0 to match the
+        # age-only path.
+        if SEX_COLUMN in person.columns:
+            sexes = person[SEX_COLUMN].to_numpy()
+        else:
+            sexes = np.array([MALE_VALUE] * len(person), dtype=object)
+        rates = np.array(
+            [
+                float(mortality_rates.get(str(s), {}).get(int(a), 0.0))
+                for a, s in zip(ages, sexes)
+            ],
+            dtype=float,
+        )
+    else:
+        rates = np.array(
+            [float(mortality_rates.get(int(a), 0.0)) for a in ages],
+            dtype=float,
+        )
+
     draws = rng.random(size=ages.shape[0])
     survives = draws >= rates
     dataset.person = person.loc[survives].reset_index(drop=True)
