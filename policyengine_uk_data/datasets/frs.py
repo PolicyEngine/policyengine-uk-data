@@ -28,6 +28,13 @@ from policyengine_uk_data.utils.datasets import (
 from policyengine_uk_data.parameters import load_take_up_rate, load_parameter
 
 
+# Canonical weeks-per-year conversion factor for annualising weekly survey
+# variables. 365.25 / 7 ≈ 52.1786 accounts for leap years; using the rounded
+# integer 52 would under-count by ~0.34%. Exposed at module level so sibling
+# loaders (e.g. LCFS/ETB in `datasets/imputations/consumption.py`) can import
+# the same value rather than re-defining `* 52` locally and drifting.
+WEEKS_IN_YEAR = 365.25 / 7
+
 LEGACY_JOBSEEKER_MIN_AGE = 18
 HOURS_WORKED_WEEKS_PER_YEAR = 52
 ESA_MIN_AGE = 16
@@ -1210,24 +1217,45 @@ def create_frs(
     scp_under_6_rate = load_take_up_rate("scp_under_6", year)
     scp_6_plus_rate = load_take_up_rate("scp_6_plus", year)
 
-    # Generate take-up decisions by comparing random draws to take-up rates
+    # Generate take-up decisions by comparing random draws to take-up rates,
+    # anchored to reported receipts where the FRS captures them. Respondents
+    # who report positive receipt of a benefit are assigned takeup=True with
+    # certainty; the remaining non-reporters are filled probabilistically to
+    # hit the aggregate target rate. See policyengine_uk_data/utils/takeup.py.
+    from policyengine_uk_data.utils.takeup import (
+        assign_takeup_with_reported_anchors,
+    )
+
+    def _reported_benunit_mask(person_column: str) -> np.ndarray:
+        reporter_benunits = set(
+            pe_person.loc[pe_person[person_column] > 0, "person_benunit_id"].values
+        )
+        return pe_benunit["benunit_id"].isin(reporter_benunits).values
+
     # Person-level
     pe_person["would_claim_marriage_allowance"] = (
         generator.random(len(pe_person)) < marriage_allowance_rate
     )
 
-    # Benefit unit-level
-    pe_benunit["would_claim_child_benefit"] = (
-        generator.random(len(pe_benunit)) < child_benefit_rate
+    # Benefit unit-level — anchor on any adult in the benefit unit having
+    # reported positive receipt in the FRS benefits table.
+    pe_benunit["would_claim_child_benefit"] = assign_takeup_with_reported_anchors(
+        generator.random(len(pe_benunit)),
+        child_benefit_rate,
+        reported_mask=_reported_benunit_mask("child_benefit_reported"),
     )
     pe_benunit["child_benefit_opts_out"] = (
         generator.random(len(pe_benunit)) < child_benefit_opts_out_rate
     )
-    pe_benunit["would_claim_pc"] = (
-        generator.random(len(pe_benunit)) < pension_credit_rate
+    pe_benunit["would_claim_pc"] = assign_takeup_with_reported_anchors(
+        generator.random(len(pe_benunit)),
+        pension_credit_rate,
+        reported_mask=_reported_benunit_mask("pension_credit_reported"),
     )
-    pe_benunit["would_claim_uc"] = (
-        generator.random(len(pe_benunit)) < universal_credit_rate
+    pe_benunit["would_claim_uc"] = assign_takeup_with_reported_anchors(
+        generator.random(len(pe_benunit)),
+        universal_credit_rate,
+        reported_mask=_reported_benunit_mask("universal_credit_reported"),
     )
     pe_benunit["would_claim_tfc"] = generator.random(len(pe_benunit)) < tfc_rate
     pe_benunit["would_claim_extended_childcare"] = (

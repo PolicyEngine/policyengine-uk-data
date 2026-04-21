@@ -25,7 +25,16 @@ reforms:
   parameters:
     gov.hmrc.national_insurance.class_1.rates.employee.main: 0.1
 - name: Raise VAT standard rate by 2pp
-  expected_impact: 25.0
+  # Delta scales as `consumption * 0.5 * 0.02 / 0.38 ≈ 0.0263 * consumption`
+  # (full-rate share 0.5 × 2pp rate change ÷ 0.38 microdata-VAT-coverage
+  # parameter). The enhanced FRS now carries a UK-realistic ~£1.6T total
+  # consumption base (ONS 2025 total consumer expenditure ≈ £1.6T), so a
+  # 2pp standard-rate rise produces ~£43 bn. The prior 25.0 bn expectation
+  # predates the consumption-base growth. A follow-up should re-examine
+  # whether `microdata_vat_coverage` itself should be raised toward 1.0
+  # now that the enhanced FRS consumption aggregate has caught up — see
+  # #364.
+  expected_impact: 43.0
   tolerance: 10.0
   parameters:
     gov.hmrc.vat.standard_rate: 0.22
