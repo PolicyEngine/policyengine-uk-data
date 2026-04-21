@@ -993,31 +993,39 @@ def apply_employment_transitions(
     job_loss_rate: float = DEFAULT_JOB_LOSS_RATE,
     job_gain_rate: float = DEFAULT_JOB_GAIN_RATE,
     wage_drift: float = DEFAULT_WAGE_DRIFT,
+    ukhls_rates: Mapping[tuple[str, str, str], Mapping[str, float]] | None = None,
     rng: np.random.Generator | None = None,
 ) -> UKSingleYearDataset:
-    """Apply one year of labour-market transitions (rule-based).
+    """Apply one year of labour-market transitions.
 
-    Three independent effects run in order:
+    Two modes:
 
-    1. **Retirement**: people who reach SPA this year have their
-       ``employment_income`` and ``self_employment_income`` zeroed, and
-       their ``employment_status`` set to ``RETIRED`` if that column is
-       present. No reverse transition (no "un-retirement"): the flow is
-       one-way.
-    2. **Wage drift**: labour income of remaining workers is multiplied
-       by ``(1 + wage_drift)`` to track a nominal CPI-plus-real path.
-    3. **Job loss / gain**: for working-age (< SPA) adults, each
-       currently-employed row can lose their job with probability
-       ``job_loss_rate`` (income zeroed, status → UNEMPLOYED if column
-       present); each currently-non-employed row can gain a job with
-       probability ``job_gain_rate``. New jobs draw a starting income
-       from the distribution of the dataset's currently-employed
-       earners at the same age (nearest-age donor).
+    - **Rule-based** (default, ``ukhls_rates=None``): runs retirement at
+      SPA → wage drift → rule-based job loss / gain as three
+      independent effects.
 
-    This is an explicit placeholder — proper year-on-year transitions
-    belong on UKHLS-estimated rates. The rule-based defaults are small
-    enough to be a low-noise starting point and surfaced as caller args
-    so they can be tuned to observed flows in the meantime.
+    - **UKHLS-driven** (``ukhls_rates`` supplied): for each working-age
+      person, classifies their current state into the four-state
+      labour market label (``IN_WORK`` / ``UNEMPLOYED`` / ``RETIRED`` /
+      ``INACTIVE``) and draws their next state from the empirical
+      age-band × sex transition matrix estimated from UKHLS. Pass the
+      output of :func:`ukhls_transitions.load_employment_transitions`
+      directly. Retirement at SPA and wage drift still run in addition.
+
+    Args:
+        dataset: panel-ready dataset. Not mutated.
+        state_pension_age: age at which labour income is zeroed and
+            status switched to RETIRED.
+        job_loss_rate: rule-based probability of losing a job (ignored
+            when ``ukhls_rates`` is supplied).
+        job_gain_rate: rule-based probability of gaining a job (ignored
+            when ``ukhls_rates`` is supplied).
+        wage_drift: nominal wage growth applied to active workers.
+        ukhls_rates: nested mapping
+            ``{(age_band, sex, state_from): {state_to: probability}}``.
+            Typically obtained via
+            ``policyengine_uk_data.utils.ukhls_transitions.load_employment_transitions``.
+        rng: generator. ``None`` constructs a default one.
     """
     if rng is None:
         rng = np.random.default_rng()
@@ -1062,45 +1070,325 @@ def apply_employment_transitions(
             1.0 + wage_drift
         )
 
-    # --- 3. Job loss / job gain ----------------------------------------------
-    # Working-age, non-retired.
+    # --- 3. Labour-market transitions ----------------------------------------
     working_age = (ages >= 18) & (ages < state_pension_age)
     employed_mask = working_age & has_labour_income.to_numpy()
     unemployed_mask = working_age & ~has_labour_income.to_numpy()
 
-    # Job loss draws.
-    if job_loss_rate > 0 and employed_mask.any():
-        draws = rng.random(size=len(person))
-        loses = employed_mask & (draws < job_loss_rate)
-        if emp_col in person.columns:
-            person.loc[loses, emp_col] = 0.0
-        if self_col is not None:
-            person.loc[loses, self_col] = 0.0
-        if status_col is not None:
-            person.loc[loses, status_col] = "UNEMPLOYED"
+    if ukhls_rates is not None:
+        _apply_ukhls_employment_transitions(
+            person=person,
+            ages=ages,
+            state_pension_age=state_pension_age,
+            ukhls_rates=ukhls_rates,
+            emp_col=emp_col,
+            self_col=self_col,
+            status_col=status_col,
+            rng=rng,
+        )
+    else:
+        # Rule-based fallback.
+        if job_loss_rate > 0 and employed_mask.any():
+            draws = rng.random(size=len(person))
+            loses = employed_mask & (draws < job_loss_rate)
+            if emp_col in person.columns:
+                person.loc[loses, emp_col] = 0.0
+            if self_col is not None:
+                person.loc[loses, self_col] = 0.0
+            if status_col is not None:
+                person.loc[loses, status_col] = "UNEMPLOYED"
 
-    # Job gain draws — assign a new income from the same-age employed donor pool.
-    if job_gain_rate > 0 and unemployed_mask.any() and emp_col in person.columns:
-        draws = rng.random(size=len(person))
-        gains = unemployed_mask & (draws < job_gain_rate)
-        if gains.any():
-            currently_employed = person[
-                (person[emp_col] > 0) & (ages < state_pension_age)
-            ]
-            if not currently_employed.empty:
-                age_values = currently_employed[AGE_COLUMN].astype(int).to_numpy()
-                income_values = currently_employed[emp_col].to_numpy()
-                gainer_ages = person.loc[gains, AGE_COLUMN].astype(int).to_numpy()
-                new_incomes = []
-                for ga in gainer_ages:
-                    # Pick nearest age donor (ties broken randomly).
-                    diffs = np.abs(age_values - ga)
-                    best = np.where(diffs == diffs.min())[0]
-                    chosen = int(rng.choice(best))
-                    new_incomes.append(float(income_values[chosen]))
-                person.loc[gains, emp_col] = new_incomes
-                if status_col is not None:
-                    person.loc[gains, status_col] = "FT_EMPLOYED"
+        if job_gain_rate > 0 and unemployed_mask.any() and emp_col in person.columns:
+            draws = rng.random(size=len(person))
+            gains = unemployed_mask & (draws < job_gain_rate)
+            if gains.any():
+                currently_employed = person[
+                    (person[emp_col] > 0) & (ages < state_pension_age)
+                ]
+                if not currently_employed.empty:
+                    age_values = currently_employed[AGE_COLUMN].astype(int).to_numpy()
+                    income_values = currently_employed[emp_col].to_numpy()
+                    gainer_ages = person.loc[gains, AGE_COLUMN].astype(int).to_numpy()
+                    new_incomes = []
+                    for ga in gainer_ages:
+                        diffs = np.abs(age_values - ga)
+                        best = np.where(diffs == diffs.min())[0]
+                        chosen = int(rng.choice(best))
+                        new_incomes.append(float(income_values[chosen]))
+                    person.loc[gains, emp_col] = new_incomes
+                    if status_col is not None:
+                        person.loc[gains, status_col] = "FT_EMPLOYED"
 
     ds.person = person.reset_index(drop=True)
+    return ds
+
+
+# -- UKHLS transition application -------------------------------------------
+
+# 5-year bands matching what `utils.ukhls_transitions._age_band` produces.
+_UKHLS_AGE_EDGES = [16, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 121]
+
+
+def _ukhls_age_band_label(age: int) -> str | None:
+    if age < _UKHLS_AGE_EDGES[0] or age >= _UKHLS_AGE_EDGES[-1]:
+        return None
+    for lo, hi in zip(_UKHLS_AGE_EDGES, _UKHLS_AGE_EDGES[1:]):
+        if lo <= age < hi:
+            return f"{lo}-{hi - 1}"
+    return None
+
+
+def _current_four_state(
+    employment_income: float,
+    has_self_employment: bool,
+    age: int,
+    state_pension_age: int,
+) -> str:
+    """Classify a person's current labour-market state into the four-state
+    enum used by the UKHLS transition tables."""
+    if age >= state_pension_age:
+        return "RETIRED"
+    if employment_income > 0 or has_self_employment:
+        return "IN_WORK"
+    if 18 <= age < state_pension_age:
+        return "UNEMPLOYED"
+    return "INACTIVE"
+
+
+def _apply_ukhls_employment_transitions(
+    *,
+    person: pd.DataFrame,
+    ages: np.ndarray,
+    state_pension_age: int,
+    ukhls_rates: Mapping[tuple[str, str, str], Mapping[str, float]],
+    emp_col: str,
+    self_col: str | None,
+    status_col: str | None,
+    rng: np.random.Generator,
+) -> None:
+    """In-place: redraw each working-age person's state from UKHLS matrices.
+
+    Classifies the current state from stored columns, draws the next
+    state from ``ukhls_rates[(age_band, sex, state_from)]``, then
+    updates income and status columns to match the new state.
+    """
+    if emp_col not in person.columns:
+        return
+    emp_income = person[emp_col].to_numpy(dtype=float)
+    has_self = (
+        (person[self_col].to_numpy(dtype=float) > 0)
+        if self_col is not None
+        else np.zeros(len(person), dtype=bool)
+    )
+    sexes = (
+        person[SEX_COLUMN].astype(str).to_numpy()
+        if SEX_COLUMN in person.columns
+        else np.array([MALE_VALUE] * len(person), dtype=object)
+    )
+
+    # Build per-person destination draws. Use a donor pool of currently
+    # employed people at similar age for fresh IN_WORK entrants.
+    employed_now_mask = (emp_income > 0) & (ages < state_pension_age)
+    donor_ages = ages[employed_now_mask]
+    donor_incomes = emp_income[employed_now_mask]
+
+    new_emp_income = emp_income.copy()
+    new_self_income = (
+        person[self_col].to_numpy(dtype=float).copy() if self_col is not None else None
+    )
+    new_status: list[str | None] = (
+        list(person[status_col].astype(str))
+        if status_col is not None
+        else [None] * len(person)
+    )
+
+    for idx in range(len(person)):
+        age = int(ages[idx])
+        # Retirees handled elsewhere; UKHLS transitions apply only to
+        # working-age people.
+        if age < 18 or age >= state_pension_age:
+            continue
+        band = _ukhls_age_band_label(age)
+        if band is None:
+            continue
+        sex = str(sexes[idx])
+        cur_state = _current_four_state(
+            emp_income[idx], bool(has_self[idx]), age, state_pension_age
+        )
+        probs = ukhls_rates.get((band, sex, cur_state))
+        if not probs:
+            continue
+        states = list(probs.keys())
+        weights = np.array([probs[s] for s in states], dtype=float)
+        weights = weights / weights.sum() if weights.sum() else weights
+        if weights.sum() == 0:
+            continue
+        next_state = str(rng.choice(states, p=weights))
+        if next_state == cur_state:
+            continue
+
+        if next_state == "IN_WORK":
+            # Sample a new income from nearest-age donor.
+            if donor_ages.size:
+                diffs = np.abs(donor_ages - age)
+                best = np.where(diffs == diffs.min())[0]
+                chosen = int(rng.choice(best))
+                new_emp_income[idx] = float(donor_incomes[chosen])
+            if status_col is not None:
+                new_status[idx] = "FT_EMPLOYED"
+        elif next_state in ("UNEMPLOYED", "INACTIVE"):
+            new_emp_income[idx] = 0.0
+            if new_self_income is not None:
+                new_self_income[idx] = 0.0
+            if status_col is not None:
+                new_status[idx] = (
+                    "UNEMPLOYED" if next_state == "UNEMPLOYED" else "OTHER_INACTIVE"
+                )
+        elif next_state == "RETIRED":
+            new_emp_income[idx] = 0.0
+            if new_self_income is not None:
+                new_self_income[idx] = 0.0
+            if status_col is not None:
+                new_status[idx] = "RETIRED"
+
+    person[emp_col] = new_emp_income
+    if new_self_income is not None and self_col is not None:
+        person[self_col] = new_self_income
+    if status_col is not None:
+        person[status_col] = new_status
+
+
+# ── Income-decile transitions ───────────────────────────────────────────────
+
+
+def apply_income_decile_transitions(
+    dataset: UKSingleYearDataset,
+    decile_rates: Mapping[tuple[str, str, int], Mapping[int, float]],
+    rng: np.random.Generator | None = None,
+    *,
+    income_col: str = "employment_income",
+    min_age: int = 18,
+) -> UKSingleYearDataset:
+    """Move people between income deciles using UKHLS-estimated transitions.
+
+    For each working-age person with a non-zero ``income_col`` value,
+    assign them a current within-dataset decile (by age-band × sex),
+    draw a destination decile from ``decile_rates[(age_band, sex,
+    decile_from)]``, and rescale their income to match the median of
+    their new decile cell.
+
+    This is a lightweight shape-shifter: it keeps the *relative*
+    position each person occupies while letting the distribution
+    evolve in the same way UKHLS observes. Absolute wage growth is
+    handled separately by :func:`apply_employment_transitions`'s
+    ``wage_drift`` and by ``uprate_dataset``.
+
+    Args:
+        dataset: panel-ready dataset. Not mutated.
+        decile_rates: output of
+            ``utils.ukhls_transitions.load_income_decile_transitions``:
+            ``{(age_band, sex, decile_from): {decile_to: probability}}``.
+        rng: generator. ``None`` constructs a default one.
+        income_col: column to rank and rescale. Defaults to
+            ``employment_income``.
+        min_age: lower bound for eligibility. People under this age
+            stay untouched.
+
+    People whose (age_band, sex, decile_from) tuple has no matching
+    row in ``decile_rates`` (e.g. sparse cells that were suppressed
+    during estimation) pass through unchanged.
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+    if not decile_rates:
+        return dataset
+
+    ds = dataset.copy()
+    ds.person = ds.person.copy(deep=True)
+    person = ds.person
+    if income_col not in person.columns:
+        return ds
+
+    ages = person[AGE_COLUMN].astype(int).to_numpy()
+    sexes = (
+        person[SEX_COLUMN].astype(str).to_numpy()
+        if SEX_COLUMN in person.columns
+        else np.array([MALE_VALUE] * len(person), dtype=object)
+    )
+    income = person[income_col].to_numpy(dtype=float)
+
+    eligible = (ages >= min_age) & (income > 0)
+    if not eligible.any():
+        return ds
+
+    age_bands = np.array(
+        [
+            _ukhls_age_band_label(int(a)) if eligible[i] else None
+            for i, a in enumerate(ages)
+        ],
+        dtype=object,
+    )
+
+    # Rank into deciles within each (age_band, sex) cell among eligibles
+    # so current decile is defined on a comparable population.
+    cell_median: dict[tuple[str, str, int], float] = {}
+    current_decile = np.full(len(person), fill_value=-1, dtype=int)
+    df = pd.DataFrame(
+        {
+            "age_band": age_bands,
+            "sex": sexes,
+            "income": income,
+            "eligible": eligible,
+        }
+    )
+    for (ab, sx), group in df[df["eligible"]].groupby(
+        ["age_band", "sex"], observed=True
+    ):
+        if ab is None:
+            continue
+        # 10-quantile cut on the income column; deciles numbered 1-10.
+        ranks = group["income"].rank(method="first")
+        deciles = pd.qcut(ranks, q=10, labels=False, duplicates="drop") + 1
+        current_decile[group.index] = deciles.astype(int).to_numpy()
+        for d in range(1, 11):
+            cell_sub = group.loc[deciles == d, "income"]
+            if len(cell_sub):
+                cell_median[(ab, sx, d)] = float(cell_sub.median())
+
+    for idx in range(len(person)):
+        if not eligible[idx]:
+            continue
+        ab = age_bands[idx]
+        if ab is None:
+            continue
+        sx = str(sexes[idx])
+        d_from = int(current_decile[idx])
+        if d_from < 1:
+            continue
+        probs = decile_rates.get((ab, sx, d_from))
+        if not probs:
+            continue
+        dests = [int(d) for d in probs.keys()]
+        weights = np.array([probs[d] for d in dests], dtype=float)
+        if weights.sum() == 0:
+            continue
+        weights = weights / weights.sum()
+        d_to = int(rng.choice(dests, p=weights))
+        if d_to == d_from:
+            continue
+
+        target = cell_median.get((ab, sx, d_to))
+        if target is None or target <= 0:
+            continue
+        # Preserve the person's relative position within their original
+        # decile cell; move them to the target decile by rescaling
+        # their income by the ratio of target-decile median to
+        # origin-decile median.
+        origin = cell_median.get((ab, sx, d_from))
+        if origin is None or origin <= 0:
+            continue
+        person.loc[person.index[idx], income_col] = float(income[idx]) * (
+            target / origin
+        )
+
     return ds

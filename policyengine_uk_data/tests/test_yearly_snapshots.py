@@ -148,3 +148,95 @@ def test_custom_filename_template(tmp_path: Path, patched_uprate):
     )
     assert written[0].name == "panel_2024.h5"
     assert written[0].exists()
+
+
+# -- full-panel mode ---------------------------------------------------------
+
+
+def _panel_base(year: int = 2023) -> UKSingleYearDataset:
+    """Dataset with the schema required by advance_year's transitions."""
+    n = 10
+    person = pd.DataFrame(
+        {
+            "person_id": list(range(1, n + 1)),
+            "person_benunit_id": list(range(1, n + 1)),
+            "person_household_id": list(range(1, n + 1)),
+            "age": [22, 25, 30, 35, 40, 45, 50, 55, 60, 70],
+            "gender": ["MALE", "FEMALE"] * 5,
+            "employment_income": [
+                18_000.0,
+                22_000.0,
+                30_000.0,
+                40_000.0,
+                45_000.0,
+                50_000.0,
+                42_000.0,
+                30_000.0,
+                15_000.0,
+                0.0,
+            ],
+            "self_employment_income": [0.0] * n,
+        }
+    )
+    benunit = pd.DataFrame(
+        {"benunit_id": list(range(1, n + 1)), "benunit_weight": [1.0] * n}
+    )
+    household = pd.DataFrame(
+        {
+            "household_id": list(range(1, n + 1)),
+            "household_weight": [1.0] * n,
+            "region": ["LONDON"] * n,
+        }
+    )
+    return UKSingleYearDataset(
+        person=person, benunit=benunit, household=household, fiscal_year=year
+    )
+
+
+def test_full_panel_mode_writes_each_year(tmp_path: Path, patched_uprate):
+    base = _panel_base(year=2023)
+    written = create_yearly_snapshots(
+        base,
+        years=[2024, 2025],
+        output_dir=tmp_path,
+        mode="full_panel",
+        # Disable every stochastic transition so the output is easy to
+        # reason about; we only check wiring here.
+        mortality_rates={},
+        fertility_rates={},
+        marriage_rates={},
+        separation_rates={},
+        leaving_home_rates={},
+        net_migration_rates={},
+    )
+    assert [p.name for p in written] == ["enhanced_frs_2024.h5", "enhanced_frs_2025.h5"]
+    for p in written:
+        assert p.exists()
+
+
+def test_full_panel_mode_ages_people_year_over_year(tmp_path: Path, patched_uprate):
+    base = _panel_base(year=2023)
+    create_yearly_snapshots(
+        base,
+        years=[2025],
+        output_dir=tmp_path,
+        mode="full_panel",
+        mortality_rates={},
+        fertility_rates={},
+        marriage_rates={},
+        separation_rates={},
+        leaving_home_rates={},
+        net_migration_rates={},
+    )
+    snapshot = UKSingleYearDataset(tmp_path / "enhanced_frs_2025.h5")
+    joined = snapshot.person.merge(
+        base.person[["person_id", "age"]], on="person_id", suffixes=("_new", "_old")
+    )
+    # Two full years of ageing = +2 years.
+    assert ((joined["age_new"] - joined["age_old"]) == 2).all()
+
+
+def test_unknown_mode_raises(tmp_path: Path):
+    base = _panel_base(year=2023)
+    with pytest.raises(ValueError, match="mode must be"):
+        create_yearly_snapshots(base, years=[2024], output_dir=tmp_path, mode="invalid")

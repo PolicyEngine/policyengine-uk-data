@@ -193,3 +193,111 @@ def test_missing_employment_columns_does_not_crash():
 def test_default_spa_constant_is_66():
     """Sanity-check the default matches current UK SPA."""
     assert DEFAULT_STATE_PENSION_AGE == 66
+
+
+# -- UKHLS-rates branch ------------------------------------------------------
+
+
+def test_ukhls_rates_override_rule_based_path():
+    """When ``ukhls_rates`` is supplied, the rule-based job_loss/gain is skipped.
+
+    Use UKHLS rates that *keep* everyone in work with probability 1 — if
+    the rule-based path were running in parallel, some workers would
+    still lose their jobs at the default rate.
+    """
+    n = 1_000
+    ds = _population(ages=[35] * n, incomes=[25_000.0] * n)
+    # Everyone stays employed regardless of age band.
+    ukhls_rates = {
+        (f"{lo}-{lo + 4}", "MALE", "IN_WORK"): {"IN_WORK": 1.0}
+        for lo in range(16, 76, 5)
+    }
+    ukhls_rates.update(
+        {
+            (f"{lo}-{lo + 4}", "FEMALE", "IN_WORK"): {"IN_WORK": 1.0}
+            for lo in range(16, 76, 5)
+        }
+    )
+    out = apply_employment_transitions(
+        ds,
+        ukhls_rates=ukhls_rates,
+        job_loss_rate=0.99,  # would zero out nearly everyone if applied
+        wage_drift=0.0,
+        rng=np.random.default_rng(0),
+    )
+    zero_after = int((out.person["employment_income"] == 0).sum())
+    assert zero_after == 0
+
+
+def test_ukhls_rates_drive_people_into_work():
+    """If rates say UNEMPLOYED → IN_WORK w.p. 1, every unemployed becomes employed."""
+    n = 500
+    ds = _population(
+        ages=[35] * n,
+        incomes=[25_000.0] * (n // 2) + [0.0] * (n // 2),
+    )
+    ukhls_rates = {
+        (band, sex, "UNEMPLOYED"): {"IN_WORK": 1.0}
+        for band in ["30-34", "35-39"]
+        for sex in ["MALE", "FEMALE"]
+    }
+    # And keep employed in work to avoid interference.
+    ukhls_rates.update(
+        {
+            (band, sex, "IN_WORK"): {"IN_WORK": 1.0}
+            for band in ["30-34", "35-39"]
+            for sex in ["MALE", "FEMALE"]
+        }
+    )
+    out = apply_employment_transitions(
+        ds,
+        ukhls_rates=ukhls_rates,
+        wage_drift=0.0,
+        rng=np.random.default_rng(0),
+    )
+    # Every row now has positive income.
+    assert (out.person["employment_income"] > 0).all()
+
+
+def test_ukhls_rates_respect_retirement_at_spa():
+    """Even with UKHLS rates, people at SPA still get retired (runs first)."""
+    ds = _population(ages=[67], incomes=[40_000.0])
+    ukhls_rates = {("65-69", "MALE", "IN_WORK"): {"IN_WORK": 1.0}}
+    out = apply_employment_transitions(
+        ds,
+        ukhls_rates=ukhls_rates,
+        state_pension_age=66,
+        wage_drift=0.0,
+        rng=np.random.default_rng(0),
+    )
+    assert float(out.person["employment_income"].iloc[0]) == 0.0
+
+
+def test_ukhls_rates_committed_csv_is_consumable():
+    """Loaded transition rates from the committed CSV feed in without shape errors."""
+    import pathlib
+
+    path = (
+        pathlib.Path(__file__).parents[2]
+        / "policyengine_uk_data"
+        / "storage"
+        / "ukhls_employment_state_transitions.csv"
+    )
+    if not path.exists():
+        import pytest as _pt
+
+        _pt.skip("UKHLS transitions CSV not present in this checkout")
+    from policyengine_uk_data.utils.ukhls_transitions import (
+        load_employment_transitions,
+    )
+
+    ukhls_rates = load_employment_transitions()
+    assert ukhls_rates, "committed transition table must not be empty"
+    ds = _population(ages=[35, 42, 55], incomes=[25_000.0, 40_000.0, 0.0])
+    out = apply_employment_transitions(
+        ds,
+        ukhls_rates=ukhls_rates,
+        wage_drift=0.0,
+        rng=np.random.default_rng(0),
+    )
+    assert len(out.person) == 3
