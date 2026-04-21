@@ -2,6 +2,7 @@ from .consumption import *
 from .vat import *
 from .wealth import *
 from .income import *
+from .frs_only import impute_frs_only_variables
 from .capital_gains import *
 from .services import impute_services
 from .salary_sacrifice import impute_salary_sacrifice
