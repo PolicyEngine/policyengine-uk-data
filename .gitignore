@@ -6,6 +6,7 @@
 **/*.zip
 **/*.pkl
 **/*.tab
+**/*.dta
 !uprating_factors.csv
 !uprating_growth_factors.csv
 !incomes.csv
@@ -15,4 +16,9 @@
 !policyengine_uk_data/datasets/local_areas/**/*.csv
 **/_build
 !policyengine_uk_data/storage/*.csv
+# UKDS-licensed microdata — NEVER commit raw files. Only aggregated,
+# non-disclosive outputs derived from these datasets may be tracked.
+# Match both the directory form and a symlink/file form with the same name.
+policyengine_uk_data/storage/ukhls
+policyengine_uk_data/storage/ukhls/
 **/version.json
