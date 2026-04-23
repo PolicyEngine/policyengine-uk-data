@@ -63,9 +63,7 @@ _YEAR_BAND_D_WALES = 2026
 _YEAR_BAND_D_SCOTLAND = 2025
 _YEAR_BAND_COUNT = 2025
 
-_BAND_COUNT_COLUMNS = {
-    band: f"count_band_{band}" for band in "ABCDEFGHI"
-}
+_BAND_COUNT_COLUMNS = {band: f"count_band_{band}" for band in "ABCDEFGHI"}
 
 _ENGLAND_REF = (
     "https://www.gov.uk/government/statistics/"
