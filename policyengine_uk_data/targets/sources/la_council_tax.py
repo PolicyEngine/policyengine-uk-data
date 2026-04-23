@@ -6,23 +6,25 @@ Produces two kinds of LA-level calibration target from public data:
   (inclusive of all precepts) each household pays in billing authority
   ``code``. Sourced from MHCLG, Welsh Government and Scottish
   Government annual publications.
-- ``ons/council_tax_band_count/{code}/{band}``: the number of dwellings
-  in band ``A``–``H`` for billing authority ``code``. Sourced from the
-  VOA *Council Tax: Stock of Properties* summary tables (England + Wales).
+- ``voa/council_tax/{code}/{band}``: the number of dwellings in band
+  ``A``–``H`` (England) or ``A``–``I`` (Wales) for billing authority
+  ``code``. Sourced from the VOA *Council Tax: Stock of Properties*
+  summary tables.
 
 Data for all 360 LAs in ``local_authorities_2021.csv`` is joined from
 the committed canonical file ``storage/la_council_tax.csv``. Rows where
-a source did not provide a value are emitted as targets with ``NaN``
-filtered out of the ``values`` dict, so calibrators that look up a
-given year / area safely skip them.
+a source did not provide a value are omitted so calibrators cleanly
+skip them.
 
 Known coverage gaps (documented, not bugs):
 
 - Northern Ireland is excluded because its domestic rates system is
   distinct from council tax.
 - Band-count rows for Scottish LAs are absent because the VOA summary
-  tables do not cover Scotland; Scottish Assessors publishes
-  per-LA chargeable-dwellings data separately and is a follow-up.
+  tables do not cover Scotland; Scottish Assessors publishes per-LA
+  chargeable-dwellings data separately and is a follow-up.
+- Band I only exists in Wales (introduced in the 2005 Welsh revaluation);
+  English rows leave it null.
 - City of London has Band A suppressed by VOA for disclosure control;
   its other bands are populated.
 
@@ -38,6 +40,8 @@ Sources:
 """
 
 from __future__ import annotations
+
+from functools import lru_cache
 
 import pandas as pd
 
@@ -60,14 +64,7 @@ _YEAR_BAND_D_SCOTLAND = 2025
 _YEAR_BAND_COUNT = 2025
 
 _BAND_COUNT_COLUMNS = {
-    "A": "band_A",
-    "B": "band_B",
-    "C": "band_C",
-    "D": "band_D_count",
-    "E": "band_E",
-    "F": "band_F",
-    "G": "band_G",
-    "H": "band_H",
+    band: f"count_band_{band}" for band in "ABCDEFGHI"
 }
 
 _ENGLAND_REF = (
@@ -81,6 +78,7 @@ _VOA_REF = (
 )
 
 
+@lru_cache(maxsize=1)
 def _load_table() -> pd.DataFrame | None:
     """Return the committed LA council-tax table, or ``None`` if missing."""
     csv_path = STORAGE / _CSV_NAME
@@ -144,8 +142,8 @@ def get_targets() -> list[Target]:
                 continue
             targets.append(
                 Target(
-                    name=f"ons/council_tax_band_count/{code}/{band}",
-                    variable="council_tax_band_count",
+                    name=f"voa/council_tax/{code}/{band}",
+                    variable="council_tax_band",
                     source="voa",
                     unit=Unit.COUNT,
                     geographic_level=GeographicLevel.LOCAL_AUTHORITY,
@@ -153,7 +151,6 @@ def get_targets() -> list[Target]:
                     geo_name=name,
                     values={_YEAR_BAND_COUNT: float(count)},
                     is_count=True,
-                    breakdown_variable=f"council_tax_band_{band}",
                     reference_url=_VOA_REF,
                 )
             )

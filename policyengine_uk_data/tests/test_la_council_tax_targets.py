@@ -53,14 +53,15 @@ def test_csv_has_every_expected_column(la_ct_df):
         "country",
         "band_d_amount",
         "has_council_tax",
-        "band_A",
-        "band_B",
-        "band_C",
-        "band_D_count",
-        "band_E",
-        "band_F",
-        "band_G",
-        "band_H",
+        "count_band_A",
+        "count_band_B",
+        "count_band_C",
+        "count_band_D",
+        "count_band_E",
+        "count_band_F",
+        "count_band_G",
+        "count_band_H",
+        "count_band_I",
         "total_dwellings",
     }
     assert expected.issubset(la_ct_df.columns), (
@@ -126,14 +127,15 @@ def test_isles_of_scilly_dwellings_are_thousands_not_millions(la_ct_df):
 
 
 def test_band_counts_sum_to_total(la_ct_df):
-    """For rows with band data, Σ(bands A-H) should equal total_dwellings
-    (within rounding from the 10-property suppression at the lowest counts).
+    """Σ(count_band_A..I) should equal the VOA-sourced total_dwellings
+    for every row with band data. VOA rounds per-band counts to the
+    nearest 10 while the total is independently rounded, so up to
+    20 dwellings of slack is expected.
     """
     have_bands = la_ct_df.dropna(subset=["total_dwellings"]).copy()
     band_cols = list(_BAND_COUNT_COLUMNS.values())
     have_bands["sum_bands"] = have_bands[band_cols].fillna(0).sum(axis=1)
     diff = (have_bands["total_dwellings"] - have_bands["sum_bands"]).abs()
-    # Allow up to 20 dwellings of slack for VOA rounding / suppression.
     assert diff.max() <= 20, (
         f"Band totals disagree by up to {int(diff.max())}; worst rows: "
         f"{have_bands.loc[diff == diff.max(), ['code', 'name', 'total_dwellings', 'sum_bands']].head(3).to_dict('records')}"
@@ -190,6 +192,38 @@ def test_wandsworth_and_westminster_are_lowest_in_england(la_ct_df):
     )
 
 
+def test_welsh_las_have_band_i(la_ct_df):
+    """Wales has council tax bands A–I (2005 revaluation); every Welsh
+    LA must carry a non-null count_band_I. Regression for the Band I
+    drop that slipped into an earlier revision of this PR.
+    """
+    welsh = la_ct_df[la_ct_df["country"] == "WALES"]
+    missing = welsh[welsh["count_band_I"].isna()][["code", "name"]].to_dict("records")
+    assert not missing, f"Welsh LAs missing Band I: {missing}"
+
+
+def test_english_las_have_no_band_i(la_ct_df):
+    """England has 8 council tax bands (A–H). count_band_I must be null
+    for every English row so we don't accidentally inject made-up counts.
+    """
+    eng = la_ct_df[la_ct_df["country"] == "ENGLAND"]
+    populated = eng[eng["count_band_I"].notna()][["code", "name"]].to_dict("records")
+    assert not populated, f"English LAs must not have Band I: {populated}"
+
+
+def test_cardiff_band_i_matches_published_figure(la_ct_df):
+    """Cardiff is the largest Welsh LA and has the highest Band I count
+    (~1,480 per VOA 2025). Specific spot-check against the published value
+    so a truncated or swapped-row source is caught immediately.
+    """
+    cardiff = la_ct_df[la_ct_df["code"] == "W06000015"]
+    assert len(cardiff) == 1
+    band_i = float(cardiff["count_band_I"].iloc[0])
+    assert 1_400 <= band_i <= 1_600, (
+        f"Cardiff count_band_I = {band_i:.0f}; VOA 2025 publishes 1,480"
+    )
+
+
 def test_scottish_band_d_is_lower_than_english_on_average(la_ct_df):
     """Scotland's Band D is typically ~£1,500, well below England ~£2,400."""
     en_mean = la_ct_df[la_ct_df["country"] == "ENGLAND"]["band_d_amount"].mean()
@@ -214,8 +248,7 @@ def test_band_d_target_count_matches_csv(la_ct_df):
 
 def test_band_count_target_count_matches_csv(la_ct_df):
     targets = get_targets()
-    bc_targets = [t for t in targets if "council_tax_band_count/" in t.name]
-    # Expected = sum across all 8 bands of non-NaN counts.
+    bc_targets = [t for t in targets if t.name.startswith("voa/council_tax/")]
     expected = int(la_ct_df[list(_BAND_COUNT_COLUMNS.values())].notna().sum().sum())
     assert len(bc_targets) == expected
 
@@ -234,7 +267,7 @@ def test_band_d_targets_use_gbp_unit():
 
 def test_band_count_targets_use_count_unit_and_is_count_flag():
     for target in get_targets():
-        if "council_tax_band_count/" in target.name:
+        if target.name.startswith("voa/council_tax/"):
             assert target.unit == Unit.COUNT
             assert target.is_count is True
 
@@ -250,7 +283,7 @@ def test_every_band_count_target_value_within_sensible_range():
     where a national total leaked into a row, à la #371.
     """
     for target in get_targets():
-        if "council_tax_band_count/" not in target.name:
+        if not target.name.startswith("voa/council_tax/"):
             continue
         for year, value in target.values.items():
             assert 0 <= value <= 500_000, (
