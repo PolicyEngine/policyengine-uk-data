@@ -57,6 +57,34 @@ def test_households_positive():
     assert (LA_INPUTS["households"] > 0).all()
 
 
+def test_households_within_plausible_range():
+    """Smallest UK billing authority (Isles of Scilly) has ~1,100
+    households; largest (Birmingham) has ~450,000. A 1000x outlier — like
+    the regional-total fallback that leaked into the IoS row pre-review —
+    must be caught by bounds, not spotted by eye.
+    """
+    out_of_range = LA_INPUTS[~LA_INPUTS["households"].between(500, 500_000)]
+    assert out_of_range.empty, (
+        "Households out of plausible [500, 500_000] range: "
+        f"{out_of_range[['code', 'name', 'households']].to_dict('records')}"
+    )
+
+
+def test_isles_of_scilly_households_are_thousands_not_millions():
+    """Explicit regression for the IoS fallback leak (was 2,492,115).
+
+    Real IoS has ~1,115 households per ONS mid-2023 estimate (pop ~2,000).
+    Anything outside [500, 5,000] indicates the fallback path has
+    regressed again.
+    """
+    ios = LA_INPUTS[LA_INPUTS["code"] == "E06000053"]
+    assert len(ios) == 1
+    hh = int(ios["households"].iloc[0])
+    assert 500 <= hh <= 5_000, (
+        f"Isles of Scilly households = {hh:,}; ONS mid-2023 estimate is ~1,115"
+    )
+
+
 # ── Share constraints ────────────────────────────────────────────────
 
 
