@@ -7,7 +7,6 @@ models trained on HMRC Survey of Personal Incomes (SPI) data.
 """
 
 import pandas as pd
-from pathlib import Path
 import numpy as np
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
@@ -116,26 +115,12 @@ INCOME_COMPONENTS = [
 # `datasets/spi.py` sums GIFTAID + GIFTINV into a single `gift_aid` column
 # because that path doesn't carry a separate `charitable_investment_gifts`
 # variable; the enhanced-FRS path here keeps them separate so each maps to
-# its own policyengine-uk variable.
+# its own policyengine-uk variable. They are kept separate from
+# INCOME_COMPONENTS because they are expenditures, not income.
 IMPUTATIONS = INCOME_COMPONENTS + ["gift_aid", "charitable_investment_gifts"]
 
 
 INCOME_MODEL_PATH = STORAGE_FOLDER / "income.pkl"
-
-
-def _safe_rescale_factor(original: float, new: float) -> float:
-    """Return the rent/mortgage rescaling factor used after income imputation.
-
-    Guards against a degenerate input where the seed dataset's imputation
-    columns sum to zero (e.g. the zero-weight synthetic copy used in
-    ``impute_income`` before incomes have been populated). In that case we
-    cannot compute a meaningful ratio, so leave housing costs untouched
-    (factor=1.0) rather than raising ``ZeroDivisionError`` or silently
-    propagating NaN / inf into downstream household tables.
-    """
-    if original == 0:
-        return 1.0
-    return new / original
 
 
 def save_imputation_models():
@@ -198,22 +183,10 @@ def impute_over_incomes(
     dataset = dataset.copy()
     sim = Microsimulation(dataset=dataset)
     input_df = sim.calculate_dataframe(["age", "gender", "region"])
-    original_income_total = dataset.person[INCOME_COMPONENTS].copy().sum().sum()
     output_df = model.predict(input_df)
 
     for column in output_variables:
         dataset.person[column] = output_df[column].fillna(0).values
-
-    new_income_total = dataset.person[INCOME_COMPONENTS].sum().sum()
-    adjustment_factor = _safe_rescale_factor(original_income_total, new_income_total)
-    # Adjust rent and mortgage interest and capital repayments proportionally
-    dataset.household["rent"] = dataset.household["rent"] * adjustment_factor
-    dataset.household["mortgage_interest_repayment"] = (
-        dataset.household["mortgage_interest_repayment"] * adjustment_factor
-    )
-    dataset.household["mortgage_capital_repayment"] = (
-        dataset.household["mortgage_capital_repayment"] * adjustment_factor
-    )
 
     return dataset
 
