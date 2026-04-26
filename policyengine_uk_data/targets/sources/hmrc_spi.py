@@ -8,6 +8,13 @@ year distributions forward using PolicyEngine's uprating factors.
 That projection logic is in utils/incomes_projection.py and is not
 part of the target download — it's a simulation step.
 
+Property income amounts are scaled up by 1.9x because the SPI only
+covers taxpayers with "some liability to tax", missing ~half of all
+landlord income. The HMRC Property Rental Income Statistics (2024)
+show £46.68bn for 2020-21 vs SPI's ~£24.5bn.
+See: https://www.gov.uk/government/statistics/property-rental-income-statistics
+See also: https://github.com/PolicyEngine/policyengine-uk-data/issues/230
+
 Source: https://www.gov.uk/government/statistics/income-tax-summarised-accounts-statistics
 """
 
@@ -49,6 +56,11 @@ _BAND_UPPER = _BAND_LOWER[1:] + [float("inf")]
 
 # SPI year: the ODS is for tax year 2022-23, mapped to calendar 2023
 _SPI_YEAR = 2023
+
+# HMRC Property Rental Income Statistics show ~1.9x more property income
+# than the SPI (£46.68bn vs £24.5bn for 2020-21), because SPI only covers
+# taxpayers with liability while the rental stats cover all ITSA landlords.
+_PROPERTY_INCOME_SCALE = 1.9
 
 
 @lru_cache(maxsize=1)
@@ -163,13 +175,16 @@ def get_targets() -> list[Target]:
 
                 if amount_col in row.index and row[amount_col] > 0:
                     # SPI amounts are in £millions, counts in thousands
+                    amount = float(row[amount_col]) * 1e6
+                    if variable == "property_income":
+                        amount *= _PROPERTY_INCOME_SCALE
                     targets.append(
                         Target(
                             name=f"hmrc/{variable}_income_band_{band_label}",
                             variable=variable,
                             source="hmrc_spi",
                             unit=Unit.GBP,
-                            values={_SPI_YEAR: float(row[amount_col]) * 1e6},
+                            values={_SPI_YEAR: amount},
                             breakdown_variable="total_income",
                             lower_bound=float(lower),
                             upper_bound=float(upper),
@@ -207,6 +222,9 @@ def get_targets() -> list[Target]:
 def _read_projection_csv(csv_path: Path, ref: str) -> list[Target]:
     """Read projected future year targets from incomes_projection.csv."""
     incomes = pd.read_csv(csv_path)
+    # Drop aggregate rows (lower=12570, upper=inf) — these duplicate the
+    # per-band rows and would cause double-counting in the calibration.
+    incomes = incomes[incomes["total_income_upper_bound"] != float("inf")]
     targets = []
 
     for year in incomes.year.unique():
@@ -224,6 +242,9 @@ def _read_projection_csv(csv_path: Path, ref: str) -> list[Target]:
                 count_col = f"{variable}_count"
 
                 if amount_col in row.index and pd.notna(row[amount_col]):
+                    amount = float(row[amount_col])
+                    if variable == "property_income":
+                        amount *= _PROPERTY_INCOME_SCALE
                     name = f"hmrc/{variable}_income_band_{band_label}"
                     targets.append(
                         Target(
@@ -231,7 +252,7 @@ def _read_projection_csv(csv_path: Path, ref: str) -> list[Target]:
                             variable=variable,
                             source="hmrc_spi",
                             unit=Unit.GBP,
-                            values={int(year): float(row[amount_col])},
+                            values={int(year): amount},
                             breakdown_variable="total_income",
                             lower_bound=float(lower),
                             upper_bound=float(upper),

@@ -1,3 +1,269 @@
+## [1.53.1] - 2026-04-20
+
+No significant changes.
+
+
+## [1.53.0] - 2026-04-19
+
+### Added
+
+- Tightened `test_population` tolerance from 7% to 3% now that the stage-2 QRF (#362), TFC target refresh (#363), and reported-anchor takeup (#359) pulled the weighted UK population overshoot from ~6.5% down to ~1.6%. Added four regression tests in `test_population_fidelity.py` (weighted-total match, household-count range, non-inflation guard, country-sum consistency) extracted from the earlier #310 draft so any future calibration drift back toward the pre-April-2026 overshoot trips CI.
+
+
+## [1.52.2] - 2026-04-18
+
+### Changed
+
+- Add second-stage QRF imputation of FRS-only variables on SPI-donor rows. After the first-stage SPI-trained QRF overwrites income components on the zero-weight subsample, a new second-stage QRF trained on the full FRS rewrites benefit `_reported` columns, pension contributions, and savings-income so they correlate with the freshly-imputed incomes instead of staying as whatever middle-income FRS donor was sampled. Mirrors the `policyengine-us-data#589` pattern. Prevents synthetic £2 M earners from carrying a middle-income donor's UC / housing-benefit receipt into calibration, which was blowing up benefit aggregates under upweight.
+- Anchor stochastic takeup assignment for Universal Credit, Pension Credit, and Child Benefit to the FRS-reported receipt columns, matching the `policyengine-us-data` pattern. Respondents who report positive receipt in the FRS benefits table now receive `would_claim_* = True` with certainty, and non-reporters are filled probabilistically to hit the aggregate target rate. Removes a source of calibration noise where respondents who clearly took up a benefit could be randomly assigned `would_claim = False`.
+
+### Fixed
+
+- Refresh Tax-Free Childcare calibration targets and take-up rate using HMRC's June 2025 release (covering 2024-25 outturn: £632 m spending, 985 k children reached). The prior target set was calibrated against the September 2024 release and undershot current TFC spending by roughly a third. Bumps the default TFC take-up rate from 0.586 to 0.88 on 2024-04-06 to close most of the gap pending a full recalibration run.
+
+
+## [1.52.1] - 2026-04-18
+
+### Fixed
+
+- Update the `Raise VAT standard rate by 2pp` reform-impact test expectation from 25.0 bn to 43.0 bn — the enhanced FRS's total consumption aggregate has grown to a UK-realistic ~£1.6 T (matching ONS 2025 total consumer expenditure), so a 2pp rise on the current `microdata_vat_coverage = 0.38`-scaled base produces ~£43 bn, not the £25 bn calibrated against an older smaller dataset. Also clamps raw electricity/gas consumption in `impute_energy_splits` to be non-negative (a handful of LCFS bill-variable inconsistencies produced small negatives), fixing `test_non_negative_energy`. Follow-up: revisit `microdata_vat_coverage` itself now that the underlying base is fuller (#364).
+
+
+## [1.52.0] - 2026-04-17
+
+### Changed
+
+- Point CONTRIBUTING.md at the shared PolicyEngine contribution guide (https://github.com/PolicyEngine/.github) and trim the per-repo file to commands, repo-specific conventions, and anti-patterns. Removes the stale `changelog_entry.yaml` / `make changelog` instructions.
+
+### Removed
+
+- Remove `policyengine_uk_data/tests/test_changelog_encoding.py`. It validated UTF-8 and YAML structure of the deprecated `changelog_entry.yaml`, which was retired when the repo migrated to towncrier `changelog.d/` fragments. All three tests now unconditionally `pytest.skip` because the file no longer exists, and any fragment-format validation is already handled by the `Check changelog fragment` CI step.
+
+
+## [1.51.1] - 2026-04-17
+
+### Fixed
+
+- Guard the rent/mortgage rescaling in `impute_over_incomes` against `ZeroDivisionError` when the seed dataset's imputation columns sum to zero (e.g. the zero-weight synthetic copy in `impute_income`).
+
+
+## [1.51.0] - 2026-04-17
+
+### Added
+
+- Add `policyengine_uk_data.utils.hf_destinations` with `PRIVATE_REPO` / `PUBLIC_REPO` constants and an AST-based xfail test (`tests/test_hf_destinations.py`) that flags every `upload(...)`, `upload_file(...)`, `upload_files_to_hf(...)`, and `upload_data_files(...)` call site that still bypasses the shared constants.
+- Add `policyengine_uk_data.utils.calibrate.load_weights`, a defensive loader that normalises calibration weights to 2D `(n_areas, n_records)` and validates expected shapes so consumers can't silently read the wrong axis layout across the L2 and L0 calibrators.
+
+### Fixed
+
+- Fix `calibrate_local_areas` non-verbose branch silently failing to save weights because the `if epoch % 10 == 0` save block was indented outside the training loop.
+- Replace bare `* 52` weekly-to-annual conversion in LCFS imputation with the shared `WEEKS_IN_YEAR = 365.25 / 7` constant used by `datasets/frs.py`, and replace two `np.random.seed(42)` calls with local `np.random.default_rng(42)` so consumption imputation stops mutating the process-wide RNG state.
+- Add OBR calibration targets for NIC Classes 2, 3 and 4 (self-employed flat-rate, voluntary and profit-based) alongside the existing Class 1 employee/employer rows, and accept common label-wording variants in OBR EFO Table 3.4.
+- Fix `datasets/spi.py` `__main__` crash (two-arg call to three-arg `create_spi`), parameterise the hardcoded £1,250 marriage allowance from policyengine-uk parameters, seed the age imputation RNG, and surface unknown GORCODE regions as `UNKNOWN` instead of silently mapping them to `SOUTH_EAST`.
+- Raise `UpratingYearOutOfRangeError` with a clear message when `uprate_values` or `uprate_dataset` is called with a year outside the `[START_YEAR, END_YEAR]` range of the uprating factor table, instead of surfacing a pandas `KeyError` or silently returning wrong values.
+- Parameterise the VAT standard rate and reduced-rate share in ETB-based VAT imputation by reading from `policyengine_uk.parameters.gov.hmrc.vat` keyed on the training year, with a `VAT_RATE_BY_YEAR` fallback for offline use. Promote the `etb.year == 2020` filter to a `year` argument with a `DEFAULT_ETB_YEAR` default.
+
+
+## [1.50.6] - 2026-04-17
+
+### Fixed
+
+- Include `gift_aid` (SPI `GIFTAID`) and `charitable_investment_gifts` (SPI `GIFTINV`) in the SPI income imputation model so synthetic high-earner rows carry plausible charitable giving drawn jointly with income, instead of a flat zero. Previously the 6-variable QRF ran over only the core income components; both charitable relief columns were in `SPI_RENAMES` but never reached the predicted output, so the SPI-donor half of the enhanced FRS carried its FRS donor's (always-zero) charitable giving. Adds both columns to the model's output list, renames the cache file to force retraining, and initialises the FRS-side columns to zero to keep the stacked dataset valid.
+
+
+## [1.50.5] - 2026-04-17
+
+No significant changes.
+
+
+## [1.50.4] - 2026-04-17
+
+### Fixed
+
+- Add periodic CI heartbeats around long calibration setup stages so dataset release builds do not get canceled while constituency target matrices are being prepared.
+
+
+## [1.50.3] - 2026-04-16
+
+### Fixed
+
+- Reduce OA cloning in GitHub Actions dataset builds so publication completes on hosted runners.
+
+
+## [1.50.2] - 2026-04-15
+
+No significant changes.
+
+
+## [1.50.1] - 2026-04-15
+
+No significant changes.
+
+
+## [1.50.0] - 2026-04-15
+
+### Added
+
+- Add SLC calibration targets for Parents' Learning Allowance and Adult Dependants' Grant.
+
+
+## [1.49.0] - 2026-04-14
+
+### Added
+
+- Add Student Loans Company maintenance-loan recipient-count and spend targets for England full-time undergraduates.
+
+
+## [1.48.0] - 2026-04-13
+
+### Added
+
+- Impute `student_loan_balance` from WAS loan aggregates and retrain stale cached wealth models when that new output is missing.
+
+
+## [1.47.0] - 2026-04-13
+
+### Added
+
+- Add 2025 Student Loans Company repayment amount calibration targets by UK country and by England repayment plan.
+
+### Fixed
+
+- Preserve zero-valued SLC borrower targets so calibration can enforce explicit zero years.
+
+
+## [1.46.6] - 2026-04-13
+
+### Fixed
+
+- Preserve zero-valued SLC borrower targets so calibration can enforce explicit zero years.
+
+
+## [1.46.5] - 2026-04-13
+
+No significant changes.
+
+
+## [1.46.4] - 2026-04-13
+
+### Fixed
+
+- Make long-running dataset builds emit plain CI heartbeat logs so release workflows are less likely to die silently during calibration.
+
+
+## [1.46.3] - 2026-04-12
+
+### Changed
+
+- Refactor land calibration targets to share one annual ONS land-value series across national targets, regional targets, and tests, including 2021 to 2023 backfill values.
+
+
+## [1.46.2] - 2026-04-12
+
+### Changed
+
+- Record build-time model version, git SHA, and data-build fingerprint in UK data release manifests.
+
+
+## [1.46.1] - 2026-04-12
+
+### Changed
+
+- Read local-authority ONS income uprating assumptions from `policyengine-uk` parameters when available, while keeping a compatibility fallback for the current released dependency.
+
+
+## [1.46.0] - 2026-04-12
+
+### Added
+
+- Add Output Area crosswalk and geographic assignment for OA-level calibration pipeline.
+
+
+## [1.45.8] - 2026-03-31
+
+No significant changes.
+
+
+## [1.45.7] - 2026-03-31
+
+No significant changes.
+
+
+## [1.45.6] - 2026-03-31
+
+No significant changes.
+
+
+## [1.45.5] - 2026-03-27
+
+### Fixed
+
+- Add regional household land value calibration targets (#314).
+
+
+## [1.45.4] - 2026-03-20
+
+### Fixed
+
+- Scale property income targets by 1.9x to match HMRC Property Rental Income Statistics, and fix double-counting of aggregate rows in projected years (#230).
+
+
+## [1.45.3] - 2026-03-20
+
+### Fixed
+
+- Loosen first decile tax rate threshold from 175% to 200% to accommodate normal variation in low-income decile effective rates.
+
+
+## [1.45.2] - 2026-03-19
+
+### Fixed
+
+- Remove the remaining non-land calibration `xfail` markers and make pytest `xfail` strict so temporary expected failures cannot silently linger.
+
+
+## [1.45.1] - 2026-03-19
+
+### Fixed
+
+- Remove the incorrect `property_wealth` land calibration target and keep only direct land-value targets from the ONS National Balance Sheet.
+
+
+## [1.45.0] - 2026-03-18
+
+### Added
+
+- Added policyengine-claude plugin auto-install configuration.
+
+
+## [1.44.4] - 2026-03-18
+
+### Changed
+
+- Clarified that NOMIS ASHE employment income targets cover all workers (part-time and full-time), not just full-time.
+
+
+## [1.44.3] - 2026-03-18
+
+### Changed
+
+- Updated age data pipeline to read from `raw_age.csv` and write processed output to `age.csv`, preserving original data. Documented original sources in READMEs.
+
+
+## [1.44.2] - 2026-03-18
+
+### Fixed
+
+- Fixed ESA calibration target entity mapping: use `household_from_family()` for the benunit-level `esa_income` variable instead of `household_from_person()`.
+
+
+## [1.44.1] - 2026-03-18
+
+### Changed
+
+- Fixed text errors in methodology documentation page.
+
+
 ## [1.44.0] - 2026-03-17
 
 ### Added

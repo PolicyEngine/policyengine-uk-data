@@ -6,10 +6,12 @@ corporate) using machine learning models trained on the UK Wealth and Assets
 Survey (WAS) data.
 """
 
+import numpy as np
 import pandas as pd
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk import Microsimulation
+from policyengine_uk_data.utils.qrf import QRF
 
 WAS_TAB_FOLDER = STORAGE_FOLDER / "was_2006_20"
 
@@ -52,7 +54,50 @@ IMPUTE_VARIABLES = [
     "non_residential_property_value",
     "savings",
     "num_vehicles",
+    "student_loan_balance",
 ]
+
+WAS_RENAMES = {
+    "R7xshhwgt": "household_weight",
+    # Components for estimating land holdings.
+    "DVLUKValR7_sum": "owned_land",  # In the UK.
+    "DVPropertyR7": "property_wealth",
+    "DVFESHARESR7_aggr": "emp_shares_options",
+    "DVFShUKVR7_aggr": "uk_shares",
+    "DVIISAVR7_aggr": "investment_isas",
+    "DVFCollVR7_aggr": "unit_investment_trusts",
+    "TotpenR7_aggr": "pensions",
+    "DvvalDBTR7_aggr": "db_pensions",
+    # Predictors for fusing to FRS.
+    "dvtotgirR7": "gross_income",
+    "NumAdultW7": "num_adults",
+    "NumCh18W7": "num_children",
+    # Household Gross Annual income from occupational or private pensions
+    "DVGIPPENR7_AGGR": "private_pension_income",
+    "DVGISER7_AGGR": "self_employment_income",
+    # Household Gross annual income from investments
+    "DVGIINVR7_aggr": "capital_income",
+    # Household Total Annual Gross employee income
+    "DVGIEMPR7_AGGR": "employment_income",
+    "HBedrmW7": "num_bedrooms",
+    "GORR7": "region",
+    "DVPriRntW7": "is_renter",  # {1, 2} TODO: Get codebook values.
+    "CTAmtW7": "council_tax",
+    # Other columns for reference.
+    "DVLOSValR7_sum": "non_uk_land",
+    "HFINWNTR7_Sum": "net_financial_wealth",
+    "DVLUKDebtR7_sum": "uk_land_debt",
+    "HFINWR7_Sum": "gross_financial_wealth",
+    "TotWlthR7": "wealth",
+    "DVhvalueR7": "main_residence_value",
+    "DVHseValR7_sum": "other_residential_property_value",
+    "DVBlDValR7_sum": "non_residential_property_value",
+    "DVTotinc_bhcR7": "household_net_income",
+    "DVSaValR7_aggr": "savings",
+    "vcarnr7": "num_vehicles",
+    "Tot_LosR7_aggr": "total_loans",
+    "Tot_los_exc_SLCR7_aggr": "total_loans_exc_slc",
+}
 
 
 def generate_was_table(was: pd.DataFrame):
@@ -70,47 +115,7 @@ def generate_was_table(was: pd.DataFrame):
     to_remove = []
     to_add = {}
 
-    RENAMES = {
-        "R7xshhwgt": "household_weight",
-        # Components for estimating land holdings.
-        "DVLUKValR7_sum": "owned_land",  # In the UK.
-        "DVPropertyR7": "property_wealth",
-        "DVFESHARESR7_aggr": "emp_shares_options",
-        "DVFShUKVR7_aggr": "uk_shares",
-        "DVIISAVR7_aggr": "investment_isas",
-        "DVFCollVR7_aggr": "unit_investment_trusts",
-        "TotpenR7_aggr": "pensions",
-        "DvvalDBTR7_aggr": "db_pensions",
-        # Predictors for fusing to FRS.
-        "dvtotgirR7": "gross_income",
-        "NumAdultW7": "num_adults",
-        "NumCh18W7": "num_children",
-        # Household Gross Annual income from occupational or private pensions
-        "DVGIPPENR7_AGGR": "private_pension_income",
-        "DVGISER7_AGGR": "self_employment_income",
-        # Household Gross annual income from investments
-        "DVGIINVR7_aggr": "capital_income",
-        # Household Total Annual Gross employee income
-        "DVGIEMPR7_AGGR": "employment_income",
-        "HBedrmW7": "num_bedrooms",
-        "GORR7": "region",
-        "DVPriRntW7": "is_renter",  # {1, 2} TODO: Get codebook values.
-        "CTAmtW7": "council_tax",
-        # Other columns for reference.
-        "DVLOSValR7_sum": "non_uk_land",
-        "HFINWNTR7_Sum": "net_financial_wealth",
-        "DVLUKDebtR7_sum": "uk_land_debt",
-        "HFINWR7_Sum": "gross_financial_wealth",
-        "TotWlthR7": "wealth",
-        "DVhvalueR7": "main_residence_value",
-        "DVHseValR7_sum": "other_residential_property_value",
-        "DVBlDValR7_sum": "non_residential_property_value",
-        "DVTotinc_bhcR7": "household_net_income",
-        "DVSaValR7_aggr": "savings",
-        "vcarnr7": "num_vehicles",
-    }
-
-    RENAMES = {x.lower(): y for x, y in RENAMES.items()}
+    RENAMES = {x.lower(): y for x, y in WAS_RENAMES.items()}
 
     for key in RENAMES:
         key = key.lower()
@@ -145,8 +150,102 @@ def generate_was_table(was: pd.DataFrame):
             "unit_investment_trusts",
         ]
     ].sum(axis=1)
+    was["student_loan_balance"] = was["total_loans"] - was["total_loans_exc_slc"]
     was["region"] = was["region"].map(REGIONS)
     return was
+
+
+def _wealth_model_outputs_are_current(model: QRF) -> bool:
+    """Check whether a cached wealth model includes all current output columns."""
+    trained_outputs = getattr(model.model, "imputed_variables", None)
+    return list(trained_outputs) == IMPUTE_VARIABLES
+
+
+def _person_column(person: pd.DataFrame, name: str, default) -> pd.Series:
+    if name in person:
+        return person[name]
+    return pd.Series(default, index=person.index)
+
+
+def _allocate_student_loan_balance_to_people(
+    household_balances: pd.Series,
+    person: pd.DataFrame,
+) -> np.ndarray:
+    """
+    Allocate household-imputed student loan balances to plausible holders.
+
+    The WAS target is household-level, but `student_loan_balance` is a person-
+    level input in `policyengine-uk`. We therefore allocate each household's
+    imputed balance to the most plausible holder set in priority order:
+    current repayers, reported borrowers, tertiary-qualified adults, current
+    tertiary students, then working-age adults as a final fallback.
+    """
+    balances = np.zeros(len(person), dtype=float)
+    if len(person) == 0:
+        return balances
+
+    age = (
+        pd.to_numeric(_person_column(person, "age", 0), errors="coerce")
+        .fillna(0)
+        .to_numpy()
+    )
+    repayments = (
+        pd.to_numeric(
+            _person_column(person, "student_loan_repayments", 0), errors="coerce"
+        )
+        .fillna(0)
+        .to_numpy()
+    )
+    reported_loans = (
+        pd.to_numeric(_person_column(person, "student_loans", 0), errors="coerce")
+        .fillna(0)
+        .to_numpy()
+    )
+    current_education = (
+        _person_column(person, "current_education", "NOT_IN_EDUCATION")
+        .fillna("NOT_IN_EDUCATION")
+        .astype(str)
+        .to_numpy()
+    )
+    highest_education = (
+        _person_column(person, "highest_education", "UPPER_SECONDARY")
+        .fillna("UPPER_SECONDARY")
+        .astype(str)
+        .to_numpy()
+    )
+
+    group_indices = person.groupby("person_household_id").indices
+
+    for household_id, household_balance in household_balances.items():
+        if household_balance <= 0 or household_id not in group_indices:
+            continue
+
+        idx = np.asarray(group_indices[household_id], dtype=int)
+        repayer_mask = repayments[idx] > 0
+        borrower_mask = reported_loans[idx] > 0
+        tertiary_grad_mask = highest_education[idx] == "TERTIARY"
+        current_student_mask = current_education[idx] == "TERTIARY"
+        working_age_mask = (age[idx] >= 18) & (age[idx] <= 55)
+
+        for mask in (
+            repayer_mask,
+            borrower_mask,
+            tertiary_grad_mask,
+            current_student_mask,
+            working_age_mask,
+            np.ones(len(idx), dtype=bool),
+        ):
+            if mask.any():
+                chosen = idx[mask]
+                break
+
+        if repayer_mask.any() and np.sum(repayments[idx][repayer_mask]) > 0:
+            weights = repayments[idx][repayer_mask]
+            balances[idx[repayer_mask]] += household_balance * (weights / weights.sum())
+        else:
+            balances[chosen] += household_balance / len(chosen)
+
+    return balances
 
 
 def save_imputation_models():
@@ -156,8 +255,6 @@ def save_imputation_models():
     Returns:
         Trained QRF model.
     """
-    from policyengine_uk_data.utils.qrf import QRF
-
     was = pd.read_csv(
         WAS_TAB_FOLDER / "was_round_7_hhold_eul_march_2022.tab",
         sep="\t",
@@ -185,10 +282,10 @@ def create_wealth_model(overwrite_existing: bool = False):
     Returns:
         QRF model for wealth imputation.
     """
-    from policyengine_uk_data.utils.qrf import QRF
-
     if (STORAGE_FOLDER / "wealth.pkl").exists() and not overwrite_existing:
-        return QRF(file_path=STORAGE_FOLDER / "wealth.pkl")
+        wealth = QRF(file_path=STORAGE_FOLDER / "wealth.pkl")
+        if _wealth_model_outputs_are_current(wealth):
+            return wealth
     return save_imputation_models()
 
 
@@ -204,7 +301,8 @@ def impute_wealth(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         dataset: PolicyEngine UK dataset to augment with wealth data.
 
     Returns:
-        Dataset with imputed wealth variables added to household table.
+        Dataset with household wealth variables added to the household table and
+        `student_loan_balance` allocated to people.
     """
     dataset = dataset.copy()
 
@@ -220,6 +318,12 @@ def impute_wealth(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     output_df = model.predict(input_df)
 
     for column in output_df.columns:
+        if column == "student_loan_balance":
+            dataset.person[column] = _allocate_student_loan_balance_to_people(
+                household_balances=output_df[column].clip(lower=0),
+                person=dataset.person,
+            )
+            continue
         dataset.household[column] = output_df[column].values
 
     dataset.validate()

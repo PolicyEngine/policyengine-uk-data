@@ -1,25 +1,52 @@
-from policyengine_uk.data import UKSingleYearDataset
-from policyengine_uk_data.datasets.frs import create_frs
-from policyengine_uk_data.storage import STORAGE_FOLDER
 import logging
 import os
-from policyengine_uk_data.utils.uprating import uprate_dataset
-from policyengine_uk_data.utils.subsample import subsample_dataset
-from policyengine_uk_data.utils.progress import (
-    ProcessingProgress,
-    display_success_panel,
-    display_error_panel,
+
+from policyengine_uk_data.utils.build_environment import (
+    assert_local_build_environment,
 )
 
 logging.basicConfig(level=logging.INFO)
 
 
+def _get_positive_int_env(name: str, default: int) -> int:
+    raw_value = os.environ.get(name)
+    if raw_value is None:
+        return default
+
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer, got {raw_value!r}.") from exc
+
+    if value < 1:
+        raise ValueError(f"{name} must be >= 1, got {value}.")
+
+    return value
+
+
 def main():
     """Create enhanced FRS dataset with rich progress tracking."""
     try:
+        assert_local_build_environment()
+
+        from policyengine_uk.data import UKSingleYearDataset
+        from policyengine_uk_data.datasets.frs import create_frs
+        from policyengine_uk_data.storage import STORAGE_FOLDER
+        from policyengine_uk_data.utils.progress import (
+            ProcessingProgress,
+            display_success_panel,
+            display_error_panel,
+        )
+        from policyengine_uk_data.utils.subsample import subsample_dataset
+        from policyengine_uk_data.utils.uprating import uprate_dataset
+
         # Use reduced epochs and fidelity for testing
         is_testing = os.environ.get("TESTING", "0") == "1"
         epochs = 32 if is_testing else 512
+        oa_clones = _get_positive_int_env(
+            "PE_UK_DATA_OA_CLONES",
+            2 if is_testing else 10,
+        )
 
         progress_tracker = ProcessingProgress()
 
@@ -34,6 +61,7 @@ def main():
             "Impute capital gains",
             "Impute salary sacrifice",
             "Impute student loan plan",
+            "Clone and assign OA geography",
             "Uprate to 2025",
             "Calibrate constituency weights",
             "Calibrate local authority weights",
@@ -65,6 +93,7 @@ def main():
                 impute_services,
                 impute_salary_sacrifice,
                 impute_student_loan_plan,
+                uprate_property_by_region,
             )
 
             # Apply imputations with progress tracking
@@ -72,6 +101,7 @@ def main():
             # uses num_vehicles as a predictor for fuel spending
             update_dataset("Impute wealth", "processing")
             frs = impute_wealth(frs)
+            frs = uprate_property_by_region(frs)
             update_dataset("Impute wealth", "completed")
 
             update_dataset("Impute consumption", "processing")
@@ -101,6 +131,15 @@ def main():
             update_dataset("Impute student loan plan", "processing")
             frs = impute_student_loan_plan(frs, year=2025)
             update_dataset("Impute student loan plan", "completed")
+
+            # Clone households and assign OA geography
+            update_dataset("Clone and assign OA geography", "processing")
+            from policyengine_uk_data.calibration.clone_and_assign import (
+                clone_and_assign,
+            )
+
+            frs = clone_and_assign(frs, n_clones=oa_clones)
+            update_dataset("Clone and assign OA geography", "completed")
 
             # Uprate dataset
             update_dataset("Uprate to 2025", "processing")
@@ -140,6 +179,7 @@ def main():
                 get_performance=get_performance,
                 nested_progress=nested_progress,  # Pass the nested progress manager
             )
+            update_dataset("Calibrate constituency weights", "completed")
 
             from policyengine_uk_data.datasets.local_areas.local_authorities.calibrate import (
                 get_performance as get_la_performance,
@@ -149,6 +189,7 @@ def main():
             )
 
             # Run calibration with verbose progress
+            update_dataset("Calibrate local authority weights", "processing")
             calibrate_local_areas(
                 dataset=frs,
                 epochs=epochs,
@@ -163,8 +204,7 @@ def main():
                 get_performance=get_la_performance,
                 nested_progress=nested_progress,  # Pass the nested progress manager
             )
-
-            update_dataset("Calibrate dataset", "completed")
+            update_dataset("Calibrate local authority weights", "completed")
 
             # Downrate and save
             update_dataset("Downrate to 2023", "processing")

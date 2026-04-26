@@ -1,5 +1,4 @@
 import pandas as pd
-import numpy as np
 
 # Read the files
 df_age = pd.read_csv("raw_age.csv", skiprows=6, thousands=",")
@@ -37,9 +36,21 @@ common_codes = set(df_age["code"]).intersection(set(df_income["code"]))
 df_age = df_age[df_age["code"].isin(common_codes)]
 df_income = df_income[df_income["code"].isin(common_codes)]
 
-# Calculate mean of each age column for non-missing values and fill missing values
+# Fill missing age values using country-specific means instead of UK-wide
+# mean, so Scotland and NI areas get their own age profiles (#64).
 for col in age_columns:
-    df_age[col] = df_age[col].fillna(df_age[col].mean())
+    missing_mask = df_age[col].isna()
+    if missing_mask.any():
+        for _, row in df_age[missing_mask].iterrows():
+            country_letter = row["code"][0]
+            same_country = df_age[
+                (df_age["code"].str.startswith(country_letter)) & ~df_age[col].isna()
+            ]
+            if len(same_country) > 0:
+                fill_value = same_country[col].mean()
+            else:
+                fill_value = df_age[col].mean()
+            df_age.loc[df_age["code"] == row["code"], col] = fill_value
 
 # Calculate 'all' as sum of all age columns after filling missing values
 df_age["all"] = df_age[age_columns].sum(axis=1)

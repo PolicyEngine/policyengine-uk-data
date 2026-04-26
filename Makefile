@@ -23,6 +23,13 @@ documentation:
 data:
 	python policyengine_uk_data/datasets/create_datasets.py
 
+data-local:
+	@PY_PATH="$(PWD)"; \
+	if [ -d ../policyengine-uk/policyengine_uk ]; then \
+		PY_PATH="$(abspath ../policyengine-uk):$$PY_PATH"; \
+	fi; \
+	PYTHONPATH="$$PY_PATH" uv run --python 3.13 python policyengine_uk_data/datasets/create_datasets.py
+
 build:
 	python -m build
 

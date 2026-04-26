@@ -1,18 +1,20 @@
-"""Miscellaneous compute functions (vehicles, housing, savings, SCP,
-student loans)."""
+"""Miscellaneous compute functions (vehicles, housing, savings, SCP, student loans)."""
 
 import numpy as np
+from policyengine_uk_data.targets.schema import Unit
 
-_ENGLAND_REGIONS = {
-    "NORTH_EAST",
-    "NORTH_WEST",
-    "YORKSHIRE",
-    "EAST_MIDLANDS",
-    "WEST_MIDLANDS",
-    "EAST_OF_ENGLAND",
-    "LONDON",
-    "SOUTH_EAST",
-    "SOUTH_WEST",
+_STUDENT_LOAN_COUNTRIES = {
+    "england": "ENGLAND",
+    "scotland": "SCOTLAND",
+    "wales": "WALES",
+    "northern_ireland": "NORTHERN_IRELAND",
+}
+
+_STUDENT_LOAN_PLAN_MAP = {
+    "plan_1": "PLAN_1",
+    "plan_2": "PLAN_2",
+    "postgraduate": "POSTGRADUATE",
+    "plan_5": "PLAN_5",
 }
 
 
@@ -27,13 +29,17 @@ def compute_vehicles(target, ctx) -> np.ndarray:
 
 
 def compute_housing(target, ctx) -> np.ndarray:
-    """Compute housing targets (mortgage, private rent)."""
+    """Compute housing targets (mortgage, private rent, social rent)."""
     name = target.name
     if name == "housing/total_mortgage":
         return ctx.pe("mortgage_capital_repayment") + ctx.pe(
             "mortgage_interest_repayment"
         )
+
     tenure = ctx.sim.calculate("tenure_type", map_to="household").values
+    if name == "housing/rent_social":
+        is_social = (tenure == "RENT_FROM_COUNCIL") | (tenure == "RENT_FROM_HA")
+        return ctx.pe("rent") * is_social
     return ctx.pe("rent") * (tenure == "RENT_PRIVATELY")
 
 
@@ -54,6 +60,13 @@ def compute_land_value(target, ctx) -> np.ndarray:
     return ctx.pe(target.variable)
 
 
+def compute_regional_land_value(target, ctx) -> np.ndarray:
+    """Compute household land value filtered to a single region."""
+    region = target.name.split("/")[-1]  # e.g. "ons/household_land_value/LONDON"
+    in_region = ctx.sim.calculate("region").values == region
+    return ctx.pe("household_land_value") * in_region
+
+
 def compute_student_loan_plan(target, ctx) -> np.ndarray:
     """Count England borrowers on a given plan with repayments > 0.
 
@@ -68,9 +81,60 @@ def compute_student_loan_plan(target, ctx) -> np.ndarray:
     else:
         return None
 
-    plan = ctx.sim.calculate("student_loan_plan").values
-    region = ctx.sim.calculate("region", map_to="person").values
-    is_england = np.isin(region, list(_ENGLAND_REGIONS))
-    on_plan = (plan == plan_value) & is_england
+    plan = ctx.pe_person("student_loan_plan")
+    repayments = ctx.pe_person("student_loan_repayments")
+    person_country = ctx.sim.calculate("country", map_to="person").values
+    on_plan = (plan == plan_value) & (person_country == "ENGLAND") & (repayments > 0)
 
     return ctx.household_from_person(on_plan.astype(float))
+
+
+def compute_student_loan_plan_liable(target, ctx) -> np.ndarray:
+    """Count all England borrowers on a given plan, including non-repayers."""
+    plan_name = target.name  # e.g. "slc/plan_2_borrowers_liable"
+    if "plan_2" in plan_name:
+        plan_value = "PLAN_2"
+    elif "plan_5" in plan_name:
+        plan_value = "PLAN_5"
+    else:
+        return None
+
+    plan = ctx.pe_person("student_loan_plan")
+    person_country = ctx.sim.calculate("country", map_to="person").values
+    on_plan = (plan == plan_value) & (person_country == "ENGLAND")
+
+    return ctx.household_from_person(on_plan.astype(float))
+
+
+def compute_student_loan_repayment(target, ctx) -> np.ndarray:
+    """Compute SLC repayment amount targets by country and optional plan."""
+    parts = target.name.split("/")
+    if len(parts) < 3 or parts[:2] != ["slc", "student_loan_repayment"]:
+        return None
+
+    country = _STUDENT_LOAN_COUNTRIES.get(parts[2])
+    if country is None:
+        return None
+
+    person_country = ctx.sim.calculate("country", map_to="person").values
+    repayments = ctx.pe_person("student_loan_repayment")
+    mask = person_country == country
+
+    if len(parts) == 4:
+        plan_value = _STUDENT_LOAN_PLAN_MAP.get(parts[3])
+        if plan_value is None:
+            return None
+        plan = ctx.pe_person("student_loan_plan")
+        mask &= plan == plan_value
+
+    return ctx.household_from_person(repayments * mask)
+
+
+def compute_person_support(target, ctx) -> np.ndarray:
+    """Compute recipient-count and spend targets for person-level support variables."""
+    values = ctx.pe_person(target.variable)
+    if target.is_count or target.unit == Unit.COUNT:
+        return ctx.household_from_person((values > 0).astype(float))
+    if target.unit == Unit.GBP:
+        return ctx.household_from_person(values)
+    return None

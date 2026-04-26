@@ -14,14 +14,19 @@ Sources:
 import logging
 
 import pandas as pd
+from policyengine_uk.system import system
 
 from policyengine_uk_data.targets.sources._common import STORAGE
 
 logger = logging.getLogger(__name__)
 
-# Uprating factors from FYE 2020 to 2025 (OBR Nov 2025 EFO)
-UPRATING_NET_INCOME_BHC_2020_TO_2025 = 1985.1 / 1467.6
-UPRATING_HOUSING_COSTS_2020_TO_2025 = 103.5 / 84.9
+# Compatibility fallback until policyengine-uk ships the matching parameters.
+_LEGACY_ONS_INCOME_UPRATING_FACTORS = {
+    2025: (
+        1985.1 / 1467.6,
+        103.5 / 84.9,
+    ),
+}
 
 _REF_ONS_INCOME = (
     "https://www.ons.gov.uk/employmentandlabourmarket/peopleinwork/"
@@ -33,6 +38,31 @@ _REF_RENT = (
     "https://www.ons.gov.uk/peoplepopulationandcommunity/housing/datasets/"
     "privaterentalmarketsummarystatisticsinengland"
 )
+
+
+def get_ons_income_uprating_factors(year: int) -> tuple[float, float]:
+    """Return BHC-income and housing-cost uprating factors for LA ONS targets."""
+    econ_assumptions = system.parameters.gov.economic_assumptions
+    local_authority_targets = getattr(econ_assumptions, "local_authority_targets", None)
+
+    if local_authority_targets is not None:
+        ons_income = local_authority_targets.ons_income
+        net_income_bhc = ons_income.net_income_bhc_uprating_factor(f"{year}-01-01")
+        housing_costs = ons_income.housing_costs_uprating_factor(f"{year}-01-01")
+        if net_income_bhc is None or housing_costs is None:
+            raise ValueError(
+                f"policyengine-uk local authority target uprating factors are "
+                f"incomplete for {year}."
+            )
+        return float(net_income_bhc), float(housing_costs)
+
+    if year in _LEGACY_ONS_INCOME_UPRATING_FACTORS:
+        return _LEGACY_ONS_INCOME_UPRATING_FACTORS[year]
+
+    raise ValueError(
+        f"No ONS LA income uprating factors configured for {year}. "
+        "Update policyengine-uk or add a compatibility fallback."
+    )
 
 
 def load_ons_la_income() -> pd.DataFrame:

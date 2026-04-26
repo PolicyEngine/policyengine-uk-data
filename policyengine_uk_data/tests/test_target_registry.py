@@ -7,8 +7,7 @@ Verifies that:
 4. Target values match the current system's hardcoded values
 """
 
-import pytest
-from policyengine_uk_data.targets import get_all_targets, Target
+from policyengine_uk_data.targets import get_all_targets
 
 
 def test_registry_loads():
@@ -33,11 +32,11 @@ def test_obr_income_tax_exists():
 
 
 def test_obr_income_tax_value():
-    """OBR income tax for 2025 should be ~£329bn (Table 3.4 accrued basis)."""
+    """OBR income tax for 2025 should be ~£331bn (March 2026 Table 3.4)."""
     targets = get_all_targets(year=2025)
     it = next(t for t in targets if t.name == "obr/income_tax")
-    # Table 3.4 D6 = 328.96bn for FY 2025-26 → calendar 2025
-    assert abs(it.values[2025] - 329e9) < 1e9
+    # Table 3.4 D6 = 331.44bn for FY 2025-26 → calendar 2025
+    assert abs(it.values[2025] - 331.4e9) < 1e9
 
 
 def test_ons_uk_population_exists():
@@ -65,10 +64,25 @@ def test_dwp_pip_targets():
 
 def test_voa_council_tax_targets():
     """VOA council tax band targets should exist."""
-    targets = get_all_targets(year=2024)
+    targets = get_all_targets(year=2025)
     voa = [t for t in targets if t.source == "voa"]
     # 11 regions × 9 (8 bands + total) = 99
     assert len(voa) >= 90, f"Expected 90+ VOA targets, got {len(voa)}"
+
+
+def test_dwp_pip_targets_use_official_source():
+    """PIP daily living targets should cite the official DWP release."""
+    targets = get_all_targets(year=2025)
+    standard = next(t for t in targets if t.name == "dwp/pip_dl_standard_claimants")
+    enhanced = next(t for t in targets if t.name == "dwp/pip_dl_enhanced_claimants")
+    assert (
+        "gov.uk/government/statistics/personal-independence-payment-statistics-to-january-2026"
+        in standard.reference_url
+    )
+    assert (
+        "gov.uk/government/statistics/personal-independence-payment-statistics-to-january-2026"
+        in enhanced.reference_url
+    )
 
 
 def test_core_target_count():
@@ -85,6 +99,15 @@ def test_two_child_limit_targets():
     assert "dwp/uc/two_child_limit/children_affected" in names
 
 
+def test_benefit_cap_targets_refreshed():
+    """Benefit cap target values should match the November 2025 release."""
+    targets = get_all_targets(year=2025)
+    capped = next(t for t in targets if t.name == "dwp/benefit_capped_households")
+    total = next(t for t in targets if t.name == "dwp/benefit_cap_total_reduction")
+    assert capped.values[2025] == 110_637
+    assert total.values[2025] == 320_866_000
+
+
 def test_scottish_child_payment():
     """Scottish child payment should exist."""
     targets = get_all_targets(year=2025)
@@ -97,3 +120,12 @@ def test_savings_interest():
     targets = get_all_targets(year=2025)
     names = {t.name for t in targets}
     assert "ons/savings_interest_income" in names
+
+
+def test_land_targets_exist():
+    """National ONS land targets should exist."""
+    targets = get_all_targets(year=2025)
+    names = {t.name for t in targets}
+    assert "ons/household_land_value" in names
+    assert "ons/corporate_land_value" in names
+    assert "ons/land_value" in names

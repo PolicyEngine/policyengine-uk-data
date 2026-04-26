@@ -32,12 +32,11 @@ from policyengine_uk_data.targets.sources.local_uc import (
     get_la_uc_targets,
 )
 from policyengine_uk_data.targets.sources.local_la_extras import (
+    get_ons_income_uprating_factors,
     load_ons_la_income,
     load_household_counts,
     load_tenure_data,
     load_private_rents,
-    UPRATING_NET_INCOME_BHC_2020_TO_2025,
-    UPRATING_HOUSING_COSTS_2020_TO_2025,
 )
 
 
@@ -127,6 +126,9 @@ def create_local_authority_target_matrix(
     hbai_net_income = sim.calculate("equiv_hbai_household_net_income").values
     hbai_net_income_ahc = sim.calculate("equiv_hbai_household_net_income_ahc").values
     housing_costs = hbai_net_income - hbai_net_income_ahc
+    income_bhc_uprating_factor, housing_costs_uprating_factor = (
+        get_ons_income_uprating_factors(int(time_period))
+    )
 
     matrix["ons/equiv_net_income_bhc"] = hbai_net_income
     matrix["ons/equiv_net_income_ahc"] = hbai_net_income_ahc
@@ -135,12 +137,12 @@ def create_local_authority_target_matrix(
     ons_merged["equiv_net_income_bhc_target"] = (
         ons_merged["net_income_bhc"]
         * ons_merged["households"]
-        * UPRATING_NET_INCOME_BHC_2020_TO_2025
+        * income_bhc_uprating_factor
     )
     ons_merged["equiv_housing_costs_target"] = (
         ons_merged["net_income_bhc"] * ons_merged["households"]
         - ons_merged["net_income_ahc"] * ons_merged["households"]
-    ) * UPRATING_HOUSING_COSTS_2020_TO_2025
+    ) * housing_costs_uprating_factor
     ons_merged["equiv_net_income_ahc_target"] = (
         ons_merged["equiv_net_income_bhc_target"]
         - ons_merged["equiv_housing_costs_target"]

@@ -5,9 +5,11 @@ loaded from pre-downloaded Stat-Xplore exports and scaled to match
 national UC payment distribution totals.
 
 Also provides UC household counts split by number of children, using
-country-level proportions from Stat-Xplore (November 2023) applied to
-each constituency's total.  This ensures the reweighting algorithm
-places adequate weight on larger families in every constituency.
+country-level shares last observed in Stat-Xplore in November 2023,
+scaled to the latest GB-wide UC household totals by children count.
+This keeps the local split aligned to current national family-size
+totals without requiring a fresh protected Stat-Xplore country export
+for every release.
 
 Source: DWP Stat-Xplore
 https://stat-xplore.dwp.gov.uk
@@ -22,24 +24,50 @@ logger = logging.getLogger(__name__)
 
 _REF = "https://stat-xplore.dwp.gov.uk"
 
-# Country-level UC households by number of children (Nov 2023, Stat-Xplore).
-# Used to split each constituency's UC total into children-count buckets.
-# Keys: (0 children, 1 child, 2 children, 3+ children)
-_UC_CHILDREN_BY_COUNTRY = {
+# Last observed country-level UC household counts by number of children
+# from the November 2023 Stat-Xplore household export. Keys:
+# (0 children, 1 child, 2 children, 3+ children)
+_UC_CHILDREN_BY_COUNTRY_BASE_2023 = {
     "E": np.array([2_411_993, 948_304, 802_992, 495_279], dtype=float),
     "W": np.array([141_054, 52_953, 44_348, 26_372], dtype=float),
     "S": np.array([253_609, 86_321, 66_829, 35_036], dtype=float),
-    # Northern Ireland: use GB-wide proportions as fallback
-    "N": np.array(
-        [
-            2_411_993 + 141_054 + 253_609,
-            948_304 + 52_953 + 86_321,
-            802_992 + 44_348 + 66_829,
-            495_279 + 26_372 + 35_036,
-        ],
-        dtype=float,
-    ),
 }
+
+# Latest GB-wide UC household totals by number of children from the
+# 2025 national claimant counts in dwp.py, with the 0-children bucket
+# inferred from the current GB total household count.
+_GB_UC_2025_CHILDREN_BUCKETS = np.array(
+    [1_222_944, 1_058_967, 473_500 + 166_790 + 74_050 + 1_860],
+    dtype=float,
+)
+
+
+def _scaled_uc_children_by_country(gb_total_households: float) -> dict[str, np.ndarray]:
+    zero_children_total = gb_total_households - _GB_UC_2025_CHILDREN_BUCKETS.sum()
+    gb_bucket_totals = np.array(
+        [zero_children_total, *_GB_UC_2025_CHILDREN_BUCKETS],
+        dtype=float,
+    )
+    base_totals = sum(_UC_CHILDREN_BY_COUNTRY_BASE_2023.values())
+    scaled = {}
+    for country, base_counts in _UC_CHILDREN_BY_COUNTRY_BASE_2023.items():
+        shares = np.divide(
+            base_counts,
+            base_totals,
+            out=np.zeros_like(base_counts),
+            where=base_totals > 0,
+        )
+        scaled[country] = np.round(shares * gb_bucket_totals).astype(float)
+
+    gb_sum = sum(scaled.values())
+    rounding_diff = gb_bucket_totals - gb_sum
+    # Keep the GB totals exact after per-country rounding drift.
+    scaled["E"] = scaled["E"] + rounding_diff
+
+    # Northern Ireland still falls back to GB-wide proportions because the
+    # public export in this repo does not include a children-count split.
+    scaled["N"] = gb_bucket_totals.copy()
+    return scaled
 
 
 def get_constituency_uc_targets() -> pd.Series:
@@ -78,11 +106,14 @@ def get_constituency_uc_by_children_targets() -> pd.DataFrame:
     for col in cols:
         result[col] = 0.0
 
+    gb_total = totals[codes.str[0].isin(["E", "W", "S"])].sum()
+    country_buckets = _scaled_uc_children_by_country(gb_total)
+
     for i, (total, code) in enumerate(zip(totals, codes)):
         country_prefix = code[0]
-        proportions = _UC_CHILDREN_BY_COUNTRY.get(
+        proportions = country_buckets.get(
             country_prefix,
-            _UC_CHILDREN_BY_COUNTRY["N"],  # fallback
+            country_buckets["N"],  # fallback
         )
         shares = proportions / proportions.sum()
         for j, col in enumerate(cols):
