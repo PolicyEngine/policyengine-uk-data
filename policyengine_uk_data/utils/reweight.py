@@ -54,8 +54,10 @@ def calibrate_household_weights(
         weighted_coefficients,
         weighted_targets,
         bounds=(min_weight, np.inf),
+        lsq_solver="lsmr",
         tol=1e-4,
         lsmr_tol="auto",
+        lsmr_maxiter=max_iter,
         max_iter=max_iter,
     )
     if not result.success:

@@ -1,5 +1,7 @@
 from pathlib import Path
+from types import SimpleNamespace
 
+import numpy as np
 import pandas as pd
 from policyengine_uk import CountryTaxBenefitSystem
 from policyengine_uk import Microsimulation
@@ -9,6 +11,7 @@ from policyengine_uk_data.datasets import (
     create_enhanced_cps,
 )
 from policyengine_uk_data.datasets.enhanced_cps import _assign_council_tax_bands
+from policyengine_uk_data.utils import reweight as reweight_module
 from policyengine_uk_data.utils.loss import get_loss_results
 
 ALLOWED_REPORTED_DATA_INPUTS = {
@@ -107,6 +110,39 @@ def test_policybench_transfer_calibration_improves_loss(tmp_path: Path):
     calibrated_loss = get_loss_results(calibrated, "2025")
 
     assert calibrated_loss.abs_rel_error.mean() < uncalibrated_loss.abs_rel_error.mean()
+
+
+def test_policybench_transfer_calibration_uses_iterative_solver(monkeypatch):
+    calls = {}
+
+    def fake_create_target_matrix(dataset, time_period, reform=None):
+        return pd.DataFrame(
+            [[1.0, 0.0], [0.0, 1.0]],
+        ), pd.Series([1.0, 2.0])
+
+    def fake_lsq_linear(*args, **kwargs):
+        calls.update(kwargs)
+        return SimpleNamespace(success=True, x=np.array([1.0, 2.0]))
+
+    monkeypatch.setattr(
+        reweight_module,
+        "create_target_matrix",
+        fake_create_target_matrix,
+    )
+    monkeypatch.setattr(reweight_module, "lsq_linear", fake_lsq_linear)
+
+    dataset = SimpleNamespace(household=pd.DataFrame({"household_id": [1, 2]}))
+    weights, diagnostics = reweight_module.calibrate_household_weights(
+        dataset,
+        "2025",
+        compute_diagnostics=False,
+    )
+
+    assert calls["lsq_solver"] == "lsmr"
+    assert calls["lsmr_tol"] == "auto"
+    assert calls["lsmr_maxiter"] == 2000
+    assert diagnostics is None
+    assert weights.tolist() == [1.0, 2.0]
 
 
 def test_policybench_transfer_family_structure_matches_person_membership(
