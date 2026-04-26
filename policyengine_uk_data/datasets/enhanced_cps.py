@@ -419,7 +419,9 @@ def export_enhanced_cps_source(
     )
 
     rows: list[dict] = []
-    household_ids = sorted(int(household_id) for household_id in eligible["household_id"])
+    household_ids = sorted(
+        int(household_id) for household_id in eligible["household_id"]
+    )
     for index, household_id in enumerate(household_ids):
         household = prepared[prepared["household_id"] == household_id].copy()
         household = household.sort_values(
