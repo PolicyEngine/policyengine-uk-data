@@ -1,0 +1,26 @@
+name: Upload public transfer dataset
+
+on:
+  workflow_dispatch:
+
+jobs:
+  upload-public-transfer:
+    runs-on: ubuntu-latest
+    env:
+      HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.13
+      - name: Install package
+        run: uv pip install -e ".[dev]" --system
+      - name: Verify public transfer artifact contract
+        run: |
+          pytest policyengine_uk_data/tests/test_enhanced_cps_artifact_manifest.py
+          pytest policyengine_uk_data/tests/test_policybench_transfer.py
+      - name: Upload public transfer artifacts
+        run: make upload-public-transfer

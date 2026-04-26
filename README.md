@@ -22,6 +22,7 @@ This repo now also includes a public calibrated microdata file:
 
 - `policyengine_uk_data/storage/enhanced_cps_2025.h5`
 - source manifest: `policyengine_uk_data/storage/enhanced_cps_source_2025.csv`
+- artifact manifest: `policyengine_uk_data/storage/enhanced_cps_manifest_2025.json`
 
 The public UK calibrated transfer dataset starts from a public export of eligible households from
 PolicyEngine-US Enhanced CPS. In the current build that source manifest contains
@@ -47,11 +48,20 @@ This is a public calibrated dataset, not a replacement for the FRS or enhanced
 FRS. It is intended as the first step in a broader cross-country public-microdata
 strategy.
 
+The legacy `policybench_transfer_2025.h5` and
+`policybench_transfer_source_2025.csv` files remain the original
+1,000-household proof-of-method artifacts. The Python
+`create_policybench_transfer` and `save_policybench_transfer` entry points are
+backward-compatible aliases for the current `enhanced_cps` builder, not a
+request to regenerate the legacy 1,000-household files.
+
 Programmatic entrypoints:
 
 - `policyengine_uk_data.datasets.create_enhanced_cps`
 - `policyengine_uk_data.datasets.export_enhanced_cps_source`
 - `policyengine_uk_data.datasets.save_enhanced_cps`
+- `make enhanced-cps-manifest`
+- `make upload-public-transfer`
 
 Backward-compatible aliases remain available:
 

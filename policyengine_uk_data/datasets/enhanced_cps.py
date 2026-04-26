@@ -23,6 +23,7 @@ from policyengine_uk_data.utils.reweight import calibrate_household_weights
 
 ENHANCED_CPS_SOURCE_FILE = STORAGE_FOLDER / "enhanced_cps_source_2025.csv"
 ENHANCED_CPS_FILE = STORAGE_FOLDER / "enhanced_cps_2025.h5"
+ENHANCED_CPS_MANIFEST_FILE = STORAGE_FOLDER / "enhanced_cps_manifest_2025.json"
 COUNCIL_TAX_BANDS_FILE = STORAGE_FOLDER / "council_tax_bands_2024.csv"
 
 # Build assumptions are pinned so the checked-in H5 is reproducible. Do not

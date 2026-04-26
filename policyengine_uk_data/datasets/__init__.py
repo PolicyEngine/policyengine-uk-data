@@ -1,5 +1,6 @@
 from .enhanced_cps import (
     ENHANCED_CPS_FILE,
+    ENHANCED_CPS_MANIFEST_FILE,
     ENHANCED_CPS_SOURCE_FILE,
     create_enhanced_cps,
     export_enhanced_cps_source,
@@ -15,6 +16,7 @@ from .spi import create_spi
 
 __all__ = [
     "ENHANCED_CPS_FILE",
+    "ENHANCED_CPS_MANIFEST_FILE",
     "ENHANCED_CPS_SOURCE_FILE",
     "create_enhanced_cps",
     "export_enhanced_cps_source",

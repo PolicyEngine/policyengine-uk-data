@@ -15,6 +15,12 @@ download:
 upload:
 	python policyengine_uk_data/storage/upload_completed_datasets.py
 
+enhanced-cps-manifest:
+	python policyengine_uk_data/storage/write_enhanced_cps_manifest.py
+
+upload-public-transfer:
+	python policyengine_uk_data/storage/upload_public_transfer_dataset.py
+
 documentation:
 	pip install --pre "jupyter-book>=2"
 	jb clean docs && jb build docs

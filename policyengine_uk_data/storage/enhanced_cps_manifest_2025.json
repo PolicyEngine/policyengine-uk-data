@@ -1,0 +1,90 @@
+{
+  "artifact": "enhanced_cps_2025",
+  "build": {
+    "build_command": "uv run --python 3.13 python -m policyengine_uk_data.storage.write_enhanced_cps_manifest",
+    "builder": "policyengine_uk_data.datasets.save_enhanced_cps",
+    "calibrated": true,
+    "calibration_target_year": 2025,
+    "exchange_rate": {
+      "live_api_called": false,
+      "source_url": "https://www.irs.gov/individuals/international-taxpayers/yearly-average-currency-exchange-rates",
+      "usd_to_gbp": 0.759
+    },
+    "fiscal_year": 2025,
+    "source_dataset": "PolicyEngine US Enhanced CPS public export",
+    "source_scope": "benchmark-compatible households"
+  },
+  "description": "Public UK calibrated transfer dataset derived from a public export of benchmark-compatible PolicyEngine US Enhanced CPS households.",
+  "files": {
+    "artifact": {
+      "git_blob_sha": "6184d619b15497b00fea2d349a4af041f85d17a0",
+      "last_modified_commit": "9514dfb7ec607897c9f7122a2e073b922c9fd8b6",
+      "path": "policyengine_uk_data/storage/enhanced_cps_2025.h5",
+      "sha256": "199ebc61d29231b4799ad337a95393765b5fb5aede1834b93ff2acecceded866",
+      "size_bytes": 23379906
+    },
+    "source_manifest": {
+      "git_blob_sha": "b94400dd8d729bcf7807ddc59a920c6f48bee2dd",
+      "last_modified_commit": "9514dfb7ec607897c9f7122a2e073b922c9fd8b6",
+      "path": "policyengine_uk_data/storage/enhanced_cps_source_2025.csv",
+      "sha256": "ab69ba5cec8c079a7cacd1494bc6766139e3c6e07e779e3719a57be60e039892",
+      "size_bytes": 58751828
+    }
+  },
+  "generated_at": "2026-04-26T17:15:02.755838Z",
+  "intended_uses": [
+    "public demos",
+    "reproducible examples",
+    "public benchmark analysis"
+  ],
+  "loss_diagnostics": {
+    "calibrated": {
+      "excludes_zero_target_relative_errors": true,
+      "mean_abs_relative_error": 0.330212,
+      "median_abs_relative_error": 0.191874,
+      "nonfinite_relative_error_count": 1,
+      "nonzero_finite_target_count": 590,
+      "p90_abs_relative_error": 1.0,
+      "share_within_10pct": 0.284746,
+      "share_within_25pct": 0.608475,
+      "target_count": 591,
+      "zero_target_count": 1
+    },
+    "raw_transfer_weights": {
+      "excludes_zero_target_relative_errors": true,
+      "mean_abs_relative_error": 3.418089,
+      "median_abs_relative_error": 1.575202,
+      "nonfinite_relative_error_count": 1,
+      "nonzero_finite_target_count": 590,
+      "p90_abs_relative_error": 5.829189,
+      "share_within_10pct": 0.022034,
+      "share_within_25pct": 0.052542,
+      "target_count": 591,
+      "zero_target_count": 1
+    },
+    "target_year": 2025
+  },
+  "not_intended_uses": [
+    "substitution for FRS or enhanced FRS",
+    "precise UK distributional analysis",
+    "administrative truth validation"
+  ],
+  "row_counts": {
+    "h5_benunits": 28532,
+    "h5_households": 28532,
+    "h5_people": 58848,
+    "source_households": 28532
+  },
+  "schema_version": 1,
+  "weight_diagnostics": {
+    "effective_sample_size": 11196.873445,
+    "max_household_weight": 20155.812507,
+    "min_household_weight": 1.0000000000000003e-09,
+    "near_zero_weight_count": 1408,
+    "near_zero_weight_threshold": 1e-06,
+    "top_100_share": 0.033223773,
+    "top_10_share": 0.005239509,
+    "top_1_share": 0.000714643,
+    "total_household_weight": 28204012.49725
+  }
+}

@@ -9,6 +9,7 @@ project:
   github: policyengine/policyengine-uk-data
   toc:
     - file: intro.md
+    - file: public_transfer_dataset.md
     - file: methodology.ipynb
     - file: imputations.md
     - file: validation/index.md
