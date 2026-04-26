@@ -31,9 +31,17 @@ vehicle ownership, pensions, disability/PIP, consumption, and capital gains,
 and then recalibrates the household weights against the UK national/region/country
 target registry used by the loss pipeline.
 
-On the native 2025 loss matrix, that alignment plus reweighting step cuts mean
-absolute relative error from roughly `3.81` on the raw transfer weights to
-roughly `0.39` on the calibrated dataset.
+The checked-in 2025 artifact uses a pinned `0.759` USD-to-GBP conversion rate
+from the IRS 2025 yearly average exchange-rate table. The builder intentionally
+does not call a live foreign-exchange API, because the committed H5 should be
+reproducible from versioned code and source data. Pass `exchange_rate=...` to
+`create_enhanced_cps` or `save_enhanced_cps` when rebuilding with a different
+conversion assumption.
+
+The calibration step is tested against the native 2025 loss matrix and should
+reduce mean absolute relative error relative to the raw transfer weights. Report
+full-artifact loss values from a named release artifact rather than copying them
+into this README.
 
 This is a public calibrated dataset, not a replacement for the FRS or enhanced
 FRS. It is intended as the first step in a broader cross-country public-microdata

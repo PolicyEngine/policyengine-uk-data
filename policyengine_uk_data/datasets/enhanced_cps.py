@@ -25,7 +25,19 @@ ENHANCED_CPS_SOURCE_FILE = STORAGE_FOLDER / "enhanced_cps_source_2025.csv"
 ENHANCED_CPS_FILE = STORAGE_FOLDER / "enhanced_cps_2025.h5"
 COUNCIL_TAX_BANDS_FILE = STORAGE_FOLDER / "council_tax_bands_2024.csv"
 
-USD_TO_GBP = 0.79
+# Build assumptions are pinned so the checked-in H5 is reproducible. Do not
+# fetch live exchange rates during dataset creation; pass `exchange_rate=...`
+# to `create_enhanced_cps` or `save_enhanced_cps` when rebuilding with a
+# different conversion assumption.
+USD_TO_GBP = 0.759
+USD_TO_GBP_SOURCE_URL = (
+    "https://www.irs.gov/individuals/international-taxpayers/"
+    "yearly-average-currency-exchange-rates"
+)
+
+# 2025/26 reported-benefit mapping assumptions used only to populate UK input
+# leaves from U.S. source records. PolicyEngine UK applies its own parameters
+# when calculating derived tax and benefit outputs.
 NEW_STATE_PENSION_2025 = 224.96 * 52
 DIVIDEND_YIELD_FOR_WEALTH_IMPUTATION = 0.03
 RENTAL_YIELD_FOR_WEALTH_IMPUTATION = 0.04
