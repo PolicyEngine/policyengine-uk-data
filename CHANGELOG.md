@@ -1,3 +1,14 @@
+## [1.54.0] - 2026-04-26
+
+### Added
+
+- Added a public `enhanced_cps_2025` dataset constructor that maps a public export of eligible households from PolicyEngine-US Enhanced CPS into a `UKSingleYearDataset` and recalibrates household weights against the UK national/region/country target registry. Backward-compatible `policybench_transfer` aliases remain available.
+
+### Fixed
+
+- Fixed the public enhanced CPS transfer builder to write valid PolicyEngine UK input leaves instead of prompt-only aggregate fields.
+
+
 ## [1.53.1] - 2026-04-20
 
 No significant changes.
