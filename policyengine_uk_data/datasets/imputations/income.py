@@ -109,14 +109,12 @@ INCOME_COMPONENTS = [
 # Aid higher-rate relief flow and an additional ~£0.1bn of qualifying-
 # investment gifts. Including them here means the multi-output QRF draws
 # them jointly with income components, so high-earner donors get plausibly
-# non-zero values. Kept separate from INCOME_COMPONENTS because the
-# rent/mortgage adjustment factor downstream is built from income sums, and
-# these are expenditures, not income. The standalone SPI dataset in
+# non-zero values. They are kept separate from INCOME_COMPONENTS because
+# they are expenditures, not income. The standalone SPI dataset in
 # `datasets/spi.py` sums GIFTAID + GIFTINV into a single `gift_aid` column
 # because that path doesn't carry a separate `charitable_investment_gifts`
 # variable; the enhanced-FRS path here keeps them separate so each maps to
-# its own policyengine-uk variable. They are kept separate from
-# INCOME_COMPONENTS because they are expenditures, not income.
+# its own policyengine-uk variable.
 IMPUTATIONS = INCOME_COMPONENTS + ["gift_aid", "charitable_investment_gifts"]
 
 
