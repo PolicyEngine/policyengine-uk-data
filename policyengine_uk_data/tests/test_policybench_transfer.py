@@ -39,7 +39,8 @@ def test_policybench_transfer_dataset_validates(tmp_path: Path):
     assert len(dataset.household) == 10
     assert len(dataset.benunit) == 10
     assert len(dataset.person) >= 10
-    assert (dataset.household.household_weight > 0).all()
+    assert (dataset.household.household_weight >= 0).all()
+    assert dataset.household.household_weight.sum() > 0
 
 
 def test_policybench_transfer_writes_only_valid_leaf_inputs(tmp_path: Path):
@@ -109,6 +110,7 @@ def test_policybench_transfer_calibration_improves_loss(tmp_path: Path):
     )
     calibrated_loss = get_loss_results(calibrated, "2025")
 
+    assert (calibrated.household.household_weight > 0).all()
     assert calibrated_loss.abs_rel_error.mean() < uncalibrated_loss.abs_rel_error.mean()
 
 
