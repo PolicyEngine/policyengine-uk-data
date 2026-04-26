@@ -16,16 +16,16 @@ If `../policyengine-uk` exists, you can run:
 make data-local
 ```
 
-## Public enhanced CPS
+## Public UK calibrated transfer dataset
 
 This repo now also includes a public calibrated microdata file:
 
 - `policyengine_uk_data/storage/enhanced_cps_2025.h5`
 - source manifest: `policyengine_uk_data/storage/enhanced_cps_source_2025.csv`
 
-The UK enhanced CPS starts from a public export of eligible households from
+The public UK calibrated transfer dataset starts from a public export of eligible households from
 PolicyEngine-US Enhanced CPS. In the current build that source manifest contains
-`27,500` households, not `1,000`. The pipeline maps those records into a
+`28,532` households, not `1,000`. The pipeline maps those records into a
 `UKSingleYearDataset`, aligns core UK-facing inputs such as council tax bands,
 vehicle ownership, pensions, disability/PIP, consumption, and capital gains,
 and then recalibrates the household weights against the UK national/region/country

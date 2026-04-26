@@ -1,13 +1,12 @@
-"""Public UK enhanced CPS built from open U.S. microdata.
+"""Public UK calibrated transfer dataset built from open U.S. microdata.
 
 This dataset starts from a public export of eligible households from
 PolicyEngine-US Enhanced CPS, maps those records into a UKSingleYearDataset,
 and then calibrates the household weights to UK national/region/country
 targets.
 
-It is a public calibrated dataset. It does not replace the FRS or enhanced FRS,
-but it follows the same general strategy: public microdata plus imputations and
-reweighting against official aggregates.
+It is a public calibrated transfer dataset. It does not replace the FRS or
+enhanced FRS, and should not be described as native UK survey microdata.
 """
 
 from __future__ import annotations

@@ -11,6 +11,12 @@ from policyengine_uk_data.datasets import (
 from policyengine_uk_data.datasets.enhanced_cps import _assign_council_tax_bands
 from policyengine_uk_data.utils.loss import get_loss_results
 
+ALLOWED_REPORTED_DATA_INPUTS = {
+    # PE-UK uses this reported base field to derive basic/additional/new
+    # state pension; it carries a formula only for year-to-year uprating.
+    "state_pension_reported",
+}
+
 
 def _subset_source(tmp_path: Path, rows: int) -> Path:
     source = pd.read_csv(ENHANCED_CPS_SOURCE_FILE).head(rows).copy()
@@ -52,7 +58,7 @@ def test_policybench_transfer_writes_only_valid_leaf_inputs(tmp_path: Path):
             or system.variables[column].entity.key != entity
             or (
                 not system.variables[column].is_input_variable()
-                and not column.endswith("_reported")
+                and column not in ALLOWED_REPORTED_DATA_INPUTS
             )
         ]
         assert invalid_columns == []
