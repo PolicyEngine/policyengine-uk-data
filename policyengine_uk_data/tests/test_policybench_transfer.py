@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pandas as pd
+from policyengine_uk import CountryTaxBenefitSystem
 from policyengine_uk import Microsimulation
 
 from policyengine_uk_data.datasets import (
@@ -30,6 +31,43 @@ def test_policybench_transfer_dataset_validates(tmp_path: Path):
     assert len(dataset.benunit) == 10
     assert len(dataset.person) >= 10
     assert (dataset.household.household_weight > 0).all()
+
+
+def test_policybench_transfer_writes_only_valid_leaf_inputs(tmp_path: Path):
+    dataset = create_enhanced_cps(
+        source_file_path=_subset_source(tmp_path, 10),
+        calibrate=False,
+    )
+    system = CountryTaxBenefitSystem()
+
+    for entity, frame in (
+        ("person", dataset.person),
+        ("benunit", dataset.benunit),
+        ("household", dataset.household),
+    ):
+        invalid_columns = [
+            column
+            for column in frame.columns
+            if column not in system.variables
+            or system.variables[column].entity.key != entity
+            or (
+                not system.variables[column].is_input_variable()
+                and not column.endswith("_reported")
+            )
+        ]
+        assert invalid_columns == []
+
+    assert "household_wealth" not in dataset.household.columns
+    assert "total_wealth" not in dataset.household.columns
+    for column in (
+        "savings",
+        "main_residence_value",
+        "other_residential_property_value",
+        "non_residential_property_value",
+        "owned_land",
+        "corporate_wealth",
+    ):
+        assert column in dataset.household.columns
 
 
 def test_policybench_transfer_runs_uk_microsimulation(tmp_path: Path):

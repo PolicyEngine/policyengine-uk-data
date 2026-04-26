@@ -28,6 +28,21 @@ COUNCIL_TAX_BANDS_FILE = STORAGE_FOLDER / "council_tax_bands_2024.csv"
 
 USD_TO_GBP = 0.79
 NEW_STATE_PENSION_2025 = 224.96 * 52
+DIVIDEND_YIELD_FOR_WEALTH_IMPUTATION = 0.03
+RENTAL_YIELD_FOR_WEALTH_IMPUTATION = 0.04
+
+PIP_2025_WEEKLY_RATES = {
+    "daily_living": {
+        "NONE": 0.0,
+        "STANDARD": 73.89,
+        "ENHANCED": 110.40,
+    },
+    "mobility": {
+        "NONE": 0.0,
+        "STANDARD": 29.19,
+        "ENHANCED": 77.04,
+    },
+}
 
 REGION_SHARES = (
     ("NORTH_EAST", 0.04),
@@ -76,6 +91,71 @@ def _sum_inputs(people: list[dict], *keys: str) -> float:
         inputs = person.get("inputs", {})
         total += sum(float(inputs.get(key, 0.0)) for key in keys)
     return total
+
+
+def _wealth_leaf_inputs(
+    people: list[dict],
+    household_inputs: dict,
+    owns_home: bool,
+    exchange_rate: float,
+) -> dict[str, float]:
+    net_worth = max(
+        _gbp(float(household_inputs.get("net_worth", 0.0)), exchange_rate),
+        0.0,
+    )
+    savings = _gbp(
+        _sum_inputs(people, "bank_account_assets", "bond_assets"),
+        exchange_rate,
+    )
+    explicit_corporate_wealth = _gbp(
+        _sum_inputs(people, "stock_assets"),
+        exchange_rate,
+    )
+    annual_dividends = _gbp(
+        _sum_inputs(
+            people,
+            "qualified_dividend_income",
+            "non_qualified_dividend_income",
+        ),
+        exchange_rate,
+    )
+    dividend_implied_corporate_wealth = (
+        annual_dividends / DIVIDEND_YIELD_FOR_WEALTH_IMPUTATION
+        if annual_dividends > 0
+        else 0.0
+    )
+
+    residual_after_savings = max(0.0, net_worth - savings)
+    corporate_wealth = min(
+        residual_after_savings,
+        max(explicit_corporate_wealth, dividend_implied_corporate_wealth),
+    )
+    residual = max(0.0, residual_after_savings - corporate_wealth)
+
+    annual_property_income = _gbp(_sum_inputs(people, "rental_income"), exchange_rate)
+    other_residential_property_value = min(
+        residual,
+        annual_property_income / RENTAL_YIELD_FOR_WEALTH_IMPUTATION
+        if annual_property_income > 0
+        else 0.0,
+    )
+    residual = max(0.0, residual - other_residential_property_value)
+
+    main_residence_value = residual if owns_home else 0.0
+    if not owns_home:
+        corporate_wealth += residual
+
+    return {
+        "savings": round(savings, 2),
+        "main_residence_value": round(main_residence_value, 2),
+        "other_residential_property_value": round(
+            other_residential_property_value,
+            2,
+        ),
+        "non_residential_property_value": 0.0,
+        "owned_land": 0.0,
+        "corporate_wealth": round(corporate_wealth, 2),
+    }
 
 
 def _vehicle_count(
@@ -155,6 +235,11 @@ def _pip_category(person: dict) -> str:
         < 12_000
     )
     return "ENHANCED" if severe_signal or low_earnings else "STANDARD"
+
+
+def _pip_reported_amount(category: str, component: str) -> float:
+    weekly = PIP_2025_WEEKLY_RATES[component][category]
+    return round(weekly * 52, 2)
 
 
 def _household_cash_income(people: list[dict], exchange_rate: float) -> float:
@@ -448,10 +533,7 @@ def _build_base_dataset(
             _sum_inputs(adults, "deductible_mortgage_interest"),
             exchange_rate,
         )
-        household_wealth = _gbp(
-            float(household_inputs.get("net_worth", 0.0)),
-            exchange_rate,
-        )
+        net_worth = _gbp(float(household_inputs.get("net_worth", 0.0)), exchange_rate)
         household_rent = _gbp(rent, exchange_rate)
         cash_income = _household_cash_income(people, exchange_rate)
         vehicle_count = _vehicle_count(
@@ -462,7 +544,7 @@ def _build_base_dataset(
         )
         consumption_inputs = _consumption_profile(
             cash_income=cash_income,
-            household_wealth=household_wealth,
+            household_wealth=max(net_worth, 0.0),
             council_tax=council_tax,
             household_rent=household_rent,
             mortgage_interest_repayment=mortgage_interest_repayment,
@@ -475,11 +557,16 @@ def _build_base_dataset(
                 for person in adults
             ),
         )
+        wealth_inputs = _wealth_leaf_inputs(
+            people=people,
+            household_inputs=household_inputs,
+            owns_home=owns_home,
+            exchange_rate=exchange_rate,
+        )
 
         household_rows.append(
             {
                 "household_id": household_id,
-                "source_household_id": source_household_id,
                 "household_weight": float(row["household_weight"]),
                 "region": region,
                 "tenure_type": tenure_type,
@@ -487,15 +574,11 @@ def _build_base_dataset(
                 "rent": household_rent,
                 "mortgage_interest_repayment": mortgage_interest_repayment,
                 "mortgage_capital_repayment": 0.0,
-                "savings": _gbp(
-                    _sum_inputs(adults, "bank_account_assets", "bond_assets"),
-                    exchange_rate,
-                ),
-                "household_wealth": household_wealth,
+                **wealth_inputs,
                 "num_vehicles": vehicle_count,
                 **consumption_inputs,
                 "housing_score": (
-                    household_wealth
+                    net_worth
                     + 12 * household_rent
                     + 18 * council_tax
                     + 10 * mortgage_interest_repayment
@@ -507,26 +590,22 @@ def _build_base_dataset(
         benunit_rows.append(
             {
                 "benunit_id": benunit_id,
-                "source_benunit_id": source_household_id,
-                "source_household_id": source_household_id,
             }
         )
 
         for person_index, person in enumerate(people, start=1):
             inputs = person.get("inputs", {})
             person_id = household_id * 10 + person_index
-            is_joint_couple = scenario["filing_status"] == "joint" and person_index <= 2
+            pip_category = _pip_category(person)
 
             person_rows.append(
                 {
                     "person_id": person_id,
                     "person_household_id": household_id,
                     "person_benunit_id": benunit_id,
-                    "source_household_id": source_household_id,
                     "age": int(person["age"]),
                     "gender": "MALE" if (household_id + person_index) % 2 else "FEMALE",
-                    "marital_status": "MARRIED" if is_joint_couple else "SINGLE",
-                    "employment_income": _gbp(
+                    "employment_income_before_lsr": _gbp(
                         float(person.get("employment_income", 0.0)),
                         exchange_rate,
                     ),
@@ -572,9 +651,14 @@ def _build_base_dataset(
                         ),
                         exchange_rate,
                     ),
-                    "private_pension_contributions": _gbp(
+                    "employee_pension_contributions_reported": _gbp(
                         float(inputs.get("traditional_401k_contributions", 0.0))
-                        + float(inputs.get("traditional_ira_contributions", 0.0))
+                        + float(inputs.get("roth_401k_contributions", 0.0)),
+                        exchange_rate,
+                    ),
+                    "personal_pension_contributions": _gbp(
+                        float(inputs.get("traditional_ira_contributions", 0.0))
+                        + float(inputs.get("roth_ira_contributions", 0.0))
                         + max(
                             float(
                                 inputs.get("self_employed_pension_contributions", 0.0)
@@ -591,8 +675,14 @@ def _build_base_dataset(
                     if bool(inputs.get("is_blind", False))
                     else 0.0,
                     "is_disabled_for_benefits": bool(inputs.get("is_disabled", False)),
-                    "pip_dl_category": _pip_category(person),
-                    "pip_m_category": _pip_category(person),
+                    "pip_dl_reported": _pip_reported_amount(
+                        pip_category,
+                        "daily_living",
+                    ),
+                    "pip_m_reported": _pip_reported_amount(
+                        pip_category,
+                        "mobility",
+                    ),
                     "hours_worked": float(
                         inputs.get(
                             "weekly_hours_worked",
@@ -600,10 +690,6 @@ def _build_base_dataset(
                         )
                     )
                     * 52,
-                    "is_disabled": bool(inputs.get("is_disabled", False)),
-                    "is_student": bool(
-                        inputs.get("is_full_time_college_student", False)
-                    ),
                 }
             )
 
