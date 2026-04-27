@@ -249,6 +249,21 @@ def _parse_nics(wb: openpyxl.Workbook) -> list[Target]:
             ["Class 1 Employer NICs"],
             "ni_employer",
         ),
+        # Self-employed NICs.
+        #
+        # Recent OBR EFOs (e.g. March 2026) publish a single combined
+        # "Class 4 and Class 2 Self employed NICs" line rather than two
+        # separate rows. Earlier EFOs split them. We list the combined
+        # label first; if a future EFO reverts to separate rows, the
+        # legacy ``ni_class_2`` / ``ni_class_4`` entries below will pick
+        # them up instead.
+        "ni_self_employed": (
+            [
+                "Class 4 and Class 2 Self employed NICs",
+                "Class 2 and Class 4 Self employed NICs",
+            ],
+            "ni_self_employed",
+        ),
         "ni_class_2": (
             [
                 "Class 2 NICs",
@@ -257,14 +272,14 @@ def _parse_nics(wb: openpyxl.Workbook) -> list[Target]:
             ],
             "ni_class_2",
         ),
-        "ni_class_3": (
-            [
-                "Class 3 NICs",
-                "Class 3 Voluntary NICs",
-                "Class 3 voluntary NICs",
-            ],
-            "ni_class_3",
-        ),
+        # Class 3 NICs are voluntary contributions to fill state-pension
+        # record gaps. The PE-UK variable ni_class_3 is an input with no
+        # formula and no dataset path populates it, so a calibration target
+        # would fall through to a flat-zero matrix column with no signal —
+        # see issue #378. Class 3 is also small (~£50m vs ~£150bn total
+        # NICs, ~0.03%), so the calibrator cannot meaningfully match it
+        # without a record-level imputation. Skipped here pending an
+        # imputation that addresses #88; restore the row when one lands.
         "ni_class_4": (
             [
                 "Class 4 NICs",
@@ -296,20 +311,38 @@ def _parse_nics(wb: openpyxl.Workbook) -> list[Target]:
             continue
 
         values = _read_row_values(ws, row_num, cols)
-        if values:
-            targets.append(
-                Target(
-                    name=f"obr/{name}",
-                    variable=variable,
-                    source="obr",
-                    unit=Unit.GBP,
-                    values=values,
-                    reference_url=ref,
-                    forecast_vintage=vintage,
-                )
-            )
+        if not values:
+            continue
+
+        kwargs: dict = {
+            "name": f"obr/{name}",
+            "variable": variable,
+            "source": "obr",
+            "unit": Unit.GBP,
+            "values": values,
+            "reference_url": ref,
+            "forecast_vintage": vintage,
+        }
+        # The combined self-employed total has no PE-UK variable of its
+        # own; sum the two underlying classes via custom_compute so the
+        # target hits a meaningful matrix column.
+        if name == "ni_self_employed":
+            kwargs["custom_compute"] = _compute_ni_self_employed_combined
+
+        targets.append(Target(**kwargs))
 
     return targets
+
+
+def _compute_ni_self_employed_combined(ctx, target, year):  # noqa: ARG001
+    """Sum Class 2 and Class 4 NICs at the household level.
+
+    Used as the ``custom_compute`` for the combined OBR target whenever
+    the EFO publishes Class 2 + Class 4 as a single self-employed line.
+    """
+    class_2 = ctx.sim.calculate("ni_class_2")
+    class_4 = ctx.sim.calculate("ni_class_4")
+    return ctx.household_from_person(class_2 + class_4)
 
 
 def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
