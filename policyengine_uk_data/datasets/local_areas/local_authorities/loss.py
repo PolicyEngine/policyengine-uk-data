@@ -11,6 +11,7 @@ Sources:
 - ONS income: ONS small area income estimates
 - Tenure: English Housing Survey
 - Private rent: VOA/ONS private rental market statistics
+- Council tax bands A-H: VOA Council Tax Stock of Properties (per LA)
 """
 
 from policyengine_uk import Microsimulation
@@ -251,6 +252,33 @@ def create_local_authority_target_matrix(
         tenure_merged["private_rent_target"].values,
         national_rent * la_household_share,
     )
+
+    # ── Council tax band counts (LA targets) ───────────────────────
+    # Per-LA dwellings in each band A-H from VOA Council Tax Stock of
+    # Properties. Scotland LAs have no VOA band data and Northern Ireland
+    # has no council tax — both fall back to national-share estimation,
+    # matching the tenure block's pattern. Band I is Wales-only and
+    # rarely populated, so it is intentionally excluded.
+    ct_path = STORAGE_FOLDER / "la_council_tax.csv"
+    if ct_path.exists():
+        ct_data = pd.read_csv(ct_path)
+        ct_merged = la_codes.merge(
+            ct_data[["code"] + [f"count_band_{b}" for b in "ABCDEFGH"]],
+            on="code",
+            how="left",
+        )
+        ct_band = sim.calculate("council_tax_band").values
+        for band in "ABCDEFGH":
+            col = f"voa/council_tax/{band}"
+            matrix[col] = (ct_band == band).astype(float)
+            csv_col = f"count_band_{band}"
+            has_count = ct_merged[csv_col].notna().values
+            national = (original_weights * matrix[col].values).sum()
+            y[col] = np.where(
+                has_count,
+                ct_merged[csv_col].values,
+                national * la_household_share,
+            )
 
     # ── Country mask ───────────────────────────────────────────────
     country_mask = create_country_mask(
