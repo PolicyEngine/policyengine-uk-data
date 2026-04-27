@@ -36,9 +36,11 @@ def test_targets_cover_every_la_code():
 def test_target_vector_in_la_codes_order_is_finite_positive():
     """Reindexing by la_codes order yields a clean float vector."""
     year = 2025
-    vec = LA_CODES["code"].map(
-        {code: values[year] for code, values in LA_TARGETS.items()}
-    ).values
+    vec = (
+        LA_CODES["code"]
+        .map({code: values[year] for code, values in LA_TARGETS.items()})
+        .values
+    )
     assert len(vec) == 360
     assert np.isfinite(vec).all()
     assert (vec > 0).all()
@@ -47,9 +49,11 @@ def test_target_vector_in_la_codes_order_is_finite_positive():
 def test_target_vector_sums_to_national_household_land():
     """Sum of the 360 LA targets equals the ONS national figure for that year."""
     for year in (2024, 2025, 2026):
-        vec = LA_CODES["code"].map(
-            {code: values[year] for code, values in LA_TARGETS.items()}
-        ).values
+        vec = (
+            LA_CODES["code"]
+            .map({code: values[year] for code, values in LA_TARGETS.items()})
+            .values
+        )
         rel_error = abs(vec.sum() / HOUSEHOLD_LAND_VALUES[year] - 1)
         assert rel_error < 1e-6, (
             f"{year}: sum £{vec.sum() / 1e12:.3f}tn != "
@@ -120,17 +124,17 @@ def test_la_loss_y_ordering_matches_la_codes(enhanced_frs):
     year = int(enhanced_frs.time_period)
     fallback = max(HOUSEHOLD_LAND_VALUES)
     land_year = year if year in HOUSEHOLD_LAND_VALUES else fallback
-    expected = LA_CODES["code"].map(
-        {code: values[land_year] for code, values in LA_TARGETS.items()}
-    ).values
+    expected = (
+        LA_CODES["code"]
+        .map({code: values[land_year] for code, values in LA_TARGETS.items()})
+        .values
+    )
 
     _, y, _ = create_local_authority_target_matrix(
         enhanced_frs, time_period=enhanced_frs.time_period
     )
 
-    np.testing.assert_array_equal(
-        y["ons/household_land_value"].values, expected
-    )
+    np.testing.assert_array_equal(y["ons/household_land_value"].values, expected)
 
 
 def test_la_loss_y_all_positive(enhanced_frs):
@@ -162,6 +166,4 @@ def test_la_loss_matrix_column_matches_household_land_value(enhanced_frs):
     sim.default_calculation_period = enhanced_frs.time_period
     expected = sim.calculate("household_land_value").values
 
-    np.testing.assert_array_equal(
-        matrix["ons/household_land_value"].values, expected
-    )
+    np.testing.assert_array_equal(matrix["ons/household_land_value"].values, expected)

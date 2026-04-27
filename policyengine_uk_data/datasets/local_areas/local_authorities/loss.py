@@ -265,9 +265,7 @@ def create_local_authority_target_matrix(
         code: values[land_year] for code, values in _compute_la_targets().items()
     }
     matrix["ons/household_land_value"] = sim.calculate("household_land_value").values
-    y["ons/household_land_value"] = (
-        la_codes["code"].map(la_land_by_code).values
-    )
+    y["ons/household_land_value"] = la_codes["code"].map(la_land_by_code).values
 
     # ── Country mask ───────────────────────────────────────────────
     country_mask = create_country_mask(
