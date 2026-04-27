@@ -11,6 +11,7 @@ Sources:
 - ONS income: ONS small area income estimates
 - Tenure: English Housing Survey
 - Private rent: VOA/ONS private rental market statistics
+- Household land value: ONS National Balance Sheet × LA property-wealth share
 """
 
 from policyengine_uk import Microsimulation
@@ -38,6 +39,8 @@ from policyengine_uk_data.targets.sources.local_la_extras import (
     load_tenure_data,
     load_private_rents,
 )
+from policyengine_uk_data.targets.sources._land import HOUSEHOLD_LAND_VALUES
+from policyengine_uk_data.targets.sources.la_land import _compute_la_targets
 
 
 def create_local_authority_target_matrix(
@@ -250,6 +253,20 @@ def create_local_authority_target_matrix(
         has_rent,
         tenure_merged["private_rent_target"].values,
         national_rent * la_household_share,
+    )
+
+    # ── Household land value (LA targets) ──────────────────────────
+    # Per-LA target = LA's share of national property wealth × ONS
+    # household-land series for the calibration year. Source:
+    # policyengine_uk_data/targets/sources/la_land.py.
+    year = int(time_period)
+    land_year = year if year in HOUSEHOLD_LAND_VALUES else max(HOUSEHOLD_LAND_VALUES)
+    la_land_by_code = {
+        code: values[land_year] for code, values in _compute_la_targets().items()
+    }
+    matrix["ons/household_land_value"] = sim.calculate("household_land_value").values
+    y["ons/household_land_value"] = (
+        la_codes["code"].map(la_land_by_code).values
     )
 
     # ── Country mask ───────────────────────────────────────────────
