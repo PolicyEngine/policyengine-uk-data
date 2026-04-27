@@ -21,6 +21,21 @@ ALLOWED_REPORTED_DATA_INPUTS = {
 }
 
 
+def _is_valid_leaf_input(column: str, entity: str, system: CountryTaxBenefitSystem):
+    variable = system.variables.get(column)
+    if variable is None:
+        return False
+    if variable.entity.key != entity:
+        return False
+    if column in ALLOWED_REPORTED_DATA_INPUTS:
+        return True
+    if not variable.is_input_variable():
+        return False
+    if getattr(variable, "defined_for", None) is not None:
+        return False
+    return True
+
+
 def _subset_source(tmp_path: Path, rows: int) -> Path:
     source = pd.read_csv(ENHANCED_CPS_SOURCE_FILE).head(rows).copy()
     subset_path = tmp_path / f"enhanced_cps_source_{rows}.csv"
@@ -58,12 +73,7 @@ def test_policybench_transfer_writes_only_valid_leaf_inputs(tmp_path: Path):
         invalid_columns = [
             column
             for column in frame.columns
-            if column not in system.variables
-            or system.variables[column].entity.key != entity
-            or (
-                not system.variables[column].is_input_variable()
-                and column not in ALLOWED_REPORTED_DATA_INPUTS
-            )
+            if not _is_valid_leaf_input(column, entity, system)
         ]
         assert invalid_columns == []
 
