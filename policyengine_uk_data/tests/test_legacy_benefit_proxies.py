@@ -11,6 +11,7 @@ from policyengine_uk_data.datasets.frs import (
     derive_esa_health_condition_proxy,
     derive_esa_support_group_proxy,
     derive_legacy_jobseeker_proxy,
+    derive_receives_benefits_in_own_right,
     load_legacy_jobseeker_max_annual_hours,
 )
 
@@ -117,6 +118,22 @@ def test_esa_support_group_proxy_is_stricter_subset_of_health_proxy():
     )
 
     assert result.tolist() == [True, False, False, False, False]
+
+
+def test_receives_benefits_in_own_right_uses_reported_adult_benefits():
+    pe_person = pd.DataFrame(
+        {
+            "universal_credit_reported": [0, 1, 0, 0, 0, 0],
+            "jsa_contrib_reported": [0, 0, 1, 0, 0, 0],
+            "jsa_income_reported": [0, 0, 0, 1, 0, 0],
+            "esa_contrib_reported": [0, 0, 0, 0, 1, 0],
+            "esa_income_reported": [0, 0, 0, 0, 0, 1],
+        }
+    )
+
+    result = derive_receives_benefits_in_own_right(pe_person)
+
+    assert result.tolist() == [False, True, True, True, True, True]
 
 
 def test_add_legacy_benefit_proxies_wires_all_three_columns():
@@ -465,6 +482,7 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
         "legacy_jobseeker_proxy",
         "esa_health_condition_proxy",
         "esa_support_group_proxy",
+        "receives_benefits_in_own_right",
         "is_parent",
     }.issubset(dataset.person.columns)
     assert not dataset.person["is_parent"].iloc[0]

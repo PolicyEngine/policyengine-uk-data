@@ -56,6 +56,13 @@ DISABLED_STUDENTS_ALLOWANCE_ELIGIBILITY_VARIABLES = (
     "disabled_students_allowance_course_eligible",
     "disabled_students_allowance_has_qualifying_condition",
 )
+BENEFITS_IN_OWN_RIGHT_REPORTED_COLUMNS = (
+    "universal_credit_reported",
+    "jsa_contrib_reported",
+    "jsa_income_reported",
+    "esa_contrib_reported",
+    "esa_income_reported",
+)
 
 
 @lru_cache(maxsize=None)
@@ -163,6 +170,15 @@ def derive_esa_support_group_proxy(
         & (age < state_pension_age)
         & esa_health_condition_proxy
         & severe_health_evidence
+    )
+
+
+def derive_receives_benefits_in_own_right(pe_person: pd.DataFrame) -> pd.Series:
+    """Identify people reporting adult benefits that end QYP status."""
+
+    return (
+        pe_person[list(BENEFITS_IN_OWN_RIGHT_REPORTED_COLUMNS)].fillna(0).sum(axis=1)
+        > 0
     )
 
 
@@ -922,6 +938,9 @@ def create_frs(
             person.person_id,
         )
         * WEEKS_IN_YEAR
+    )
+    pe_person["receives_benefits_in_own_right"] = derive_receives_benefits_in_own_right(
+        pe_person
     )
 
     pe_person["bsp_reported"] = (
