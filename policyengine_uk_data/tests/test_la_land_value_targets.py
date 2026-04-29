@@ -135,16 +135,27 @@ def test_kensington_and_chelsea_above_blackpool():
     name_to_code = dict(zip(LA_PRICES["name"], LA_PRICES["code"]))
     kc = LA_TARGETS[name_to_code["Kensington and Chelsea"]]
     bp = LA_TARGETS[name_to_code["Blackpool"]]
-    assert kc > bp, f"K&C target (£{kc / 1e9:.1f}bn) should exceed Blackpool (£{bp / 1e9:.1f}bn)"
+    assert kc > bp, (
+        f"K&C target (£{kc / 1e9:.1f}bn) should exceed Blackpool (£{bp / 1e9:.1f}bn)"
+    )
 
 
 def test_london_total_exceeds_north_east():
     """Sum of London LA targets should exceed sum of North-East LA targets."""
     london_codes = [c for c in LA_TARGETS if c.startswith("E09")]
     ne_prefixes = {
-        "E06000001", "E06000002", "E06000003", "E06000004", "E06000005",
-        "E06000047", "E08000021", "E08000022", "E08000023", "E08000024",
-        "E08000037", "E06000057",
+        "E06000001",
+        "E06000002",
+        "E06000003",
+        "E06000004",
+        "E06000005",
+        "E06000047",
+        "E08000021",
+        "E08000022",
+        "E08000023",
+        "E08000024",
+        "E08000037",
+        "E06000057",
     }
     ne_codes = [c for c in LA_TARGETS if c in ne_prefixes]
     london_total = sum(LA_TARGETS[c] for c in london_codes)

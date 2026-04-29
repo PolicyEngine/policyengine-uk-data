@@ -67,13 +67,12 @@ def _compute_la_targets() -> dict[str, float]:
     if prices.empty or tenure.empty or households.empty:
         return {}
 
-    merged = prices.merge(
-        tenure, left_on="code", right_on="la_code", how="left"
-    ).merge(households, on="la_code", how="left")
+    merged = prices.merge(tenure, left_on="code", right_on="la_code", how="left").merge(
+        households, on="la_code", how="left"
+    )
 
     ownership_share = (
-        merged["owned_outright_pct"].fillna(0)
-        + merged["owned_mortgage_pct"].fillna(0)
+        merged["owned_outright_pct"].fillna(0) + merged["owned_mortgage_pct"].fillna(0)
     ) / 100
     targets = merged["avg_house_price"] * ownership_share * merged["households"]
 
