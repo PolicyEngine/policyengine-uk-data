@@ -12,6 +12,8 @@ Sources:
 - Tenure: English Housing Survey
 - Private rent: VOA/ONS private rental market statistics
 - Council tax bands A-H: VOA Council Tax Stock of Properties (per LA)
+- Council tax £ paid (net of CTR): MHCLG taxbase × Band D (England),
+  Welsh Government Council Tax Income (Wales)
 """
 
 from policyengine_uk import Microsimulation
@@ -263,7 +265,15 @@ def create_local_authority_target_matrix(
     if ct_path.exists():
         ct_data = pd.read_csv(ct_path)
         ct_merged = la_codes.merge(
-            ct_data[["code"] + [f"count_band_{b}" for b in "ABCDEFGH"]],
+            ct_data[
+                ["code"]
+                + [f"count_band_{b}" for b in "ABCDEFGH"]
+                + (
+                    ["total_council_tax_net"]
+                    if "total_council_tax_net" in ct_data.columns
+                    else []
+                )
+            ],
             on="code",
             how="left",
         )
@@ -278,6 +288,28 @@ def create_local_authority_target_matrix(
                 has_count,
                 ct_merged[csv_col].values,
                 national * la_household_share,
+            )
+
+        # ── Council tax £ paid, net of CTR (LA targets) ────────────
+        # Mirrors the private-rent block: directly observed LA-level
+        # net council tax revenue from MHCLG (England) and Welsh
+        # Government (Wales). Scotland and NI fall back to
+        # national_share, same pattern as the tenure target.
+        # Matrix col uses council_tax_less_benefit (net of CTR award)
+        # so both sides of the constraint are net, per Max's standup
+        # decision (28 Apr) on FRS-net-of-CTR alignment.
+        if "total_council_tax_net" in ct_merged.columns:
+            matrix["housing/council_tax_net"] = sim.calculate(
+                "council_tax_less_benefit"
+            ).values
+            has_ct_net = ct_merged["total_council_tax_net"].notna().values
+            national_ct_net = (
+                original_weights * matrix["housing/council_tax_net"].values
+            ).sum()
+            y["housing/council_tax_net"] = np.where(
+                has_ct_net,
+                ct_merged["total_council_tax_net"].values,
+                national_ct_net * la_household_share,
             )
 
     # ── Country mask ───────────────────────────────────────────────

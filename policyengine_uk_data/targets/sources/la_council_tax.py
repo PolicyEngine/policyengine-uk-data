@@ -74,6 +74,14 @@ _SCOTLAND_REF = "https://www.gov.scot/publications/council-tax-datasets/"
 _VOA_REF = (
     "https://www.gov.uk/government/statistics/council-tax-stock-of-properties-2025"
 )
+# Net council tax requirement per LA. England derived from MHCLG
+# Council Taxbase 2025 Table 1.35 ("Tax base after allowance for council
+# tax support") × LA Band D amount. Wales sourced directly from the
+# Welsh Government Table 3 "Council tax income (£m)" — already net.
+_NET_CT_REF_ENG = (
+    "https://www.gov.uk/government/statistics/council-taxbase-2025-in-england"
+)
+_NET_CT_REF_WAL = _WALES_REF
 
 
 @lru_cache(maxsize=1)
@@ -83,6 +91,26 @@ def _load_table() -> pd.DataFrame | None:
     if not csv_path.exists():
         return None
     return pd.read_csv(csv_path)
+
+
+def load_la_net_council_tax() -> pd.DataFrame:
+    """Load per-LA net council tax requirement (£, after CTR support).
+
+    Returns a DataFrame with columns ``code, total_council_tax_net``
+    for LAs where a directly-observed net figure is available
+    (England + Wales). Scotland and NI are absent and handled by the
+    loss-matrix national-share fallback — same pattern as the rent
+    and tenure targets.
+    """
+    df = _load_table()
+    if df is None or df.empty:
+        return pd.DataFrame(columns=["code", "total_council_tax_net"])
+    if "total_council_tax_net" not in df.columns:
+        return pd.DataFrame(columns=["code", "total_council_tax_net"])
+    return df.loc[
+        df["total_council_tax_net"].notna(),
+        ["code", "total_council_tax_net"],
+    ].reset_index(drop=True)
 
 
 def _year_for_band_d(country: str) -> int:
@@ -150,6 +178,30 @@ def get_targets() -> list[Target]:
                     values={_YEAR_BAND_COUNT: float(count)},
                     is_count=True,
                     reference_url=_VOA_REF,
+                )
+            )
+
+    # Net council tax £ targets — one per LA with an observed value.
+    # Mirrors the FRS net-of-CTR amount; pairs with the band targets
+    # above to cover both FRS council-tax data points.
+    if "total_council_tax_net" in df.columns:
+        for _, row in df.iterrows():
+            net = row.get("total_council_tax_net")
+            if pd.isna(net):
+                continue
+            country = str(row["country"])
+            ref = _NET_CT_REF_WAL if country == "WALES" else _NET_CT_REF_ENG
+            targets.append(
+                Target(
+                    name=f"housing/council_tax_net/{row['code']}",
+                    variable="council_tax_less_benefit",
+                    source="mhclg" if country == "ENGLAND" else "stats_wales",
+                    unit=Unit.GBP,
+                    geographic_level=GeographicLevel.LOCAL_AUTHORITY,
+                    geo_code=str(row["code"]),
+                    geo_name=str(row["name"]),
+                    values={_YEAR_BAND_D_ENGLAND: float(net)},
+                    reference_url=ref,
                 )
             )
 
