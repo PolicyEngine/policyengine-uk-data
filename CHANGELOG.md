@@ -1,3 +1,10 @@
+## [1.55.0] - 2026-04-29
+
+### Added
+
+- Added FRS person-level child and qualifying young person inputs for reported adult benefit receipt, current non-advanced education, approved training, education/training entry age, and the Universal Credit terminal-date proxy.
+
+
 ## [1.54.0] - 2026-04-26
 
 ### Added
