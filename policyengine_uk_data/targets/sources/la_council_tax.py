@@ -1,6 +1,6 @@
-"""Local-authority council tax calibration targets.
+"""Local-authority council tax calibration targets (derived proxies).
 
-Produces two kinds of LA-level calibration target from public data:
+Produces three kinds of LA-level calibration target from public data:
 
 - ``ons/council_tax_band_d/{code}``: the average Band D council tax
   (inclusive of all precepts) each household pays in billing authority
@@ -10,16 +10,47 @@ Produces two kinds of LA-level calibration target from public data:
   ``A``–``H`` (England) or ``A``–``I`` (Wales) for billing authority
   ``code``. Sourced from the VOA *Council Tax: Stock of Properties*
   summary tables.
+- ``housing/council_tax_net/{code}``: net council tax requirement per
+  LA (net of CTR support). England derived from MHCLG taxbase × Band D;
+  Wales sourced directly from WG Council Tax Income (Table 3).
 
 Data for all 360 LAs in ``local_authorities_2021.csv`` is joined from
 the committed canonical file ``storage/la_council_tax.csv``. Rows where
 a source did not provide a value are omitted so calibrators cleanly
 skip them.
 
-Known coverage gaps (documented, not bugs):
+Lineage caveats (flagged in PR review by @MaxGhenis):
+
+- ``voa/council_tax/{A..H}`` is a **derived proxy**, not a direct
+  match for the matrix-side household ``council_tax_band``:
+  * Target counts VOA dwellings; matrix counts policyengine-uk
+    households. A household ≠ a dwelling in general.
+  * VOA stock includes exempt, empty, and second-home dwellings,
+    which contribute zero to the matrix-side sum (no household lives
+    in them in the FRS).
+  * VOA covers England and Wales only. Scotland uses the
+    national-share fallback; NI is zeroed (no council tax).
+  * Banding ratios differ: Scotland diverged from the standard
+    6/9–18/9 E&W ratios after the 2017 reform; Wales has Band I,
+    England does not.
+
+- ``housing/council_tax_net`` is a **derived proxy**:
+  * Target value (England) is MHCLG ``taxbase × Band D``, where
+    taxbase is Band D equivalent dwellings adjusted for ~7
+    discount, premium, and exemption classes (single-person,
+    disabled relief, second-home, empty-home premium, family
+    annexe, etc.). Wales uses WG-published net council tax income
+    direct.
+  * Matrix col is FRS-reported ``council_tax_less_benefit``
+    (household-reported gross less reported CTB).
+  * Same intent (what households pay net of CTR), different
+    construction paths and underlying microdata sources.
+
+Known coverage gaps:
 
 - Northern Ireland is excluded because its domestic rates system is
-  distinct from council tax.
+  distinct from council tax. ``loss.py`` zeros the y vector for NI
+  rather than fabricating a fallback.
 - Band-count rows for Scottish LAs are absent because the VOA summary
   tables do not cover Scotland; Scottish Assessors publishes per-LA
   chargeable-dwellings data separately and is a follow-up.
@@ -31,6 +62,8 @@ Known coverage gaps (documented, not bugs):
 Sources:
 - MHCLG *Council Tax levels set by local authorities in England 2026-27*
   https://www.gov.uk/government/statistics/council-tax-levels-set-by-local-authorities-in-england-2026-to-2027
+- MHCLG *Council Taxbase 2025 in England* (Table 1.35 taxbase after CTR)
+  https://www.gov.uk/government/statistics/council-taxbase-2025-in-england
 - Welsh Government *Council Tax levels: April 2026 to March 2027*
   https://www.gov.wales/council-tax-levels-april-2026-march-2027-html
 - Scottish Government *Council Tax Assumptions 2025* (CT by Band, 2025-26)

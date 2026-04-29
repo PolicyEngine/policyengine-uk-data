@@ -256,8 +256,11 @@ def create_local_authority_target_matrix(
     )
 
     # ── Council tax band counts (LA targets) ───────────────────────
-    # Per-LA dwellings in each band A-H from VOA Council Tax Stock of
-    # Properties. Scotland LAs have no VOA band data — fall back to
+    # Derived/proxy targets: per-LA VOA dwellings in each band A-H.
+    # Lineage drift vs the matrix-side household council_tax_band:
+    # VOA counts dwellings (incl. exempt / empty / second homes);
+    # matrix counts households. See la_council_tax.py for full
+    # caveat. Scotland LAs have no VOA band data — fall back to
     # national-share estimation, matching the tenure block's pattern.
     # Northern Ireland has no council tax (domestic rates instead);
     # the CSV's has_council_tax flag drives a hard zero target rather
@@ -290,14 +293,15 @@ def create_local_authority_target_matrix(
             )
 
         # ── Council tax £ paid, net of CTR (LA targets) ────────────
-        # Mirrors the private-rent block: directly observed LA-level
-        # net council tax revenue from MHCLG (England) and Welsh
-        # Government (Wales). Scotland falls back to national_share
-        # (same pattern as the tenure target). Northern Ireland is
-        # zeroed via has_council_tax — no council tax, no constraint.
-        # Matrix col uses council_tax_less_benefit (net of CTR award)
-        # so both sides of the constraint are net, per Max's standup
-        # decision (28 Apr) on FRS-net-of-CTR alignment.
+        # Derived/proxy target: y = MHCLG taxbase × Band D (E) or WG
+        # Council Tax Income (W). Matrix col is FRS-reported
+        # council_tax_less_benefit (gross − reported CTB). Same
+        # intent (household council tax paid net of CTR), different
+        # construction paths — see la_council_tax.py for the lineage
+        # caveat flagged in review by @MaxGhenis. Both sides are net
+        # of CTR, per Max's 28 Apr standup decision on FRS alignment.
+        # Scotland falls back to national_share; Northern Ireland is
+        # zeroed via has_council_tax (no council tax, no constraint).
         if "total_council_tax_net" in ct_merged.columns:
             matrix["housing/council_tax_net"] = sim.calculate(
                 "council_tax_less_benefit"
