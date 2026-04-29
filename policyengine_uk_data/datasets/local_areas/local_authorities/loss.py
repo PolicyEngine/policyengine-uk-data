@@ -257,26 +257,23 @@ def create_local_authority_target_matrix(
 
     # ── Council tax band counts (LA targets) ───────────────────────
     # Per-LA dwellings in each band A-H from VOA Council Tax Stock of
-    # Properties. Scotland LAs have no VOA band data and Northern Ireland
-    # has no council tax — both fall back to national-share estimation,
-    # matching the tenure block's pattern. Band I is Wales-only and
+    # Properties. Scotland LAs have no VOA band data — fall back to
+    # national-share estimation, matching the tenure block's pattern.
+    # Northern Ireland has no council tax (domestic rates instead);
+    # the CSV's has_council_tax flag drives a hard zero target rather
+    # than a fabricated fallback, otherwise the optimiser would spend
+    # loss on an impossible constraint. Band I is Wales-only and
     # rarely populated, so it is intentionally excluded.
     ct_path = STORAGE_FOLDER / "la_council_tax.csv"
     if ct_path.exists():
         ct_data = pd.read_csv(ct_path)
-        ct_merged = la_codes.merge(
-            ct_data[
-                ["code"]
-                + [f"count_band_{b}" for b in "ABCDEFGH"]
-                + (
-                    ["total_council_tax_net"]
-                    if "total_council_tax_net" in ct_data.columns
-                    else []
-                )
-            ],
-            on="code",
-            how="left",
-        )
+        ct_columns = ["code", "has_council_tax"] + [
+            f"count_band_{b}" for b in "ABCDEFGH"
+        ]
+        if "total_council_tax_net" in ct_data.columns:
+            ct_columns.append("total_council_tax_net")
+        ct_merged = la_codes.merge(ct_data[ct_columns], on="code", how="left")
+        is_ct_la = ct_merged["has_council_tax"].fillna(True).astype(bool).values
         ct_band = sim.calculate("council_tax_band").values
         for band in "ABCDEFGH":
             col = f"voa/council_tax/{band}"
@@ -284,17 +281,20 @@ def create_local_authority_target_matrix(
             csv_col = f"count_band_{band}"
             has_count = ct_merged[csv_col].notna().values
             national = (original_weights * matrix[col].values).sum()
+            direct = ct_merged[csv_col].values
+            fallback = national * la_household_share
             y[col] = np.where(
-                has_count,
-                ct_merged[csv_col].values,
-                national * la_household_share,
+                is_ct_la,
+                np.where(has_count, direct, fallback),
+                0.0,
             )
 
         # ── Council tax £ paid, net of CTR (LA targets) ────────────
         # Mirrors the private-rent block: directly observed LA-level
         # net council tax revenue from MHCLG (England) and Welsh
-        # Government (Wales). Scotland and NI fall back to
-        # national_share, same pattern as the tenure target.
+        # Government (Wales). Scotland falls back to national_share
+        # (same pattern as the tenure target). Northern Ireland is
+        # zeroed via has_council_tax — no council tax, no constraint.
         # Matrix col uses council_tax_less_benefit (net of CTR award)
         # so both sides of the constraint are net, per Max's standup
         # decision (28 Apr) on FRS-net-of-CTR alignment.
@@ -306,10 +306,12 @@ def create_local_authority_target_matrix(
             national_ct_net = (
                 original_weights * matrix["housing/council_tax_net"].values
             ).sum()
+            direct_net = ct_merged["total_council_tax_net"].values
+            fallback_net = national_ct_net * la_household_share
             y["housing/council_tax_net"] = np.where(
-                has_ct_net,
-                ct_merged["total_council_tax_net"].values,
-                national_ct_net * la_household_share,
+                is_ct_la,
+                np.where(has_ct_net, direct_net, fallback_net),
+                0.0,
             )
 
     # ── Country mask ───────────────────────────────────────────────
