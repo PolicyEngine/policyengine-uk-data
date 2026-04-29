@@ -8,8 +8,12 @@ from policyengine_uk_data.datasets.frs import (
     attach_legacy_benefit_proxies_from_frs_person,
     apply_legacy_benefit_proxies,
     create_frs,
+    derive_age_started_or_accepted_current_education_or_training,
     derive_esa_health_condition_proxy,
     derive_esa_support_group_proxy,
+    derive_is_before_universal_credit_qualifying_young_person_terminal_date,
+    derive_is_in_approved_training_from_frs_person,
+    derive_is_in_non_advanced_education,
     derive_legacy_jobseeker_proxy,
     derive_receives_benefits_in_own_right,
     load_legacy_jobseeker_max_annual_hours,
@@ -134,6 +138,60 @@ def test_receives_benefits_in_own_right_uses_reported_adult_benefits():
     result = derive_receives_benefits_in_own_right(pe_person)
 
     assert result.tolist() == [False, True, True, True, True, True]
+
+
+def test_qualifying_young_person_education_inputs_use_current_education():
+    result = derive_is_in_non_advanced_education(
+        np.array(
+            [
+                "NOT_IN_EDUCATION",
+                "LOWER_SECONDARY",
+                "UPPER_SECONDARY",
+                "POST_SECONDARY",
+                "TERTIARY",
+                "UPPER_SECONDARY",
+            ]
+        ),
+        is_apprentice=np.array([False, False, False, False, False, True]),
+    )
+
+    assert result.tolist() == [False, True, True, True, False, False]
+
+
+def test_approved_training_uses_frs_government_training_codes():
+    person = pd.DataFrame({"train": [-1, 0, 1, 2, 9, 10, 13, np.nan]})
+
+    result = derive_is_in_approved_training_from_frs_person(person)
+
+    assert result.tolist() == [False, False, True, True, True, False, False, False]
+
+
+def test_approved_training_defaults_false_when_frs_field_missing():
+    person = pd.DataFrame({"age": [16, 19]})
+
+    result = derive_is_in_approved_training_from_frs_person(person)
+
+    assert result.tolist() == [False, False]
+
+
+def test_qyp_entry_age_proxy_caps_current_education_or_training_at_18():
+    result = derive_age_started_or_accepted_current_education_or_training(
+        age=np.array([16, 18, 19, 20, 19]),
+        is_in_non_advanced_education=np.array([True, True, True, True, False]),
+        is_in_approved_training=np.array([False, False, False, False, False]),
+    )
+
+    assert result.tolist() == [16, 18, 18, 18, 1000]
+
+
+def test_uc_terminal_date_proxy_applies_to_19yo_current_qyp_activity_only():
+    result = derive_is_before_universal_credit_qualifying_young_person_terminal_date(
+        age=np.array([18, 19, 19, 19, 20]),
+        is_in_non_advanced_education=np.array([True, True, False, False, True]),
+        is_in_approved_training=np.array([False, False, True, False, False]),
+    )
+
+    assert result.tolist() == [False, True, True, False, False]
 
 
 def test_add_legacy_benefit_proxies_wires_all_three_columns():
@@ -483,8 +541,21 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
         "esa_health_condition_proxy",
         "esa_support_group_proxy",
         "receives_benefits_in_own_right",
+        "is_in_non_advanced_education",
+        "is_in_approved_training",
+        "age_started_or_accepted_current_education_or_training",
+        "is_before_universal_credit_qualifying_young_person_terminal_date",
         "is_parent",
     }.issubset(dataset.person.columns)
     assert not dataset.person["is_parent"].iloc[0]
+    assert not dataset.person["is_in_non_advanced_education"].iloc[0]
+    assert not dataset.person["is_in_approved_training"].iloc[0]
+    assert (
+        dataset.person["age_started_or_accepted_current_education_or_training"].iloc[0]
+        == 1000
+    )
+    assert not dataset.person[
+        "is_before_universal_credit_qualifying_young_person_terminal_date"
+    ].iloc[0]
     assert dataset.person["education_grants"].iloc[0] == 100
     assert dataset.person["disabled_students_allowance_eligible_expenses"].iloc[0] == 0

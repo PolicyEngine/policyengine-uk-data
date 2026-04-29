@@ -1,1 +1,1 @@
-Added an FRS person-level `receives_benefits_in_own_right` input derived from reported UC, JSA, and ESA receipt.
+Added FRS person-level child and qualifying young person inputs for reported adult benefit receipt, current non-advanced education, approved training, education/training entry age, and the Universal Credit terminal-date proxy.
