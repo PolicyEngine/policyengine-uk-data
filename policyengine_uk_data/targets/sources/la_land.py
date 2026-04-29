@@ -1,12 +1,28 @@
-"""LA-level main residence value targets.
+"""LA-level main residence value targets (derived proxy).
 
-Each local authority's target is built from directly observed LA-level
-housing indicators, mirroring the existing private-rent calibration:
+This target is a **derived proxy**, not a directly observed LA total.
+Per-LA target is constructed by multiplying three observed inputs:
 
     target_la = avg_house_price_la × ownership_share_la × n_households_la
 
-This is the symmetric counterpart of the rent target for the
-owner-occupier side. No national-total apportionment.
+Same multiplicative shape as the existing private-rent target
+(median × pct × n_households).
+
+Lineage caveat (flagged in PR review by @MaxGhenis):
+- Matrix column ``main_residence_value`` in policyengine-uk is a
+  **stock-wealth** quantity, imputed from the Wealth and Assets Survey
+  (WAS) and uprated regionally via property-wealth intensity ratios.
+- The target value uses HM Land Registry UK HPI "Average Price" — a
+  **transaction-weighted geography-period price index**, not an
+  observed stock total of owner-occupied main residences.
+- The product avg_price × ownership × n_households is therefore a
+  defensible identity ("if every owner-occupied dwelling were valued
+  at the LA HPI average, the total would be £X") but the two sides
+  of the calibration constraint reference different price concepts.
+
+The target is treated as a soft-weighted/proxy training signal
+relative to direct observed targets (HMRC SPI counts, ONS mid-year
+population, DWP UC caseload, VOA dwelling band counts).
 
 Data sources:
 - Average house price by LA: HM Land Registry UK HPI (Dec 2025).
@@ -14,7 +30,7 @@ Data sources:
   LA name. For Northern Ireland LGDs missing from a specific month,
   the NI country-level HPI price is used as a fallback.
 - Ownership share by LA: English Housing Survey, via load_tenure_data
-  (owned_outright_pct + owned_mortgage_pct).
+  (owned_outright_pct + owned_mortgage_pct). England-only.
 - Households by LA: Census 2021, via load_household_counts.
 """
 

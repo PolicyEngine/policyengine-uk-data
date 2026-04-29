@@ -255,9 +255,12 @@ def create_local_authority_target_matrix(
     )
 
     # ── Main residence value (HMLR × ownership share × households) ─
-    # Mirrors the private-rent target pattern: directly observed
-    # LA-level housing indicators multiplied together, with a
-    # national-share fallback for LAs missing any input.
+    # Derived proxy target: a product of three observed inputs, not a
+    # directly observed LA total. Mirrors the private-rent target's
+    # multiplicative shape. Lineage caveat: matrix col is WAS-imputed
+    # stock wealth; the target uses HMLR HPI transaction prices —
+    # different price concepts on the two sides of the constraint.
+    # See targets/sources/la_land.py for full provenance.
     la_prices = load_la_avg_prices()
     tenure_merged = tenure_merged.merge(
         la_prices[["code", "avg_house_price"]], on="code", how="left"
