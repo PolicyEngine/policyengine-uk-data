@@ -159,3 +159,96 @@ def test_la_loss_matrix_column_matches_main_residence_value(enhanced_frs):
     np.testing.assert_array_equal(
         matrix["housing/main_residence_value"].values, expected
     )
+
+
+# ── Layer 2b: calibration well-formedness ─────────────────────────────
+
+
+def test_la_loss_y_has_no_nan(enhanced_frs):
+    """Every LA must have a numeric target. NaN entries would propagate
+    through the optimiser and fail calibration silently."""
+    from policyengine_uk_data.datasets.local_areas.local_authorities.loss import (
+        create_local_authority_target_matrix,
+    )
+
+    _, y, _ = create_local_authority_target_matrix(
+        enhanced_frs, time_period=enhanced_frs.time_period
+    )
+
+    assert not y["housing/main_residence_value"].isna().any()
+
+
+def test_la_loss_fallback_applied_to_non_english_las(enhanced_frs):
+    """Wales / Scotland / NI LAs use the national-share fallback because
+    EHS only covers England. Their y entry must still be positive
+    (so the optimiser has a target to fit) and must NOT equal the
+    direct-formula value (which is undefined when ownership share
+    is missing)."""
+    from policyengine_uk_data.datasets.local_areas.local_authorities.loss import (
+        create_local_authority_target_matrix,
+    )
+
+    _, y, _ = create_local_authority_target_matrix(
+        enhanced_frs, time_period=enhanced_frs.time_period
+    )
+
+    fallback_codes = [c for c in LA_CODES["code"] if not c.startswith("E")]
+    fallback_indices = [
+        i for i, c in enumerate(LA_CODES["code"].values) if c in fallback_codes
+    ]
+    fallback_values = y["housing/main_residence_value"].iloc[fallback_indices]
+
+    assert (fallback_values > 0).all()
+    assert fallback_values.notna().all()
+
+
+def test_la_loss_matrix_column_carries_calibration_signal(enhanced_frs):
+    """matrix['housing/main_residence_value'] must vary across households —
+    a constant column gives the optimiser no signal to differentiate
+    LAs and the new target would be inert."""
+    from policyengine_uk_data.datasets.local_areas.local_authorities.loss import (
+        create_local_authority_target_matrix,
+    )
+
+    matrix, _, _ = create_local_authority_target_matrix(
+        enhanced_frs, time_period=enhanced_frs.time_period
+    )
+
+    column = matrix["housing/main_residence_value"].values
+    assert column.var() > 0
+    assert (column > 0).any(), "no households with positive main_residence_value"
+
+
+def test_la_loss_english_target_total_within_reach_of_initial_weights(enhanced_frs):
+    """Sum of English LA targets should be in the same order of magnitude
+    as the implied initial English main-residence-value — so the
+    optimiser has a chance of hitting them via reweighting rather than
+    requiring weights to inflate by 100x."""
+    from policyengine_uk import Microsimulation
+    from policyengine_uk_data.datasets.local_areas.local_authorities.loss import (
+        create_local_authority_target_matrix,
+    )
+
+    _, y, _ = create_local_authority_target_matrix(
+        enhanced_frs, time_period=enhanced_frs.time_period
+    )
+
+    sim = Microsimulation(dataset=enhanced_frs)
+    original_weights = sim.calculate("household_weight", 2025).values
+    main_res = sim.calculate("main_residence_value", enhanced_frs.time_period).values
+    country = sim.calculate("country", enhanced_frs.time_period).values
+
+    england_mask = country == "ENGLAND"
+    england_initial = (original_weights[england_mask] * main_res[england_mask]).sum()
+
+    english_indices = [
+        i for i, c in enumerate(LA_CODES["code"].values) if c.startswith("E")
+    ]
+    english_targets = y["housing/main_residence_value"].iloc[english_indices].sum()
+
+    ratio = english_targets / england_initial
+    assert 0.5 < ratio < 3.0, (
+        f"English LA target sum (£{english_targets / 1e9:.0f}bn) / "
+        f"initial English main-residence-value (£{england_initial / 1e9:.0f}bn) "
+        f"= {ratio:.2f}; calibration target may be hard to reach"
+    )
