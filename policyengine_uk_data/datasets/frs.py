@@ -77,6 +77,25 @@ def _pip_category_from_reported(
     )
 
 
+BENEFITS_IN_OWN_RIGHT_REPORTED_COLUMNS = (
+    "universal_credit_reported",
+    "jsa_contrib_reported",
+    "jsa_income_reported",
+    "esa_contrib_reported",
+    "esa_income_reported",
+)
+NON_ADVANCED_EDUCATION_LEVELS = (
+    "PRE_PRIMARY",
+    "PRIMARY",
+    "LOWER_SECONDARY",
+    "UPPER_SECONDARY",
+    "POST_SECONDARY",
+)
+# FRS government-training question variants use 10 or 13 for "None of these".
+FRS_APPROVED_TRAINING_CODES = tuple(range(1, 10))
+UNKNOWN_QUALIFYING_EDUCATION_OR_TRAINING_ENTRY_AGE = 1000
+
+
 @lru_cache(maxsize=None)
 def load_legacy_jobseeker_max_annual_hours(year: int) -> int:
     """Read the JSA single-claimant hours rule from policyengine-uk."""
@@ -183,6 +202,88 @@ def derive_esa_support_group_proxy(
         & esa_health_condition_proxy
         & severe_health_evidence
     )
+
+
+def derive_receives_benefits_in_own_right(pe_person: pd.DataFrame) -> pd.Series:
+    """Identify people reporting adult benefits that end QYP status."""
+
+    return (
+        pe_person[list(BENEFITS_IN_OWN_RIGHT_REPORTED_COLUMNS)].fillna(0).sum(axis=1)
+        > 0
+    )
+
+
+def derive_is_in_non_advanced_education(
+    current_education,
+    is_apprentice=None,
+) -> np.ndarray:
+    """Identify current non-advanced education from PolicyEngine education states."""
+
+    current_education = np.asarray(current_education)
+    if is_apprentice is None:
+        is_apprentice = np.zeros(len(current_education), dtype=bool)
+    else:
+        is_apprentice = np.asarray(is_apprentice)
+
+    return np.isin(current_education, NON_ADVANCED_EDUCATION_LEVELS) & ~is_apprentice
+
+
+def derive_is_in_approved_training_from_frs_person(
+    person: pd.DataFrame,
+) -> pd.Series:
+    """Identify reported government training scheme participation in FRS."""
+
+    if "train" not in person.columns:
+        return pd.Series(False, index=person.index)
+
+    train = pd.to_numeric(person.train, errors="coerce").fillna(0)
+    return train.isin(FRS_APPROVED_TRAINING_CODES)
+
+
+def derive_age_started_or_accepted_current_education_or_training(
+    age,
+    is_in_non_advanced_education,
+    is_in_approved_training,
+) -> np.ndarray:
+    """Approximate the entry age for current QYP education or training.
+
+    FRS observes current education/training status but not the age at which the
+    current course or programme was started, enrolled on, or accepted. For
+    people currently in qualifying education/training, cap the imputed entry
+    age at 18 so observed 19-year-olds remain eligible for rules requiring
+    entry before age 19.
+    """
+
+    age = np.asarray(age)
+    in_qualifying_education_or_training = np.asarray(
+        is_in_non_advanced_education
+    ) | np.asarray(is_in_approved_training)
+
+    return np.where(
+        in_qualifying_education_or_training,
+        np.minimum(age, 18),
+        UNKNOWN_QUALIFYING_EDUCATION_OR_TRAINING_ENTRY_AGE,
+    )
+
+
+def derive_is_before_universal_credit_qualifying_young_person_terminal_date(
+    age,
+    is_in_non_advanced_education,
+    is_in_approved_training,
+) -> np.ndarray:
+    """Approximate the UC terminal-date condition for observed 19-year-olds.
+
+    FRS does not expose the date-of-birth and assessment-period detail needed
+    to identify the exact 1 September terminal date. Use current qualifying
+    education/training status as the microdata proxy for age-19 records.
+    """
+
+    age = np.asarray(age)
+    in_qualifying_education_or_training = np.asarray(
+        is_in_non_advanced_education
+    ) | np.asarray(is_in_approved_training)
+
+    return (age == 19) & in_qualifying_education_or_training
 
 
 def add_legacy_benefit_proxies(
@@ -577,6 +678,26 @@ def create_frs(
         [determine_education_level(f, t, a) for f, t, a in zip(fted, typeed2, age)],
         index=pe_person.index,
     )
+    pe_person["is_in_non_advanced_education"] = derive_is_in_non_advanced_education(
+        pe_person.current_education
+    )
+    pe_person["is_in_approved_training"] = (
+        derive_is_in_approved_training_from_frs_person(person)
+    )
+    pe_person["age_started_or_accepted_current_education_or_training"] = (
+        derive_age_started_or_accepted_current_education_or_training(
+            age,
+            pe_person.is_in_non_advanced_education,
+            pe_person.is_in_approved_training,
+        )
+    )
+    pe_person["is_before_universal_credit_qualifying_young_person_terminal_date"] = (
+        derive_is_before_universal_credit_qualifying_young_person_terminal_date(
+            age,
+            pe_person.is_in_non_advanced_education,
+            pe_person.is_in_approved_training,
+        )
+    )
 
     # Add highest education from EDUCQUAL (highest qualification achieved)
     # Codes from FRS ADT_324X classification; unmapped codes default to UPPER_SECONDARY
@@ -941,6 +1062,9 @@ def create_frs(
             person.person_id,
         )
         * WEEKS_IN_YEAR
+    )
+    pe_person["receives_benefits_in_own_right"] = derive_receives_benefits_in_own_right(
+        pe_person
     )
 
     pe_person["bsp_reported"] = (
