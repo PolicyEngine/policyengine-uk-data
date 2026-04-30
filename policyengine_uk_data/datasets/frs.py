@@ -59,20 +59,19 @@ DISABLED_STUDENTS_ALLOWANCE_ELIGIBILITY_VARIABLES = (
 PIP_CATEGORY_SAFETY_MARGIN = 0.1
 
 
-def _pip_category_from_reported(
+def _category_from_reported(
     reported,
-    standard_rate: float,
-    enhanced_rate: float,
+    thresholds: tuple[tuple[str, float], ...],
 ) -> np.ndarray:
-    """Convert annual reported PIP amounts to PE-UK PIP category inputs."""
+    """Convert annual reported amounts to PE-UK category inputs."""
 
     reported_weekly = pd.Series(reported).fillna(0).astype(float) / WEEKS_IN_YEAR
     return np.select(
         [
-            reported_weekly >= enhanced_rate * (1 - PIP_CATEGORY_SAFETY_MARGIN),
-            reported_weekly >= standard_rate * (1 - PIP_CATEGORY_SAFETY_MARGIN),
+            reported_weekly >= rate * (1 - PIP_CATEGORY_SAFETY_MARGIN)
+            for _, rate in thresholds
         ],
-        ["ENHANCED", "STANDARD"],
+        [category for category, _ in thresholds],
         default="NONE",
     )
 
@@ -1244,36 +1243,57 @@ def create_frs(
 
     benefit = CountryTaxBenefitSystem().parameters(year).gov.dwp
 
-    pe_person["pip_dl_category"] = _pip_category_from_reported(
-        pe_person["pip_dl_reported"],
-        benefit.pip.daily_living.standard,
-        benefit.pip.daily_living.enhanced,
+    pe_person["aa_category"] = _category_from_reported(
+        pe_person["attendance_allowance_reported"],
+        (
+            ("HIGHER", benefit.attendance_allowance.higher),
+            ("LOWER", benefit.attendance_allowance.lower),
+        ),
     )
-    pe_person["pip_m_category"] = _pip_category_from_reported(
+    pe_person["dla_sc_category"] = _category_from_reported(
+        pe_person["dla_sc_reported"],
+        (
+            ("HIGHER", benefit.dla.self_care.higher),
+            ("MIDDLE", benefit.dla.self_care.middle),
+            ("LOWER", benefit.dla.self_care.lower),
+        ),
+    )
+    pe_person["dla_m_category"] = _category_from_reported(
+        pe_person["dla_m_reported"],
+        (
+            ("HIGHER", benefit.dla.mobility.higher),
+            ("LOWER", benefit.dla.mobility.lower),
+        ),
+    )
+    pe_person["pip_dl_category"] = _category_from_reported(
+        pe_person["pip_dl_reported"],
+        (
+            ("ENHANCED", benefit.pip.daily_living.enhanced),
+            ("STANDARD", benefit.pip.daily_living.standard),
+        ),
+    )
+    pe_person["pip_m_category"] = _category_from_reported(
         pe_person["pip_m_reported"],
-        benefit.pip.mobility.standard,
-        benefit.pip.mobility.enhanced,
+        (
+            ("ENHANCED", benefit.pip.mobility.enhanced),
+            ("STANDARD", benefit.pip.mobility.standard),
+        ),
     )
 
     has_pip = (pe_person["pip_dl_category"] != "NONE") | (
         pe_person["pip_m_category"] != "NONE"
     )
-    pe_person["is_disabled_for_benefits"] = (
-        pe_person.dla_sc_reported + pe_person.dla_m_reported > 0
-    ) | has_pip
-
-    THRESHOLD_SAFETY_GAP = 1 * WEEKS_IN_YEAR
+    has_dla = (pe_person["dla_sc_category"] != "NONE") | (
+        pe_person["dla_m_category"] != "NONE"
+    )
+    pe_person["is_disabled_for_benefits"] = has_dla | has_pip
 
     pe_person["is_enhanced_disabled_for_benefits"] = (
-        pe_person.dla_sc_reported
-        > benefit.dla.self_care.higher * WEEKS_IN_YEAR - THRESHOLD_SAFETY_GAP
+        pe_person["dla_sc_category"] == "HIGHER"
     )
 
     # Child Tax Credit Regulations 2002 s. 8
-    paragraph_3 = (
-        pe_person.dla_sc_reported
-        >= benefit.dla.self_care.higher * WEEKS_IN_YEAR - THRESHOLD_SAFETY_GAP
-    )
+    paragraph_3 = pe_person["dla_sc_category"] == "HIGHER"
     paragraph_4 = pe_person["pip_dl_category"] == "ENHANCED"
     paragraph_5 = pe_person.afcs_reported > 0
     pe_person["is_severely_disabled_for_benefits"] = (
@@ -1281,7 +1301,13 @@ def create_frs(
     )
 
     pe_person = pe_person.drop(
-        columns=["pip_dl_reported", "pip_m_reported"],
+        columns=[
+            "attendance_allowance_reported",
+            "dla_sc_reported",
+            "dla_m_reported",
+            "pip_dl_reported",
+            "pip_m_reported",
+        ],
         errors="ignore",
     )
 

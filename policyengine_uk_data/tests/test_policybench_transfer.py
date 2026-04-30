@@ -79,6 +79,9 @@ def test_policybench_transfer_writes_only_valid_leaf_inputs(tmp_path: Path):
 
     assert "household_wealth" not in dataset.household.columns
     assert "total_wealth" not in dataset.household.columns
+    assert "attendance_allowance_reported" not in dataset.person.columns
+    assert "dla_sc_reported" not in dataset.person.columns
+    assert "dla_m_reported" not in dataset.person.columns
     assert "pip_dl_reported" not in dataset.person.columns
     assert "pip_m_reported" not in dataset.person.columns
     assert (

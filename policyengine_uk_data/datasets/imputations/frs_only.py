@@ -77,10 +77,7 @@ FRS_ONLY_PERSON_VARIABLES = [
     "income_support_reported",
     "working_tax_credit_reported",
     "child_tax_credit_reported",
-    "attendance_allowance_reported",
     "state_pension_reported",
-    "dla_sc_reported",
-    "dla_m_reported",
     "sda_reported",
     "carers_allowance_reported",
     "iidb_reported",
@@ -96,20 +93,12 @@ FRS_ONLY_PERSON_VARIABLES = [
     "esa_income_reported",
 ]
 
-FRS_ONLY_PERSON_CATEGORY_VARIABLES = [
-    "pip_m_category",
-    "pip_dl_category",
-]
-
-PIP_CATEGORY_TO_CODE = {
-    "NONE": 0.0,
-    "STANDARD": 1.0,
-    "ENHANCED": 2.0,
-}
-PIP_CODE_TO_CATEGORY = {
-    0: "NONE",
-    1: "STANDARD",
-    2: "ENHANCED",
+FRS_ONLY_PERSON_CATEGORY_VARIABLES = {
+    "aa_category": ["NONE", "LOWER", "HIGHER"],
+    "dla_m_category": ["NONE", "LOWER", "HIGHER"],
+    "dla_sc_category": ["NONE", "LOWER", "MIDDLE", "HIGHER"],
+    "pip_m_category": ["NONE", "STANDARD", "ENHANCED"],
+    "pip_dl_category": ["NONE", "STANDARD", "ENHANCED"],
 }
 
 
@@ -171,9 +160,12 @@ def _build_predictor_frame(dataset: UKSingleYearDataset) -> pd.DataFrame:
     return frame
 
 
-def _category_codes(series: pd.Series) -> pd.Series:
+def _category_codes(series: pd.Series, allowed_categories: list[str]) -> pd.Series:
+    category_to_code = {
+        category: float(index) for index, category in enumerate(allowed_categories)
+    }
     categories = series.fillna("NONE").astype(str).str.upper()
-    return categories.map(PIP_CATEGORY_TO_CODE).fillna(0.0)
+    return categories.map(category_to_code).fillna(0.0)
 
 
 def impute_frs_only_variables(
@@ -209,12 +201,12 @@ def impute_frs_only_variables(
     ]
     category_outputs = [
         v
-        for v in FRS_ONLY_PERSON_CATEGORY_VARIABLES
+        for v in FRS_ONLY_PERSON_CATEGORY_VARIABLES.keys()
         if v in train_person.columns and v in target_person.columns
     ]
     outputs = numeric_outputs + category_outputs
     missing = (
-        set(FRS_ONLY_PERSON_VARIABLES) | set(FRS_ONLY_PERSON_CATEGORY_VARIABLES)
+        set(FRS_ONLY_PERSON_VARIABLES) | set(FRS_ONLY_PERSON_CATEGORY_VARIABLES.keys())
     ) - set(outputs)
     if missing:
         logger.warning(
@@ -242,7 +234,10 @@ def impute_frs_only_variables(
     # columns that default to zero when unreported.
     train_outputs = train_person[numeric_outputs].fillna(0).astype(float)
     for column in category_outputs:
-        train_outputs[column] = _category_codes(train_person[column])
+        train_outputs[column] = _category_codes(
+            train_person[column],
+            FRS_ONLY_PERSON_CATEGORY_VARIABLES[column],
+        )
 
     logger.info(
         "Stage-2 FRS-only imputation: %d outputs, training on %d FRS "
@@ -267,10 +262,9 @@ def impute_frs_only_variables(
         target_dataset.person[column] = values
 
     for column in category_outputs:
+        allowed_categories = FRS_ONLY_PERSON_CATEGORY_VARIABLES[column]
         values = np.rint(predictions[column].fillna(0.0).values).astype(int)
-        values = np.clip(values, 0, 2)
-        target_dataset.person[column] = [
-            PIP_CODE_TO_CATEGORY[value] for value in values
-        ]
+        values = np.clip(values, 0, len(allowed_categories) - 1)
+        target_dataset.person[column] = [allowed_categories[value] for value in values]
 
     return target_dataset
