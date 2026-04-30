@@ -268,13 +268,10 @@ def create_local_authority_target_matrix(
     ct_path = STORAGE_FOLDER / "la_council_tax.csv"
     if ct_path.exists():
         ct_data = pd.read_csv(ct_path)
-        ct_columns = ["code", "has_council_tax"] + [
-            f"count_band_{b}" for b in "ABCDEFGH"
-        ]
+        ct_columns = ["code"] + [f"count_band_{b}" for b in "ABCDEFGH"]
         if "total_council_tax_net" in ct_data.columns:
             ct_columns.append("total_council_tax_net")
         ct_merged = la_codes.merge(ct_data[ct_columns], on="code", how="left")
-        is_ct_la = ct_merged["has_council_tax"].fillna(True).astype(bool).values
         ct_band = sim.calculate("council_tax_band").values
         for band in "ABCDEFGH":
             col = f"voa/council_tax/{band}"
@@ -283,7 +280,7 @@ def create_local_authority_target_matrix(
             has_count = ct_merged[csv_col].notna().values
             direct = ct_merged[csv_col].values
             y[col] = np.where(
-                is_ct_la & has_count,
+                has_count,
                 direct,
                 np.nan,
             )
@@ -304,7 +301,7 @@ def create_local_authority_target_matrix(
             has_ct_net = ct_merged["total_council_tax_net"].notna().values
             direct_net = ct_merged["total_council_tax_net"].values
             y["housing/council_tax_net"] = np.where(
-                is_ct_la & has_ct_net,
+                has_ct_net,
                 direct_net,
                 np.nan,
             )
