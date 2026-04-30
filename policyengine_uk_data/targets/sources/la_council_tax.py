@@ -28,8 +28,8 @@ Lineage caveats (flagged in PR review by @MaxGhenis):
   * VOA stock includes exempt, empty, and second-home dwellings,
     which contribute zero to the matrix-side sum (no household lives
     in them in the FRS).
-  * VOA covers England and Wales only. Scotland uses the
-    national-share fallback; NI is zeroed (no council tax).
+  * VOA covers England and Wales only. Scotland and NI cells are
+    masked out of the loss matrix unless a direct source is available.
   * Banding ratios differ: Scotland diverged from the standard
     6/9–18/9 E&W ratios after the 2017 reform; Wales has Band I,
     England does not.
@@ -49,8 +49,8 @@ Lineage caveats (flagged in PR review by @MaxGhenis):
 Known coverage gaps:
 
 - Northern Ireland is excluded because its domestic rates system is
-  distinct from council tax. ``loss.py`` zeros the y vector for NI
-  rather than fabricating a fallback.
+  distinct from council tax. ``loss.py`` masks NI cells rather than
+  fabricating a fallback.
 - Band-count rows for Scottish LAs are absent because the VOA summary
   tables do not cover Scotland; Scottish Assessors publishes per-LA
   chargeable-dwellings data separately and is a follow-up.
@@ -131,9 +131,8 @@ def load_la_net_council_tax() -> pd.DataFrame:
 
     Returns a DataFrame with columns ``code, total_council_tax_net``
     for LAs where a directly-observed net figure is available
-    (England + Wales). Scotland and NI are absent and handled by the
-    loss-matrix national-share fallback — same pattern as the rent
-    and tenure targets.
+    (England + Wales). Scotland and NI are absent; loss-matrix callers
+    should mask those cells rather than fabricating fallback values.
     """
     df = _load_table()
     if df is None or df.empty:

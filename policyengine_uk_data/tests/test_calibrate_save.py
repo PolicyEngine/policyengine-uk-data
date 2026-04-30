@@ -120,3 +120,42 @@ def test_calibrate_local_areas_saves_weights_in_nonverbose_branch(
         # Verify the saved weights have the area_count x n_households shape
         # produced by the calibrator.
         assert weights.shape == (2, 4)
+
+
+def test_calibrate_local_areas_masks_nan_local_targets(tmp_path, monkeypatch):
+    """Sparse local targets should be allowed.
+
+    Local-authority sources are not available for every area/metric pair.
+    A NaN target means "do not train on this cell", not "propagate NaN
+    through the loss".
+    """
+
+    import h5py
+
+    from policyengine_uk_data.utils import calibrate as calibrate_module
+    from policyengine_uk_data.utils.calibrate import calibrate_local_areas
+
+    monkeypatch.setattr(calibrate_module, "STORAGE_FOLDER", tmp_path)
+
+    matrix_fn, national_matrix_fn = _make_toy_inputs(n_households=4, area_count=2)
+
+    def sparse_matrix_fn(dataset):
+        matrix, local_targets, country_mask = matrix_fn(dataset)
+        local_targets.iloc[1, 0] = np.nan
+        return matrix, local_targets, country_mask
+
+    weight_file = "toy_sparse_weights.h5"
+    calibrate_local_areas(
+        dataset=_StubDataset(np.array([1.0, 1.0, 1.0, 1.0])),
+        matrix_fn=sparse_matrix_fn,
+        national_matrix_fn=national_matrix_fn,
+        area_count=2,
+        weight_file=weight_file,
+        dataset_key="2025",
+        epochs=5,
+        verbose=False,
+    )
+
+    with h5py.File(tmp_path / weight_file, "r") as f:
+        weights = f["2025"][:]
+        assert np.isfinite(weights).all()

@@ -110,9 +110,12 @@ def test_la_loss_band_y_vectors_length_360(enhanced_frs):
         assert len(y[f"voa/council_tax/{band}"]) == 360
 
 
-def test_la_loss_band_y_finite(enhanced_frs):
-    """No NaNs / negatives in y. NI LAs are zero (no council tax there);
-    other LAs are positive via direct value or national-share fallback."""
+def test_la_loss_band_y_direct_cells_finite(enhanced_frs):
+    """Direct band-count cells are finite and non-negative.
+
+    Missing-source cells stay NaN so the calibrator can mask them out
+    instead of training on fabricated national-share fallbacks.
+    """
     from policyengine_uk_data.datasets.local_areas.local_authorities.loss import (
         create_local_authority_target_matrix,
     )
@@ -128,11 +131,12 @@ def test_la_loss_band_y_finite(enhanced_frs):
     ]
     for band in WIRED_BANDS:
         col = f"voa/council_tax/{band}"
-        assert np.isfinite(y[col]).all(), f"{col}: NaN/inf in y"
-        assert (y[col] >= 0).all(), f"{col}: negative y values"
-        # All non-NI LAs have positive targets.
-        non_ni = y[col].drop(ni_indices)
-        assert (non_ni > 0).all(), f"{col}: non-positive y for non-NI LA"
+        direct = y[col].dropna()
+        assert np.isfinite(direct).all(), f"{col}: inf in direct y cells"
+        assert (direct >= 0).all(), f"{col}: negative direct y values"
+        assert y[col].iloc[ni_indices].isna().all(), (
+            f"{col}: NI cells should be masked, not zero-filled"
+        )
 
 
 def test_la_loss_band_matrix_columns_are_indicators(enhanced_frs):
@@ -187,10 +191,9 @@ def test_la_loss_band_y_matches_csv_for_english_la(enhanced_frs):
         )
 
 
-def test_la_loss_band_y_uses_fallback_for_scotland(enhanced_frs):
-    """Scottish LAs have no VOA band counts; y must use the
-    national_band_count × la_household_share fallback rather than NaN
-    or 0."""
+def test_la_loss_band_y_masks_scotland_without_direct_source(enhanced_frs):
+    """Scottish LAs have no VOA band counts; y must be NaN so the
+    calibrator excludes those cells instead of inventing a fallback."""
     from policyengine_uk_data.datasets.local_areas.local_authorities.loss import (
         create_local_authority_target_matrix,
     )
@@ -202,18 +205,16 @@ def test_la_loss_band_y_uses_fallback_for_scotland(enhanced_frs):
     scotland_la = CT_DATA[CT_DATA["country"] == "SCOTLAND"]["code"].iloc[0]
     la_index = LA_CODES.index[LA_CODES["code"] == scotland_la][0]
     for band in WIRED_BANDS:
-        val = float(y[f"voa/council_tax/{band}"].iloc[la_index])
-        assert val > 0, (
-            f"Scotland LA {scotland_la} band {band}: fallback produced {val}"
+        val = y[f"voa/council_tax/{band}"].iloc[la_index]
+        assert pd.isna(val), (
+            f"Scotland LA {scotland_la} band {band}: expected masked NaN, got {val}"
         )
 
 
-def test_la_loss_band_y_zero_for_ni(enhanced_frs):
+def test_la_loss_band_y_masks_ni(enhanced_frs):
     """NI LAs have no council tax (domestic rates instead). Band targets
-    must be exactly zero — a positive fallback would be an impossible
-    constraint (NI households have council_tax_band == None, so the
-    matrix column is zero everywhere) and the optimiser would waste
-    loss on a constraint it cannot satisfy."""
+    must be masked. A zero target is still a training constraint and can
+    be impossible if the matrix-side band variable is non-zero."""
     from policyengine_uk_data.datasets.local_areas.local_authorities.loss import (
         create_local_authority_target_matrix,
     )
@@ -226,9 +227,9 @@ def test_la_loss_band_y_zero_for_ni(enhanced_frs):
     for ni_la in ni_codes:
         la_index = LA_CODES.index[LA_CODES["code"] == ni_la][0]
         for band in WIRED_BANDS:
-            val = float(y[f"voa/council_tax/{band}"].iloc[la_index])
-            assert val == 0.0, (
-                f"NI LA {ni_la} band {band}: expected 0 (no CT in NI), got {val}"
+            val = y[f"voa/council_tax/{band}"].iloc[la_index]
+            assert pd.isna(val), (
+                f"NI LA {ni_la} band {band}: expected masked NaN, got {val}"
             )
 
 
@@ -242,9 +243,8 @@ def test_csv_has_net_council_tax_column():
 
 def test_net_council_tax_covers_england_and_wales():
     """Direct-formula values are produced for England (MHCLG taxbase × Band D)
-    and Wales (Welsh Government Council Tax Income). Scotland and NI fall
-    through to the loss.py national-share fallback, same pattern as
-    band counts and the existing tenure target."""
+    and Wales (Welsh Government Council Tax Income). Scotland and NI are
+    masked in loss.py unless direct values are added."""
     cov = (
         CT_DATA.assign(has_net=CT_DATA["total_council_tax_net"].notna())
         .groupby("country")["has_net"]
@@ -314,9 +314,12 @@ def test_la_loss_council_tax_net_matrix_uses_net_variable(enhanced_frs):
     np.testing.assert_array_equal(matrix["housing/council_tax_net"].values, expected)
 
 
-def test_la_loss_council_tax_net_y_finite(enhanced_frs):
-    """y has no NaN/inf. NI LAs are zero (no council tax there);
-    Scotland uses fallback; England/Wales use direct values."""
+def test_la_loss_council_tax_net_y_direct_cells_finite(enhanced_frs):
+    """Direct net-council-tax cells are finite and non-negative.
+
+    Missing-source cells stay NaN so the calibrator excludes them from
+    training instead of using national-share fallbacks or hard zeroes.
+    """
     from policyengine_uk_data.datasets.local_areas.local_authorities.loss import (
         create_local_authority_target_matrix,
     )
@@ -325,21 +328,20 @@ def test_la_loss_council_tax_net_y_finite(enhanced_frs):
         enhanced_frs, time_period=enhanced_frs.time_period
     )
     col = y["housing/council_tax_net"]
-    assert np.isfinite(col).all()
-    assert (col >= 0).all()
+    direct = col.dropna()
+    assert np.isfinite(direct).all()
+    assert (direct >= 0).all()
 
     ni_indices = LA_CODES.index[
         LA_CODES["code"].isin(
             CT_DATA.loc[CT_DATA["country"] == "NORTHERN_IRELAND", "code"]
         )
     ]
-    assert (col.iloc[ni_indices] == 0).all(), (
-        "NI LAs should have y=0 for housing/council_tax_net "
+    assert col.iloc[ni_indices].isna().all(), (
+        "NI LAs should be masked for housing/council_tax_net "
         "(NI uses domestic rates, not council tax)"
     )
-    assert (col.drop(ni_indices) > 0).all(), (
-        "non-NI LAs should have positive y (direct value or fallback)"
-    )
+    assert (direct > 0).all(), "direct housing/council_tax_net cells should be positive"
 
 
 def test_la_loss_council_tax_net_y_matches_csv_for_english_la(enhanced_frs):
@@ -362,9 +364,9 @@ def test_la_loss_council_tax_net_y_matches_csv_for_english_la(enhanced_frs):
     assert actual == pytest.approx(expected, rel=1e-6)
 
 
-def test_la_loss_council_tax_net_y_uses_fallback_for_scotland(enhanced_frs):
-    """Scottish LAs have no published net CT in the CSV; the fallback
-    must produce a positive value."""
+def test_la_loss_council_tax_net_y_masks_scotland_without_direct_source(enhanced_frs):
+    """Scottish LAs have no published net CT in the CSV; the target
+    should be NaN until a direct source is wired in."""
     from policyengine_uk_data.datasets.local_areas.local_authorities.loss import (
         create_local_authority_target_matrix,
     )
@@ -374,7 +376,7 @@ def test_la_loss_council_tax_net_y_uses_fallback_for_scotland(enhanced_frs):
     )
     scotland_code = CT_DATA[CT_DATA["country"] == "SCOTLAND"]["code"].iloc[0]
     la_index = LA_CODES.index[LA_CODES["code"] == scotland_code][0]
-    assert float(y["housing/council_tax_net"].iloc[la_index]) > 0
+    assert pd.isna(y["housing/council_tax_net"].iloc[la_index])
 
 
 def test_la_loss_english_council_tax_net_in_reach_of_initial_weights(

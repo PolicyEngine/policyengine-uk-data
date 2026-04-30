@@ -260,13 +260,11 @@ def create_local_authority_target_matrix(
     # Lineage drift vs the matrix-side household council_tax_band:
     # VOA counts dwellings (incl. exempt / empty / second homes);
     # matrix counts households. See la_council_tax.py for full
-    # caveat. Scotland LAs have no VOA band data — fall back to
-    # national-share estimation, matching the tenure block's pattern.
-    # Northern Ireland has no council tax (domestic rates instead);
-    # the CSV's has_council_tax flag drives a hard zero target rather
-    # than a fabricated fallback, otherwise the optimiser would spend
-    # loss on an impossible constraint. Band I is Wales-only and
-    # rarely populated, so it is intentionally excluded.
+    # caveat. Missing cells stay NaN and are masked out by the
+    # calibrator; this keeps the target direct instead of fabricating
+    # national-share fallbacks for Scotland or Northern Ireland. Band I
+    # is Wales-only and rarely populated, so it is intentionally
+    # excluded.
     ct_path = STORAGE_FOLDER / "la_council_tax.csv"
     if ct_path.exists():
         ct_data = pd.read_csv(ct_path)
@@ -283,13 +281,11 @@ def create_local_authority_target_matrix(
             matrix[col] = (ct_band == band).astype(float)
             csv_col = f"count_band_{band}"
             has_count = ct_merged[csv_col].notna().values
-            national = (original_weights * matrix[col].values).sum()
             direct = ct_merged[csv_col].values
-            fallback = national * la_household_share
             y[col] = np.where(
-                is_ct_la,
-                np.where(has_count, direct, fallback),
-                0.0,
+                is_ct_la & has_count,
+                direct,
+                np.nan,
             )
 
         # ── Council tax £ paid, net of CTR (LA targets) ────────────
@@ -300,22 +296,17 @@ def create_local_authority_target_matrix(
         # construction paths — see la_council_tax.py for the lineage
         # caveat flagged in review by @MaxGhenis. Both sides are net
         # of CTR, per Max's 28 Apr standup decision on FRS alignment.
-        # Scotland falls back to national_share; Northern Ireland is
-        # zeroed via has_council_tax (no council tax, no constraint).
+        # Missing cells remain NaN and are masked out by the calibrator.
         if "total_council_tax_net" in ct_merged.columns:
             matrix["housing/council_tax_net"] = sim.calculate(
                 "council_tax_less_benefit"
             ).values
             has_ct_net = ct_merged["total_council_tax_net"].notna().values
-            national_ct_net = (
-                original_weights * matrix["housing/council_tax_net"].values
-            ).sum()
             direct_net = ct_merged["total_council_tax_net"].values
-            fallback_net = national_ct_net * la_household_share
             y["housing/council_tax_net"] = np.where(
-                is_ct_la,
-                np.where(has_ct_net, direct_net, fallback_net),
-                0.0,
+                is_ct_la & has_ct_net,
+                direct_net,
+                np.nan,
             )
 
     # ── Country mask ───────────────────────────────────────────────
