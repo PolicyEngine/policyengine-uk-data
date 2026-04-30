@@ -20,9 +20,10 @@ Lineage caveat (flagged in PR review by @MaxGhenis):
   at the LA HPI average, the total would be £X") but the two sides
   of the calibration constraint reference different price concepts.
 
-The target is treated as a soft-weighted/proxy training signal
-relative to direct observed targets (HMRC SPI counts, ONS mid-year
-population, DWP UC caseload, VOA dwelling band counts).
+The target is included as a validation/proxy diagnostic and is excluded
+from the default local-authority training targets. It should not be
+treated as a direct target unless a cleaner LA stock-value source is
+added.
 
 Data sources:
 - Average house price by LA: HM Land Registry UK HPI (Dec 2025).

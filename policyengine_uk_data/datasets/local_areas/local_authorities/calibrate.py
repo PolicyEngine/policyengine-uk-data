@@ -10,12 +10,18 @@ from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 
 
+VALIDATION_TARGETS = ["housing/main_residence_value"]
+
+
 def calibrate(
     dataset: UKSingleYearDataset,
-    excluded_training_targets=[],
+    excluded_training_targets=None,
     log_csv="la_calibration_log.csv",
     verbose: bool = False,
 ):
+    if excluded_training_targets is None:
+        excluded_training_targets = VALIDATION_TARGETS
+
     return calibrate_local_areas(
         dataset=dataset,
         matrix_fn=lambda ds: create_local_authority_target_matrix(ds, ds.time_period),

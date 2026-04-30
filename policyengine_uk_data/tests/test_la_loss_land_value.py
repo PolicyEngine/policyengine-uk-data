@@ -88,6 +88,15 @@ def test_la_loss_matrix_includes_main_residence_value(enhanced_frs):
     assert "housing/main_residence_value" in y.columns
 
 
+def test_main_residence_value_is_validation_target_by_default():
+    """The derived proxy target is reported for validation, not trained by default."""
+    from policyengine_uk_data.datasets.local_areas.local_authorities.calibrate import (
+        VALIDATION_TARGETS,
+    )
+
+    assert "housing/main_residence_value" in VALIDATION_TARGETS
+
+
 def test_la_loss_y_vector_length_360(enhanced_frs):
     """y has one entry per LA and matches local_authorities_2021.csv ordering
     by length."""
