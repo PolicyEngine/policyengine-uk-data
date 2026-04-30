@@ -72,8 +72,16 @@ def _fake_dataset(person_rows: int, seed: int = 0):
             "state_pension_reported": 0.0,
             "dla_sc_reported": 0.0,
             "dla_m_reported": 0.0,
-            "pip_m_reported": 0.0,
-            "pip_dl_reported": 0.0,
+            "pip_m_category": np.where(
+                rng.random(person_rows) < 0.05,
+                "STANDARD",
+                "NONE",
+            ),
+            "pip_dl_category": np.where(
+                rng.random(person_rows) < 0.05,
+                "ENHANCED",
+                "NONE",
+            ),
             "sda_reported": 0.0,
             "carers_allowance_reported": 0.0,
             "iidb_reported": 0.0,
@@ -125,6 +133,9 @@ def test_frs_only_outputs_are_non_negative():
         values = result.person[column].values
         assert np.all(values >= 0), f"{column} has negative predictions"
         assert np.isfinite(values).all(), f"{column} has NaN / inf predictions"
+
+    for column in ("pip_m_category", "pip_dl_category"):
+        assert result.person[column].isin(["NONE", "STANDARD", "ENHANCED"]).all()
 
 
 def test_frs_only_does_not_touch_non_output_columns():

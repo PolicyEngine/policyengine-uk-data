@@ -56,6 +56,25 @@ DISABLED_STUDENTS_ALLOWANCE_ELIGIBILITY_VARIABLES = (
     "disabled_students_allowance_course_eligible",
     "disabled_students_allowance_has_qualifying_condition",
 )
+PIP_CATEGORY_SAFETY_MARGIN = 0.1
+
+
+def _pip_category_from_reported(
+    reported,
+    standard_rate: float,
+    enhanced_rate: float,
+) -> np.ndarray:
+    """Convert annual reported PIP amounts to PE-UK PIP category inputs."""
+
+    reported_weekly = pd.Series(reported).fillna(0).astype(float) / WEEKS_IN_YEAR
+    return np.select(
+        [
+            reported_weekly >= enhanced_rate * (1 - PIP_CATEGORY_SAFETY_MARGIN),
+            reported_weekly >= standard_rate * (1 - PIP_CATEGORY_SAFETY_MARGIN),
+        ],
+        ["ENHANCED", "STANDARD"],
+        default="NONE",
+    )
 
 
 @lru_cache(maxsize=None)
@@ -1099,6 +1118,49 @@ def create_frs(
         household.index,
     )
 
+    benefit = CountryTaxBenefitSystem().parameters(year).gov.dwp
+
+    pe_person["pip_dl_category"] = _pip_category_from_reported(
+        pe_person["pip_dl_reported"],
+        benefit.pip.daily_living.standard,
+        benefit.pip.daily_living.enhanced,
+    )
+    pe_person["pip_m_category"] = _pip_category_from_reported(
+        pe_person["pip_m_reported"],
+        benefit.pip.mobility.standard,
+        benefit.pip.mobility.enhanced,
+    )
+
+    has_pip = (pe_person["pip_dl_category"] != "NONE") | (
+        pe_person["pip_m_category"] != "NONE"
+    )
+    pe_person["is_disabled_for_benefits"] = (
+        pe_person.dla_sc_reported + pe_person.dla_m_reported > 0
+    ) | has_pip
+
+    THRESHOLD_SAFETY_GAP = 1 * WEEKS_IN_YEAR
+
+    pe_person["is_enhanced_disabled_for_benefits"] = (
+        pe_person.dla_sc_reported
+        > benefit.dla.self_care.higher * WEEKS_IN_YEAR - THRESHOLD_SAFETY_GAP
+    )
+
+    # Child Tax Credit Regulations 2002 s. 8
+    paragraph_3 = (
+        pe_person.dla_sc_reported
+        >= benefit.dla.self_care.higher * WEEKS_IN_YEAR - THRESHOLD_SAFETY_GAP
+    )
+    paragraph_4 = pe_person["pip_dl_category"] == "ENHANCED"
+    paragraph_5 = pe_person.afcs_reported > 0
+    pe_person["is_severely_disabled_for_benefits"] = (
+        paragraph_3 | paragraph_4 | paragraph_5
+    )
+
+    pe_person = pe_person.drop(
+        columns=["pip_dl_reported", "pip_m_reported"],
+        errors="ignore",
+    )
+
     dataset = UKSingleYearDataset(
         person=pe_person,
         benunit=pe_benunit,
@@ -1143,37 +1205,6 @@ def create_frs(
     brmas = df[sim.calculate("household_id")].values
 
     pe_household["brma"] = brmas
-
-    parameters = sim.tax_benefit_system.parameters
-    benefit = parameters(year).gov.dwp
-
-    pe_person["is_disabled_for_benefits"] = (
-        pe_person.dla_sc_reported
-        + pe_person.dla_m_reported
-        + pe_person.pip_m_reported
-        + pe_person.pip_dl_reported
-    ) > 0
-
-    THRESHOLD_SAFETY_GAP = 1 * WEEKS_IN_YEAR
-
-    pe_person["is_enhanced_disabled_for_benefits"] = (
-        pe_person.dla_sc_reported
-        > benefit.dla.self_care.higher * WEEKS_IN_YEAR - THRESHOLD_SAFETY_GAP
-    )
-
-    # Child Tax Credit Regulations 2002 s. 8
-    paragraph_3 = (
-        pe_person.dla_sc_reported
-        >= benefit.dla.self_care.higher * WEEKS_IN_YEAR - THRESHOLD_SAFETY_GAP
-    )
-    paragraph_4 = (
-        pe_person.pip_dl_reported
-        >= benefit.pip.daily_living.enhanced * WEEKS_IN_YEAR - THRESHOLD_SAFETY_GAP
-    )
-    paragraph_5 = pe_person.afcs_reported > 0
-    pe_person["is_severely_disabled_for_benefits"] = (
-        paragraph_3 | paragraph_4 | paragraph_5
-    )
 
     # Dataset-side claimant-state approximations for future legacy ESA/JSA
     # modelling. These are explicit proxies based on observed survey
