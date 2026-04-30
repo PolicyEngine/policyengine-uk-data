@@ -11,7 +11,6 @@ Sources:
 - ONS income: ONS small area income estimates
 - Tenure: English Housing Survey
 - Private rent: VOA/ONS private rental market statistics
-- Main residence value: HMLR UK HPI × ownership share × household count
 """
 
 from policyengine_uk import Microsimulation
@@ -39,7 +38,6 @@ from policyengine_uk_data.targets.sources.local_la_extras import (
     load_tenure_data,
     load_private_rents,
 )
-from policyengine_uk_data.targets.sources.la_land import load_la_avg_prices
 
 
 def create_local_authority_target_matrix(
@@ -252,47 +250,6 @@ def create_local_authority_target_matrix(
         has_rent,
         tenure_merged["private_rent_target"].values,
         national_rent * la_household_share,
-    )
-
-    # ── Main residence value (HMLR × ownership share × households) ─
-    # Derived proxy target: a product of three observed inputs, not a
-    # directly observed LA total. Mirrors the private-rent target's
-    # multiplicative shape. Lineage caveat: matrix col is WAS-imputed
-    # stock wealth; the target uses HMLR HPI transaction prices —
-    # different price concepts on the two sides of the constraint.
-    # See targets/sources/la_land.py for full provenance.
-    la_prices = load_la_avg_prices()
-    tenure_merged = tenure_merged.merge(
-        la_prices[["code", "avg_house_price"]], on="code", how="left"
-    )
-
-    matrix["housing/main_residence_value"] = sim.calculate(
-        "main_residence_value"
-    ).values
-
-    ownership_share_la = (
-        tenure_merged["owned_outright_pct"].fillna(0)
-        + tenure_merged["owned_mortgage_pct"].fillna(0)
-    ) / 100
-    tenure_merged["main_residence_value_target"] = (
-        tenure_merged["avg_house_price"]
-        * ownership_share_la
-        * tenure_merged["households"]
-    )
-
-    has_property = (
-        tenure_merged["avg_house_price"].notna()
-        & tenure_merged["owned_outright_pct"].notna()
-        & tenure_merged["households"].notna()
-    ).values
-    national_property = (
-        original_weights * matrix["housing/main_residence_value"].values
-    ).sum()
-
-    y["housing/main_residence_value"] = np.where(
-        has_property,
-        tenure_merged["main_residence_value_target"].values,
-        national_property * la_household_share,
     )
 
     # ── Country mask ───────────────────────────────────────────────
