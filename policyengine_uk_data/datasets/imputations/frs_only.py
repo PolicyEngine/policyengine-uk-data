@@ -36,6 +36,10 @@ import logging
 import numpy as np
 import pandas as pd
 from policyengine_uk.data import UKSingleYearDataset
+from policyengine_uk_data.datasets.disability_benefits import (
+    add_disability_benefit_categories_from_reported_amounts,
+    add_disability_benefit_flags_from_reported_amounts,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -236,5 +240,14 @@ def impute_frs_only_variables(
         # amounts or contributions and are non-negative by construction.
         values = np.maximum(predictions[column].values, 0.0)
         target_dataset.person[column] = values
+
+    target_dataset.person = add_disability_benefit_categories_from_reported_amounts(
+        target_dataset.person,
+        int(str(target_dataset.time_period)[:4]),
+    )
+    target_dataset.person = add_disability_benefit_flags_from_reported_amounts(
+        target_dataset.person,
+        int(str(target_dataset.time_period)[:4]),
+    )
 
     return target_dataset

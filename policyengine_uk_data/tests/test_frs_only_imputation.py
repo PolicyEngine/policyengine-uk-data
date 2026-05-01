@@ -221,3 +221,40 @@ def test_frs_only_reported_values_correlate_with_training_pattern():
         "Stage-2 QRF should produce lower UC-receipt predictions for high-"
         f"income target rows (got high={high_mean:.2f} vs low={low_mean:.2f})."
     )
+
+
+def test_frs_only_recomputes_disability_flags_after_amount_imputation(monkeypatch):
+    """Disability flags should follow imputed amounts, not donor rows."""
+    from policyengine_uk_data.datasets.imputations.frs_only import (
+        impute_frs_only_variables,
+    )
+    import policyengine_uk_data.utils.qrf as qrf_module
+
+    class ZeroQRF:
+        def fit(self, _x, y):
+            self.output_columns = list(y.columns)
+
+        def predict(self, x):
+            return pd.DataFrame(
+                {column: np.zeros(len(x)) for column in self.output_columns},
+                index=x.index,
+            )
+
+    monkeypatch.setattr(qrf_module, "QRF", ZeroQRF)
+
+    train = _fake_dataset(person_rows=20, seed=0)
+    target = _fake_dataset(person_rows=5, seed=1)
+    target.person["is_disabled_for_benefits"] = True
+    target.person["is_enhanced_disabled_for_benefits"] = True
+    target.person["is_severely_disabled_for_benefits"] = True
+
+    result = impute_frs_only_variables(
+        train_dataset=train,
+        target_dataset=target,
+    )
+
+    assert not result.person["is_disabled_for_benefits"].any()
+    assert not result.person["is_enhanced_disabled_for_benefits"].any()
+    assert not result.person["is_severely_disabled_for_benefits"].any()
+    assert (result.person["pip_dl_category"] == "NONE").all()
+    assert (result.person["pip_m_category"] == "NONE").all()

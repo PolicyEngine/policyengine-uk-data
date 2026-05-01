@@ -7,7 +7,6 @@ models trained on HMRC Survey of Personal Incomes (SPI) data.
 """
 
 import pandas as pd
-from pathlib import Path
 import numpy as np
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
@@ -265,6 +264,9 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     from policyengine_uk_data.datasets.imputations.frs_only import (
         impute_frs_only_variables,
     )
+    from policyengine_uk_data.datasets.disability_benefits import (
+        strip_internal_disability_reported_amounts,
+    )
 
     zero_weight_copy = impute_frs_only_variables(
         train_dataset=dataset,
@@ -285,4 +287,4 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         zero_weight_copy,
     )
 
-    return data
+    return strip_internal_disability_reported_amounts(data)

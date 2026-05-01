@@ -17,6 +17,11 @@ from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk.variables.household.income.employment_status import (
     EmploymentStatus,
 )
+from policyengine_uk_data.datasets.disability_benefits import (
+    add_disability_benefit_categories_from_reported_amounts,
+    add_disability_benefit_flags_from_reported_amounts,
+    drop_internal_disability_reported_amounts,
+)
 from policyengine_uk_data.utils.datasets import (
     sum_to_entity,
     categorical,
@@ -475,6 +480,7 @@ def split_reported_education_grants(
 def create_frs(
     raw_frs_folder: str,
     year: int,
+    include_internal_disability_reported_amounts: bool = False,
 ) -> UKSingleYearDataset:
     """
     Process raw FRS data into PolicyEngine UK dataset format.
@@ -487,6 +493,9 @@ def create_frs(
     Args:
         raw_frs_folder: Path to folder containing raw FRS .tab files.
         year: Survey year for the dataset.
+        include_internal_disability_reported_amounts: Keep raw disability
+            benefit amount intermediates for downstream imputation. Public
+            saved datasets should leave this as ``False``.
 
     Returns:
         UKSingleYearDataset with processed FRS data ready for policy simulation.
@@ -1010,6 +1019,12 @@ def create_frs(
             * WEEKS_IN_YEAR
         )
 
+    pe_person = add_disability_benefit_categories_from_reported_amounts(
+        pe_person,
+        year,
+        inplace=True,
+    )
+
     pe_person["jsa_contrib_reported"] = (
         sum_to_entity(
             benefits.benamt * (benefits.var2.isin((1, 3))) * (benefits.benefit == 14),
@@ -1266,35 +1281,10 @@ def create_frs(
 
     pe_household["brma"] = brmas
 
-    parameters = sim.tax_benefit_system.parameters
-    benefit = parameters(year).gov.dwp
-
-    pe_person["is_disabled_for_benefits"] = (
-        pe_person.dla_sc_reported
-        + pe_person.dla_m_reported
-        + pe_person.pip_m_reported
-        + pe_person.pip_dl_reported
-    ) > 0
-
-    THRESHOLD_SAFETY_GAP = 1 * WEEKS_IN_YEAR
-
-    pe_person["is_enhanced_disabled_for_benefits"] = (
-        pe_person.dla_sc_reported
-        > benefit.dla.self_care.higher * WEEKS_IN_YEAR - THRESHOLD_SAFETY_GAP
-    )
-
-    # Child Tax Credit Regulations 2002 s. 8
-    paragraph_3 = (
-        pe_person.dla_sc_reported
-        >= benefit.dla.self_care.higher * WEEKS_IN_YEAR - THRESHOLD_SAFETY_GAP
-    )
-    paragraph_4 = (
-        pe_person.pip_dl_reported
-        >= benefit.pip.daily_living.enhanced * WEEKS_IN_YEAR - THRESHOLD_SAFETY_GAP
-    )
-    paragraph_5 = pe_person.afcs_reported > 0
-    pe_person["is_severely_disabled_for_benefits"] = (
-        paragraph_3 | paragraph_4 | paragraph_5
+    pe_person = add_disability_benefit_flags_from_reported_amounts(
+        pe_person,
+        year,
+        inplace=True,
     )
 
     # Dataset-side claimant-state approximations for future legacy ESA/JSA
@@ -1459,6 +1449,9 @@ def create_frs(
     pe_household["property_purchased"] = (
         np.random.random(len(pe_household)) < PROPERTY_PURCHASE_RATE
     )
+
+    if not include_internal_disability_reported_amounts:
+        pe_person = drop_internal_disability_reported_amounts(pe_person)
 
     dataset = UKSingleYearDataset(
         person=pe_person,
