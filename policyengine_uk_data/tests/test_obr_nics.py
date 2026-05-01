@@ -15,8 +15,8 @@ Follow-up (issue #378, partial close of #88):
   column with no signal. The parser therefore drops it.
 - **Classes 2 + 4** are bundled in recent OBR EFOs (e.g. March 2026)
   as a single "Class 4 and Class 2 Self employed NICs" line. The
-  parser emits a combined ``obr/ni_self_employed`` target that uses
-  ``custom_compute`` to sum the two PE-UK variables. If a future EFO
+  parser emits a combined ``obr/ni_self_employed`` target that maps
+  directly to the PE-UK ``ni_self_employed`` variable. If a future EFO
   reverts to separate rows, the legacy ``ni_class_2`` / ``ni_class_4``
   candidates still match and emit individually.
 """
@@ -89,8 +89,8 @@ def _build_separate_efo_workbook() -> openpyxl.Workbook:
 
 
 def test_parse_nics_combined_self_employed_line():
-    """Current EFO format: combined Class 2+4 line gets a single target with
-    custom_compute, alongside Class 1 employee/employer."""
+    """Current EFO format: combined Class 2+4 line gets a single direct
+    target alongside Class 1 employee/employer."""
     from policyengine_uk_data.targets.sources import obr as obr_module
 
     with patch.object(obr_module, "load_config", return_value=_FAKE_CONFIG):
@@ -106,11 +106,7 @@ def test_parse_nics_combined_self_employed_line():
     combined = next(t for t in targets if t.name == "obr/ni_self_employed")
     assert combined.variable == "ni_self_employed"
     assert combined.values[2024] == pytest.approx(4.8e9)
-    # The combined target is virtual — it must carry a custom_compute that
-    # sums the two underlying PE-UK variables. Without it the loss matrix
-    # falls through to the simple-GBP path and looks for a non-existent
-    # `ni_self_employed` PE-UK variable.
-    assert callable(combined.custom_compute)
+    assert combined.custom_compute is None
 
 
 def test_parse_nics_falls_back_to_separate_classes_for_old_efo():

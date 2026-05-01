@@ -7,9 +7,8 @@ Active targets (against the March 2026 EFO format):
 
 - ``obr/ni_employee`` — Class 1 employee, formula-derived in PE-UK.
 - ``obr/ni_employer`` — Class 1 employer, formula-derived in PE-UK.
-- ``obr/ni_self_employed`` — combined Class 2 + Class 4, computed via
-  ``custom_compute`` since recent EFOs publish a single self-employed
-  line. Sums the two PE-UK variables at the household level.
+- ``obr/ni_self_employed`` — combined Class 2 + Class 4, aligned to the
+  PE-UK ``ni_self_employed`` variable.
 
 Class 3 is intentionally absent because no dataset populates
 ``ni_class_3`` — the matrix column would be a flat zero.
@@ -26,7 +25,6 @@ Two layers:
 
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
 
@@ -38,6 +36,7 @@ _ACTIVE_TOPLINE_TARGET_NAMES = (
 _PE_UK_NIC_VARIABLES_WITH_SIGNAL = (
     "ni_employee",
     "ni_employer",
+    "ni_self_employed",
     "ni_class_2",
     "ni_class_4",
 )
@@ -55,11 +54,9 @@ def test_obr_nic_target_registry_includes_active_classes():
     assert actual == expected, f"Missing OBR NIC targets: {expected - actual}"
 
 
-def test_obr_ni_self_employed_target_uses_custom_compute():
-    """The combined self-employed target is virtual — it must carry a
-    custom_compute callable, otherwise the loss matrix tries to look up a
-    non-existent ``ni_self_employed`` PE-UK variable and emits an empty
-    column."""
+def test_obr_ni_self_employed_target_uses_direct_pe_variable():
+    """The combined self-employed target must map directly to the PE-UK
+    ``ni_self_employed`` variable so target lineage stays explicit."""
     from policyengine_uk_data.targets import get_all_targets
 
     target = next(
@@ -67,9 +64,8 @@ def test_obr_ni_self_employed_target_uses_custom_compute():
         None,
     )
     assert target is not None, "obr/ni_self_employed not registered"
-    assert callable(target.custom_compute), (
-        "obr/ni_self_employed must carry a custom_compute (sum of class 2 + 4)"
-    )
+    assert target.variable == "ni_self_employed"
+    assert target.custom_compute is None
 
 
 def test_obr_ni_class_3_target_is_intentionally_absent():
@@ -100,24 +96,6 @@ def test_active_nic_variable_has_nonzero_variation(enhanced_frs, variable):
     assert float(values.var()) > 0.0, (
         f"{variable}: zero variance — calibration cannot move it"
     )
-
-
-def test_self_employed_combined_compute_returns_nonzero(enhanced_frs):
-    """``_compute_ni_self_employed_combined`` must return a non-zero
-    household-level vector — i.e. the sum of Class 2 and Class 4 actually
-    has signal in the dataset, not just each component individually."""
-    from policyengine_uk import Microsimulation
-
-    sim = Microsimulation(dataset=enhanced_frs)
-    sim.default_calculation_period = enhanced_frs.time_period
-
-    combined_person = (
-        sim.calculate("ni_class_2").values + sim.calculate("ni_class_4").values
-    )
-    combined_household = sim.map_result(combined_person, "person", "household")
-
-    assert (combined_household != 0).sum() > 0
-    assert float(np.asarray(combined_household).var()) > 0.0
 
 
 def test_ni_class_3_simulator_returns_uniform_zero(enhanced_frs):

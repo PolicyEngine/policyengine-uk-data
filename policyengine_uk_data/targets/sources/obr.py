@@ -323,26 +323,9 @@ def _parse_nics(wb: openpyxl.Workbook) -> list[Target]:
             "reference_url": ref,
             "forecast_vintage": vintage,
         }
-        # The combined self-employed total has no PE-UK variable of its
-        # own; sum the two underlying classes via custom_compute so the
-        # target hits a meaningful matrix column.
-        if name == "ni_self_employed":
-            kwargs["custom_compute"] = _compute_ni_self_employed_combined
-
         targets.append(Target(**kwargs))
 
     return targets
-
-
-def _compute_ni_self_employed_combined(ctx, target, year):  # noqa: ARG001
-    """Sum Class 2 and Class 4 NICs at the household level.
-
-    Used as the ``custom_compute`` for the combined OBR target whenever
-    the EFO publishes Class 2 + Class 4 as a single self-employed line.
-    """
-    class_2 = ctx.sim.calculate("ni_class_2")
-    class_4 = ctx.sim.calculate("ni_class_4")
-    return ctx.household_from_person(class_2 + class_4)
 
 
 def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
