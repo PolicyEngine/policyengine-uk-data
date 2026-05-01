@@ -5,8 +5,10 @@ import numpy as np
 import pandas as pd
 from policyengine_uk import CountryTaxBenefitSystem
 from policyengine_uk import Microsimulation
+from policyengine_uk.data import UKSingleYearDataset
 
 from policyengine_uk_data.datasets import (
+    ENHANCED_CPS_FILE,
     ENHANCED_CPS_SOURCE_FILE,
     create_enhanced_cps,
 )
@@ -14,10 +16,15 @@ from policyengine_uk_data.datasets.enhanced_cps import _assign_council_tax_bands
 from policyengine_uk_data.utils import reweight as reweight_module
 from policyengine_uk_data.utils.loss import get_loss_results
 
-ALLOWED_REPORTED_DATA_INPUTS = {
+ALLOWED_COMPATIBILITY_INPUTS = {
     # PE-UK uses this reported base field to derive basic/additional/new
     # state pension; it carries a formula only for year-to-year uprating.
     "state_pension_reported",
+    # These become leaf inputs in policyengine-uk#1656. Current released
+    # PE-UK versions still expose them as formula variables, but dataset
+    # loading accepts category columns and uses them as inputs.
+    "pip_dl_category",
+    "pip_m_category",
 }
 
 
@@ -62,13 +69,17 @@ def test_policybench_transfer_writes_only_valid_leaf_inputs(tmp_path: Path):
             or system.variables[column].entity.key != entity
             or (
                 not system.variables[column].is_input_variable()
-                and column not in ALLOWED_REPORTED_DATA_INPUTS
+                and column not in ALLOWED_COMPATIBILITY_INPUTS
             )
         ]
         assert invalid_columns == []
 
     assert "household_wealth" not in dataset.household.columns
     assert "total_wealth" not in dataset.household.columns
+    assert "pip_dl_reported" not in dataset.person.columns
+    assert "pip_m_reported" not in dataset.person.columns
+    assert "pip_dl_category" in dataset.person.columns
+    assert "pip_m_category" in dataset.person.columns
     for column in (
         "savings",
         "main_residence_value",
@@ -78,6 +89,15 @@ def test_policybench_transfer_writes_only_valid_leaf_inputs(tmp_path: Path):
         "corporate_wealth",
     ):
         assert column in dataset.household.columns
+
+
+def test_checked_in_enhanced_cps_h5_uses_pip_categories():
+    dataset = UKSingleYearDataset(file_path=str(ENHANCED_CPS_FILE))
+
+    assert "pip_dl_reported" not in dataset.person.columns
+    assert "pip_m_reported" not in dataset.person.columns
+    assert "pip_dl_category" in dataset.person.columns
+    assert "pip_m_category" in dataset.person.columns
 
 
 def test_policybench_transfer_runs_uk_microsimulation(tmp_path: Path):

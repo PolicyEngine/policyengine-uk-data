@@ -30,6 +30,9 @@ def main():
         assert_local_build_environment()
 
         from policyengine_uk.data import UKSingleYearDataset
+        from policyengine_uk_data.datasets.disability_benefits import (
+            strip_internal_disability_reported_amounts,
+        )
         from policyengine_uk_data.datasets.frs import create_frs
         from policyengine_uk_data.storage import STORAGE_FOLDER
         from policyengine_uk_data.utils.progress import (
@@ -79,8 +82,11 @@ def main():
             frs = create_frs(
                 raw_frs_folder=STORAGE_FOLDER / "frs_2023_24",
                 year=2023,
+                include_internal_disability_reported_amounts=True,
             )
-            frs.save(STORAGE_FOLDER / "frs_2023_24.h5")
+            strip_internal_disability_reported_amounts(frs).save(
+                STORAGE_FOLDER / "frs_2023_24.h5"
+            )
             update_dataset("Create base FRS dataset", "completed")
 
             # Import imputation functions
@@ -212,7 +218,9 @@ def main():
             update_dataset("Downrate to 2023", "completed")
 
             update_dataset("Save final dataset", "processing")
-            frs_calibrated.save(STORAGE_FOLDER / "enhanced_frs_2023_24.h5")
+            strip_internal_disability_reported_amounts(frs_calibrated).save(
+                STORAGE_FOLDER / "enhanced_frs_2023_24.h5"
+            )
             update_dataset("Save final dataset", "completed")
 
             # Create tiny (n=1000 households) versions for testing
@@ -225,7 +233,10 @@ def main():
             tiny_frs = subsample_dataset(frs_base, TINY_SIZE)
             tiny_frs.save(STORAGE_FOLDER / "frs_2023_24_tiny.h5")
 
-            tiny_enhanced = subsample_dataset(frs_calibrated, TINY_SIZE)
+            tiny_enhanced = subsample_dataset(
+                strip_internal_disability_reported_amounts(frs_calibrated),
+                TINY_SIZE,
+            )
             tiny_enhanced.save(STORAGE_FOLDER / "enhanced_frs_2023_24_tiny.h5")
             update_dataset("Create tiny datasets", "completed")
 

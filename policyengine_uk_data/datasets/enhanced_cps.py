@@ -35,25 +35,12 @@ USD_TO_GBP_SOURCE_URL = (
     "yearly-average-currency-exchange-rates"
 )
 
-# 2025/26 reported-benefit mapping assumptions used only to populate UK input
-# leaves from U.S. source records. PolicyEngine UK applies its own parameters
-# when calculating derived tax and benefit outputs.
+# 2025/26 benefit mapping assumptions used only to populate UK input leaves from
+# U.S. source records. PolicyEngine UK applies its own parameters when
+# calculating derived tax and benefit outputs.
 NEW_STATE_PENSION_2025 = 224.96 * 52
 DIVIDEND_YIELD_FOR_WEALTH_IMPUTATION = 0.03
 RENTAL_YIELD_FOR_WEALTH_IMPUTATION = 0.04
-
-PIP_2025_WEEKLY_RATES = {
-    "daily_living": {
-        "NONE": 0.0,
-        "STANDARD": 73.89,
-        "ENHANCED": 110.40,
-    },
-    "mobility": {
-        "NONE": 0.0,
-        "STANDARD": 29.19,
-        "ENHANCED": 77.04,
-    },
-}
 
 REGION_SHARES = (
     ("NORTH_EAST", 0.04),
@@ -246,11 +233,6 @@ def _pip_category(person: dict) -> str:
         < 12_000
     )
     return "ENHANCED" if severe_signal or low_earnings else "STANDARD"
-
-
-def _pip_reported_amount(category: str, component: str) -> float:
-    weekly = PIP_2025_WEEKLY_RATES[component][category]
-    return round(weekly * 52, 2)
 
 
 def _household_cash_income(people: list[dict], exchange_rate: float) -> float:
@@ -688,14 +670,8 @@ def _build_base_dataset(
                     if bool(inputs.get("is_blind", False))
                     else 0.0,
                     "is_disabled_for_benefits": bool(inputs.get("is_disabled", False)),
-                    "pip_dl_reported": _pip_reported_amount(
-                        pip_category,
-                        "daily_living",
-                    ),
-                    "pip_m_reported": _pip_reported_amount(
-                        pip_category,
-                        "mobility",
-                    ),
+                    "pip_dl_category": pip_category,
+                    "pip_m_category": pip_category,
                     "hours_worked": float(
                         inputs.get(
                             "weekly_hours_worked",
