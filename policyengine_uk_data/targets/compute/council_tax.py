@@ -19,9 +19,18 @@ def compute_council_tax_band(target, ctx) -> np.ndarray:
 
 
 def compute_obr_council_tax(target, ctx) -> np.ndarray:
-    """Compute OBR council tax receipts, optionally by country."""
+    """Compute OBR council tax receipts, optionally by country.
+
+    OBR Table 4.1 reports "Total net council tax receipts" — net of
+    council tax reduction (CTR) support. The matching household-level
+    signal is therefore ``council_tax_less_benefit`` (= gross council
+    tax less the CTR award), not ``council_tax`` (which is the gross
+    liability before CTR). Using the gross variable here would
+    systematically push weights down to fit a net target, leaking
+    bias into adjacent national calibrations.
+    """
     name = target.name
-    ct = ctx.pe("council_tax")
+    ct = ctx.pe("council_tax_less_benefit")
 
     if name == "obr/council_tax":
         return ct

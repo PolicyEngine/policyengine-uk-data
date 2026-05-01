@@ -11,6 +11,9 @@ Sources:
 - ONS income: ONS small area income estimates
 - Tenure: English Housing Survey
 - Private rent: VOA/ONS private rental market statistics
+- Council tax bands A-H: VOA Council Tax Stock of Properties (per LA)
+- Council tax £ paid (net of CTR): MHCLG taxbase × Band D (England),
+  Welsh Government Council Tax Income (Wales)
 """
 
 from policyengine_uk import Microsimulation
@@ -251,6 +254,57 @@ def create_local_authority_target_matrix(
         tenure_merged["private_rent_target"].values,
         national_rent * la_household_share,
     )
+
+    # ── Council tax band counts (LA targets) ───────────────────────
+    # Derived/proxy targets: per-LA VOA dwellings in each band A-H.
+    # Lineage drift vs the matrix-side household council_tax_band:
+    # VOA counts dwellings (incl. exempt / empty / second homes);
+    # matrix counts households. See la_council_tax.py for full
+    # caveat. Missing cells stay NaN and are masked out by the
+    # calibrator; this keeps the target direct instead of fabricating
+    # national-share fallbacks for Scotland or Northern Ireland. Band I
+    # is Wales-only and rarely populated, so it is intentionally
+    # excluded.
+    ct_path = STORAGE_FOLDER / "la_council_tax.csv"
+    if ct_path.exists():
+        ct_data = pd.read_csv(ct_path)
+        ct_columns = ["code"] + [f"count_band_{b}" for b in "ABCDEFGH"]
+        if "total_council_tax_net" in ct_data.columns:
+            ct_columns.append("total_council_tax_net")
+        ct_merged = la_codes.merge(ct_data[ct_columns], on="code", how="left")
+        ct_band = sim.calculate("council_tax_band").values
+        for band in "ABCDEFGH":
+            col = f"voa/council_tax/{band}"
+            matrix[col] = (ct_band == band).astype(float)
+            csv_col = f"count_band_{band}"
+            has_count = ct_merged[csv_col].notna().values
+            direct = ct_merged[csv_col].values
+            y[col] = np.where(
+                has_count,
+                direct,
+                np.nan,
+            )
+
+        # ── Council tax £ paid, net of CTR (LA targets) ────────────
+        # Derived/proxy target: y = MHCLG taxbase × Band D (E) or WG
+        # Council Tax Income (W). Matrix col is FRS-reported
+        # council_tax_less_benefit (gross − reported CTB). Same
+        # intent (household council tax paid net of CTR), different
+        # construction paths — see la_council_tax.py for the lineage
+        # caveat flagged in review by @MaxGhenis. Both sides are net
+        # of CTR, per Max's 28 Apr standup decision on FRS alignment.
+        # Missing cells remain NaN and are masked out by the calibrator.
+        if "total_council_tax_net" in ct_merged.columns:
+            matrix["housing/council_tax_net"] = sim.calculate(
+                "council_tax_less_benefit"
+            ).values
+            has_ct_net = ct_merged["total_council_tax_net"].notna().values
+            direct_net = ct_merged["total_council_tax_net"].values
+            y["housing/council_tax_net"] = np.where(
+                has_ct_net,
+                direct_net,
+                np.nan,
+            )
 
     # ── Country mask ───────────────────────────────────────────────
     country_mask = create_country_mask(

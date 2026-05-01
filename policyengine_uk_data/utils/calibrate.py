@@ -156,7 +156,10 @@ def calibrate_local_areas(
 
         # Set up validation targets if specified
         validation_targets_local = (
-            matrix.columns.isin(excluded_training_targets)
+            torch.tensor(
+                matrix.columns.isin(excluded_training_targets),
+                dtype=torch.bool,
+            )
             if hasattr(matrix, "columns")
             else None
         )
@@ -172,7 +175,9 @@ def calibrate_local_areas(
             matrix.values if hasattr(matrix, "values") else matrix,
             dtype=torch.float32,
         )
-        y = torch.tensor(y.values if hasattr(y, "values") else y, dtype=torch.float32)
+        y_values = y.values if hasattr(y, "values") else y
+        local_target_available = torch.tensor(np.isfinite(y_values), dtype=torch.bool)
+        y = torch.tensor(np.nan_to_num(y_values, nan=0.0), dtype=torch.float32)
         matrix_national = torch.tensor(
             m_national.values if hasattr(m_national, "values") else m_national,
             dtype=torch.float32,
@@ -190,15 +195,18 @@ def calibrate_local_areas(
 
     def loss(w, validation: bool = False):
         pred_local = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
+        local_mask = local_target_available
         if dropout_targets and validation_targets_local is not None:
             if validation:
-                mask = validation_targets_local
+                column_mask = validation_targets_local
             else:
-                mask = ~validation_targets_local
-            pred_local = pred_local[:, mask]
-            mse_local = torch.mean(sre(pred_local, y[:, mask]))
+                column_mask = ~validation_targets_local
+            local_mask = local_mask & column_mask.unsqueeze(0)
+
+        if local_mask.any():
+            mse_local = torch.mean(sre(pred_local[local_mask], y[local_mask]))
         else:
-            mse_local = torch.mean(sre(pred_local, y))
+            mse_local = pred_local.sum() * 0
 
         pred_national = (w.sum(axis=0) * matrix_national.T).sum(axis=1)
         if dropout_targets and validation_targets_national is not None:
@@ -220,8 +228,10 @@ def calibrate_local_areas(
 
         if local:
             pred_local = (w.unsqueeze(-1) * metrics.unsqueeze(0)).sum(dim=1)
-            e_local = torch.sum(torch.abs((pred_local / (1 + y) - 1)) < t).item()
-            c_local = pred_local.shape[0] * pred_local.shape[1]
+            e_local = torch.sum(
+                (torch.abs((pred_local / (1 + y) - 1)) < t) & local_target_available
+            ).item()
+            c_local = torch.sum(local_target_available).item()
             numerator += e_local
             denominator += c_local
 
