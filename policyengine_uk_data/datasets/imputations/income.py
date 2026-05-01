@@ -122,21 +122,6 @@ IMPUTATIONS = INCOME_COMPONENTS + ["gift_aid", "charitable_investment_gifts"]
 INCOME_MODEL_PATH = STORAGE_FOLDER / "income.pkl"
 
 
-def _safe_rescale_factor(original: float, new: float) -> float:
-    """Return the rent/mortgage rescaling factor used after income imputation.
-
-    Guards against a degenerate input where the seed dataset's imputation
-    columns sum to zero (e.g. the zero-weight synthetic copy used in
-    ``impute_income`` before incomes have been populated). In that case we
-    cannot compute a meaningful ratio, so leave housing costs untouched
-    (factor=1.0) rather than raising ``ZeroDivisionError`` or silently
-    propagating NaN / inf into downstream household tables.
-    """
-    if original == 0:
-        return 1.0
-    return new / original
-
-
 def save_imputation_models():
     """
     Train and save income imputation model.
@@ -197,22 +182,20 @@ def impute_over_incomes(
     dataset = dataset.copy()
     sim = Microsimulation(dataset=dataset)
     input_df = sim.calculate_dataframe(["age", "gender", "region"])
-    original_income_total = dataset.person[INCOME_COMPONENTS].copy().sum().sum()
     output_df = model.predict(input_df)
 
     for column in output_variables:
         dataset.person[column] = output_df[column].fillna(0).values
 
-    new_income_total = dataset.person[INCOME_COMPONENTS].sum().sum()
-    adjustment_factor = _safe_rescale_factor(original_income_total, new_income_total)
-    # Adjust rent and mortgage interest and capital repayments proportionally
-    dataset.household["rent"] = dataset.household["rent"] * adjustment_factor
-    dataset.household["mortgage_interest_repayment"] = (
-        dataset.household["mortgage_interest_repayment"] * adjustment_factor
-    )
-    dataset.household["mortgage_capital_repayment"] = (
-        dataset.household["mortgage_capital_repayment"] * adjustment_factor
-    )
+    # Housing costs (rent, mortgage interest, mortgage capital) used to be
+    # rescaled here by new_income_total / original_income_total across
+    # INCOME_COMPONENTS. Because FRS dividend_income is near-zero and the
+    # SPI-trained QRF predicts materially larger dividends, the ratio
+    # inflated rent/mortgage by ~2.5× uniformly in the built enhanced FRS
+    # — pushing AHC poverty rates 10–18 pp above HBAI for non-pensioners
+    # (see issue #367). Housing costs now pass through unchanged; their
+    # year-on-year growth is handled by per-variable OBR uprating indices,
+    # not by income-imputation side-effects.
 
     return dataset
 
