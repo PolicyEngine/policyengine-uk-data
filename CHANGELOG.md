@@ -1,3 +1,10 @@
+## [1.55.1] - 2026-05-01
+
+### Changed
+
+- Map reported disability benefit amounts to category inputs in the data pipeline.
+
+
 ## [1.55.0] - 2026-04-29
 
 ### Added
