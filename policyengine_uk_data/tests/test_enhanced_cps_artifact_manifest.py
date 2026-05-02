@@ -123,12 +123,14 @@ def test_legacy_policybench_transfer_artifacts_are_explicitly_legacy():
 
 def test_public_transfer_upload_targets_public_hf_repo():
     with patch(
-        "policyengine_uk_data.storage.upload_public_transfer_dataset.upload_files_to_hf"
+        "policyengine_uk_data.storage.upload_public_transfer_dataset.upload_files_to_hf",
+        autospec=True,
     ) as upload_files_to_hf:
-        upload_public_transfer_dataset()
+        upload_public_transfer_dataset(version="1.55.3")
 
     upload_files_to_hf.assert_called_once()
     kwargs = upload_files_to_hf.call_args.kwargs
+    assert kwargs["version"] == "1.55.3"
     assert kwargs["hf_repo_name"] == PUBLIC_REPO
     assert kwargs["files"] == [
         ENHANCED_CPS_FILE,
