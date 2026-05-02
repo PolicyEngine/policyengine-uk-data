@@ -1,4 +1,3 @@
-from policyengine_core.data import Dataset
 from policyengine_uk_data.storage import STORAGE_FOLDER
 import pandas as pd
 import numpy as np
@@ -128,10 +127,11 @@ def create_spi(
     person["private_pension_contributions"] = df.PSAV_XS
     person["pension_contributions_relief"] = df.PENSRLF
     person["self_employment_income"] = df.PROFITS
-    # HMRC seems to assume the trading and property allowance are already deducted
-    # (per record inspection of SREF 15494988 in 2020-21)
-    person["trading_allowance"] = np.zeros(len(df))
-    person["property_allowance"] = np.zeros(len(df))
+    # HMRC seems to assume the trading and property allowances are already
+    # deducted (per record inspection of SREF 15494988 in 2020-21), so SPI
+    # records override the actual deductions rather than the policy parameters.
+    person["trading_allowance_deduction"] = np.zeros(len(df))
+    person["property_allowance_deduction"] = np.zeros(len(df))
     person["savings_starter_rate_income"] = np.zeros(len(df))
     person["capital_allowances"] = df.CAPALL
     person["loss_relief"] = df.LOSSBF
