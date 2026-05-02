@@ -1,14 +1,16 @@
 from io import BytesIO
 from typing import Dict, List, Optional, Tuple
 from huggingface_hub import HfApi, CommitOperationAdd, hf_hub_download
-from huggingface_hub.errors import RevisionNotFoundError
+from huggingface_hub.errors import EntryNotFoundError, RevisionNotFoundError
 from google.cloud import storage
 from pathlib import Path
 from importlib import metadata
+from importlib.util import find_spec
 import google.auth
 import json
 import logging
 import os
+import tomllib
 
 from policyengine_uk_data.utils.release_manifest import (
     build_release_manifest,
@@ -21,6 +23,20 @@ RELEASE_MANIFEST_PATH = "release_manifest.json"
 def _get_model_package_version(
     package_name: str = "policyengine-uk",
 ) -> Optional[str]:
+    module_name = package_name.replace("-", "_")
+    spec = find_spec(module_name)
+    module_origin = getattr(spec, "origin", None) if spec is not None else None
+    if module_origin is not None:
+        package_root = Path(module_origin).resolve().parent
+        for parent in [package_root, *package_root.parents]:
+            pyproject_path = parent / "pyproject.toml"
+            if not pyproject_path.exists():
+                continue
+            with open(pyproject_path, "rb") as f:
+                pyproject = tomllib.load(f)
+            project = pyproject.get("project", {})
+            if project.get("name") == package_name and project.get("version"):
+                return project["version"]
     try:
         return metadata.version(package_name)
     except metadata.PackageNotFoundError:
@@ -87,7 +103,7 @@ def load_release_manifest_from_hf(
             )
         except RevisionNotFoundError:
             raise
-        except Exception:
+        except EntryNotFoundError:
             continue
 
         with open(manifest_path) as f:
