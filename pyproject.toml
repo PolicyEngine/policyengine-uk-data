@@ -45,8 +45,9 @@ dev = [
     "yaml-changelog>=0.1.7",
     "itables",
     "quantile-forest",
-    "build",    "towncrier>=24.8.0",
-
+    "build",
+    "modal",
+    "towncrier>=24.8.0",
 ]
 
 [tool.setuptools]
