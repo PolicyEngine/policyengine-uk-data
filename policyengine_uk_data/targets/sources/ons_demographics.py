@@ -98,9 +98,8 @@ def _aggregate_ages(
 ) -> dict[int, float]:
     """Sum population for a sex and age range across years."""
     sex_filter = "Females" if sex == "female" else "Males"
-    mask = (df["Sex"] == sex_filter) & (
-        df["Age"].apply(lambda a: isinstance(a, int) and low <= a <= high)
-    )
+    ages = pd.to_numeric(df["Age"], errors="coerce")
+    mask = (df["Sex"] == sex_filter) & ages.between(low, high)
     subset = df[mask]
     result = {}
     for y in years:
