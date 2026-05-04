@@ -1,7 +1,7 @@
 """HMRC Survey of Personal Incomes targets.
 
 Downloads and parses the SPI ODS (Tables 3.6 and 3.7) to get income
-distributions by total income band and income type for 2022-23.
+distributions by total income band and income type for 2023-24.
 
 For future year projections, the microsimulation uprates these base
 year distributions forward using PolicyEngine's uprating factors.
@@ -54,8 +54,8 @@ _BAND_LOWER = [
 ]
 _BAND_UPPER = _BAND_LOWER[1:] + [float("inf")]
 
-# SPI year: the ODS is for tax year 2022-23, mapped to calendar 2023
-_SPI_YEAR = 2023
+# SPI year: the ODS is for tax year 2023-24, mapped to calendar 2024
+_SPI_YEAR = 2024
 
 # HMRC Property Rental Income Statistics show ~1.9x more property income
 # than the SPI (£46.68bn vs £24.5bn for 2020-21), because SPI only covers

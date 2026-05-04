@@ -16,7 +16,7 @@ import warnings
 
 import numpy as np
 
-POPULATION_TARGET = 69.5  # ONS 2022-based projection for 2025, millions
+POPULATION_TARGET = 69.5  # ONS 2024-based projection for 2025, millions
 TOLERANCE = 0.04  # 4% — covers ~1.6%-3.3% stochastic calibration variance
 
 

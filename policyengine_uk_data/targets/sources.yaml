@@ -7,8 +7,8 @@ obr:
   vintage: "march_2026"
 
 hmrc:
-  spi_collated: "https://assets.publishing.service.gov.uk/media/67cabb37ade26736dbf9ffe5/Collated_Tables_3_1_to_3_17_2223.ods"
-  spi_geography: "https://assets.publishing.service.gov.uk/media/67cabb7f8c1076c796a45bec/Collated_Tables_3_12_to_3_15a_2223.ods"
+  spi_collated: "https://assets.publishing.service.gov.uk/media/69f1f12d2fae53a03709682f/Collated_Tables_3_1_to_3_11_2324.ods"
+  spi_geography: "https://assets.publishing.service.gov.uk/media/69f1f17cc42061e837e3ac3b/Collated_Tables_3_12_to_3_15a_2324.ods"
   income_tax_liabilities: "https://www.gov.uk/government/statistics/income-tax-liabilities-statistics-tax-year-2022-to-2023-to-tax-year-2025-to-2026"
   salary_sacrifice_table_6: "https://assets.publishing.service.gov.uk/media/687a294e312ee8a5f0806b6d/Tables_6_1_and_6_2.csv"
 

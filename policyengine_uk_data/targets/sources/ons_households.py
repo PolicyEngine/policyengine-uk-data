@@ -22,7 +22,7 @@ _URL = (
     "https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/"
     "birthsdeathsandmarriages/families/datasets/"
     "familiesandhouseholdsfamiliesandhouseholds/"
-    "current/familiesandhouseholdsuk2024.xlsx"
+    "current/familiesandhouseholdsuk2025.xlsx"
 )
 _REF = (
     "https://www.ons.gov.uk/peoplepopulationandcommunity/"
