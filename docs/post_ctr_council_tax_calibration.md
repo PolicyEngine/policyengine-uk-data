@@ -37,20 +37,24 @@ net Council Tax.
 
 ## Acceptance gates before switching
 
-Do not switch production calibration outputs until all of these are true:
+Do not switch production calibration outputs until a release validation
+artifact records all of these checks. Default tolerances are below; a
+future PR may change them, but it must update this list and report the
+new thresholds with the release results.
 
 - PolicyEngine UK has CTR schemes for every council tax billing
   authority that the dataset can assign.
 - Unsupported or unmapped local authority records are explicitly
-  counted and small enough to accept, or handled with a documented
-  fallback.
+  counted and either below 0.5% of weighted households or handled with a
+  documented fallback.
 - Modelled national and country Council Tax Reduction totals are within
-  agreed tolerances of admin spend or caseload targets where available.
+  5% of admin spend or caseload targets where available.
 - Modelled `council_tax_less_benefit` remains within agreed tolerances of
-  OBR net Council Tax receipts.
+  OBR net Council Tax receipts, with 2% as the default national
+  tolerance and 5% as the default country tolerance.
 - LA-level net Council Tax diagnostics are no worse than the current
   FRS-derived calibration baseline for England and Wales where targets
-  exist.
+  exist, measured by weighted absolute percentage error.
 - Scotland and Northern Ireland remain explicitly handled rather than
   silently folded into England/Wales assumptions.
 
