@@ -7,6 +7,8 @@ import json
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
+from policyengine_uk_data.utils.hf_destinations import PRIVATE_REPO, PUBLIC_REPO
+
 RELEASE_MANIFEST_SCHEMA_VERSION = 1
 
 
@@ -49,7 +51,14 @@ def _artifact_uri(
 
 
 def _artifact_visibility(repo_id: str) -> str:
-    return "private" if repo_id.endswith("-private") else "public"
+    if repo_id == PRIVATE_REPO:
+        return "private"
+    if repo_id == PUBLIC_REPO:
+        return "public"
+    raise ValueError(
+        f"Unknown UK data Hugging Face repo {repo_id!r}; use "
+        "PRIVATE_REPO or PUBLIC_REPO."
+    )
 
 
 def _artifact_release_metadata(
@@ -114,23 +123,42 @@ def _core_version(core_package_metadata: Mapping[str, Any] | None) -> str | None
     return version if isinstance(version, str) and version else None
 
 
-def _base_manifest(
+def _model_package_compatibility(
+    *,
+    model_package_name: str,
+    model_package_version: str | None,
+) -> list[Dict[str, str]]:
+    if not model_package_version:
+        return []
+    return [
+        {
+            "name": model_package_name,
+            "specifier": f"=={model_package_version}",
+        }
+    ]
+
+
+def _core_package_compatibility(
+    *,
+    core_package_metadata: Mapping[str, Any] | None,
+) -> list[Dict[str, str]]:
+    core_version = _core_version(core_package_metadata)
+    if not core_version or core_package_metadata is None:
+        return []
+    return [
+        {
+            "name": core_package_metadata.get("name", "policyengine-core"),
+            "specifier": f"=={core_version}",
+        }
+    ]
+
+
+def _new_release_manifest(
     *,
     version: str,
     data_package_name: str,
-    model_package_name: str,
-    model_package_version: str | None,
-    model_package_git_sha: str | None,
-    model_package_data_build_fingerprint: str | None,
-    core_package_metadata: Mapping[str, Any] | None,
-    data_package_git_sha: str | None,
-    repo_id: str,
-    repo_type: str,
-    build_id: str,
-    created_at: str,
 ) -> Dict:
-    build_metadata = _build_metadata(data_package_git_sha=data_package_git_sha)
-    manifest = {
+    return {
         "schema_version": RELEASE_MANIFEST_SCHEMA_VERSION,
         "data_package": {
             "name": data_package_name,
@@ -139,21 +167,49 @@ def _base_manifest(
         "compatible_model_packages": [],
         "compatible_core_packages": [],
         "default_datasets": {},
-        "build": {
-            "build_id": build_id,
-            "built_at": created_at,
-        },
+        "build": {},
         "artifacts": {},
-        "metadata": {
-            "artifact_release": _artifact_release_metadata(
-                repo_id=repo_id,
-                repo_type=repo_type,
-                version=version,
-            )
-        },
+        "metadata": {},
     }
+
+
+def _update_manifest_metadata(
+    manifest: Dict,
+    *,
+    repo_id: str,
+    repo_type: str,
+    version: str,
+) -> None:
+    manifest["schema_version"] = RELEASE_MANIFEST_SCHEMA_VERSION
+    manifest.setdefault("metadata", {})["artifact_release"] = (
+        _artifact_release_metadata(
+            repo_id=repo_id,
+            repo_type=repo_type,
+            version=version,
+        )
+    )
+
+
+def _update_build_section(
+    manifest: Dict,
+    *,
+    build_id: str,
+    created_at: str,
+    data_package_git_sha: str | None,
+    model_package_name: str,
+    model_package_version: str | None,
+    model_package_git_sha: str | None,
+    model_package_data_build_fingerprint: str | None,
+    core_package_metadata: Mapping[str, Any] | None,
+) -> None:
+    build = manifest.setdefault("build", {})
+    build.setdefault("build_id", build_id)
+    build.setdefault("built_at", created_at)
+
+    build_metadata = _build_metadata(data_package_git_sha=data_package_git_sha)
     if build_metadata:
-        manifest["build"]["metadata"] = build_metadata
+        build.setdefault("metadata", {}).update(build_metadata)
+
     model_package_metadata = _runtime_component_metadata(
         name=model_package_name,
         version=model_package_version,
@@ -162,25 +218,79 @@ def _base_manifest(
         core_package_metadata=core_package_metadata,
     )
     if model_package_metadata is not None:
-        manifest["build"]["built_with_model_package"] = model_package_metadata
+        build["built_with_model_package"] = model_package_metadata
     if core_package_metadata is not None:
-        manifest["build"]["built_with_core_package"] = dict(core_package_metadata)
-    if model_package_version:
-        manifest["compatible_model_packages"].append(
-            {
-                "name": model_package_name,
-                "specifier": f"=={model_package_version}",
-            }
-        )
-    core_version = _core_version(core_package_metadata)
-    if core_version:
-        manifest["compatible_core_packages"].append(
-            {
-                "name": core_package_metadata.get("name", "policyengine-core"),
-                "specifier": f"=={core_version}",
-            }
-        )
-    return manifest
+        build["built_with_core_package"] = dict(core_package_metadata)
+
+
+def _update_compatibility(
+    manifest: Dict,
+    *,
+    model_package_name: str,
+    model_package_version: str | None,
+    core_package_metadata: Mapping[str, Any] | None,
+) -> None:
+    manifest.setdefault("compatible_model_packages", [])
+    model_package_compatibility = _model_package_compatibility(
+        model_package_name=model_package_name,
+        model_package_version=model_package_version,
+    )
+    if model_package_compatibility:
+        manifest["compatible_model_packages"] = model_package_compatibility
+
+    manifest.setdefault("compatible_core_packages", [])
+    core_package_compatibility = _core_package_compatibility(
+        core_package_metadata=core_package_metadata,
+    )
+    if core_package_compatibility:
+        manifest["compatible_core_packages"] = core_package_compatibility
+
+
+def _update_artifacts(
+    manifest: Dict,
+    *,
+    files_with_repo_paths: Sequence[Tuple[Path | str, str]],
+    repo_id: str,
+    repo_type: str,
+    version: str,
+) -> None:
+    artifacts = manifest.setdefault("artifacts", {})
+    for local_path, path_in_repo in files_with_repo_paths:
+        local_path = Path(local_path)
+        artifacts[_artifact_key(path_in_repo)] = {
+            "kind": _artifact_kind(path_in_repo),
+            "uri": _artifact_uri(
+                repo_id=repo_id,
+                repo_type=repo_type,
+                revision=version,
+                path_in_repo=path_in_repo,
+            ),
+            "path": path_in_repo,
+            "repo_id": repo_id,
+            "revision": version,
+            "sha256": _compute_file_checksum(local_path),
+            "size_bytes": local_path.stat().st_size,
+            "metadata": {
+                "repo_type": repo_type,
+                "visibility": _artifact_visibility(repo_id),
+            },
+        }
+
+
+def _update_default_datasets(
+    manifest: Dict,
+    *,
+    default_datasets: Optional[Mapping[str, str]],
+) -> None:
+    defaults = manifest.setdefault("default_datasets", {})
+    if default_datasets:
+        defaults.update(default_datasets)
+    if "national" not in defaults and "enhanced_frs_2023_24" in manifest.get(
+        "artifacts", {}
+    ):
+        defaults["national"] = "enhanced_frs_2023_24"
+    if "baseline" not in defaults and "frs_2023_24" in manifest.get("artifacts", {}):
+        defaults["baseline"] = "frs_2023_24"
 
 
 def _normalize_existing_manifest(
@@ -226,93 +336,45 @@ def build_release_manifest(
     resolved_build_id = build_id or f"{data_package_name}-{version}"
 
     if manifest is None:
-        manifest = _base_manifest(
+        manifest = _new_release_manifest(
             version=version,
             data_package_name=data_package_name,
-            model_package_name=model_package_name,
-            model_package_version=model_package_version,
-            model_package_git_sha=model_package_git_sha,
-            model_package_data_build_fingerprint=model_package_data_build_fingerprint,
-            core_package_metadata=core_package_metadata,
-            data_package_git_sha=data_package_git_sha,
-            repo_id=repo_id,
-            repo_type=repo_type,
-            build_id=resolved_build_id,
-            created_at=manifest_timestamp,
         )
-    else:
-        manifest["schema_version"] = RELEASE_MANIFEST_SCHEMA_VERSION
-        manifest.setdefault("compatible_core_packages", [])
-        manifest.setdefault("metadata", {})["artifact_release"] = (
-            _artifact_release_metadata(
-                repo_id=repo_id,
-                repo_type=repo_type,
-                version=version,
-            )
-        )
-        manifest.setdefault("build", {})
-        manifest["build"].setdefault("build_id", resolved_build_id)
-        manifest["build"].setdefault("built_at", manifest_timestamp)
-        build_metadata = _build_metadata(data_package_git_sha=data_package_git_sha)
-        if build_metadata:
-            manifest["build"].setdefault("metadata", {}).update(build_metadata)
-        model_package_metadata = _runtime_component_metadata(
-            name=model_package_name,
-            version=model_package_version,
-            git_sha=model_package_git_sha,
-            data_build_fingerprint=model_package_data_build_fingerprint,
-            core_package_metadata=core_package_metadata,
-        )
-        if model_package_metadata is not None:
-            manifest["build"]["built_with_model_package"] = model_package_metadata
-        if core_package_metadata is not None:
-            manifest["build"]["built_with_core_package"] = dict(core_package_metadata)
-        if model_package_version:
-            manifest["compatible_model_packages"] = [
-                {
-                    "name": model_package_name,
-                    "specifier": f"=={model_package_version}",
-                }
-            ]
-        core_version = _core_version(core_package_metadata)
-        if core_version:
-            manifest["compatible_core_packages"] = [
-                {
-                    "name": core_package_metadata.get("name", "policyengine-core"),
-                    "specifier": f"=={core_version}",
-                }
-            ]
 
-    if default_datasets:
-        manifest.setdefault("default_datasets", {}).update(default_datasets)
-
-    for local_path, path_in_repo in files_with_repo_paths:
-        local_path = Path(local_path)
-        manifest["artifacts"][_artifact_key(path_in_repo)] = {
-            "kind": _artifact_kind(path_in_repo),
-            "uri": _artifact_uri(
-                repo_id=repo_id,
-                repo_type=repo_type,
-                revision=version,
-                path_in_repo=path_in_repo,
-            ),
-            "path": path_in_repo,
-            "repo_id": repo_id,
-            "revision": version,
-            "sha256": _compute_file_checksum(local_path),
-            "size_bytes": local_path.stat().st_size,
-            "metadata": {
-                "repo_type": repo_type,
-                "visibility": _artifact_visibility(repo_id),
-            },
-        }
-
-    defaults = manifest["default_datasets"]
-    if "national" not in defaults and "enhanced_frs_2023_24" in manifest["artifacts"]:
-        defaults["national"] = "enhanced_frs_2023_24"
-    if "baseline" not in defaults and "frs_2023_24" in manifest["artifacts"]:
-        defaults["baseline"] = "frs_2023_24"
-
+    _update_manifest_metadata(
+        manifest,
+        repo_id=repo_id,
+        repo_type=repo_type,
+        version=version,
+    )
+    _update_build_section(
+        manifest,
+        build_id=resolved_build_id,
+        created_at=manifest_timestamp,
+        data_package_git_sha=data_package_git_sha,
+        model_package_name=model_package_name,
+        model_package_version=model_package_version,
+        model_package_git_sha=model_package_git_sha,
+        model_package_data_build_fingerprint=model_package_data_build_fingerprint,
+        core_package_metadata=core_package_metadata,
+    )
+    _update_compatibility(
+        manifest,
+        model_package_name=model_package_name,
+        model_package_version=model_package_version,
+        core_package_metadata=core_package_metadata,
+    )
+    _update_artifacts(
+        manifest,
+        files_with_repo_paths=files_with_repo_paths,
+        repo_id=repo_id,
+        repo_type=repo_type,
+        version=version,
+    )
+    _update_default_datasets(
+        manifest,
+        default_datasets=default_datasets,
+    )
     return manifest
 
 

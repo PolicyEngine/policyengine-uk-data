@@ -17,6 +17,7 @@ from policyengine_uk_data.utils.release_manifest import (
     build_release_manifest,
     serialize_release_manifest,
 )
+from policyengine_uk_data.utils.hf_destinations import PRIVATE_REPO, PUBLIC_REPO
 
 RELEASE_MANIFEST_PATH = "release_manifest.json"
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -136,7 +137,7 @@ def _get_data_package_git_sha() -> str | None:
 
 def load_release_manifest_from_hf(
     version: str,
-    hf_repo_name: str = "policyengine/policyengine-uk-data-private",
+    hf_repo_name: str = PRIVATE_REPO,
     hf_repo_type: str = "model",
     revision: Optional[str] = None,
 ) -> Optional[Dict]:
@@ -172,11 +173,48 @@ def load_release_manifest_from_hf(
     return None
 
 
+def _get_release_tag_revision(
+    version: str,
+    hf_repo_name: str = PRIVATE_REPO,
+    hf_repo_type: str = "model",
+    token: Optional[str] = None,
+    api: Optional[HfApi] = None,
+) -> Optional[str]:
+    api = api or HfApi()
+    token = token or os.environ.get("HUGGING_FACE_TOKEN")
+    try:
+        repo_info = api.repo_info(
+            repo_id=hf_repo_name,
+            repo_type=hf_repo_type,
+            revision=version,
+            token=token,
+        )
+        return getattr(repo_info, "sha", None) or "<unknown revision>"
+    except RevisionNotFoundError:
+        return None
+
+
 def assert_release_not_finalized(
     version: str,
-    hf_repo_name: str = "policyengine/policyengine-uk-data-private",
+    hf_repo_name: str = PRIVATE_REPO,
     hf_repo_type: str = "model",
+    token: Optional[str] = None,
+    api: Optional[HfApi] = None,
 ) -> None:
+    tagged_revision = _get_release_tag_revision(
+        version=version,
+        hf_repo_name=hf_repo_name,
+        hf_repo_type=hf_repo_type,
+        token=token,
+        api=api,
+    )
+    if tagged_revision is not None:
+        raise RuntimeError(
+            f"Release {version} is already finalized on {hf_repo_name} at "
+            f"{tagged_revision}. Refusing to mutate release manifest state "
+            "after the tag exists."
+        )
+
     finalized_manifest = load_release_manifest_from_hf(
         version=version,
         hf_repo_name=hf_repo_name,
@@ -193,7 +231,7 @@ def assert_release_not_finalized(
 def create_release_tag(
     version: str,
     revision: str,
-    hf_repo_name: str = "policyengine/policyengine-uk-data-private",
+    hf_repo_name: str = PRIVATE_REPO,
     hf_repo_type: str = "model",
     token: Optional[str] = None,
     api: Optional[HfApi] = None,
@@ -217,15 +255,12 @@ def create_release_tag(
         )
     except Exception as e:
         if "Tag reference exists already" in str(e) or "409" in str(e):
-            tagged_revision = getattr(
-                api.repo_info(
-                    repo_id=hf_repo_name,
-                    repo_type=hf_repo_type,
-                    revision=version,
-                    token=token,
-                ),
-                "sha",
-                None,
+            tagged_revision = _get_release_tag_revision(
+                version=version,
+                hf_repo_name=hf_repo_name,
+                hf_repo_type=hf_repo_type,
+                token=token,
+                api=api,
             )
             if tagged_revision == revision:
                 logging.info(
@@ -245,7 +280,7 @@ def create_release_tag(
 def create_release_manifest_commit_operations(
     files_with_repo_paths: List[Tuple[Path, str]],
     version: str,
-    hf_repo_name: str = "policyengine/policyengine-uk-data-private",
+    hf_repo_name: str = PRIVATE_REPO,
     hf_repo_type: str = "model",
     model_package_name: str = "policyengine-uk",
     model_package_version: Optional[str] = None,
@@ -285,7 +320,7 @@ def create_release_manifest_commit_operations(
 def upload_data_files(
     files: List[str],
     gcs_bucket_name: str = "policyengine-uk-data-private",
-    hf_repo_name: str = "policyengine/policyengine-uk-data",
+    hf_repo_name: str = PUBLIC_REPO,
     hf_repo_type: str = "model",
     version: str = None,
 ):
@@ -309,7 +344,7 @@ def upload_data_files(
 def upload_files_to_hf(
     files: List[str],
     version: str,
-    hf_repo_name: str = "policyengine/policyengine-uk-data-private",
+    hf_repo_name: str = PRIVATE_REPO,
     hf_repo_type: str = "model",
 ):
     """
@@ -323,6 +358,8 @@ def upload_files_to_hf(
         version=version,
         hf_repo_name=hf_repo_name,
         hf_repo_type=hf_repo_type,
+        token=token,
+        api=api,
     )
     hf_operations = []
     files_with_repo_paths = []
