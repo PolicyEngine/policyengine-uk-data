@@ -332,6 +332,80 @@ def test_upload_files_to_hf_adds_uk_release_manifest_operations(tmp_path):
     )
 
 
+def test_upload_files_to_hf_refreshes_same_version_unfinalized_manifest(tmp_path):
+    dataset_path = _write_file(
+        tmp_path / "enhanced_frs_2023_24.h5",
+        b"enhanced-frs-v2",
+    )
+    existing_manifest = {
+        "schema_version": RELEASE_MANIFEST_SCHEMA_VERSION,
+        "data_package": {
+            "name": "policyengine-uk-data",
+            "version": "1.40.4",
+        },
+        "compatible_model_packages": [
+            {
+                "name": "policyengine-uk",
+                "specifier": "==2.0.0",
+            }
+        ],
+        "compatible_core_packages": [],
+        "default_datasets": {},
+        "created_at": "2026-04-10T12:00:00Z",
+        "artifacts": {},
+    }
+    mock_api = MagicMock()
+    mock_api.create_commit.return_value = MagicMock(oid="commit-sha")
+
+    with (
+        patch("policyengine_uk_data.utils.data_upload.HfApi", return_value=mock_api),
+        patch(
+            "policyengine_uk_data.utils.data_upload.load_release_manifest_from_hf",
+            side_effect=lambda *args, **kwargs: (
+                None if kwargs.get("revision") == "1.40.4" else existing_manifest
+            ),
+        ),
+        patch(
+            "policyengine_uk_data.utils.data_upload._get_model_package_build_metadata",
+            return_value={
+                "version": "2.74.0",
+                "git_sha": "deadbeef",
+                "data_build_fingerprint": "sha256:fingerprint",
+                "core": EXPECTED_CORE_PACKAGE,
+            },
+        ),
+        patch(
+            "policyengine_uk_data.utils.data_upload._get_data_package_git_sha",
+            return_value="cafebabe",
+        ),
+    ):
+        upload_files_to_hf(
+            files=[dataset_path],
+            version="1.40.4",
+        )
+
+    operations = mock_api.create_commit.call_args.kwargs["operations"]
+    release_op = next(
+        operation
+        for operation in operations
+        if operation.path_in_repo == "release_manifest.json"
+    )
+    manifest = json.loads(release_op.path_or_fileobj.getvalue().decode("utf-8"))
+
+    assert "created_at" not in manifest
+    assert manifest["compatible_model_packages"] == [
+        {"name": "policyengine-uk", "specifier": "==2.74.0"}
+    ]
+    assert manifest["compatible_core_packages"] == EXPECTED_COMPATIBLE_CORE_PACKAGES
+    assert manifest["build"]["metadata"] == {
+        "data_package_git_sha": "cafebabe",
+    }
+    assert manifest["build"]["built_with_core_package"] == EXPECTED_CORE_PACKAGE
+    assert manifest["artifacts"]["enhanced_frs_2023_24"]["sha256"] == _sha256(
+        b"enhanced-frs-v2"
+    )
+
+
 def test_upload_files_to_hf_rejects_finalized_release(tmp_path):
     dataset_path = _write_file(
         tmp_path / "enhanced_frs_2023_24.h5",
