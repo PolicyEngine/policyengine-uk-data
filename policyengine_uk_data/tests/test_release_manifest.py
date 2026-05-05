@@ -19,9 +19,14 @@ from policyengine_uk_data.utils.release_manifest import (
     build_release_manifest,
 )
 
-EXPECTED_CORE_PACKAGE = {"name": "policyengine-core", "version": "3.26.0"}
+# Synthetic fixture: this verifies manifest propagation, not the package dep range.
+CORE_FIXTURE_VERSION = "9.8.7"
+EXPECTED_CORE_PACKAGE = {
+    "name": "policyengine-core",
+    "version": CORE_FIXTURE_VERSION,
+}
 EXPECTED_COMPATIBLE_CORE_PACKAGES = [
-    {"name": "policyengine-core", "specifier": "==3.26.0"}
+    {"name": "policyengine-core", "specifier": f"=={CORE_FIXTURE_VERSION}"}
 ]
 
 
