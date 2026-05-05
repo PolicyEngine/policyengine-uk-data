@@ -1,3 +1,10 @@
+## [1.55.4] - 2026-05-05
+
+### Changed
+
+- Added bundle-compatible metadata to UK data release manifests.
+
+
 ## [1.55.3] - 2026-05-02
 
 No significant changes.
