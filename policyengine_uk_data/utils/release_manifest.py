@@ -52,6 +52,22 @@ def _artifact_visibility(repo_id: str) -> str:
     return "private" if repo_id.endswith("-private") else "public"
 
 
+def _artifact_release_metadata(
+    *,
+    repo_id: str,
+    repo_type: str,
+    version: str,
+) -> Dict[str, str]:
+    # UK data uses one release coordinate across package code, HF tags, and
+    # published dataset artifacts. Do not treat this as a separate artifact version.
+    return {
+        "repo_id": repo_id,
+        "repo_type": repo_type,
+        "version": version,
+        "visibility": _artifact_visibility(repo_id),
+    }
+
+
 def _without_none_values(payload: Mapping[str, Any]) -> Dict[str, Any]:
     return {key: value for key, value in payload.items() if value is not None}
 
@@ -129,12 +145,11 @@ def _base_manifest(
         },
         "artifacts": {},
         "metadata": {
-            "artifact_release": {
-                "repo_id": repo_id,
-                "repo_type": repo_type,
-                "version": version,
-                "visibility": _artifact_visibility(repo_id),
-            }
+            "artifact_release": _artifact_release_metadata(
+                repo_id=repo_id,
+                repo_type=repo_type,
+                version=version,
+            )
         },
     }
     if build_metadata:
@@ -228,12 +243,13 @@ def build_release_manifest(
     else:
         manifest["schema_version"] = RELEASE_MANIFEST_SCHEMA_VERSION
         manifest.setdefault("compatible_core_packages", [])
-        manifest.setdefault("metadata", {})["artifact_release"] = {
-            "repo_id": repo_id,
-            "repo_type": repo_type,
-            "version": version,
-            "visibility": _artifact_visibility(repo_id),
-        }
+        manifest.setdefault("metadata", {})["artifact_release"] = (
+            _artifact_release_metadata(
+                repo_id=repo_id,
+                repo_type=repo_type,
+                version=version,
+            )
+        )
         manifest.setdefault("build", {})
         manifest["build"].setdefault("build_id", resolved_build_id)
         manifest["build"].setdefault("built_at", manifest_timestamp)

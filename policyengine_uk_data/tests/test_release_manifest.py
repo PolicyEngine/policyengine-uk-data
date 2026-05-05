@@ -40,6 +40,17 @@ def _sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
+def _assert_single_uk_data_release_version(manifest: dict) -> None:
+    """UK data uses one version for package code, HF tags, and artifacts."""
+
+    release_version = manifest["data_package"]["version"]
+    assert manifest["metadata"]["artifact_release"]["version"] == release_version
+
+    for artifact in manifest["artifacts"].values():
+        assert artifact["revision"] == release_version
+        assert f"@{release_version}/" in artifact["uri"]
+
+
 def test_build_release_manifest_tracks_uk_release_artifacts(tmp_path):
     enhanced_bytes = b"enhanced-frs"
     baseline_bytes = b"baseline-frs"
@@ -104,6 +115,7 @@ def test_build_release_manifest_tracks_uk_release_artifacts(tmp_path):
             "visibility": "private",
         }
     }
+    _assert_single_uk_data_release_version(manifest)
     assert manifest["default_datasets"] == {
         "national": "enhanced_frs_2023_24",
         "baseline": "frs_2023_24",
@@ -181,6 +193,55 @@ def test_build_release_manifest_refreshes_compatible_model_packages_for_draft_re
     assert manifest["compatible_model_packages"] == [
         {"name": "policyengine-uk", "specifier": "==9.99.9"}
     ]
+    _assert_single_uk_data_release_version(manifest)
+
+
+def test_build_release_manifest_refreshes_draft_artifact_release_version(tmp_path):
+    dataset_path = _write_file(
+        tmp_path / "enhanced_frs_2023_24.h5",
+        b"enhanced-frs",
+    )
+
+    manifest = build_release_manifest(
+        files_with_repo_paths=[(dataset_path, "enhanced_frs_2023_24.h5")],
+        version="1.40.4",
+        repo_id="policyengine/policyengine-uk-data-private",
+        existing_manifest={
+            "schema_version": RELEASE_MANIFEST_SCHEMA_VERSION,
+            "data_package": {
+                "name": "policyengine-uk-data",
+                "version": "1.40.4",
+            },
+            "compatible_model_packages": [],
+            "compatible_core_packages": [],
+            "default_datasets": {},
+            "metadata": {
+                "artifact_release": {
+                    "repo_id": "policyengine/policyengine-uk-data-private",
+                    "repo_type": "model",
+                    "version": "stale-draft-version",
+                    "visibility": "private",
+                }
+            },
+            "artifacts": {
+                "enhanced_frs_2023_24": {
+                    "kind": "microdata",
+                    "uri": "hf://model/policyengine/policyengine-uk-data-private@stale-draft-version/enhanced_frs_2023_24.h5",
+                    "path": "enhanced_frs_2023_24.h5",
+                    "repo_id": "policyengine/policyengine-uk-data-private",
+                    "revision": "stale-draft-version",
+                    "sha256": "stale",
+                    "size_bytes": 5,
+                    "metadata": {
+                        "repo_type": "model",
+                        "visibility": "private",
+                    },
+                }
+            },
+        },
+    )
+
+    _assert_single_uk_data_release_version(manifest)
 
 
 def test_load_release_manifest_from_hf_raises_non_missing_download_errors():
@@ -322,6 +383,7 @@ def test_upload_files_to_hf_adds_uk_release_manifest_operations(tmp_path):
 
     payload = release_ops[0].path_or_fileobj.getvalue()
     manifest = json.loads(payload.decode("utf-8"))
+    _assert_single_uk_data_release_version(manifest)
     assert manifest["compatible_core_packages"] == EXPECTED_COMPATIBLE_CORE_PACKAGES
     assert manifest["build"]["built_with_core_package"] == EXPECTED_CORE_PACKAGE
     assert manifest["build"]["metadata"] == {
@@ -393,6 +455,7 @@ def test_upload_files_to_hf_refreshes_same_version_unfinalized_manifest(tmp_path
     manifest = json.loads(release_op.path_or_fileobj.getvalue().decode("utf-8"))
 
     assert "created_at" not in manifest
+    _assert_single_uk_data_release_version(manifest)
     assert manifest["compatible_model_packages"] == [
         {"name": "policyengine-uk", "specifier": "==2.74.0"}
     ]
