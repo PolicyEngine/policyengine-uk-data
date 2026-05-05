@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from huggingface_hub import CommitOperationAdd
-from huggingface_hub.errors import EntryNotFoundError
+from huggingface_hub.errors import EntryNotFoundError, RevisionNotFoundError
 
 from policyengine_uk_data.utils.data_upload import (
     _get_model_package_version,
@@ -203,6 +203,40 @@ def test_load_release_manifest_from_hf_continues_on_missing_entry(tmp_path):
     assert manifest["data_package"]["version"] == "1.40.4"
 
 
+def test_load_release_manifest_from_hf_uses_explicit_revision_when_requested(tmp_path):
+    manifest_path = tmp_path / "release_manifest.json"
+    manifest_path.write_text('{"data_package": {"version": "1.40.4"}}')
+
+    with patch(
+        "policyengine_uk_data.utils.data_upload.hf_hub_download",
+        return_value=str(manifest_path),
+    ) as mock_download:
+        manifest = load_release_manifest_from_hf(
+            version="1.40.4",
+            revision="1.40.4",
+        )
+
+    assert manifest["data_package"]["version"] == "1.40.4"
+    assert mock_download.call_args.kwargs["revision"] == "1.40.4"
+
+
+def test_load_release_manifest_from_hf_returns_none_when_revision_is_missing():
+    with patch(
+        "policyengine_uk_data.utils.data_upload.hf_hub_download",
+        side_effect=RevisionNotFoundError(
+            "missing revision",
+            response=MagicMock(),
+        ),
+    ):
+        assert (
+            load_release_manifest_from_hf(
+                version="1.40.4",
+                revision="1.40.4",
+            )
+            is None
+        )
+
+
 def test_get_model_package_version_prefers_imported_checkout(tmp_path):
     package_root = tmp_path / "policyengine_uk"
     package_root.mkdir()
@@ -291,3 +325,86 @@ def test_upload_files_to_hf_adds_uk_release_manifest_operations(tmp_path):
     assert (
         manifest["build"]["built_with_model_package"]["core"] == EXPECTED_CORE_PACKAGE
     )
+
+
+def test_upload_files_to_hf_rejects_finalized_release(tmp_path):
+    dataset_path = _write_file(
+        tmp_path / "enhanced_frs_2023_24.h5",
+        b"enhanced-frs",
+    )
+    finalized_manifest = {
+        "schema_version": RELEASE_MANIFEST_SCHEMA_VERSION,
+        "data_package": {
+            "name": "policyengine-uk-data",
+            "version": "1.40.4",
+        },
+        "compatible_model_packages": [
+            {"name": "policyengine-uk", "specifier": "==2.74.0"}
+        ],
+        "default_datasets": {"national": "enhanced_frs_2023_24"},
+        "artifacts": {
+            "enhanced_frs_2023_24": {
+                "kind": "microdata",
+                "path": "enhanced_frs_2023_24.h5",
+                "repo_id": "policyengine/policyengine-uk-data-private",
+                "revision": "1.40.4",
+                "sha256": _sha256(b"enhanced-frs"),
+                "size_bytes": len(b"enhanced-frs"),
+            }
+        },
+    }
+    mock_api = MagicMock()
+
+    with (
+        patch("policyengine_uk_data.utils.data_upload.HfApi", return_value=mock_api),
+        patch(
+            "policyengine_uk_data.utils.data_upload.load_release_manifest_from_hf",
+            side_effect=lambda *args, **kwargs: (
+                finalized_manifest if kwargs.get("revision") == "1.40.4" else None
+            ),
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="already finalized"):
+            upload_files_to_hf(
+                files=[dataset_path],
+                version="1.40.4",
+            )
+
+    mock_api.create_commit.assert_not_called()
+
+
+def test_upload_files_to_hf_rejects_tag_that_points_to_different_revision(tmp_path):
+    dataset_path = _write_file(
+        tmp_path / "enhanced_frs_2023_24.h5",
+        b"enhanced-frs",
+    )
+    mock_api = MagicMock()
+    mock_api.create_commit.return_value = MagicMock(oid="new-commit")
+    mock_api.create_tag.side_effect = RuntimeError("409 Tag reference exists already")
+    mock_api.repo_info.return_value = MagicMock(sha="old-commit")
+
+    with (
+        patch("policyengine_uk_data.utils.data_upload.HfApi", return_value=mock_api),
+        patch(
+            "policyengine_uk_data.utils.data_upload.load_release_manifest_from_hf",
+            return_value=None,
+        ),
+        patch(
+            "policyengine_uk_data.utils.data_upload._get_model_package_build_metadata",
+            return_value={
+                "version": "2.74.0",
+                "git_sha": "deadbeef",
+                "data_build_fingerprint": "sha256:fingerprint",
+                "core": EXPECTED_CORE_PACKAGE,
+            },
+        ),
+        patch(
+            "policyengine_uk_data.utils.data_upload._get_data_package_git_sha",
+            return_value="cafebabe",
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="refusing to treat new-commit"):
+            upload_files_to_hf(
+                files=[dataset_path],
+                version="1.40.4",
+            )
