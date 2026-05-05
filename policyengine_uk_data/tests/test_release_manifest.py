@@ -1,6 +1,7 @@
 import hashlib
 from io import BytesIO
 from importlib import metadata
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -17,6 +18,11 @@ from policyengine_uk_data.utils.release_manifest import (
     RELEASE_MANIFEST_SCHEMA_VERSION,
     build_release_manifest,
 )
+
+EXPECTED_CORE_PACKAGE = {"name": "policyengine-core", "version": "3.26.0"}
+EXPECTED_COMPATIBLE_CORE_PACKAGES = [
+    {"name": "policyengine-core", "specifier": "==3.26.0"}
+]
 
 
 def _write_file(path: Path, content: bytes) -> Path:
@@ -52,6 +58,8 @@ def test_build_release_manifest_tracks_uk_release_artifacts(tmp_path):
         model_package_version="2.74.0",
         model_package_git_sha="deadbeef",
         model_package_data_build_fingerprint="sha256:fingerprint",
+        core_package_metadata=EXPECTED_CORE_PACKAGE,
+        data_package_git_sha="cafebabe",
         created_at="2026-04-10T12:00:00Z",
     )
 
@@ -66,15 +74,30 @@ def test_build_release_manifest_tracks_uk_release_artifacts(tmp_path):
             "specifier": "==2.74.0",
         }
     ]
+    assert manifest["compatible_core_packages"] == EXPECTED_COMPATIBLE_CORE_PACKAGES
     assert manifest["build"] == {
         "build_id": "policyengine-uk-data-1.40.4",
         "built_at": "2026-04-10T12:00:00Z",
+        "metadata": {
+            "data_package_git_sha": "cafebabe",
+        },
         "built_with_model_package": {
             "name": "policyengine-uk",
             "version": "2.74.0",
             "git_sha": "deadbeef",
             "data_build_fingerprint": "sha256:fingerprint",
+            "core": EXPECTED_CORE_PACKAGE,
         },
+        "built_with_core_package": EXPECTED_CORE_PACKAGE,
+    }
+    assert "created_at" not in manifest
+    assert manifest["metadata"] == {
+        "artifact_release": {
+            "repo_id": "policyengine/policyengine-uk-data-private",
+            "repo_type": "model",
+            "version": "1.40.4",
+            "visibility": "private",
+        }
     }
     assert manifest["default_datasets"] == {
         "national": "enhanced_frs_2023_24",
@@ -86,6 +109,36 @@ def test_build_release_manifest_tracks_uk_release_artifacts(tmp_path):
     )
     assert manifest["artifacts"]["frs_2023_24"]["sha256"] == _sha256(baseline_bytes)
     assert manifest["artifacts"]["local_authority_weights"]["kind"] == "weights"
+    assert manifest["artifacts"]["enhanced_frs_2023_24"]["uri"] == (
+        "hf://model/policyengine/policyengine-uk-data-private@1.40.4/"
+        "enhanced_frs_2023_24.h5"
+    )
+    assert manifest["artifacts"]["enhanced_frs_2023_24"]["metadata"] == {
+        "repo_type": "model",
+        "visibility": "private",
+    }
+
+
+def test_build_release_manifest_validates_against_bundle_contract(tmp_path):
+    policyengine_bundles = pytest.importorskip("policyengine_bundles")
+    dataset_path = _write_file(
+        tmp_path / "enhanced_frs_2023_24.h5",
+        b"enhanced-frs",
+    )
+
+    manifest = build_release_manifest(
+        files_with_repo_paths=[(dataset_path, "enhanced_frs_2023_24.h5")],
+        version="1.40.4",
+        repo_id="policyengine/policyengine-uk-data-private",
+        model_package_version="2.74.0",
+        model_package_git_sha="deadbeef",
+        model_package_data_build_fingerprint="sha256:fingerprint",
+        core_package_metadata=EXPECTED_CORE_PACKAGE,
+        data_package_git_sha="cafebabe",
+        created_at="2026-04-10T12:00:00Z",
+    )
+
+    policyengine_bundles.DataReleaseManifest.model_validate(manifest)
 
 
 def test_build_release_manifest_refreshes_compatible_model_packages_for_draft_retry(
@@ -113,6 +166,7 @@ def test_build_release_manifest_refreshes_compatible_model_packages_for_draft_re
                     "specifier": "==1.0.0",
                 }
             ],
+            "compatible_core_packages": [],
             "default_datasets": {},
             "created_at": "2026-04-10T12:00:00Z",
             "artifacts": {},
@@ -192,7 +246,12 @@ def test_upload_files_to_hf_adds_uk_release_manifest_operations(tmp_path):
                 "version": "2.74.0",
                 "git_sha": "deadbeef",
                 "data_build_fingerprint": "sha256:fingerprint",
+                "core": EXPECTED_CORE_PACKAGE,
             },
+        ),
+        patch(
+            "policyengine_uk_data.utils.data_upload._get_data_package_git_sha",
+            return_value="cafebabe",
         ),
         patch.dict(
             "policyengine_uk_data.utils.data_upload.os.environ",
@@ -221,3 +280,14 @@ def test_upload_files_to_hf_adds_uk_release_manifest_operations(tmp_path):
     for operation in release_ops:
         assert isinstance(operation, CommitOperationAdd)
         assert isinstance(operation.path_or_fileobj, BytesIO)
+
+    payload = release_ops[0].path_or_fileobj.getvalue()
+    manifest = json.loads(payload.decode("utf-8"))
+    assert manifest["compatible_core_packages"] == EXPECTED_COMPATIBLE_CORE_PACKAGES
+    assert manifest["build"]["built_with_core_package"] == EXPECTED_CORE_PACKAGE
+    assert manifest["build"]["metadata"] == {
+        "data_package_git_sha": "cafebabe",
+    }
+    assert (
+        manifest["build"]["built_with_model_package"]["core"] == EXPECTED_CORE_PACKAGE
+    )

@@ -27,6 +27,25 @@ jobs:
           pip install "ruff>=0.9.0"
       - name: Check formatting
         run: ruff format --check .
+  bundle-release-manifest-contract:
+    name: Validate bundle release manifest contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.13
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+      - name: Install package
+        run: uv pip install --system .
+      - name: Install bundle validation tooling
+        # Pin the test-only bundle contract dependency until policyengine-bundles
+        # has published releases suitable for ordinary dependency specifiers.
+        run: uv pip install --system pytest "policyengine-bundles @ git+https://github.com/PolicyEngine/policyengine-bundles@8ae9f56fefcf89f69b8a7e3bc49928509c6207be"
+      - name: Validate release manifest contract
+        run: python -m pytest policyengine_uk_data/tests/test_release_manifest.py::test_build_release_manifest_validates_against_bundle_contract
   test:
     name: Test
     runs-on: ubuntu-latest

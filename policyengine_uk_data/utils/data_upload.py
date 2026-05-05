@@ -1,5 +1,5 @@
 from io import BytesIO
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 from huggingface_hub import HfApi, CommitOperationAdd, hf_hub_download
 from huggingface_hub.errors import EntryNotFoundError, RevisionNotFoundError
 from google.cloud import storage
@@ -10,6 +10,7 @@ import google.auth
 import json
 import logging
 import os
+import subprocess
 import tomllib
 
 from policyengine_uk_data.utils.release_manifest import (
@@ -18,6 +19,7 @@ from policyengine_uk_data.utils.release_manifest import (
 )
 
 RELEASE_MANIFEST_PATH = "release_manifest.json"
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _get_model_package_version(
@@ -49,23 +51,27 @@ def _get_model_package_version(
 
 def _get_model_package_build_metadata(
     package_name: str = "policyengine-uk",
-) -> Dict[str, Optional[str]]:
-    metadata_payload: Dict[str, Optional[str]] = {
+) -> Dict[str, Any]:
+    metadata_payload: Dict[str, Any] = {
         "version": _get_model_package_version(package_name),
         "git_sha": None,
         "data_build_fingerprint": None,
+        "core": None,
     }
     module_name = package_name.replace("-", "_")
     try:
         build_metadata_module = __import__(
             f"{module_name}.build_metadata",
-            fromlist=["get_data_build_metadata"],
+            fromlist=["get_runtime_metadata", "get_data_build_metadata"],
         )
-        get_data_build_metadata = getattr(
-            build_metadata_module, "get_data_build_metadata", None
-        )
-        if callable(get_data_build_metadata):
-            package_metadata = get_data_build_metadata()
+        for metadata_getter_name in (
+            "get_runtime_metadata",
+            "get_data_build_metadata",
+        ):
+            metadata_getter = getattr(build_metadata_module, metadata_getter_name, None)
+            if not callable(metadata_getter):
+                continue
+            package_metadata = metadata_getter()
             metadata_payload["version"] = (
                 package_metadata.get("version") or metadata_payload["version"]
             )
@@ -73,6 +79,8 @@ def _get_model_package_build_metadata(
             metadata_payload["data_build_fingerprint"] = package_metadata.get(
                 "data_build_fingerprint"
             )
+            metadata_payload["core"] = package_metadata.get("core")
+            break
     except Exception:
         logging.warning(
             "Could not load build metadata from %s while building release manifest.",
@@ -80,6 +88,50 @@ def _get_model_package_build_metadata(
             exc_info=True,
         )
     return metadata_payload
+
+
+def _get_core_package_runtime_metadata(
+    package_name: str = "policyengine-core",
+) -> Dict[str, Any] | None:
+    try:
+        from policyengine_core import get_runtime_metadata
+
+        return dict(get_runtime_metadata())
+    except (AttributeError, ImportError):
+        pass
+    except Exception:
+        logging.warning(
+            "Could not load runtime metadata from %s while building release manifest.",
+            package_name,
+            exc_info=True,
+        )
+
+    try:
+        return {
+            "name": package_name,
+            "version": metadata.version(package_name),
+        }
+    except metadata.PackageNotFoundError:
+        logging.warning(
+            "Could not determine installed version for %s while building release manifest.",
+            package_name,
+        )
+        return None
+
+
+def _get_data_package_git_sha() -> str | None:
+    try:
+        return subprocess.check_output(
+            ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except Exception:
+        logging.warning(
+            "Could not determine policyengine-uk-data git SHA while building release manifest.",
+            exc_info=True,
+        )
+        return None
 
 
 def load_release_manifest_from_hf(
@@ -120,20 +172,26 @@ def create_release_manifest_commit_operations(
     files_with_repo_paths: List[Tuple[Path, str]],
     version: str,
     hf_repo_name: str = "policyengine/policyengine-uk-data-private",
+    hf_repo_type: str = "model",
     model_package_name: str = "policyengine-uk",
     model_package_version: Optional[str] = None,
     model_package_git_sha: Optional[str] = None,
     model_package_data_build_fingerprint: Optional[str] = None,
+    core_package_metadata: Optional[Mapping[str, Any]] = None,
+    data_package_git_sha: Optional[str] = None,
     existing_manifest: Optional[Dict] = None,
 ) -> Tuple[Dict, List[CommitOperationAdd]]:
     manifest = build_release_manifest(
         files_with_repo_paths=files_with_repo_paths,
         version=version,
         repo_id=hf_repo_name,
+        repo_type=hf_repo_type,
         model_package_name=model_package_name,
         model_package_version=model_package_version,
         model_package_git_sha=model_package_git_sha,
         model_package_data_build_fingerprint=model_package_data_build_fingerprint,
+        core_package_metadata=core_package_metadata,
+        data_package_git_sha=data_package_git_sha,
         existing_manifest=existing_manifest,
     )
     manifest_payload = serialize_release_manifest(manifest)
@@ -209,15 +267,21 @@ def upload_files_to_hf(
         hf_repo_type=hf_repo_type,
     )
     model_build_metadata = _get_model_package_build_metadata()
+    core_package_metadata = (
+        model_build_metadata.get("core") or _get_core_package_runtime_metadata()
+    )
     _, manifest_operations = create_release_manifest_commit_operations(
         files_with_repo_paths=files_with_repo_paths,
         version=version,
         hf_repo_name=hf_repo_name,
+        hf_repo_type=hf_repo_type,
         model_package_version=model_build_metadata["version"],
         model_package_git_sha=model_build_metadata["git_sha"],
         model_package_data_build_fingerprint=model_build_metadata[
             "data_build_fingerprint"
         ],
+        core_package_metadata=core_package_metadata,
+        data_package_git_sha=_get_data_package_git_sha(),
         existing_manifest=existing_manifest,
     )
     hf_operations.extend(manifest_operations)
