@@ -141,11 +141,11 @@ def load_release_manifest_from_hf(
     hf_repo_name: str = PRIVATE_REPO,
     hf_repo_type: str = "model",
     revision: Optional[str] = None,
-    include_current_manifest: bool = True,
+    include_top_level_manifest: bool = True,
 ) -> Optional[Dict]:
     token = os.environ.get("HUGGING_FACE_TOKEN")
     candidate_paths = [f"releases/{version}/{RELEASE_MANIFEST_PATH}"]
-    if include_current_manifest:
+    if include_top_level_manifest:
         candidate_paths.append(RELEASE_MANIFEST_PATH)
 
     for path_in_repo in candidate_paths:
@@ -217,7 +217,7 @@ def get_finalized_release_manifest(
         hf_repo_name=hf_repo_name,
         hf_repo_type=hf_repo_type,
         revision=version,
-        include_current_manifest=False,
+        include_top_level_manifest=False,
     )
     if finalized_manifest is None:
         raise RuntimeError(
@@ -448,7 +448,7 @@ def upload_files_to_hf(
         hf_repo_name=hf_repo_name,
         hf_repo_type=hf_repo_type,
         revision=version,
-        include_current_manifest=False,
+        include_top_level_manifest=False,
     )
     if tagged_manifest is None:
         raise RuntimeError(

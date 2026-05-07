@@ -228,6 +228,12 @@ def test_build_release_manifest_validates_against_bundle_contract(tmp_path):
             "revision",
         ),
         (
+            lambda manifest: manifest["artifacts"]["enhanced_frs_2023_24"].update(
+                {"uri": "hf://model/policyengine/wrong@1.40.4/enhanced_frs_2023_24.h5"}
+            ),
+            "uri",
+        ),
+        (
             lambda manifest: manifest["build"].pop("built_with_core_package"),
             "built_with_core_package",
         ),
@@ -416,7 +422,7 @@ def test_load_release_manifest_from_hf_can_require_versioned_path():
         manifest = load_release_manifest_from_hf(
             version="1.40.4",
             revision="1.40.4",
-            include_current_manifest=False,
+            include_top_level_manifest=False,
         )
 
     assert manifest is None
@@ -702,7 +708,8 @@ def test_upload_files_to_hf_rejects_existing_tag_without_manifest(tmp_path):
 
     mock_load_release_manifest.assert_called_once()
     assert (
-        mock_load_release_manifest.call_args.kwargs["include_current_manifest"] is False
+        mock_load_release_manifest.call_args.kwargs["include_top_level_manifest"]
+        is False
     )
     mock_api.create_commit.assert_not_called()
     mock_api.create_tag.assert_not_called()

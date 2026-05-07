@@ -188,21 +188,12 @@ def _require_exact_compatibility(
         )
 
 
-def validate_release_manifest(
+def _validate_manifest_identity(
     manifest: Mapping[str, Any],
     *,
     version: str,
-    repo_id: str | None = None,
-    repo_type: str | None = None,
     data_package_name: str = "policyengine-uk-data",
 ) -> None:
-    """Validate the bundle-facing UK data release contract.
-
-    ``release_manifest.json`` is the authoritative signal that a release can be
-    consumed by bundles. This validation is intentionally stricter than the
-    general schema: a finalized release must include concrete artifact hashes,
-    sizes, runtime package metadata, and exact compatibility specifiers.
-    """
     if manifest.get("schema_version") != RELEASE_MANIFEST_SCHEMA_VERSION:
         raise ValueError(
             "release_manifest.schema_version must equal "
@@ -217,6 +208,14 @@ def validate_release_manifest(
     if data_package.get("version") != version:
         raise ValueError(f"release_manifest.data_package.version must equal {version}.")
 
+
+def _validate_artifact_release_metadata(
+    manifest: Mapping[str, Any],
+    *,
+    version: str,
+    repo_id: str | None,
+    repo_type: str | None,
+) -> None:
     metadata = _require_mapping(manifest.get("metadata"), "metadata")
     artifact_release = _require_mapping(
         metadata.get("artifact_release"),
@@ -242,6 +241,8 @@ def validate_release_manifest(
                 f"{expected_visibility}."
             )
 
+
+def _validate_build_and_compatibility(manifest: Mapping[str, Any]) -> None:
     build = _require_mapping(manifest.get("build"), "build")
     build_metadata = _require_mapping(build.get("metadata"), "build.metadata")
     _require_string(
@@ -292,14 +293,22 @@ def validate_release_manifest(
         field="compatible_core_packages",
     )
 
+
+def _validate_artifacts(
+    manifest: Mapping[str, Any],
+    *,
+    version: str,
+    repo_id: str | None,
+    repo_type: str | None,
+) -> Mapping[str, Any]:
     artifacts = _require_mapping(manifest.get("artifacts"), "artifacts")
     if not artifacts:
         raise ValueError("release_manifest.artifacts must not be empty.")
     for artifact_key, artifact in artifacts.items():
         field_prefix = f"artifacts.{artifact_key}"
         artifact = _require_mapping(artifact, field_prefix)
-        _require_string(artifact.get("uri"), f"{field_prefix}.uri")
-        _require_string(artifact.get("path"), f"{field_prefix}.path")
+        artifact_uri = _require_string(artifact.get("uri"), f"{field_prefix}.uri")
+        artifact_path = _require_string(artifact.get("path"), f"{field_prefix}.path")
         artifact_repo_id = _require_string(
             artifact.get("repo_id"), f"{field_prefix}.repo_id"
         )
@@ -307,10 +316,22 @@ def validate_release_manifest(
             raise ValueError(
                 f"release_manifest.{field_prefix}.repo_id must equal {repo_id}."
             )
+        expected_repo_id = repo_id or artifact_repo_id
         if artifact.get("revision") != version:
             raise ValueError(
                 f"release_manifest.{field_prefix}.revision must equal {version}."
             )
+        if repo_type is not None:
+            expected_uri = _artifact_uri(
+                repo_id=expected_repo_id,
+                repo_type=repo_type,
+                revision=version,
+                path_in_repo=artifact_path,
+            )
+            if artifact_uri != expected_uri:
+                raise ValueError(
+                    f"release_manifest.{field_prefix}.uri must equal {expected_uri}."
+                )
         _require_string(artifact.get("sha256"), f"{field_prefix}.sha256")
         _require_positive_int(artifact.get("size_bytes"), f"{field_prefix}.size_bytes")
         artifact_metadata = _require_mapping(
@@ -329,6 +350,13 @@ def validate_release_manifest(
                     f"{expected_visibility}."
                 )
 
+    return artifacts
+
+
+def _validate_default_datasets(
+    manifest: Mapping[str, Any],
+    artifacts: Mapping[str, Any],
+) -> None:
     default_datasets = _require_mapping(
         manifest.get("default_datasets"),
         "default_datasets",
@@ -341,6 +369,42 @@ def validate_release_manifest(
                 "release_manifest.default_datasets "
                 f"{default_key!r} points to missing artifact {artifact_key!r}."
             )
+
+
+def validate_release_manifest(
+    manifest: Mapping[str, Any],
+    *,
+    version: str,
+    repo_id: str | None = None,
+    repo_type: str | None = None,
+    data_package_name: str = "policyengine-uk-data",
+) -> None:
+    """Validate the bundle-facing UK data release contract.
+
+    ``release_manifest.json`` is the authoritative signal that a release can be
+    consumed by bundles. This validation is intentionally stricter than the
+    general schema: a finalized release must include concrete artifact hashes,
+    sizes, runtime package metadata, and exact compatibility specifiers.
+    """
+    _validate_manifest_identity(
+        manifest,
+        version=version,
+        data_package_name=data_package_name,
+    )
+    _validate_artifact_release_metadata(
+        manifest,
+        version=version,
+        repo_id=repo_id,
+        repo_type=repo_type,
+    )
+    _validate_build_and_compatibility(manifest)
+    artifacts = _validate_artifacts(
+        manifest,
+        version=version,
+        repo_id=repo_id,
+        repo_type=repo_type,
+    )
+    _validate_default_datasets(manifest, artifacts)
 
 
 def _new_release_manifest(
