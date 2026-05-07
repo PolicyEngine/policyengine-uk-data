@@ -153,6 +153,196 @@ def _core_package_compatibility(
     ]
 
 
+def _require_mapping(value: Any, field: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError(f"release_manifest.{field} must be an object.")
+    return value
+
+
+def _require_string(value: Any, field: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"release_manifest.{field} must be a non-empty string.")
+    return value
+
+
+def _require_positive_int(value: Any, field: str) -> int:
+    if not isinstance(value, int) or value <= 0:
+        raise ValueError(f"release_manifest.{field} must be a positive integer.")
+    return value
+
+
+def _require_exact_compatibility(
+    entries: Any,
+    *,
+    package_name: str,
+    package_version: str,
+    field: str,
+) -> None:
+    if not isinstance(entries, list):
+        raise ValueError(f"release_manifest.{field} must be a list.")
+    expected = {"name": package_name, "specifier": f"=={package_version}"}
+    if expected not in entries:
+        raise ValueError(
+            f"release_manifest.{field} must include exact specifier "
+            f"{package_name}=={package_version}."
+        )
+
+
+def validate_release_manifest(
+    manifest: Mapping[str, Any],
+    *,
+    version: str,
+    repo_id: str | None = None,
+    repo_type: str | None = None,
+    data_package_name: str = "policyengine-uk-data",
+) -> None:
+    """Validate the bundle-facing UK data release contract.
+
+    ``release_manifest.json`` is the authoritative signal that a release can be
+    consumed by bundles. This validation is intentionally stricter than the
+    general schema: a finalized release must include concrete artifact hashes,
+    sizes, runtime package metadata, and exact compatibility specifiers.
+    """
+    if manifest.get("schema_version") != RELEASE_MANIFEST_SCHEMA_VERSION:
+        raise ValueError(
+            "release_manifest.schema_version must equal "
+            f"{RELEASE_MANIFEST_SCHEMA_VERSION}."
+        )
+
+    data_package = _require_mapping(manifest.get("data_package"), "data_package")
+    if data_package.get("name") != data_package_name:
+        raise ValueError(
+            f"release_manifest.data_package.name must equal {data_package_name}."
+        )
+    if data_package.get("version") != version:
+        raise ValueError(f"release_manifest.data_package.version must equal {version}.")
+
+    metadata = _require_mapping(manifest.get("metadata"), "metadata")
+    artifact_release = _require_mapping(
+        metadata.get("artifact_release"),
+        "metadata.artifact_release",
+    )
+    if repo_id is not None and artifact_release.get("repo_id") != repo_id:
+        raise ValueError(
+            f"release_manifest.metadata.artifact_release.repo_id must equal {repo_id}."
+        )
+    if repo_type is not None and artifact_release.get("repo_type") != repo_type:
+        raise ValueError(
+            f"release_manifest.metadata.artifact_release.repo_type must equal {repo_type}."
+        )
+    if artifact_release.get("version") != version:
+        raise ValueError(
+            f"release_manifest.metadata.artifact_release.version must equal {version}."
+        )
+    if repo_id is not None:
+        expected_visibility = _artifact_visibility(repo_id)
+        if artifact_release.get("visibility") != expected_visibility:
+            raise ValueError(
+                "release_manifest.metadata.artifact_release.visibility must equal "
+                f"{expected_visibility}."
+            )
+
+    build = _require_mapping(manifest.get("build"), "build")
+    build_metadata = _require_mapping(build.get("metadata"), "build.metadata")
+    _require_string(
+        build_metadata.get("data_package_git_sha"),
+        "build.metadata.data_package_git_sha",
+    )
+
+    model_package = _require_mapping(
+        build.get("built_with_model_package"),
+        "build.built_with_model_package",
+    )
+    model_name = _require_string(
+        model_package.get("name"),
+        "build.built_with_model_package.name",
+    )
+    model_version = _require_string(
+        model_package.get("version"),
+        "build.built_with_model_package.version",
+    )
+    _require_string(
+        model_package.get("data_build_fingerprint"),
+        "build.built_with_model_package.data_build_fingerprint",
+    )
+
+    core_package = _require_mapping(
+        build.get("built_with_core_package"),
+        "build.built_with_core_package",
+    )
+    core_name = _require_string(
+        core_package.get("name"),
+        "build.built_with_core_package.name",
+    )
+    core_version = _require_string(
+        core_package.get("version"),
+        "build.built_with_core_package.version",
+    )
+
+    _require_exact_compatibility(
+        manifest.get("compatible_model_packages"),
+        package_name=model_name,
+        package_version=model_version,
+        field="compatible_model_packages",
+    )
+    _require_exact_compatibility(
+        manifest.get("compatible_core_packages"),
+        package_name=core_name,
+        package_version=core_version,
+        field="compatible_core_packages",
+    )
+
+    artifacts = _require_mapping(manifest.get("artifacts"), "artifacts")
+    if not artifacts:
+        raise ValueError("release_manifest.artifacts must not be empty.")
+    for artifact_key, artifact in artifacts.items():
+        field_prefix = f"artifacts.{artifact_key}"
+        artifact = _require_mapping(artifact, field_prefix)
+        _require_string(artifact.get("uri"), f"{field_prefix}.uri")
+        _require_string(artifact.get("path"), f"{field_prefix}.path")
+        artifact_repo_id = _require_string(
+            artifact.get("repo_id"), f"{field_prefix}.repo_id"
+        )
+        if repo_id is not None and artifact_repo_id != repo_id:
+            raise ValueError(
+                f"release_manifest.{field_prefix}.repo_id must equal {repo_id}."
+            )
+        if artifact.get("revision") != version:
+            raise ValueError(
+                f"release_manifest.{field_prefix}.revision must equal {version}."
+            )
+        _require_string(artifact.get("sha256"), f"{field_prefix}.sha256")
+        _require_positive_int(artifact.get("size_bytes"), f"{field_prefix}.size_bytes")
+        artifact_metadata = _require_mapping(
+            artifact.get("metadata"),
+            f"{field_prefix}.metadata",
+        )
+        if repo_type is not None and artifact_metadata.get("repo_type") != repo_type:
+            raise ValueError(
+                f"release_manifest.{field_prefix}.metadata.repo_type must equal {repo_type}."
+            )
+        if repo_id is not None:
+            expected_visibility = _artifact_visibility(repo_id)
+            if artifact_metadata.get("visibility") != expected_visibility:
+                raise ValueError(
+                    f"release_manifest.{field_prefix}.metadata.visibility must equal "
+                    f"{expected_visibility}."
+                )
+
+    default_datasets = _require_mapping(
+        manifest.get("default_datasets"),
+        "default_datasets",
+    )
+    if not default_datasets:
+        raise ValueError("release_manifest.default_datasets must not be empty.")
+    for default_key, artifact_key in default_datasets.items():
+        if artifact_key not in artifacts:
+            raise ValueError(
+                "release_manifest.default_datasets "
+                f"{default_key!r} points to missing artifact {artifact_key!r}."
+            )
+
+
 def _new_release_manifest(
     *,
     version: str,

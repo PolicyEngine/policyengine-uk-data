@@ -16,6 +16,7 @@ import tomllib
 from policyengine_uk_data.utils.release_manifest import (
     build_release_manifest,
     serialize_release_manifest,
+    validate_release_manifest,
 )
 from policyengine_uk_data.utils.hf_destinations import PRIVATE_REPO, PUBLIC_REPO
 
@@ -140,12 +141,12 @@ def load_release_manifest_from_hf(
     hf_repo_name: str = PRIVATE_REPO,
     hf_repo_type: str = "model",
     revision: Optional[str] = None,
+    include_current_manifest: bool = True,
 ) -> Optional[Dict]:
     token = os.environ.get("HUGGING_FACE_TOKEN")
-    candidate_paths = [
-        f"releases/{version}/{RELEASE_MANIFEST_PATH}",
-        RELEASE_MANIFEST_PATH,
-    ]
+    candidate_paths = [f"releases/{version}/{RELEASE_MANIFEST_PATH}"]
+    if include_current_manifest:
+        candidate_paths.append(RELEASE_MANIFEST_PATH)
 
     for path_in_repo in candidate_paths:
         try:
@@ -194,13 +195,13 @@ def _get_release_tag_revision(
         return None
 
 
-def assert_release_not_finalized(
+def get_finalized_release_manifest(
     version: str,
     hf_repo_name: str = PRIVATE_REPO,
     hf_repo_type: str = "model",
     token: Optional[str] = None,
     api: Optional[HfApi] = None,
-) -> None:
+) -> Optional[Dict]:
     tagged_revision = _get_release_tag_revision(
         version=version,
         hf_repo_name=hf_repo_name,
@@ -208,24 +209,28 @@ def assert_release_not_finalized(
         token=token,
         api=api,
     )
-    if tagged_revision is not None:
-        raise RuntimeError(
-            f"Release {version} is already finalized on {hf_repo_name} at "
-            f"{tagged_revision}. Refusing to mutate release manifest state "
-            "after the tag exists."
-        )
+    if tagged_revision is None:
+        return None
 
     finalized_manifest = load_release_manifest_from_hf(
         version=version,
         hf_repo_name=hf_repo_name,
         hf_repo_type=hf_repo_type,
         revision=version,
+        include_current_manifest=False,
     )
-    if finalized_manifest is not None:
+    if finalized_manifest is None:
         raise RuntimeError(
-            f"Release {version} is already finalized on {hf_repo_name}. "
-            "Refusing to mutate release manifest state after the tag exists."
+            f"Release {version} is tagged on {hf_repo_name} at {tagged_revision}, "
+            f"but no versioned {RELEASE_MANIFEST_PATH} is available at that tag."
         )
+    validate_release_manifest(
+        finalized_manifest,
+        version=version,
+        repo_id=hf_repo_name,
+        repo_type=hf_repo_type,
+    )
+    return finalized_manifest
 
 
 def create_release_tag(
@@ -303,6 +308,12 @@ def create_release_manifest_commit_operations(
         data_package_git_sha=data_package_git_sha,
         existing_manifest=existing_manifest,
     )
+    validate_release_manifest(
+        manifest,
+        version=version,
+        repo_id=hf_repo_name,
+        repo_type=hf_repo_type,
+    )
     manifest_payload = serialize_release_manifest(manifest)
     operations = [
         CommitOperationAdd(
@@ -354,13 +365,6 @@ def upload_files_to_hf(
     token = os.environ.get(
         "HUGGING_FACE_TOKEN",
     )
-    assert_release_not_finalized(
-        version=version,
-        hf_repo_name=hf_repo_name,
-        hf_repo_type=hf_repo_type,
-        token=token,
-        api=api,
-    )
     hf_operations = []
     files_with_repo_paths = []
 
@@ -377,7 +381,14 @@ def upload_files_to_hf(
             )
         )
 
-    existing_manifest = load_release_manifest_from_hf(
+    finalized_manifest = get_finalized_release_manifest(
+        version=version,
+        hf_repo_name=hf_repo_name,
+        hf_repo_type=hf_repo_type,
+        token=token,
+        api=api,
+    )
+    existing_manifest = finalized_manifest or load_release_manifest_from_hf(
         version=version,
         hf_repo_name=hf_repo_name,
         hf_repo_type=hf_repo_type,
@@ -386,7 +397,7 @@ def upload_files_to_hf(
     core_package_metadata = (
         model_build_metadata.get("core") or _get_core_package_runtime_metadata()
     )
-    _, manifest_operations = create_release_manifest_commit_operations(
+    candidate_manifest, manifest_operations = create_release_manifest_commit_operations(
         files_with_repo_paths=files_with_repo_paths,
         version=version,
         hf_repo_name=hf_repo_name,
@@ -400,6 +411,18 @@ def upload_files_to_hf(
         data_package_git_sha=_get_data_package_git_sha(),
         existing_manifest=existing_manifest,
     )
+    if finalized_manifest is not None:
+        if candidate_manifest == finalized_manifest:
+            logging.info(
+                "Release %s is already finalized on %s with the same release manifest.",
+                version,
+                hf_repo_name,
+            )
+            return
+        raise RuntimeError(
+            f"Release {version} is already finalized on {hf_repo_name} with a "
+            "different release manifest. Refusing to mutate release state."
+        )
     hf_operations.extend(manifest_operations)
 
     commit_info = api.create_commit(
@@ -419,6 +442,30 @@ def upload_files_to_hf(
         token=token,
         api=api,
     )
+
+    tagged_manifest = load_release_manifest_from_hf(
+        version=version,
+        hf_repo_name=hf_repo_name,
+        hf_repo_type=hf_repo_type,
+        revision=version,
+        include_current_manifest=False,
+    )
+    if tagged_manifest is None:
+        raise RuntimeError(
+            f"Release {version} was tagged on {hf_repo_name}, but no versioned "
+            f"{RELEASE_MANIFEST_PATH} is available at that tag."
+        )
+    validate_release_manifest(
+        tagged_manifest,
+        version=version,
+        repo_id=hf_repo_name,
+        repo_type=hf_repo_type,
+    )
+    if tagged_manifest != candidate_manifest:
+        raise RuntimeError(
+            f"Release {version} was tagged on {hf_repo_name}, but the versioned "
+            "release manifest differs from the uploaded manifest."
+        )
 
 
 def upload_files_to_gcs(

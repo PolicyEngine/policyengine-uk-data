@@ -18,6 +18,7 @@ from policyengine_uk_data.utils.hf_destinations import PRIVATE_REPO
 from policyengine_uk_data.utils.release_manifest import (
     RELEASE_MANIFEST_SCHEMA_VERSION,
     build_release_manifest,
+    validate_release_manifest,
 )
 
 # Synthetic fixture: this verifies manifest propagation, not the package dep range.
@@ -29,6 +30,12 @@ EXPECTED_CORE_PACKAGE = {
 EXPECTED_COMPATIBLE_CORE_PACKAGES = [
     {"name": "policyengine-core", "specifier": f"=={CORE_FIXTURE_VERSION}"}
 ]
+MODEL_BUILD_METADATA_FIXTURE = {
+    "version": "2.74.0",
+    "git_sha": "deadbeef",
+    "data_build_fingerprint": "sha256:fingerprint",
+    "core": EXPECTED_CORE_PACKAGE,
+}
 
 
 def _missing_revision_error() -> RevisionNotFoundError:
@@ -57,6 +64,40 @@ def _assert_single_uk_data_release_version(manifest: dict) -> None:
     for artifact in manifest["artifacts"].values():
         assert artifact["revision"] == release_version
         assert f"@{release_version}/" in artifact["uri"]
+
+
+def _uploaded_release_manifest(mock_api: MagicMock) -> dict:
+    operations = mock_api.create_commit.call_args.kwargs["operations"]
+    release_op = next(
+        operation
+        for operation in operations
+        if operation.path_in_repo == "releases/1.40.4/release_manifest.json"
+    )
+    return json.loads(release_op.path_or_fileobj.getvalue().decode("utf-8"))
+
+
+def _load_uploaded_manifest_after_commit(mock_api: MagicMock):
+    def fake_load_release_manifest(*args, **kwargs):
+        if kwargs.get("revision") == "1.40.4":
+            return _uploaded_release_manifest(mock_api)
+        return None
+
+    return fake_load_release_manifest
+
+
+def _valid_release_manifest(tmp_path: Path, content: bytes = b"enhanced-frs") -> dict:
+    dataset_path = _write_file(tmp_path / "enhanced_frs_2023_24.h5", content)
+    return build_release_manifest(
+        files_with_repo_paths=[(dataset_path, "enhanced_frs_2023_24.h5")],
+        version="1.40.4",
+        repo_id=PRIVATE_REPO,
+        model_package_version="2.74.0",
+        model_package_git_sha="deadbeef",
+        model_package_data_build_fingerprint="sha256:fingerprint",
+        core_package_metadata=EXPECTED_CORE_PACKAGE,
+        data_package_git_sha="cafebabe",
+        created_at="2026-04-10T12:00:00Z",
+    )
 
 
 def test_build_release_manifest_tracks_uk_release_artifacts(tmp_path):
@@ -163,6 +204,66 @@ def test_build_release_manifest_validates_against_bundle_contract(tmp_path):
     )
 
     policyengine_bundles.DataReleaseManifest.model_validate(manifest)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "match"),
+    [
+        (
+            lambda manifest: manifest["artifacts"]["enhanced_frs_2023_24"].pop(
+                "sha256"
+            ),
+            "sha256",
+        ),
+        (
+            lambda manifest: manifest["artifacts"]["enhanced_frs_2023_24"].pop(
+                "size_bytes"
+            ),
+            "size_bytes",
+        ),
+        (
+            lambda manifest: manifest["artifacts"]["enhanced_frs_2023_24"].update(
+                {"revision": "stale-version"}
+            ),
+            "revision",
+        ),
+        (
+            lambda manifest: manifest["build"].pop("built_with_core_package"),
+            "built_with_core_package",
+        ),
+        (
+            lambda manifest: manifest["build"]["built_with_model_package"].pop(
+                "data_build_fingerprint"
+            ),
+            "data_build_fingerprint",
+        ),
+        (
+            lambda manifest: manifest.update({"compatible_core_packages": []}),
+            "compatible_core_packages",
+        ),
+        (
+            lambda manifest: manifest["default_datasets"].update(
+                {"national": "missing_artifact"}
+            ),
+            "default_datasets",
+        ),
+    ],
+)
+def test_validate_release_manifest_rejects_incomplete_bundle_contract(
+    tmp_path,
+    mutate,
+    match,
+):
+    manifest = _valid_release_manifest(tmp_path)
+    mutate(manifest)
+
+    with pytest.raises(ValueError, match=match):
+        validate_release_manifest(
+            manifest,
+            version="1.40.4",
+            repo_id=PRIVATE_REPO,
+            repo_type="model",
+        )
 
 
 def test_build_release_manifest_rejects_unknown_hf_repo(tmp_path):
@@ -307,6 +408,25 @@ def test_load_release_manifest_from_hf_uses_explicit_revision_when_requested(tmp
     assert mock_download.call_args.kwargs["revision"] == "1.40.4"
 
 
+def test_load_release_manifest_from_hf_can_require_versioned_path():
+    with patch(
+        "policyengine_uk_data.utils.data_upload.hf_hub_download",
+        side_effect=EntryNotFoundError("missing"),
+    ) as mock_download:
+        manifest = load_release_manifest_from_hf(
+            version="1.40.4",
+            revision="1.40.4",
+            include_current_manifest=False,
+        )
+
+    assert manifest is None
+    mock_download.assert_called_once()
+    assert (
+        mock_download.call_args.kwargs["filename"]
+        == "releases/1.40.4/release_manifest.json"
+    )
+
+
 def test_load_release_manifest_from_hf_returns_none_when_revision_is_missing():
     with patch(
         "policyengine_uk_data.utils.data_upload.hf_hub_download",
@@ -357,16 +477,11 @@ def test_upload_files_to_hf_adds_uk_release_manifest_operations(tmp_path):
         patch("policyengine_uk_data.utils.data_upload.HfApi", return_value=mock_api),
         patch(
             "policyengine_uk_data.utils.data_upload.load_release_manifest_from_hf",
-            return_value=None,
+            side_effect=_load_uploaded_manifest_after_commit(mock_api),
         ),
         patch(
             "policyengine_uk_data.utils.data_upload._get_model_package_build_metadata",
-            return_value={
-                "version": "2.74.0",
-                "git_sha": "deadbeef",
-                "data_build_fingerprint": "sha256:fingerprint",
-                "core": EXPECTED_CORE_PACKAGE,
-            },
+            return_value=MODEL_BUILD_METADATA_FIXTURE,
         ),
         patch(
             "policyengine_uk_data.utils.data_upload._get_data_package_git_sha",
@@ -444,17 +559,15 @@ def test_upload_files_to_hf_refreshes_same_version_unfinalized_manifest(tmp_path
         patch(
             "policyengine_uk_data.utils.data_upload.load_release_manifest_from_hf",
             side_effect=lambda *args, **kwargs: (
-                None if kwargs.get("revision") == "1.40.4" else existing_manifest
+                _uploaded_release_manifest(mock_api)
+                if kwargs.get("revision") == "1.40.4"
+                and mock_api.create_commit.call_args is not None
+                else existing_manifest
             ),
         ),
         patch(
             "policyengine_uk_data.utils.data_upload._get_model_package_build_metadata",
-            return_value={
-                "version": "2.74.0",
-                "git_sha": "deadbeef",
-                "data_build_fingerprint": "sha256:fingerprint",
-                "core": EXPECTED_CORE_PACKAGE,
-            },
+            return_value=MODEL_BUILD_METADATA_FIXTURE,
         ),
         patch(
             "policyengine_uk_data.utils.data_upload._get_data_package_git_sha",
@@ -489,34 +602,17 @@ def test_upload_files_to_hf_refreshes_same_version_unfinalized_manifest(tmp_path
     )
 
 
-def test_upload_files_to_hf_rejects_finalized_release(tmp_path):
+def test_upload_files_to_hf_noops_when_finalized_manifest_matches(tmp_path):
     dataset_path = _write_file(
         tmp_path / "enhanced_frs_2023_24.h5",
         b"enhanced-frs",
     )
-    finalized_manifest = {
-        "schema_version": RELEASE_MANIFEST_SCHEMA_VERSION,
-        "data_package": {
-            "name": "policyengine-uk-data",
-            "version": "1.40.4",
-        },
-        "compatible_model_packages": [
-            {"name": "policyengine-uk", "specifier": "==2.74.0"}
-        ],
-        "default_datasets": {"national": "enhanced_frs_2023_24"},
-        "artifacts": {
-            "enhanced_frs_2023_24": {
-                "kind": "microdata",
-                "path": "enhanced_frs_2023_24.h5",
-                "repo_id": PRIVATE_REPO,
-                "revision": "1.40.4",
-                "sha256": _sha256(b"enhanced-frs"),
-                "size_bytes": len(b"enhanced-frs"),
-            }
-        },
-    }
+    finalized_manifest = _valid_release_manifest(
+        tmp_path / "finalized",
+        b"enhanced-frs",
+    )
     mock_api = MagicMock()
-    mock_api.repo_info.side_effect = _missing_revision_error()
+    mock_api.repo_info.return_value = MagicMock(sha="finalized-sha")
 
     with (
         patch("policyengine_uk_data.utils.data_upload.HfApi", return_value=mock_api),
@@ -526,17 +622,64 @@ def test_upload_files_to_hf_rejects_finalized_release(tmp_path):
                 finalized_manifest if kwargs.get("revision") == "1.40.4" else None
             ),
         ),
+        patch(
+            "policyengine_uk_data.utils.data_upload._get_model_package_build_metadata",
+            return_value=MODEL_BUILD_METADATA_FIXTURE,
+        ),
+        patch(
+            "policyengine_uk_data.utils.data_upload._get_data_package_git_sha",
+            return_value="cafebabe",
+        ),
     ):
-        with pytest.raises(RuntimeError, match="already finalized"):
+        upload_files_to_hf(
+            files=[dataset_path],
+            version="1.40.4",
+        )
+
+    mock_api.create_commit.assert_not_called()
+    mock_api.create_tag.assert_not_called()
+
+
+def test_upload_files_to_hf_rejects_finalized_manifest_mismatch(tmp_path):
+    dataset_path = _write_file(
+        tmp_path / "enhanced_frs_2023_24.h5",
+        b"enhanced-frs-v2",
+    )
+    finalized_manifest = _valid_release_manifest(
+        tmp_path / "finalized",
+        b"enhanced-frs",
+    )
+    mock_api = MagicMock()
+    mock_api.repo_info.return_value = MagicMock(sha="finalized-sha")
+
+    with (
+        patch("policyengine_uk_data.utils.data_upload.HfApi", return_value=mock_api),
+        patch(
+            "policyengine_uk_data.utils.data_upload.load_release_manifest_from_hf",
+            side_effect=lambda *args, **kwargs: (
+                finalized_manifest if kwargs.get("revision") == "1.40.4" else None
+            ),
+        ),
+        patch(
+            "policyengine_uk_data.utils.data_upload._get_model_package_build_metadata",
+            return_value=MODEL_BUILD_METADATA_FIXTURE,
+        ),
+        patch(
+            "policyengine_uk_data.utils.data_upload._get_data_package_git_sha",
+            return_value="cafebabe",
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="different release manifest"):
             upload_files_to_hf(
                 files=[dataset_path],
                 version="1.40.4",
             )
 
     mock_api.create_commit.assert_not_called()
+    mock_api.create_tag.assert_not_called()
 
 
-def test_upload_files_to_hf_rejects_existing_tag_before_commit(tmp_path):
+def test_upload_files_to_hf_rejects_existing_tag_without_manifest(tmp_path):
     dataset_path = _write_file(
         tmp_path / "enhanced_frs_2023_24.h5",
         b"enhanced-frs",
@@ -551,12 +694,15 @@ def test_upload_files_to_hf_rejects_existing_tag_before_commit(tmp_path):
             return_value=None,
         ) as mock_load_release_manifest,
     ):
-        with pytest.raises(RuntimeError, match="already finalized"):
+        with pytest.raises(RuntimeError, match="no versioned release_manifest.json"):
             upload_files_to_hf(
                 files=[dataset_path],
                 version="1.40.4",
             )
 
-    mock_load_release_manifest.assert_not_called()
+    mock_load_release_manifest.assert_called_once()
+    assert (
+        mock_load_release_manifest.call_args.kwargs["include_current_manifest"] is False
+    )
     mock_api.create_commit.assert_not_called()
     mock_api.create_tag.assert_not_called()
