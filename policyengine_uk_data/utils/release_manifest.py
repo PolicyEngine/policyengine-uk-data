@@ -242,7 +242,12 @@ def _validate_artifact_release_metadata(
             )
 
 
-def _validate_build_and_compatibility(manifest: Mapping[str, Any]) -> None:
+def _validate_build_and_compatibility(
+    manifest: Mapping[str, Any],
+    *,
+    model_package_name: str,
+    core_package_name: str,
+) -> None:
     build = _require_mapping(manifest.get("build"), "build")
     build_metadata = _require_mapping(build.get("metadata"), "build.metadata")
     _require_string(
@@ -258,6 +263,11 @@ def _validate_build_and_compatibility(manifest: Mapping[str, Any]) -> None:
         model_package.get("name"),
         "build.built_with_model_package.name",
     )
+    if model_name != model_package_name:
+        raise ValueError(
+            "release_manifest.build.built_with_model_package.name must equal "
+            f"{model_package_name}."
+        )
     model_version = _require_string(
         model_package.get("version"),
         "build.built_with_model_package.version",
@@ -275,6 +285,11 @@ def _validate_build_and_compatibility(manifest: Mapping[str, Any]) -> None:
         core_package.get("name"),
         "build.built_with_core_package.name",
     )
+    if core_name != core_package_name:
+        raise ValueError(
+            "release_manifest.build.built_with_core_package.name must equal "
+            f"{core_package_name}."
+        )
     core_version = _require_string(
         core_package.get("version"),
         "build.built_with_core_package.version",
@@ -378,6 +393,8 @@ def validate_release_manifest(
     repo_id: str | None = None,
     repo_type: str | None = None,
     data_package_name: str = "policyengine-uk-data",
+    model_package_name: str = "policyengine-uk",
+    core_package_name: str = "policyengine-core",
 ) -> None:
     """Validate the bundle-facing UK data release contract.
 
@@ -397,7 +414,11 @@ def validate_release_manifest(
         repo_id=repo_id,
         repo_type=repo_type,
     )
-    _validate_build_and_compatibility(manifest)
+    _validate_build_and_compatibility(
+        manifest,
+        model_package_name=model_package_name,
+        core_package_name=core_package_name,
+    )
     artifacts = _validate_artifacts(
         manifest,
         version=version,

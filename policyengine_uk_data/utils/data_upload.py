@@ -142,8 +142,9 @@ def load_release_manifest_from_hf(
     hf_repo_type: str = "model",
     revision: Optional[str] = None,
     include_top_level_manifest: bool = True,
+    token: Optional[str] = None,
 ) -> Optional[Dict]:
-    token = os.environ.get("HUGGING_FACE_TOKEN")
+    token = token or os.environ.get("HUGGING_FACE_TOKEN")
     candidate_paths = [f"releases/{version}/{RELEASE_MANIFEST_PATH}"]
     if include_top_level_manifest:
         candidate_paths.append(RELEASE_MANIFEST_PATH)
@@ -218,6 +219,7 @@ def get_finalized_release_manifest(
         hf_repo_type=hf_repo_type,
         revision=version,
         include_top_level_manifest=False,
+        token=token,
     )
     if finalized_manifest is None:
         raise RuntimeError(
@@ -313,6 +315,7 @@ def create_release_manifest_commit_operations(
         version=version,
         repo_id=hf_repo_name,
         repo_type=hf_repo_type,
+        model_package_name=model_package_name,
     )
     manifest_payload = serialize_release_manifest(manifest)
     operations = [
@@ -392,6 +395,7 @@ def upload_files_to_hf(
         version=version,
         hf_repo_name=hf_repo_name,
         hf_repo_type=hf_repo_type,
+        token=token,
     )
     model_build_metadata = _get_model_package_build_metadata()
     core_package_metadata = (
@@ -449,6 +453,7 @@ def upload_files_to_hf(
         hf_repo_type=hf_repo_type,
         revision=version,
         include_top_level_manifest=False,
+        token=token,
     )
     if tagged_manifest is None:
         raise RuntimeError(

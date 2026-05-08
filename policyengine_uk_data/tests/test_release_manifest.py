@@ -11,6 +11,7 @@ from huggingface_hub.errors import EntryNotFoundError, RevisionNotFoundError
 
 from policyengine_uk_data.utils.data_upload import (
     _get_model_package_version,
+    get_finalized_release_manifest,
     load_release_manifest_from_hf,
     upload_files_to_hf,
 )
@@ -238,6 +239,18 @@ def test_build_release_manifest_validates_against_bundle_contract(tmp_path):
             "built_with_core_package",
         ),
         (
+            lambda manifest: manifest["build"]["built_with_model_package"].update(
+                {"name": "policyengine-uk-copy"}
+            ),
+            "built_with_model_package.name",
+        ),
+        (
+            lambda manifest: manifest["build"]["built_with_core_package"].update(
+                {"name": "policyengine-core-copy"}
+            ),
+            "built_with_core_package.name",
+        ),
+        (
             lambda manifest: manifest["build"]["built_with_model_package"].pop(
                 "data_build_fingerprint"
             ),
@@ -414,6 +427,23 @@ def test_load_release_manifest_from_hf_uses_explicit_revision_when_requested(tmp
     assert mock_download.call_args.kwargs["revision"] == "1.40.4"
 
 
+def test_load_release_manifest_from_hf_uses_explicit_token(tmp_path):
+    manifest_path = tmp_path / "release_manifest.json"
+    manifest_path.write_text('{"data_package": {"version": "1.40.4"}}')
+
+    with patch(
+        "policyengine_uk_data.utils.data_upload.hf_hub_download",
+        return_value=str(manifest_path),
+    ) as mock_download:
+        manifest = load_release_manifest_from_hf(
+            version="1.40.4",
+            token="explicit-token",
+        )
+
+    assert manifest["data_package"]["version"] == "1.40.4"
+    assert mock_download.call_args.kwargs["token"] == "explicit-token"
+
+
 def test_load_release_manifest_from_hf_can_require_versioned_path():
     with patch(
         "policyengine_uk_data.utils.data_upload.hf_hub_download",
@@ -445,6 +475,32 @@ def test_load_release_manifest_from_hf_returns_none_when_revision_is_missing():
             )
             is None
         )
+
+
+def test_get_finalized_release_manifest_forwards_explicit_token(tmp_path):
+    finalized_manifest = _valid_release_manifest(tmp_path)
+    mock_api = MagicMock()
+    mock_api.repo_info.return_value = MagicMock(sha="finalized-sha")
+
+    with patch(
+        "policyengine_uk_data.utils.data_upload.load_release_manifest_from_hf",
+        return_value=finalized_manifest,
+    ) as mock_load_release_manifest:
+        manifest = get_finalized_release_manifest(
+            version="1.40.4",
+            hf_repo_name=PRIVATE_REPO,
+            hf_repo_type="model",
+            token="explicit-token",
+            api=mock_api,
+        )
+
+    assert manifest == finalized_manifest
+    assert mock_api.repo_info.call_args.kwargs["token"] == "explicit-token"
+    assert mock_load_release_manifest.call_args.kwargs["token"] == "explicit-token"
+    assert (
+        mock_load_release_manifest.call_args.kwargs["include_top_level_manifest"]
+        is False
+    )
 
 
 def test_get_model_package_version_prefers_imported_checkout(tmp_path):
@@ -532,6 +588,7 @@ def test_upload_files_to_hf_adds_uk_release_manifest_operations(tmp_path):
     assert (
         manifest["build"]["built_with_model_package"]["core"] == EXPECTED_CORE_PACKAGE
     )
+    assert mock_api.create_commit.call_args.kwargs["token"] == "token"
 
 
 def test_upload_files_to_hf_refreshes_same_version_unfinalized_manifest(tmp_path):
