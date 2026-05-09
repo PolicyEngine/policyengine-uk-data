@@ -1,3 +1,10 @@
+## [1.55.5] - 2026-05-09
+
+### Changed
+
+- Treat UK data release manifests as the authoritative finalized bundle contract and make finalized upload retries idempotent.
+
+
 ## [1.55.4] - 2026-05-05
 
 ### Changed
