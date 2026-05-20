@@ -26,8 +26,10 @@ from policyengine_uk_data.sources.road_fuel_volume import (
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk_data.utils.uprating import (
     END_YEAR,
+    HOUSEHOLD_WEIGHT_UPRATING_INDEX,
     START_YEAR,
     VOLUME_OVERRIDDEN_VARIABLES,
+    _apply_household_weight_uprating_override,
     _apply_road_fuel_litre_proxy_override,
     fuel_spending_litre_proxy_index,
     uprate_dataset,
@@ -78,9 +80,15 @@ def test__given_pre_pandemic_base__then_obr_forecast_volume_declines():
 def test__given_uprating_table__then_only_fuel_rows_are_overridden():
     # Given
     df = pd.DataFrame(
-        {year: [1.0, 1.0, 1.0] for year in range(START_YEAR, END_YEAR + 1)},
-        index=["petrol_spending", "diesel_spending", "some_other_variable"],
+        {year: [1.0, 1.0, 1.0, 1.0] for year in range(START_YEAR, END_YEAR + 1)},
+        index=[
+            "petrol_spending",
+            "diesel_spending",
+            "household_weight",
+            "some_other_variable",
+        ],
     )
+    df.loc["household_weight", 2024] = 1.2
 
     # When
     out = _apply_road_fuel_litre_proxy_override(df.copy())
@@ -88,14 +96,34 @@ def test__given_uprating_table__then_only_fuel_rows_are_overridden():
     # Then
     for year in range(START_YEAR, END_YEAR + 1):
         assert out.loc["some_other_variable", year] == 1.0
+        assert out.loc["household_weight", year] == df.loc["household_weight", year]
     for variable in VOLUME_OVERRIDDEN_VARIABLES:
         expected = fuel_spending_litre_proxy_index(
             variable=variable,
             base_year=START_YEAR,
             end_year=END_YEAR,
+            household_weight_index=df.loc["household_weight"],
         )
         for year in range(START_YEAR, END_YEAR + 1):
             assert out.loc[variable, year] == round(expected[year], 3)
+
+
+def test__given_generated_uprating_table__then_household_weight_row_is_restored():
+    # Given
+    df = pd.DataFrame(
+        {year: [1.0, 2.0] for year in range(START_YEAR, END_YEAR + 1)},
+        index=["household_weight", "some_other_variable"],
+    )
+
+    # When
+    out = _apply_household_weight_uprating_override(df.copy())
+
+    # Then
+    for year in range(START_YEAR, END_YEAR + 1):
+        assert (
+            out.loc["household_weight", year] == HOUSEHOLD_WEIGHT_UPRATING_INDEX[year]
+        )
+        assert out.loc["some_other_variable", year] == 2.0
 
 
 def test__given_storage_csv__then_fuel_rows_reflect_litre_proxy_index():
@@ -108,10 +136,24 @@ def test__given_storage_csv__then_fuel_rows_reflect_litre_proxy_index():
             variable=variable,
             base_year=START_YEAR,
             end_year=END_YEAR,
+            household_weight_index=df.loc["household_weight"],
         )
         assert variable in df.index
         for year in range(START_YEAR, END_YEAR + 1):
             assert df.loc[variable, str(year)] == round(expected[year], 3)
+
+
+def test__given_storage_csv__then_household_weight_row_is_unchanged():
+    # Given
+    df = pd.read_csv(STORAGE_FOLDER / "uprating_factors.csv").set_index("Variable")
+
+    # Then
+    assert df.loc[
+        "household_weight", [str(year) for year in range(START_YEAR, END_YEAR + 1)]
+    ].tolist() == [
+        HOUSEHOLD_WEIGHT_UPRATING_INDEX[year]
+        for year in range(START_YEAR, END_YEAR + 1)
+    ]
 
 
 def test__given_lcfs_training_table__then_fuel_uprating_preserves_litre_proxy():
