@@ -65,12 +65,12 @@ ROAD_FUEL_VOLUME_MLITRES = {
     2017: 46_400,
     2018: 46_600,
     2019: 45_900,
-    2020: 34_800,   # COVID
+    2020: 34_800,  # COVID
     2021: 43_100,
     2022: 41_700,
     2023: 41_000,
     2024: 40_100,
-    2025: 39_400,   # OBR-implied forecast (declining due to EV adoption)
+    2025: 39_400,  # OBR-implied forecast (declining due to EV adoption)
     2026: 38_700,
     2027: 37_900,
     2028: 37_100,
@@ -92,4 +92,6 @@ def road_fuel_volume_index(base_year: int = 2020) -> dict[int, float]:
     ``petrol_spending`` and ``diesel_spending``.
     """
     base = ROAD_FUEL_VOLUME_MLITRES[base_year]
-    return {year: round(value / base, 3) for year, value in ROAD_FUEL_VOLUME_MLITRES.items()}
+    return {
+        year: round(value / base, 3) for year, value in ROAD_FUEL_VOLUME_MLITRES.items()
+    }
