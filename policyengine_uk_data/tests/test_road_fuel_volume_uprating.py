@@ -1,10 +1,15 @@
 """Tests for road-fuel volume uprating. See #402."""
 
 import pandas as pd
+import pytest
+from policyengine_uk.data import UKSingleYearDataset
 
 from policyengine_uk_data.datasets.imputations.consumption import (
     CONSUMPTION_MODEL_FILENAME,
     IMPUTATIONS,
+    _fuel_litre_proxy_mlitres,
+    calibrate_dataset_fuel_litre_proxies_to_road_fuel,
+    calibrate_fuel_litre_proxies_to_road_fuel,
     fuel_spending_litre_proxy_uprating,
     uprate_lcfs_table,
 )
@@ -23,7 +28,9 @@ from policyengine_uk_data.utils.uprating import (
     END_YEAR,
     START_YEAR,
     VOLUME_OVERRIDDEN_VARIABLES,
-    _apply_road_fuel_volume_override,
+    _apply_road_fuel_litre_proxy_override,
+    fuel_spending_litre_proxy_index,
+    uprate_dataset,
 )
 
 
@@ -76,24 +83,32 @@ def test__given_uprating_table__then_only_fuel_rows_are_overridden():
     )
 
     # When
-    out = _apply_road_fuel_volume_override(df.copy())
-    expected = road_fuel_volume_index(base_year=START_YEAR, end_year=END_YEAR)
+    out = _apply_road_fuel_litre_proxy_override(df.copy())
 
     # Then
     for year in range(START_YEAR, END_YEAR + 1):
         assert out.loc["some_other_variable", year] == 1.0
     for variable in VOLUME_OVERRIDDEN_VARIABLES:
+        expected = fuel_spending_litre_proxy_index(
+            variable=variable,
+            base_year=START_YEAR,
+            end_year=END_YEAR,
+        )
         for year in range(START_YEAR, END_YEAR + 1):
             assert out.loc[variable, year] == round(expected[year], 3)
 
 
-def test__given_storage_csv__then_fuel_rows_reflect_volume_index():
+def test__given_storage_csv__then_fuel_rows_reflect_litre_proxy_index():
     # Given
     df = pd.read_csv(STORAGE_FOLDER / "uprating_factors.csv").set_index("Variable")
-    expected = road_fuel_volume_index(base_year=START_YEAR, end_year=END_YEAR)
 
     # Then
     for variable in VOLUME_OVERRIDDEN_VARIABLES:
+        expected = fuel_spending_litre_proxy_index(
+            variable=variable,
+            base_year=START_YEAR,
+            end_year=END_YEAR,
+        )
         assert variable in df.index
         for year in range(START_YEAR, END_YEAR + 1):
             assert df.loc[variable, str(year)] == round(expected[year], 3)
@@ -148,6 +163,87 @@ def test__given_obr_2027_volume__then_rate_difference_matches_cost_benchmark():
     assert round(benchmark_cost_gbp_bn, 2) == 3.12
 
 
+def test__given_imputed_fuel_proxies__then_calibration_matches_road_fuel_litres():
+    # Given
+    from policyengine_uk.system import system
+
+    year = 2027
+    target_mlitres = road_fuel_clearances_mlitres()[year]
+    petrol_price = system.parameters.household.consumption.fuel.prices.petrol(year)
+    diesel_price = system.parameters.household.consumption.fuel.prices.diesel(year)
+    household = pd.DataFrame(
+        {
+            "household_weight": [1.0, 1.0],
+            "petrol_spending": [
+                target_mlitres * 1_000_000 * petrol_price,
+                0.0,
+            ],
+            "diesel_spending": [
+                0.0,
+                target_mlitres * 1_000_000 * diesel_price,
+            ],
+        }
+    )
+
+    # When
+    scale = calibrate_fuel_litre_proxies_to_road_fuel(household, year)
+
+    # Then
+    assert scale == pytest.approx(0.5)
+    assert _fuel_litre_proxy_mlitres(household, year) == pytest.approx(target_mlitres)
+
+
+def test__given_final_weight_changes__then_dataset_calibration_matches_litres():
+    # Given
+    from policyengine_uk.system import system
+
+    year = 2023
+    target_mlitres = road_fuel_clearances_mlitres()[year]
+    petrol_price = system.parameters.household.consumption.fuel.prices.petrol(year)
+    dataset = _minimal_fuel_dataset(
+        fiscal_year=year,
+        petrol_spending=target_mlitres * 1_000_000 * petrol_price,
+        diesel_spending=0.0,
+        household_weight=2.0,
+    )
+
+    # When
+    scale = calibrate_dataset_fuel_litre_proxies_to_road_fuel(dataset)
+
+    # Then
+    assert scale == pytest.approx(0.5)
+    assert _fuel_litre_proxy_mlitres(dataset.household, year) == pytest.approx(
+        target_mlitres
+    )
+
+
+def test__given_calibrated_dataset_uprated__then_litres_track_forecast_target():
+    # Given
+    from policyengine_uk.system import system
+
+    start_year = 2023
+    target_year = 2027
+    start_mlitres = road_fuel_clearances_mlitres()[start_year]
+    petrol_price = system.parameters.household.consumption.fuel.prices.petrol(
+        start_year
+    )
+    dataset = _minimal_fuel_dataset(
+        fiscal_year=start_year,
+        petrol_spending=start_mlitres * 1_000_000 * petrol_price,
+        diesel_spending=0.0,
+    )
+    calibrate_dataset_fuel_litre_proxies_to_road_fuel(dataset)
+
+    # When
+    uprated = uprate_dataset(dataset, target_year)
+
+    # Then
+    assert _fuel_litre_proxy_mlitres(
+        uprated.household,
+        target_year,
+    ) == pytest.approx(road_fuel_clearances_mlitres()[target_year], rel=1e-3)
+
+
 def test__given_year_after_obr_horizon__then_last_forecast_is_carried_forward():
     # When
     series = road_fuel_clearances_mlitres(end_year=END_YEAR)
@@ -155,3 +251,36 @@ def test__given_year_after_obr_horizon__then_last_forecast_is_carried_forward():
     # Then
     assert series[2031] == series[2030]
     assert series[2034] == series[2030]
+
+
+def _minimal_fuel_dataset(
+    *,
+    fiscal_year: int,
+    petrol_spending: float,
+    diesel_spending: float,
+    household_weight: float = 1.0,
+) -> UKSingleYearDataset:
+    return UKSingleYearDataset(
+        person=pd.DataFrame(
+            {
+                "person_id": [0],
+                "benunit_id": [0],
+                "household_id": [0],
+            }
+        ),
+        benunit=pd.DataFrame(
+            {
+                "benunit_id": [0],
+                "household_id": [0],
+            }
+        ),
+        household=pd.DataFrame(
+            {
+                "household_id": [0],
+                "household_weight": [household_weight],
+                "petrol_spending": [petrol_spending],
+                "diesel_spending": [diesel_spending],
+            }
+        ),
+        fiscal_year=fiscal_year,
+    )

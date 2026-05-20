@@ -5,11 +5,15 @@ from policyengine_uk.data import UKSingleYearDataset
 START_YEAR = 2020
 END_YEAR = 2034
 
-# These variables are named as spending, but PolicyEngine UK currently uses
-# them only to derive fuel litres through ``litres = spending / price``. With
-# pump-price parameters held flat after 2024, price-index uprating turns price
-# growth into litres growth. Use road-fuel volumes instead.
+# These variables are named as spending, but PolicyEngine UK derives fuel
+# litres through ``litres = spending / price`` and uprates household weights
+# separately. Uprate fuel proxies by road-fuel volume per weighted household
+# and model pump prices so weighted litres follow HMRC/OBR clearances.
 VOLUME_OVERRIDDEN_VARIABLES = ("petrol_spending", "diesel_spending")
+FUEL_PRICE_PARAMETER_NAME = {
+    "petrol_spending": "petrol",
+    "diesel_spending": "diesel",
+}
 
 
 class UpratingYearOutOfRangeError(ValueError):
@@ -61,9 +65,9 @@ def create_policyengine_uprating_factors_table():
     df = df.pivot(index="Variable", columns="Year", values="Value")
     df = df.sort_values("Variable")
 
-    # Ensure petrol/diesel use sourced road-fuel clearances. This keeps the
-    # generated CSV aligned with PolicyEngine UK's runtime road-fuel index.
-    df = _apply_road_fuel_volume_override(df)
+    # Ensure petrol/diesel use sourced road-fuel clearances and model pump
+    # prices. This keeps litres aligned after PolicyEngine divides by price.
+    df = _apply_road_fuel_litre_proxy_override(df)
 
     df.to_csv(STORAGE_FOLDER / "uprating_factors.csv")
 
@@ -78,41 +82,86 @@ def create_policyengine_uprating_factors_table():
     return df
 
 
-def _apply_road_fuel_volume_override(df: pd.DataFrame) -> pd.DataFrame:
-    """Set petrol/diesel growth to a sourced road-fuel volume index.
+def fuel_spending_litre_proxy_index(
+    *,
+    variable: str,
+    base_year: int = START_YEAR,
+    end_year: int = END_YEAR,
+    parameters=None,
+) -> dict[int, float]:
+    """Return the spending-proxy index that preserves fuel litres.
 
-    PolicyEngine derives litres as ``spending / price``. With pump-price
-    parameters held flat after 2024, a price index would implicitly become
-    quantity growth. This function writes the road-fuel-volume index used by
-    PolicyEngine UK runtime projection: HMRC clearances historically and
-    OBR-implied clearances over the forecast.
+    PolicyEngine derives litres as ``spending / price`` and separately uprates
+    household weights. Therefore the spending proxy must grow with physical
+    road-fuel volumes per weighted household and the model pump-price
+    denominator.
     """
+    from policyengine_uk.system import system
     from policyengine_uk_data.sources.road_fuel_volume import (
         road_fuel_volume_index,
     )
 
+    if variable not in FUEL_PRICE_PARAMETER_NAME:
+        raise ValueError(f"Unsupported fuel variable: {variable}")
+
+    if parameters is None:
+        parameters = system.parameters
+
+    volume_index = road_fuel_volume_index(base_year=base_year, end_year=end_year)
+    price_parameter = getattr(
+        parameters.household.consumption.fuel.prices,
+        FUEL_PRICE_PARAMETER_NAME[variable],
+    )
+    population = parameters.gov.economic_assumptions.indices.ons.population
+    base_price = price_parameter(base_year)
+    base_population = population(base_year)
+    return {
+        year: (
+            volume_index[year]
+            * price_parameter(year)
+            / base_price
+            * base_population
+            / population(year)
+        )
+        for year in volume_index
+    }
+
+
+def _apply_road_fuel_litre_proxy_override(df: pd.DataFrame) -> pd.DataFrame:
+    """Set petrol/diesel growth to litre-preserving spending-proxy indices.
+
+    Historical and forecast litres come from HMRC clearances and OBR-implied
+    clearances. Multiplying by model pump prices and dividing by the household
+    weight index keeps weighted ``spending / price`` equal to those litre
+    controls when datasets are uprated.
+    """
     if not any(v in df.index for v in VOLUME_OVERRIDDEN_VARIABLES):
         return df
-
-    volume_index = road_fuel_volume_index(
-        base_year=START_YEAR,
-        end_year=END_YEAR,
-    )
-    missing_years = [
-        year for year in range(START_YEAR, END_YEAR + 1) if year not in volume_index
-    ]
-    if missing_years:
-        raise ValueError(
-            "Road-fuel volume index missing years: "
-            + ", ".join(str(year) for year in missing_years)
-        )
 
     for variable in VOLUME_OVERRIDDEN_VARIABLES:
         if variable not in df.index:
             continue
+        index = fuel_spending_litre_proxy_index(
+            variable=variable,
+            base_year=START_YEAR,
+            end_year=END_YEAR,
+        )
+        missing_years = [
+            year for year in range(START_YEAR, END_YEAR + 1) if year not in index
+        ]
+        if missing_years:
+            raise ValueError(
+                f"{variable} litre-proxy index missing years: "
+                + ", ".join(str(year) for year in missing_years)
+            )
         for year in range(START_YEAR, END_YEAR + 1):
-            df.loc[variable, year] = round(volume_index[year], 3)
+            df.loc[variable, year] = round(index[year], 3)
     return df
+
+
+def _apply_road_fuel_volume_override(df: pd.DataFrame) -> pd.DataFrame:
+    """Backward-compatible alias for the litre-preserving fuel override."""
+    return _apply_road_fuel_litre_proxy_override(df)
 
 
 def uprate_values(values, variable_name, start_year=START_YEAR, end_year=END_YEAR):
