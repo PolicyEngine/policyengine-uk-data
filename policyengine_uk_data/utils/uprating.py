@@ -14,6 +14,23 @@ FUEL_PRICE_PARAMETER_NAME = {
     "petrol_spending": "petrol",
     "diesel_spending": "diesel",
 }
+HOUSEHOLD_WEIGHT_UPRATING_INDEX = {
+    2020: 1.0,
+    2021: 1.0,
+    2022: 1.003,
+    2023: 1.017,
+    2024: 1.027,
+    2025: 1.039,
+    2026: 1.046,
+    2027: 1.054,
+    2028: 1.058,
+    2029: 1.064,
+    2030: 1.064,
+    2031: 1.064,
+    2032: 1.064,
+    2033: 1.064,
+    2034: 1.064,
+}
 
 
 class UpratingYearOutOfRangeError(ValueError):
@@ -65,6 +82,11 @@ def create_policyengine_uprating_factors_table():
     df = df.pivot(index="Variable", columns="Year", values="Value")
     df = df.sort_values("Variable")
 
+    # Keep the population calibration row stable. Current PolicyEngine UK
+    # population indices would inflate final calibrated population above the
+    # existing fidelity guard.
+    df = _apply_household_weight_uprating_override(df)
+
     # Ensure petrol/diesel use sourced road-fuel clearances and model pump
     # prices. This keeps litres aligned after PolicyEngine divides by price.
     df = _apply_road_fuel_litre_proxy_override(df)
@@ -82,12 +104,33 @@ def create_policyengine_uprating_factors_table():
     return df
 
 
+def _apply_household_weight_uprating_override(df: pd.DataFrame) -> pd.DataFrame:
+    """Restore the household-weight index used by the calibrated dataset."""
+    if "household_weight" not in df.index:
+        return df
+
+    missing_years = [
+        year
+        for year in range(START_YEAR, END_YEAR + 1)
+        if year not in HOUSEHOLD_WEIGHT_UPRATING_INDEX
+    ]
+    if missing_years:
+        raise ValueError(
+            "Household-weight uprating index missing years: "
+            + ", ".join(str(year) for year in missing_years)
+        )
+    for year in range(START_YEAR, END_YEAR + 1):
+        df.loc["household_weight", year] = HOUSEHOLD_WEIGHT_UPRATING_INDEX[year]
+    return df
+
+
 def fuel_spending_litre_proxy_index(
     *,
     variable: str,
     base_year: int = START_YEAR,
     end_year: int = END_YEAR,
     parameters=None,
+    household_weight_index: dict[int, float] | pd.Series | None = None,
 ) -> dict[int, float]:
     """Return the spending-proxy index that preserves fuel litres.
 
@@ -112,16 +155,38 @@ def fuel_spending_litre_proxy_index(
         parameters.household.consumption.fuel.prices,
         FUEL_PRICE_PARAMETER_NAME[variable],
     )
-    population = parameters.gov.economic_assumptions.indices.ons.population
     base_price = price_parameter(base_year)
-    base_population = population(base_year)
+
+    if household_weight_index is None:
+        population = parameters.gov.economic_assumptions.indices.ons.population
+        base_household_weight_index = population(base_year)
+
+        def household_weight_relative(year: int) -> float:
+            return population(year) / base_household_weight_index
+
+    else:
+
+        def household_weight_value(year: int) -> float:
+            if hasattr(household_weight_index, "index"):
+                if year in household_weight_index.index:
+                    return float(household_weight_index.loc[year])
+                return float(household_weight_index.loc[str(year)])
+            try:
+                return float(household_weight_index[year])
+            except KeyError:
+                return float(household_weight_index[str(year)])
+
+        base_household_weight_index = household_weight_value(base_year)
+
+        def household_weight_relative(year: int) -> float:
+            return household_weight_value(year) / base_household_weight_index
+
     return {
         year: (
             volume_index[year]
             * price_parameter(year)
             / base_price
-            * base_population
-            / population(year)
+            / household_weight_relative(year)
         )
         for year in volume_index
     }
@@ -141,10 +206,14 @@ def _apply_road_fuel_litre_proxy_override(df: pd.DataFrame) -> pd.DataFrame:
     for variable in VOLUME_OVERRIDDEN_VARIABLES:
         if variable not in df.index:
             continue
+        household_weight_index = (
+            df.loc["household_weight"] if "household_weight" in df.index else None
+        )
         index = fuel_spending_litre_proxy_index(
             variable=variable,
             base_year=START_YEAR,
             end_year=END_YEAR,
+            household_weight_index=household_weight_index,
         )
         missing_years = [
             year for year in range(START_YEAR, END_YEAR + 1) if year not in index
