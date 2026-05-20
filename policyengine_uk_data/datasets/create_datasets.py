@@ -69,6 +69,7 @@ def main():
             "Calibrate constituency weights",
             "Calibrate local authority weights",
             "Downrate to 2023",
+            "Calibrate fuel litres",
             "Save final dataset",
             "Create tiny datasets",
         ]
@@ -216,6 +217,14 @@ def main():
             update_dataset("Downrate to 2023", "processing")
             frs_calibrated = uprate_dataset(frs_calibrated_constituencies, 2023)
             update_dataset("Downrate to 2023", "completed")
+
+            update_dataset("Calibrate fuel litres", "processing")
+            from policyengine_uk_data.datasets.imputations.consumption import (
+                calibrate_dataset_fuel_litre_proxies_to_road_fuel,
+            )
+
+            calibrate_dataset_fuel_litre_proxies_to_road_fuel(frs_calibrated)
+            update_dataset("Calibrate fuel litres", "completed")
 
             update_dataset("Save final dataset", "processing")
             strip_internal_disability_reported_amounts(frs_calibrated).save(

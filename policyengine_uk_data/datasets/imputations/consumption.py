@@ -610,10 +610,76 @@ def fuel_spending_litre_proxy_uprating(
         parameters.household.consumption.fuel.prices,
         FUEL_PRICE_PARAMETER_NAME[variable],
     )
+    population = parameters.gov.economic_assumptions.indices.ons.population
     return (
         road_fuel_volume_uprating(start_year=start_year, end_year=end_year)
+        / (population(end_year) / population(start_year))
         * model_price(end_year)
         / lcfs_price
+    )
+
+
+def _fuel_litre_proxy_mlitres(
+    household: pd.DataFrame,
+    fiscal_year: int,
+    parameters=None,
+) -> float:
+    """Return weighted petrol + diesel litres represented by spending proxies."""
+    from policyengine_uk.system import system
+
+    if parameters is None:
+        parameters = system.parameters
+
+    total_litres = 0.0
+    for variable, price_parameter_name in FUEL_PRICE_PARAMETER_NAME.items():
+        price = getattr(
+            parameters.household.consumption.fuel.prices,
+            price_parameter_name,
+        )(fiscal_year)
+        total_litres += household[variable] / price
+    return (total_litres * household["household_weight"]).sum() / 1_000_000
+
+
+def calibrate_fuel_litre_proxies_to_road_fuel(
+    household: pd.DataFrame,
+    fiscal_year: int,
+    parameters=None,
+) -> float:
+    """Scale imputed fuel proxies to HMRC/OBR road-fuel litre controls.
+
+    PolicyEngine UK derives petrol and diesel litres from spending divided by
+    pump prices. Applying one multiplicative factor to petrol and diesel
+    spending preserves the household distribution while making the resulting
+    litres reconcile to the external fuel-duty volume benchmark.
+    """
+    from policyengine_uk_data.sources.road_fuel_volume import (
+        road_fuel_clearances_mlitres,
+    )
+
+    actual_mlitres = _fuel_litre_proxy_mlitres(
+        household,
+        fiscal_year,
+        parameters=parameters,
+    )
+    if actual_mlitres <= 0:
+        return 1.0
+
+    target_mlitres = road_fuel_clearances_mlitres(end_year=fiscal_year)[fiscal_year]
+    scale = target_mlitres / actual_mlitres
+    for variable in FUEL_PRICE_PARAMETER_NAME:
+        household[variable] *= scale
+    return scale
+
+
+def calibrate_dataset_fuel_litre_proxies_to_road_fuel(
+    dataset: UKSingleYearDataset,
+    parameters=None,
+) -> float:
+    """Scale a dataset's fuel proxies after final household weights are set."""
+    return calibrate_fuel_litre_proxies_to_road_fuel(
+        dataset.household,
+        int(dataset.time_period),
+        parameters=parameters,
     )
 
 
