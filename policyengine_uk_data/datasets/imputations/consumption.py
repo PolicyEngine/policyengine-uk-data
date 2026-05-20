@@ -527,9 +527,15 @@ def generate_lcfs_table(lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame)
 
 def uprate_lcfs_table(household: pd.DataFrame, time_period: str) -> pd.DataFrame:
     from policyengine_uk.system import system
+    from policyengine_uk_data.sources.road_fuel_volume import (
+        road_fuel_volume_uprating,
+    )
 
     start_period = 2021
-    fuel_uprating = 1.3
+    fuel_uprating = road_fuel_volume_uprating(
+        start_year=start_period,
+        end_year=int(str(time_period)[:4]),
+    )
     household["petrol_spending"] *= fuel_uprating
     household["diesel_spending"] *= fuel_uprating
 

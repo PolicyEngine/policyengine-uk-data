@@ -5,6 +5,12 @@ from policyengine_uk.data import UKSingleYearDataset
 START_YEAR = 2020
 END_YEAR = 2034
 
+# These variables are named as spending, but PolicyEngine UK currently uses
+# them only to derive fuel litres through ``litres = spending / price``. With
+# pump-price parameters held flat after 2024, CPI uprating turns price growth
+# into litres growth. Use road-fuel volumes instead.
+VOLUME_OVERRIDDEN_VARIABLES = ("petrol_spending", "diesel_spending")
+
 
 class UpratingYearOutOfRangeError(ValueError):
     """Raised when a caller asks for an uprating factor outside the table range.
@@ -54,6 +60,11 @@ def create_policyengine_uprating_factors_table():
     # Convert to there is a column for each year
     df = df.pivot(index="Variable", columns="Year", values="Value")
     df = df.sort_values("Variable")
+
+    # Override CPI-based uprating for petrol/diesel with sourced road-fuel
+    # clearances. See policyengine_uk_data.sources.road_fuel_volume.
+    df = _apply_road_fuel_volume_override(df)
+
     df.to_csv(STORAGE_FOLDER / "uprating_factors.csv")
 
     # Create a table with growth factors by year
@@ -64,6 +75,45 @@ def create_policyengine_uprating_factors_table():
     df_growth[START_YEAR] = 0
 
     df_growth.to_csv(STORAGE_FOLDER / "uprating_growth_factors.csv")
+    return df
+
+
+def _apply_road_fuel_volume_override(df: pd.DataFrame) -> pd.DataFrame:
+    """Replace CPI-based growth for petrol/diesel with a road-fuel volume index.
+
+    The default ``uprating`` parameter on ``petrol_spending`` and
+    ``diesel_spending`` in the PolicyEngine UK model is the OBR CPI. Combined
+    with a flat pump-price parameter and ``litres = spending / price`` that
+    implicitly inflates household-level *quantities* by CPI — which is
+    economically wrong. This function substitutes the row with a
+    road-fuel-volume index: HMRC clearances historically and OBR-implied
+    clearances over the forecast.
+    """
+    from policyengine_uk_data.sources.road_fuel_volume import (
+        road_fuel_volume_index,
+    )
+
+    if not any(v in df.index for v in VOLUME_OVERRIDDEN_VARIABLES):
+        return df
+
+    volume_index = road_fuel_volume_index(
+        base_year=START_YEAR,
+        end_year=END_YEAR,
+    )
+    missing_years = [
+        year for year in range(START_YEAR, END_YEAR + 1) if year not in volume_index
+    ]
+    if missing_years:
+        raise ValueError(
+            "Road-fuel volume index missing years: "
+            + ", ".join(str(year) for year in missing_years)
+        )
+
+    for variable in VOLUME_OVERRIDDEN_VARIABLES:
+        if variable not in df.index:
+            continue
+        for year in range(START_YEAR, END_YEAR + 1):
+            df.loc[variable, year] = round(volume_index[year], 3)
     return df
 
 
