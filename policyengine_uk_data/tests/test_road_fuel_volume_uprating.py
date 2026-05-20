@@ -3,7 +3,9 @@
 import pandas as pd
 
 from policyengine_uk_data.datasets.imputations.consumption import (
+    CONSUMPTION_MODEL_FILENAME,
     IMPUTATIONS,
+    fuel_spending_litre_proxy_uprating,
     uprate_lcfs_table,
 )
 from policyengine_uk_data.sources.road_fuel_volume import (
@@ -97,7 +99,7 @@ def test__given_storage_csv__then_fuel_rows_reflect_volume_index():
             assert df.loc[variable, str(year)] == round(expected[year], 3)
 
 
-def test__given_lcfs_training_table__then_fuel_uprating_uses_volume_index():
+def test__given_lcfs_training_table__then_fuel_uprating_preserves_litre_proxy():
     # Given
     household = pd.DataFrame({variable: [1.0] for variable in IMPUTATIONS})
     household["hbai_household_net_income"] = 1.0
@@ -108,12 +110,42 @@ def test__given_lcfs_training_table__then_fuel_uprating_uses_volume_index():
 
     # When
     out = uprate_lcfs_table(household.copy(), "2024")
-    expected = road_fuel_volume_uprating(start_year=2021, end_year=2024)
+    petrol_expected = fuel_spending_litre_proxy_uprating(
+        variable="petrol_spending",
+        start_year=2021,
+        end_year=2024,
+    )
+    diesel_expected = fuel_spending_litre_proxy_uprating(
+        variable="diesel_spending",
+        start_year=2021,
+        end_year=2024,
+    )
+    volume_only = road_fuel_volume_uprating(start_year=2021, end_year=2024)
 
     # Then
-    assert out["petrol_spending"].iloc[0] == expected
-    assert out["diesel_spending"].iloc[0] == expected
-    assert expected != 1.3
+    assert out["petrol_spending"].iloc[0] == petrol_expected
+    assert out["diesel_spending"].iloc[0] == diesel_expected
+    assert petrol_expected > volume_only
+    assert diesel_expected > volume_only
+    assert petrol_expected != 1.3
+
+
+def test__given_fuel_method_change__then_consumption_model_filename_is_versioned():
+    # Then
+    assert CONSUMPTION_MODEL_FILENAME != "consumption.pkl"
+    assert "fuel_litre_proxy" in CONSUMPTION_MODEL_FILENAME
+
+
+def test__given_obr_2027_volume__then_rate_difference_matches_cost_benchmark():
+    # Given
+    road_fuel_bn_litres = road_fuel_clearances_mlitres()[2027] / 1_000
+    broad_2027_rate_gap_gbp_per_litre = FISCAL_YEAR_AVERAGE_DUTY_RATE[2027] - 0.5295
+
+    # When
+    benchmark_cost_gbp_bn = road_fuel_bn_litres * broad_2027_rate_gap_gbp_per_litre
+
+    # Then
+    assert round(benchmark_cost_gbp_bn, 2) == 3.12
 
 
 def test__given_year_after_obr_horizon__then_last_forecast_is_carried_forward():
