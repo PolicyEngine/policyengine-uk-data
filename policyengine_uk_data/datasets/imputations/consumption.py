@@ -38,6 +38,21 @@ _HAS_FUEL_SEED = 42
 # EV/ICE vehicle mix from NTS 2024
 NTS_2024_ICE_VEHICLE_SHARE = 0.90
 
+# DESNZ weekly road-fuel price statistics, "Data" sheet, fiscal-year average
+# UK pump prices over 2021-04-01 to 2022-03-31. Data source:
+# https://www.data.gov.uk/dataset/21db6396-3daf-4d90-8b3f-054995256018/petrol-and-diesel-prices
+# LCFS records nominal fuel spending, while PolicyEngine derives litres via
+# ``spending / model pump price``.
+LCFS_FUEL_PRICE_GBP_PER_LITRE = {
+    "petrol_spending": {2021: 1.3890790089424998},
+    "diesel_spending": {2021: 1.4291180616502566},
+}
+FUEL_PRICE_PARAMETER_NAME = {
+    "petrol_spending": "petrol",
+    "diesel_spending": "diesel",
+}
+CONSUMPTION_MODEL_FILENAME = "consumption_fuel_litre_proxy_2026_05.pkl"
+
 REGIONS = {
     1: "NORTH_EAST",
     2: "NORTH_WEST",
@@ -527,17 +542,16 @@ def generate_lcfs_table(lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame)
 
 def uprate_lcfs_table(household: pd.DataFrame, time_period: str) -> pd.DataFrame:
     from policyengine_uk.system import system
-    from policyengine_uk_data.sources.road_fuel_volume import (
-        road_fuel_volume_uprating,
-    )
 
     start_period = 2021
-    fuel_uprating = road_fuel_volume_uprating(
-        start_year=start_period,
-        end_year=int(str(time_period)[:4]),
-    )
-    household["petrol_spending"] *= fuel_uprating
-    household["diesel_spending"] *= fuel_uprating
+    target_year = int(str(time_period)[:4])
+    for variable in FUEL_PRICE_PARAMETER_NAME:
+        household[variable] *= fuel_spending_litre_proxy_uprating(
+            variable=variable,
+            start_year=start_period,
+            end_year=target_year,
+            parameters=system.parameters,
+        )
 
     cpi = system.parameters.gov.economic_assumptions.indices.obr.consumer_price_index
     cpi_uprating = cpi(time_period) / cpi(start_period)
@@ -566,6 +580,43 @@ def uprate_lcfs_table(household: pd.DataFrame, time_period: str) -> pd.DataFrame
     return household
 
 
+def fuel_spending_litre_proxy_uprating(
+    *,
+    variable: str,
+    start_year: int,
+    end_year: int,
+    parameters=None,
+) -> float:
+    """Uprate LCFS fuel spending to target-year litres at model pump prices."""
+    from policyengine_uk.system import system
+    from policyengine_uk_data.sources.road_fuel_volume import (
+        road_fuel_volume_uprating,
+    )
+
+    if variable not in FUEL_PRICE_PARAMETER_NAME:
+        raise ValueError(f"Unsupported fuel variable: {variable}")
+
+    if parameters is None:
+        parameters = system.parameters
+
+    try:
+        lcfs_price = LCFS_FUEL_PRICE_GBP_PER_LITRE[variable][start_year]
+    except KeyError as exc:
+        raise ValueError(
+            f"Missing LCFS fuel price for {variable} in fiscal year {start_year}"
+        ) from exc
+
+    model_price = getattr(
+        parameters.household.consumption.fuel.prices,
+        FUEL_PRICE_PARAMETER_NAME[variable],
+    )
+    return (
+        road_fuel_volume_uprating(start_year=start_year, end_year=end_year)
+        * model_price(end_year)
+        / lcfs_price
+    )
+
+
 def save_imputation_models():
     from policyengine_uk_data.utils.qrf import QRF
 
@@ -581,15 +632,16 @@ def save_imputation_models():
     household = generate_lcfs_table(lcfs_person, lcfs_household)
     household = uprate_lcfs_table(household, "2024")
     consumption.fit(household[PREDICTOR_VARIABLES], household[IMPUTATIONS])
-    consumption.save(STORAGE_FOLDER / "consumption.pkl")
+    consumption.save(STORAGE_FOLDER / CONSUMPTION_MODEL_FILENAME)
     return consumption
 
 
 def create_consumption_model(overwrite_existing: bool = False):
     from policyengine_uk_data.utils.qrf import QRF
 
-    if (STORAGE_FOLDER / "consumption.pkl").exists() and not overwrite_existing:
-        return QRF(file_path=STORAGE_FOLDER / "consumption.pkl")
+    model_path = STORAGE_FOLDER / CONSUMPTION_MODEL_FILENAME
+    if model_path.exists() and not overwrite_existing:
+        return QRF(file_path=model_path)
     return save_imputation_models()
 
 

@@ -7,8 +7,8 @@ END_YEAR = 2034
 
 # These variables are named as spending, but PolicyEngine UK currently uses
 # them only to derive fuel litres through ``litres = spending / price``. With
-# pump-price parameters held flat after 2024, CPI uprating turns price growth
-# into litres growth. Use road-fuel volumes instead.
+# pump-price parameters held flat after 2024, price-index uprating turns price
+# growth into litres growth. Use road-fuel volumes instead.
 VOLUME_OVERRIDDEN_VARIABLES = ("petrol_spending", "diesel_spending")
 
 
@@ -61,8 +61,8 @@ def create_policyengine_uprating_factors_table():
     df = df.pivot(index="Variable", columns="Year", values="Value")
     df = df.sort_values("Variable")
 
-    # Override CPI-based uprating for petrol/diesel with sourced road-fuel
-    # clearances. See policyengine_uk_data.sources.road_fuel_volume.
+    # Ensure petrol/diesel use sourced road-fuel clearances. This keeps the
+    # generated CSV aligned with PolicyEngine UK's runtime road-fuel index.
     df = _apply_road_fuel_volume_override(df)
 
     df.to_csv(STORAGE_FOLDER / "uprating_factors.csv")
@@ -79,15 +79,13 @@ def create_policyengine_uprating_factors_table():
 
 
 def _apply_road_fuel_volume_override(df: pd.DataFrame) -> pd.DataFrame:
-    """Replace CPI-based growth for petrol/diesel with a road-fuel volume index.
+    """Set petrol/diesel growth to a sourced road-fuel volume index.
 
-    The default ``uprating`` parameter on ``petrol_spending`` and
-    ``diesel_spending`` in the PolicyEngine UK model is the OBR CPI. Combined
-    with a flat pump-price parameter and ``litres = spending / price`` that
-    implicitly inflates household-level *quantities* by CPI — which is
-    economically wrong. This function substitutes the row with a
-    road-fuel-volume index: HMRC clearances historically and OBR-implied
-    clearances over the forecast.
+    PolicyEngine derives litres as ``spending / price``. With pump-price
+    parameters held flat after 2024, a price index would implicitly become
+    quantity growth. This function writes the road-fuel-volume index used by
+    PolicyEngine UK runtime projection: HMRC clearances historically and
+    OBR-implied clearances over the forecast.
     """
     from policyengine_uk_data.sources.road_fuel_volume import (
         road_fuel_volume_index,
