@@ -1,3 +1,10 @@
+## [1.55.7] - 2026-05-20
+
+### Changed
+
+- Adjust LCFS petrol and diesel consumption training to preserve fuel-litre proxies using DESNZ pump-price averages, and version the regenerated consumption imputation model filename.
+
+
 ## [1.55.6] - 2026-05-20
 
 No significant changes.
