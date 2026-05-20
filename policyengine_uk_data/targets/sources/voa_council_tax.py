@@ -10,8 +10,12 @@ Sources:
 """
 
 from functools import lru_cache
+from html import unescape
 from io import BytesIO
 import re
+import time
+from urllib.parse import urljoin
+from zipfile import BadZipFile
 
 import openpyxl
 import requests
@@ -33,6 +37,10 @@ _SCOTLAND_WORKBOOK_URL = (
     "number-of-chargeable-dwellings/chargeable-dwellings---september-2025-data/"
     "chargeable-dwellings---september-2025-data/govscot%3Adocument/"
     "CTAXBASE%2B2025%2B-%2BTables%2B-%2BChargeable%2BDwellings.xlsx"
+)
+_SCOTLAND_WORKBOOK_LINK = re.compile(
+    r'href="([^"]*chargeable-dwellings---september-2025-data[^"]+?\.xlsx)"',
+    re.IGNORECASE,
 )
 _VOA_NAME_TO_REGION = {
     "North East": "NORTH_EAST",
@@ -70,16 +78,70 @@ def _download_workbook() -> openpyxl.Workbook:
     return openpyxl.load_workbook(BytesIO(workbook_response.content), data_only=True)
 
 
-@lru_cache(maxsize=1)
-def _download_scotland_workbook() -> openpyxl.Workbook:
+def _load_xlsx_response(response: requests.Response) -> openpyxl.Workbook:
+    response.raise_for_status()
+    try:
+        return openpyxl.load_workbook(BytesIO(response.content), data_only=True)
+    except BadZipFile as error:
+        content_type = response.headers.get("content-type", "")
+        preview = response.content[:160].decode("utf-8", errors="replace")
+        preview = " ".join(preview.split())
+        raise ValueError(
+            "Expected an XLSX workbook from "
+            f"{response.url}; got content-type {content_type!r} "
+            f"with {len(response.content)} bytes: {preview!r}"
+        ) from error
+
+
+def _scotland_workbook_urls_from_page() -> list[str]:
     r = requests.get(
-        _SCOTLAND_WORKBOOK_URL,
+        _SCOTLAND_REF,
         headers=HEADERS,
         allow_redirects=True,
         timeout=60,
     )
     r.raise_for_status()
-    return openpyxl.load_workbook(BytesIO(r.content), data_only=True)
+    urls: list[str] = []
+    for match in _SCOTLAND_WORKBOOK_LINK.finditer(r.text):
+        url = urljoin(_SCOTLAND_REF, unescape(match.group(1)))
+        if url not in urls:
+            urls.append(url)
+    return urls
+
+
+@lru_cache(maxsize=1)
+def _download_scotland_workbook() -> openpyxl.Workbook:
+    errors: list[str] = []
+
+    def try_url(url: str) -> openpyxl.Workbook | None:
+        for attempt in range(3):
+            try:
+                r = requests.get(
+                    url,
+                    headers=HEADERS,
+                    allow_redirects=True,
+                    timeout=60,
+                )
+                return _load_xlsx_response(r)
+            except Exception as error:
+                errors.append(f"{url}: {error}")
+                if attempt < 2:
+                    time.sleep(2**attempt)
+        return None
+
+    workbook = try_url(_SCOTLAND_WORKBOOK_URL)
+    if workbook is not None:
+        return workbook
+
+    for url in _scotland_workbook_urls_from_page():
+        workbook = try_url(url)
+        if workbook is not None:
+            return workbook
+
+    raise ValueError(
+        "Could not download Scotland council tax workbook. Recent errors: "
+        + " | ".join(errors[-3:])
+    )
 
 
 def _to_float(value) -> float:
