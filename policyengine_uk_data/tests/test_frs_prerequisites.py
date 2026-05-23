@@ -5,7 +5,9 @@ import pytest
 
 from policyengine_uk_data.datasets.create_datasets import (
     _materialize_base_year_dataset,
+    _materialize_calibration_year_dataset,
     _needs_base_year_materialization,
+    _needs_calibration_year_materialization,
 )
 from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
 from policyengine_uk_data.storage.download_private_prerequisites import (
@@ -50,6 +52,27 @@ def test_materialize_base_year_downrates_after_current_target_calibration():
     assert calls == [(dataset, 2024)]
 
 
+def test_materialize_calibration_year_uprates_before_current_target_calibration():
+    release = replace(
+        CURRENT_FRS_RELEASE,
+        base_year=2024,
+        calibration_year=2025,
+    )
+    dataset = object()
+    calls = []
+
+    def uprate_dataset(dataset_to_uprate, target_year):
+        calls.append((dataset_to_uprate, target_year))
+        return "calibration-year-dataset"
+
+    assert _needs_calibration_year_materialization(release)
+    assert (
+        _materialize_calibration_year_dataset(dataset, release, uprate_dataset)
+        == "calibration-year-dataset"
+    )
+    assert calls == [(dataset, 2025)]
+
+
 def test_materialize_base_year_is_noop_when_calibrating_base_year():
     release = replace(
         CURRENT_FRS_RELEASE,
@@ -63,6 +86,24 @@ def test_materialize_base_year_is_noop_when_calibrating_base_year():
 
     assert not _needs_base_year_materialization(release)
     assert _materialize_base_year_dataset(dataset, release, uprate_dataset) is dataset
+
+
+def test_materialize_calibration_year_is_noop_when_calibrating_base_year():
+    release = replace(
+        CURRENT_FRS_RELEASE,
+        base_year=2024,
+        calibration_year=2024,
+    )
+    dataset = object()
+
+    def uprate_dataset(_dataset_to_uprate, _target_year):
+        raise AssertionError("uprate_dataset should not be called")
+
+    assert not _needs_calibration_year_materialization(release)
+    assert (
+        _materialize_calibration_year_dataset(dataset, release, uprate_dataset)
+        is dataset
+    )
 
 
 def test_extract_zipped_folder_flattens_current_ukds_tab_layout(tmp_path):

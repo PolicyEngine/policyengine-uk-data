@@ -138,6 +138,8 @@ def calibrate_local_areas(
     """
     if dataset_key is None:
         dataset_key = default_weight_dataset_key()
+    if time_period is None and str(dataset_key).isdigit():
+        time_period = dataset_key
 
     progress_tracker = ProcessingProgress() if verbose else None
 

@@ -28,6 +28,17 @@ def _needs_base_year_materialization(frs_release) -> bool:
     return frs_release.calibration_year != frs_release.base_year
 
 
+def _needs_calibration_year_materialization(frs_release) -> bool:
+    return frs_release.calibration_year != frs_release.base_year
+
+
+def _materialize_calibration_year_dataset(dataset, frs_release, uprate_dataset):
+    if not _needs_calibration_year_materialization(frs_release):
+        return dataset
+
+    return uprate_dataset(dataset, frs_release.calibration_year)
+
+
 def _materialize_base_year_dataset(dataset, frs_release, uprate_dataset):
     if not _needs_base_year_materialization(frs_release):
         return dataset
@@ -65,6 +76,12 @@ def main():
         frs_release = CURRENT_FRS_RELEASE
         align_to_base_year = frs_release.base_year != frs_release.survey_year
         align_step = f"Align to {frs_release.base_year} base year"
+        materialize_calibration_year = _needs_calibration_year_materialization(
+            frs_release
+        )
+        materialize_calibration_step = (
+            f"Materialize {frs_release.calibration_year} calibration-year dataset"
+        )
         materialize_base_year = _needs_base_year_materialization(frs_release)
         materialize_step = (
             f"Materialize calibrated {frs_release.base_year} base-year dataset"
@@ -94,6 +111,11 @@ def main():
             steps.insert(
                 steps.index("Calibrate constituency weights"),
                 align_step,
+            )
+        if materialize_calibration_year:
+            steps.insert(
+                steps.index("Calibrate constituency weights"),
+                materialize_calibration_step,
             )
         if materialize_base_year:
             steps.insert(
@@ -182,6 +204,15 @@ def main():
                 update_dataset(align_step, "processing")
                 frs = uprate_dataset(frs, frs_release.base_year)
                 update_dataset(align_step, "completed")
+
+            if materialize_calibration_year:
+                update_dataset(materialize_calibration_step, "processing")
+                frs = _materialize_calibration_year_dataset(
+                    frs,
+                    frs_release,
+                    uprate_dataset,
+                )
+                update_dataset(materialize_calibration_step, "completed")
 
             # Calibrate constituency weights with nested progress
 

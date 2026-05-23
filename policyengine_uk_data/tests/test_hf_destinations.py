@@ -194,6 +194,19 @@ def test_hf_destinations_constants_are_distinct_and_well_formed() -> None:
         assert repo.startswith("policyengine/"), repo
 
 
+def test_childcare_takeup_uses_private_enhanced_frs_uri() -> None:
+    from policyengine_uk_data.datasets.childcare.takeup_rate import (
+        ENHANCED_FRS_DATASET,
+    )
+    from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
+    from policyengine_uk_data.utils.hf_destinations import PRIVATE_REPO, PUBLIC_REPO
+
+    assert ENHANCED_FRS_DATASET == (
+        f"hf://{PRIVATE_REPO}/{CURRENT_FRS_RELEASE.enhanced_dataset_file}"
+    )
+    assert not ENHANCED_FRS_DATASET.startswith(f"hf://{PUBLIC_REPO}/")
+
+
 @pytest.mark.parametrize(
     ("relative_path", "call_name", "keyword"),
     [
