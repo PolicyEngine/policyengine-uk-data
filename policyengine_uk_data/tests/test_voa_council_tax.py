@@ -91,3 +91,21 @@ def test_load_xlsx_response_reports_bad_content_type():
                 content_type="text/html",
             )
         )
+
+
+def test_scotland_band_counts_fall_back_when_gov_scot_blocks(monkeypatch):
+    def raise_blocked():
+        raise ValueError("CloudFront challenge")
+
+    monkeypatch.setattr(
+        voa_council_tax,
+        "_download_scotland_workbook",
+        raise_blocked,
+    )
+
+    counts = voa_council_tax._get_scotland_band_counts()
+
+    assert counts["Total"] == voa_council_tax._SCOTLAND_FALLBACK_TOTAL_2025
+    band_sum = sum(counts[band] for band in "ABCDEFGH")
+    assert band_sum == pytest.approx(counts["Total"])
+    assert counts["B"] > counts["H"]
