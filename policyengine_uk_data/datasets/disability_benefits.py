@@ -33,8 +33,15 @@ DISABILITY_CATEGORY_COLUMNS = (
     "pip_dl_category",
 )
 
+PIP_POINT_COLUMNS = (
+    "pip_m_points",
+    "pip_dl_points",
+)
+
 SAFETY_MARGIN = 0.1
 SURVEY_REPORTED_AMOUNT_WEEKS_IN_YEAR = 365.25 / 7
+PIP_STANDARD_POINTS = 8
+PIP_ENHANCED_POINTS = 12
 
 
 @lru_cache(maxsize=None)
@@ -48,6 +55,12 @@ def _dwp_category_threshold_parameters(year: int):
 def _dwp_flag_parameters(year: int):
     # Match the FRS disability flag derivation that already lived in uk-data.
     return CountryTaxBenefitSystem().parameters(year).gov.dwp
+
+
+@lru_cache(maxsize=None)
+def _model_supports_pip_point_inputs() -> bool:
+    variables = CountryTaxBenefitSystem().variables
+    return all(column in variables for column in PIP_POINT_COLUMNS)
 
 
 def _reported_amount(person: pd.DataFrame, column: str) -> pd.Series:
@@ -68,6 +81,44 @@ def _category_from_reported_amount(
             category_name
         )
     return category
+
+
+def _minimum_pip_points_from_category(category: pd.Series) -> np.ndarray:
+    category = category.fillna("NONE").astype(str)
+    return np.select(
+        [
+            category == "ENHANCED",
+            category == "STANDARD",
+        ],
+        [
+            PIP_ENHANCED_POINTS,
+            PIP_STANDARD_POINTS,
+        ],
+        default=0,
+    ).astype(int)
+
+
+def add_pip_points_from_categories(
+    person: pd.DataFrame,
+    *,
+    inplace: bool = False,
+) -> pd.DataFrame:
+    """Assign the minimum PIP points consistent with observed categories."""
+
+    if not inplace:
+        person = person.copy()
+
+    mappings = (
+        ("pip_m_category", "pip_m_points"),
+        ("pip_dl_category", "pip_dl_points"),
+    )
+    for category_column, points_column in mappings:
+        if category_column in person.columns:
+            person[points_column] = _minimum_pip_points_from_category(
+                person[category_column]
+            )
+
+    return person
 
 
 def add_disability_benefit_categories_from_reported_amounts(
@@ -132,6 +183,9 @@ def add_disability_benefit_categories_from_reported_amounts(
                 person[reported_column],
                 thresholds,
             )
+
+    if _model_supports_pip_point_inputs():
+        add_pip_points_from_categories(person, inplace=True)
 
     return person
 

@@ -8,6 +8,7 @@ from policyengine_uk.model_api import WEEKS_IN_YEAR
 from policyengine_uk_data.datasets.disability_benefits import (
     add_disability_benefit_categories_from_reported_amounts,
     add_disability_benefit_flags_from_reported_amounts,
+    add_pip_points_from_categories,
     drop_internal_disability_reported_amounts,
     strip_internal_disability_reported_amounts,
 )
@@ -53,6 +54,22 @@ def test_reported_amounts_map_to_disability_categories():
     assert result["dla_m_category"].tolist() == ["NONE", "LOWER", "HIGHER"]
     assert result["pip_m_category"].tolist() == ["NONE", "STANDARD", "ENHANCED"]
     assert result["pip_dl_category"].tolist() == ["NONE", "STANDARD", "ENHANCED"]
+
+
+def test_pip_categories_map_to_minimum_qualifying_points():
+    person = pd.DataFrame(
+        {
+            "pip_m_category": ["NONE", "STANDARD", "ENHANCED", None],
+            "pip_dl_category": ["ENHANCED", "STANDARD", "NONE", None],
+        }
+    )
+
+    result = add_pip_points_from_categories(person)
+
+    assert result["pip_m_points"].tolist() == [0, 8, 12, 0]
+    assert result["pip_dl_points"].tolist() == [12, 8, 0, 0]
+    assert "pip_m_points" not in person.columns
+    assert "pip_dl_points" not in person.columns
 
 
 def test_reported_amounts_recompute_disability_flags():
