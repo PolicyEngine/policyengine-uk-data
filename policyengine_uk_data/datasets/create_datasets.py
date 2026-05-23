@@ -24,6 +24,17 @@ def _get_positive_int_env(name: str, default: int) -> int:
     return value
 
 
+def _needs_base_year_materialization(frs_release) -> bool:
+    return frs_release.calibration_year != frs_release.base_year
+
+
+def _materialize_base_year_dataset(dataset, frs_release, uprate_dataset):
+    if not _needs_base_year_materialization(frs_release):
+        return dataset
+
+    return uprate_dataset(dataset, frs_release.base_year)
+
+
 def main():
     """Create enhanced FRS dataset with rich progress tracking."""
     try:
@@ -54,6 +65,10 @@ def main():
         frs_release = CURRENT_FRS_RELEASE
         align_to_base_year = frs_release.base_year != frs_release.survey_year
         align_step = f"Align to {frs_release.base_year} base year"
+        materialize_base_year = _needs_base_year_materialization(frs_release)
+        materialize_step = (
+            f"Materialize calibrated {frs_release.base_year} base-year dataset"
+        )
 
         progress_tracker = ProcessingProgress()
 
@@ -79,6 +94,11 @@ def main():
             steps.insert(
                 steps.index("Calibrate constituency weights"),
                 align_step,
+            )
+        if materialize_base_year:
+            steps.insert(
+                steps.index("Calibrate fuel litres"),
+                materialize_step,
             )
 
         with progress_tracker.track_dataset_creation(steps) as (
@@ -227,12 +247,21 @@ def main():
             )
             update_dataset("Calibrate local authority weights", "completed")
 
+            frs_calibrated = frs_calibrated_constituencies
+            if materialize_base_year:
+                update_dataset(materialize_step, "processing")
+                frs_calibrated = _materialize_base_year_dataset(
+                    frs_calibrated,
+                    frs_release,
+                    uprate_dataset,
+                )
+                update_dataset(materialize_step, "completed")
+
             update_dataset("Calibrate fuel litres", "processing")
             from policyengine_uk_data.datasets.imputations.consumption import (
                 calibrate_dataset_fuel_litre_proxies_to_road_fuel,
             )
 
-            frs_calibrated = frs_calibrated_constituencies
             calibrate_dataset_fuel_litre_proxies_to_road_fuel(frs_calibrated)
             update_dataset("Calibrate fuel litres", "completed")
 

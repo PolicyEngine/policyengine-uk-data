@@ -1,6 +1,7 @@
 from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk_data.utils.data_upload import upload_data_files
+from policyengine_uk_data.utils.hf_destinations import PRIVATE_REPO
 
 
 def upload_datasets():
@@ -20,7 +21,7 @@ def upload_datasets():
 
     upload_data_files(
         files=dataset_files,
-        hf_repo_name="policyengine/policyengine-uk-data-private",
+        hf_repo_name=PRIVATE_REPO,
         hf_repo_type="model",
         gcs_bucket_name="policyengine-uk-data-private",
     )

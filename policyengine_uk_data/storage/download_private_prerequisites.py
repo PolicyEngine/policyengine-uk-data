@@ -1,4 +1,5 @@
 from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
+from policyengine_uk_data.utils.hf_destinations import PRIVATE_REPO
 from policyengine_uk_data.utils.huggingface import download
 from pathlib import Path
 from pathlib import PurePosixPath
@@ -102,7 +103,7 @@ def download_prerequisites():
     for filename, tab_subdir in PRIVATE_PREREQUISITES:
         file = folder / filename
         download(
-            repo="policyengine/policyengine-uk-data",
+            repo=PRIVATE_REPO,
             repo_filename=file.name,
             local_folder=file.parent,
         )

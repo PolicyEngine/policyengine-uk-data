@@ -4,11 +4,15 @@ Validates that the L0 calibrator produces sparse weights that
 match targets within reasonable tolerances.
 """
 
+import sys
+import types
+
 import numpy as np
 import pandas as pd
 import pytest
 from scipy import sparse as sp
 
+from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
 from policyengine_uk_data.utils.calibrate_l0 import (
     _build_sparse_calibration_matrix,
     calibrate_l0,
@@ -180,3 +184,86 @@ class TestL0CalibrationSmoke:
 
         sparsity = model.get_sparsity()
         assert sparsity > 0.1, f"Sparsity {sparsity:.1%} too low with strong L0 penalty"
+
+
+class TestL0CalibrationPeriods:
+    @pytest.mark.parametrize(
+        "dataset_key",
+        [None, str(CURRENT_FRS_RELEASE.calibration_year)],
+    )
+    def test_default_calibration_period_is_passed_to_matrix_functions(
+        self,
+        dataset_key,
+        monkeypatch,
+        tmp_path,
+    ):
+        class FakeSparseCalibrationWeights:
+            def __init__(self, **_kwargs):
+                pass
+
+            def fit(self, **_kwargs):
+                pass
+
+            def get_weights(self, deterministic=True):
+                class Weights:
+                    def numpy(self):
+                        return np.array([1.0, 2.0])
+
+                return Weights()
+
+            def get_sparsity(self):
+                return 0.0
+
+            def get_active_weights(self):
+                return {"count": 2}
+
+        l0_package = types.ModuleType("l0")
+        calibration_module = types.ModuleType("l0.calibration")
+        calibration_module.SparseCalibrationWeights = FakeSparseCalibrationWeights
+        l0_package.calibration = calibration_module
+        monkeypatch.setitem(sys.modules, "l0", l0_package)
+        monkeypatch.setitem(sys.modules, "l0.calibration", calibration_module)
+        monkeypatch.setattr(
+            "policyengine_uk_data.utils.calibrate_l0.STORAGE_FOLDER",
+            tmp_path,
+        )
+
+        class Dataset:
+            def __init__(self):
+                self.household = pd.DataFrame(
+                    {"household_weight": np.array([1.0, 2.0])}
+                )
+
+            def copy(self):
+                clone = Dataset()
+                clone.household = self.household.copy()
+                return clone
+
+        local_periods = []
+        national_periods = []
+
+        def matrix_fn(_dataset, time_period=None):
+            local_periods.append(time_period)
+            return (
+                pd.DataFrame({"m0": [1.0, 1.0]}),
+                pd.DataFrame({"m0": [3.0]}),
+                np.ones((1, 2)),
+            )
+
+        def national_matrix_fn(_dataset, time_period=None):
+            national_periods.append(time_period)
+            return pd.DataFrame({"n0": [1.0, 1.0]}), pd.Series({"n0": 3.0})
+
+        calibrate_l0(
+            dataset=Dataset(),
+            matrix_fn=matrix_fn,
+            national_matrix_fn=national_matrix_fn,
+            area_count=1,
+            weight_file="weights.h5",
+            dataset_key=dataset_key,
+            epochs=1,
+        )
+
+        expected_period = str(CURRENT_FRS_RELEASE.calibration_year)
+        assert local_periods == [expected_period]
+        assert national_periods == [expected_period]

@@ -1,6 +1,7 @@
 from policyengine_uk_data.storage.download_private_prerequisites import (
     PRIVATE_PREREQUISITES,
 )
+from policyengine_uk_data.utils.hf_destinations import PRIVATE_REPO
 from policyengine_uk_data.utils.huggingface import upload
 from pathlib import Path
 import zipfile
@@ -23,7 +24,7 @@ for file in FILES:
     if not file.exists():
         raise FileNotFoundError(f"File {file} not found")
     upload(
-        repo="policyengine/policyengine-uk-data",
+        repo=PRIVATE_REPO,
         repo_file_path=file.name,
         local_file_path=file,
     )
