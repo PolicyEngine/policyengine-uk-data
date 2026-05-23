@@ -27,20 +27,22 @@ from policyengine_uk_data.datasets.imputations.consumption import (
     TENURE_TO_NEED,
     impute_consumption,
 )
+from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
 from policyengine_uk_data.datasets.imputations.wealth import impute_wealth
 from policyengine_uk_data.storage import STORAGE_FOLDER
 
 BAND_TOL = 0.11  # 11% per cell (raking tension between dimensions can push ~10%)
 HIGH_INC_TOL = 0.15  # 15% for £100k+ bands (thin FRS sample, raking tension)
+PERIOD = CURRENT_FRS_RELEASE.base_year
 
 
 @pytest.fixture(scope="module")
 def imputed():
-    """Base FRS with wealth then consumption imputed, at 2023 price levels."""
+    """Base FRS with wealth then consumption imputed."""
     try:
-        ds = UKSingleYearDataset(STORAGE_FOLDER / "frs_2023_24.h5")
+        ds = UKSingleYearDataset(STORAGE_FOLDER / CURRENT_FRS_RELEASE.base_dataset_file)
     except FileNotFoundError:
-        pytest.skip("frs_2023_24.h5 not available")
+        pytest.skip(f"{CURRENT_FRS_RELEASE.base_dataset_file} not available")
     ds = impute_wealth(ds)
     return impute_consumption(ds)
 
@@ -50,15 +52,15 @@ def arrays(imputed):
     sim = Microsimulation(dataset=imputed)
     return dict(
         income=sim.calculate(
-            "household_gross_income", map_to="household", period=2023
+            "household_gross_income", map_to="household", period=PERIOD
         ).values,
-        tenure=sim.calculate("tenure_type", map_to="household", period=2023).values,
+        tenure=sim.calculate("tenure_type", map_to="household", period=PERIOD).values,
         accomm=sim.calculate(
-            "accommodation_type", map_to="household", period=2023
+            "accommodation_type", map_to="household", period=PERIOD
         ).values,
-        region=sim.calculate("region", map_to="household", period=2023).values,
+        region=sim.calculate("region", map_to="household", period=PERIOD).values,
         weights=sim.calculate(
-            "household_weight", map_to="household", period=2023
+            "household_weight", map_to="household", period=PERIOD
         ).values,
         elec=imputed.household["electricity_consumption"].values,
         gas=imputed.household["gas_consumption"].values,

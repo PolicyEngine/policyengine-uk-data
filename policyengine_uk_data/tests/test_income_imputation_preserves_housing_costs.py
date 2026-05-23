@@ -16,6 +16,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
+
 
 class _FakeQRFModel:
     """Minimal stub with the interface `impute_over_incomes` expects."""
@@ -43,7 +45,7 @@ def _tiny_frs_dataset():
     from policyengine_uk.data import UKSingleYearDataset
     from policyengine_uk_data.storage import STORAGE_FOLDER
 
-    path = STORAGE_FOLDER / "frs_2023_24_tiny.h5"
+    path = STORAGE_FOLDER / CURRENT_FRS_RELEASE.tiny_base_dataset_file
     if not path.exists():
         pytest.skip("Tiny FRS dataset not available")
     return UKSingleYearDataset(path)
@@ -134,8 +136,8 @@ def test_built_enhanced_frs_housing_costs_track_raw_frs():
     from policyengine_uk.data import UKSingleYearDataset
     from policyengine_uk_data.storage import STORAGE_FOLDER
 
-    raw_path = STORAGE_FOLDER / "frs_2023_24.h5"
-    enh_path = STORAGE_FOLDER / "enhanced_frs_2023_24.h5"
+    raw_path = STORAGE_FOLDER / CURRENT_FRS_RELEASE.base_dataset_file
+    enh_path = STORAGE_FOLDER / CURRENT_FRS_RELEASE.enhanced_dataset_file
     if not (raw_path.exists() and enh_path.exists()):
         pytest.skip("Full raw and enhanced FRS datasets not available")
 

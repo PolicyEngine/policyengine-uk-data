@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.optimize import minimize
 from policyengine_uk import Microsimulation
+from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
 
 # 🎯 Calibration targets
 #
@@ -58,12 +59,14 @@ def simulate_childcare_programs(
 
     # Initialize sim
     sim = Microsimulation(
-        dataset="hf://policyengine/policyengine-uk-data/enhanced_frs_2022_23.h5"
+        dataset=(
+            "hf://policyengine/policyengine-uk-data/"
+            f"{CURRENT_FRS_RELEASE.enhanced_dataset_file}"
+        )
     )
 
     # Get counts of people and benefit units
     benunit_count = sim.calculate("benunit_id").values.shape[0]
-    person_count = sim.calculate("person_id").values.shape[0]
 
     # Set seed
     np.random.seed(seed)

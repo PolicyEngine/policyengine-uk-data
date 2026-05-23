@@ -1,11 +1,12 @@
-from policyengine_uk_data.utils.huggingface import download, upload
+from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
+from policyengine_uk_data.utils.huggingface import download
 from pathlib import Path
 
 FOLDER = Path(__file__).parent
 
 FILES = [
-    "enhanced_frs_2022_23.h5",
-    "frs_2022_23.h5",
+    CURRENT_FRS_RELEASE.enhanced_dataset_file,
+    CURRENT_FRS_RELEASE.base_dataset_file,
     "parliamentary_constituency_weights.h5",
     "local_authority_weights.h5",
 ]

@@ -18,6 +18,7 @@ calibration happen via weight optimisation in a subsequent step.
 
 import pandas as pd
 import numpy as np
+from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk import Microsimulation
@@ -47,7 +48,7 @@ def save_salary_sacrifice_model():
     from policyengine_uk_data.utils import QRF
 
     # Load the base FRS dataset
-    frs_path = STORAGE_FOLDER / "frs_2023_24.h5"
+    frs_path = STORAGE_FOLDER / CURRENT_FRS_RELEASE.base_dataset_file
     if not frs_path.exists():
         raise FileNotFoundError(
             f"FRS dataset not found at {frs_path}. "

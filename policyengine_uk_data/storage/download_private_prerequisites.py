@@ -1,13 +1,94 @@
-from policyengine_uk_data.utils.huggingface import download, upload
+from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
+from policyengine_uk_data.utils.huggingface import download
 from pathlib import Path
+from pathlib import PurePosixPath
+import shutil
 import zipfile
 import warnings
 
 
-def extract_zipped_folder(folder):
+PRIVATE_PREREQUISITES = [
+    (CURRENT_FRS_RELEASE.raw_zip_name, CURRENT_FRS_RELEASE.ukds_tab_subdir),
+    ("lcfs_2021_22.zip", None),
+    ("was_2006_20.zip", None),
+    ("etb_1977_21.zip", None),
+    ("spi_2020_21.zip", None),
+]
+
+
+def _validate_zip_path(path: PurePosixPath) -> None:
+    if path.is_absolute() or ".." in path.parts:
+        raise ValueError(f"Unsafe path in zip file: {path}")
+
+
+def _copy_zip_member(zip_ref, member, destination):
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with zip_ref.open(member) as source, open(destination, "wb") as target:
+        shutil.copyfileobj(source, target)
+
+
+def _extract_all(zip_ref, destination):
+    destination = Path(destination)
+    for member in zip_ref.infolist():
+        if member.is_dir():
+            continue
+        member_path = PurePosixPath(member.filename)
+        _validate_zip_path(member_path)
+        _copy_zip_member(zip_ref, member, destination.joinpath(*member_path.parts))
+
+
+def _extract_tab_subdir(zip_ref, tab_subdir, destination):
+    prefix = PurePosixPath(tab_subdir)
+    extracted = set()
+    for member in zip_ref.infolist():
+        if member.is_dir():
+            continue
+        member_path = PurePosixPath(member.filename)
+        _validate_zip_path(member_path)
+        try:
+            relative_path = member_path.relative_to(prefix)
+        except ValueError:
+            continue
+        if len(relative_path.parts) != 1:
+            continue
+        filename = relative_path.name
+        if filename in extracted:
+            raise ValueError(f"Duplicate FRS TAB filename in zip file: {filename}")
+        _copy_zip_member(zip_ref, member, Path(destination) / filename)
+        extracted.add(filename)
+    return len(extracted)
+
+
+def _extract_flat_files(zip_ref, destination):
+    extracted_count = 0
+    for member in zip_ref.infolist():
+        if member.is_dir():
+            continue
+        member_path = PurePosixPath(member.filename)
+        _validate_zip_path(member_path)
+        if len(member_path.parts) != 1:
+            continue
+        _copy_zip_member(zip_ref, member, Path(destination) / member_path.name)
+        extracted_count += 1
+    return extracted_count
+
+
+def extract_zipped_folder(folder, tab_subdir=None):
     folder = Path(folder)
+    destination = folder.parent / folder.stem
     with zipfile.ZipFile(folder, "r") as zip_ref:
-        zip_ref.extractall(folder.parent / folder.stem)
+        if tab_subdir is None:
+            _extract_all(zip_ref, destination)
+            return
+
+        extracted_count = _extract_tab_subdir(zip_ref, tab_subdir, destination)
+        if extracted_count == 0:
+            extracted_count = _extract_flat_files(zip_ref, destination)
+        if extracted_count == 0:
+            raise ValueError(
+                f"No files found under {tab_subdir!r} or at the zip root in {folder}."
+            )
 
 
 def download_prerequisites():
@@ -18,25 +99,14 @@ def download_prerequisites():
     """
     folder = Path(__file__).parent
 
-    files = [
-        "frs_2020_21.zip",
-        "frs_2022_23.zip",
-        "frs_2023_24.zip",
-        "lcfs_2021_22.zip",
-        "was_2006_20.zip",
-        "etb_1977_21.zip",
-        "spi_2020_21.zip",
-    ]
-
-    files = [folder / file for file in files]
-
-    for file in files:
+    for filename, tab_subdir in PRIVATE_PREREQUISITES:
+        file = folder / filename
         download(
             repo="policyengine/policyengine-uk-data",
             repo_filename=file.name,
             local_folder=file.parent,
         )
-        extract_zipped_folder(file)
+        extract_zipped_folder(file, tab_subdir=tab_subdir)
         file.unlink()
 
 
@@ -48,15 +118,7 @@ def check_prerequisites():
     """
     folder = Path(__file__).parent
 
-    expected_folders = [
-        "frs_2020_21",
-        "frs_2022_23",
-        "frs_2023_24",
-        "lcfs_2021_22",
-        "was_2006_20",
-        "etb_1977_21",
-        "spi_2020_21",
-    ]
+    expected_folders = [Path(filename).stem for filename, _ in PRIVATE_PREREQUISITES]
 
     missing = []
     for folder_name in expected_folders:

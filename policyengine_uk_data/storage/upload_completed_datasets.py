@@ -1,13 +1,15 @@
+from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk_data.utils.data_upload import upload_data_files
 
 
 def upload_datasets():
+    frs_release = CURRENT_FRS_RELEASE
     dataset_files = [
-        STORAGE_FOLDER / "frs_2023_24.h5",
-        STORAGE_FOLDER / "enhanced_frs_2023_24.h5",
-        STORAGE_FOLDER / "frs_2023_24_tiny.h5",
-        STORAGE_FOLDER / "enhanced_frs_2023_24_tiny.h5",
+        STORAGE_FOLDER / frs_release.base_dataset_file,
+        STORAGE_FOLDER / frs_release.enhanced_dataset_file,
+        STORAGE_FOLDER / frs_release.tiny_base_dataset_file,
+        STORAGE_FOLDER / frs_release.tiny_enhanced_dataset_file,
         STORAGE_FOLDER / "parliamentary_constituency_weights.h5",
         STORAGE_FOLDER / "local_authority_weights.h5",
     ]

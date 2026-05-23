@@ -54,15 +54,15 @@ def create_local_authority_target_matrix(
     la_codes = pd.read_csv(STORAGE_FOLDER / "local_authorities_2021.csv")
 
     sim = Microsimulation(dataset=dataset, reform=reform)
-    original_weights = sim.calculate("household_weight", 2025).values
     sim.default_calculation_period = time_period
+    original_weights = sim.calculate("household_weight", time_period).values
 
     matrix = pd.DataFrame()
     y = pd.DataFrame()
 
     # ── Income targets ─────────────────────────────────────────────
     incomes = get_la_income_targets()
-    national_incomes = get_national_income_projections(int(dataset.time_period))
+    national_incomes = get_national_income_projections(int(time_period))
 
     for income_variable in INCOME_VARIABLES:
         income_values = sim.calculate(income_variable).values

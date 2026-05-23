@@ -150,7 +150,7 @@ def calibrate_l0(
     national_matrix_fn,
     area_count: int,
     weight_file: str,
-    dataset_key: str = "2025",
+    dataset_key: str | None = None,
     epochs: int = 1000,
     lambda_l0: float = 0.01,
     lambda_l2: float = 1e-6,
@@ -192,9 +192,12 @@ def calibrate_l0(
         dataset with calibrated household_weight.
     """
     from l0.calibration import SparseCalibrationWeights
+    from policyengine_uk_data.utils.calibrate import default_weight_dataset_key
 
     if excluded_training_targets is None:
         excluded_training_targets = []
+    if dataset_key is None:
+        dataset_key = default_weight_dataset_key()
 
     dataset = dataset.copy()
 

@@ -1464,8 +1464,10 @@ def create_frs(
 
 
 if __name__ == "__main__":
+    from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
+
     frs = create_frs(
-        raw_frs_folder=STORAGE_FOLDER / "frs_2022_23",
-        year=2022,
+        raw_frs_folder=STORAGE_FOLDER / CURRENT_FRS_RELEASE.name,
+        year=CURRENT_FRS_RELEASE.survey_year,
     )
-    frs.save(STORAGE_FOLDER / "frs_2022.h5")
+    frs.save(STORAGE_FOLDER / CURRENT_FRS_RELEASE.base_dataset_file)

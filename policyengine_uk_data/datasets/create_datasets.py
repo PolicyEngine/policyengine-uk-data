@@ -34,6 +34,7 @@ def main():
             strip_internal_disability_reported_amounts,
         )
         from policyengine_uk_data.datasets.frs import create_frs
+        from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
         from policyengine_uk_data.storage import STORAGE_FOLDER
         from policyengine_uk_data.utils.progress import (
             ProcessingProgress,
@@ -50,6 +51,9 @@ def main():
             "PE_UK_DATA_OA_CLONES",
             2 if is_testing else 10,
         )
+        frs_release = CURRENT_FRS_RELEASE
+        align_to_base_year = frs_release.base_year != frs_release.survey_year
+        align_step = f"Align to {frs_release.base_year} base year"
 
         progress_tracker = ProcessingProgress()
 
@@ -65,14 +69,17 @@ def main():
             "Impute salary sacrifice",
             "Impute student loan plan",
             "Clone and assign OA geography",
-            "Uprate to 2025",
             "Calibrate constituency weights",
             "Calibrate local authority weights",
-            "Downrate to 2023",
             "Calibrate fuel litres",
             "Save final dataset",
             "Create tiny datasets",
         ]
+        if align_to_base_year:
+            steps.insert(
+                steps.index("Calibrate constituency weights"),
+                align_step,
+            )
 
         with progress_tracker.track_dataset_creation(steps) as (
             update_dataset,
@@ -81,12 +88,12 @@ def main():
             # Create base FRS dataset
             update_dataset("Create base FRS dataset", "processing")
             frs = create_frs(
-                raw_frs_folder=STORAGE_FOLDER / "frs_2023_24",
-                year=2023,
+                raw_frs_folder=STORAGE_FOLDER / frs_release.name,
+                year=frs_release.survey_year,
                 include_internal_disability_reported_amounts=True,
             )
             strip_internal_disability_reported_amounts(frs).save(
-                STORAGE_FOLDER / "frs_2023_24.h5"
+                STORAGE_FOLDER / frs_release.base_dataset_file
             )
             update_dataset("Create base FRS dataset", "completed")
 
@@ -136,7 +143,10 @@ def main():
             update_dataset("Impute salary sacrifice", "completed")
 
             update_dataset("Impute student loan plan", "processing")
-            frs = impute_student_loan_plan(frs, year=2025)
+            frs = impute_student_loan_plan(
+                frs,
+                year=frs_release.base_year,
+            )
             update_dataset("Impute student loan plan", "completed")
 
             # Clone households and assign OA geography
@@ -148,10 +158,10 @@ def main():
             frs = clone_and_assign(frs, n_clones=oa_clones)
             update_dataset("Clone and assign OA geography", "completed")
 
-            # Uprate dataset
-            update_dataset("Uprate to 2025", "processing")
-            frs = uprate_dataset(frs, 2025)
-            update_dataset("Uprate to 2025", "completed")
+            if align_to_base_year:
+                update_dataset(align_step, "processing")
+                frs = uprate_dataset(frs, frs_release.base_year)
+                update_dataset(align_step, "completed")
 
             # Calibrate constituency weights with nested progress
 
@@ -179,6 +189,7 @@ def main():
                 national_matrix_fn=create_national_target_matrix,
                 area_count=650,
                 weight_file="parliamentary_constituency_weights.h5",
+                dataset_key=str(frs_release.base_year),
                 excluded_training_targets=[],
                 log_csv="constituency_calibration_log.csv",
                 verbose=True,  # Enable nested progress display
@@ -204,6 +215,7 @@ def main():
                 national_matrix_fn=create_national_target_matrix,
                 area_count=360,
                 weight_file="local_authority_weights.h5",
+                dataset_key=str(frs_release.base_year),
                 excluded_training_targets=[],
                 log_csv="la_calibration_log.csv",
                 verbose=True,  # Enable nested progress display
@@ -213,22 +225,18 @@ def main():
             )
             update_dataset("Calibrate local authority weights", "completed")
 
-            # Downrate and save
-            update_dataset("Downrate to 2023", "processing")
-            frs_calibrated = uprate_dataset(frs_calibrated_constituencies, 2023)
-            update_dataset("Downrate to 2023", "completed")
-
             update_dataset("Calibrate fuel litres", "processing")
             from policyengine_uk_data.datasets.imputations.consumption import (
                 calibrate_dataset_fuel_litre_proxies_to_road_fuel,
             )
 
+            frs_calibrated = frs_calibrated_constituencies
             calibrate_dataset_fuel_litre_proxies_to_road_fuel(frs_calibrated)
             update_dataset("Calibrate fuel litres", "completed")
 
             update_dataset("Save final dataset", "processing")
             strip_internal_disability_reported_amounts(frs_calibrated).save(
-                STORAGE_FOLDER / "enhanced_frs_2023_24.h5"
+                STORAGE_FOLDER / frs_release.enhanced_dataset_file
             )
             update_dataset("Save final dataset", "completed")
 
@@ -237,26 +245,26 @@ def main():
             TINY_SIZE = 1_000
 
             frs_base = UKSingleYearDataset(
-                file_path=str(STORAGE_FOLDER / "frs_2023_24.h5")
+                file_path=str(STORAGE_FOLDER / frs_release.base_dataset_file)
             )
             tiny_frs = subsample_dataset(frs_base, TINY_SIZE)
-            tiny_frs.save(STORAGE_FOLDER / "frs_2023_24_tiny.h5")
+            tiny_frs.save(STORAGE_FOLDER / frs_release.tiny_base_dataset_file)
 
             tiny_enhanced = subsample_dataset(
                 strip_internal_disability_reported_amounts(frs_calibrated),
                 TINY_SIZE,
             )
-            tiny_enhanced.save(STORAGE_FOLDER / "enhanced_frs_2023_24_tiny.h5")
+            tiny_enhanced.save(STORAGE_FOLDER / frs_release.tiny_enhanced_dataset_file)
             update_dataset("Create tiny datasets", "completed")
 
         # Display success message
         display_success_panel(
             "Dataset creation completed successfully",
             details={
-                "base_dataset": "frs_2023_24.h5",
-                "enhanced_dataset": "enhanced_frs_2023_24.h5",
-                "tiny_base_dataset": "frs_2023_24_tiny.h5",
-                "tiny_enhanced_dataset": "enhanced_frs_2023_24_tiny.h5",
+                "base_dataset": frs_release.base_dataset_file,
+                "enhanced_dataset": frs_release.enhanced_dataset_file,
+                "tiny_base_dataset": frs_release.tiny_base_dataset_file,
+                "tiny_enhanced_dataset": frs_release.tiny_enhanced_dataset_file,
                 "imputations_applied": "consumption, wealth, VAT, services, income, capital_gains, salary_sacrifice, student_loan_plan",
                 "calibration": "national, LA and  constituency targets",
             },

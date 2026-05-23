@@ -8,12 +8,17 @@ import numpy as np
 import h5py
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
+from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
 from policyengine_uk_data.utils.progress import ProcessingProgress
+
+
+def default_weight_dataset_key() -> str:
+    return str(CURRENT_FRS_RELEASE.base_year)
 
 
 def load_weights(
     weight_file: Union[str, Path],
-    dataset_key: str = "2025",
+    dataset_key: str | None = None,
     n_areas: Optional[int] = None,
     n_records: Optional[int] = None,
 ) -> np.ndarray:
@@ -50,6 +55,8 @@ def load_weights(
     path = Path(weight_file)
     if not path.is_absolute():
         path = STORAGE_FOLDER / path
+    if dataset_key is None:
+        dataset_key = default_weight_dataset_key()
 
     with h5py.File(path, "r") as f:
         if dataset_key not in f:
@@ -89,7 +96,7 @@ def calibrate_local_areas(
     national_matrix_fn,
     area_count: int,
     weight_file: str,
-    dataset_key: str = "2025",
+    dataset_key: str | None = None,
     epochs: int = 512,
     excluded_training_targets=[],
     log_csv=None,
@@ -114,6 +121,9 @@ def calibrate_local_areas(
         verbose: Whether to print progress
         area_name: Name of the area type for logging
     """
+    if dataset_key is None:
+        dataset_key = default_weight_dataset_key()
+
     progress_tracker = ProcessingProgress() if verbose else None
 
     def track_stage(stage_name: str):
