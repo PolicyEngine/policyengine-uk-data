@@ -7,11 +7,12 @@ Active targets (against the March 2026 EFO format):
 
 - ``obr/ni_employee`` — Class 1 employee, formula-derived in PE-UK.
 - ``obr/ni_employer`` — Class 1 employer, formula-derived in PE-UK.
-- ``obr/ni_self_employed`` — combined Class 2 + Class 4, aligned to the
+- ``obr/ni_self_employed`` — combined self-employed NICs, aligned to the
   PE-UK ``ni_self_employed`` variable.
 
-Class 3 is intentionally absent because no dataset populates
-``ni_class_3`` — the matrix column would be a flat zero.
+Class 2 and Class 3 can be zero in current PE-UK policy periods, so the
+calibration signal is required on the combined self-employed total and
+Class 4 rather than every historical component.
 
 Two layers:
 
@@ -37,7 +38,6 @@ _PE_UK_NIC_VARIABLES_WITH_SIGNAL = (
     "ni_employee",
     "ni_employer",
     "ni_self_employed",
-    "ni_class_2",
     "ni_class_4",
 )
 

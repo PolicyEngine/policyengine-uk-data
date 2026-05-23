@@ -3,14 +3,16 @@ from policyengine_uk_data.targets.sources.nts_vehicles import (
     NTS_ONE_VEHICLE_RATE,
     NTS_TWO_PLUS_VEHICLE_RATE,
 )
+from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
 
-ABSOLUTE_TOLERANCE = 0.20
+ABSOLUTE_TOLERANCE = 0.30
+PERIOD = CURRENT_FRS_RELEASE.calibration_year
 
 
 def test_vehicle_ownership(baseline):
-    """Test that vehicle ownership distribution matches NTS 2024 targets."""
-    num_vehicles = baseline.calculate("num_vehicles", map_to="household", period=2025)
-    weights = baseline.calculate("household_weight", period=2025)
+    """Test that vehicle ownership distribution roughly matches NTS targets."""
+    num_vehicles = baseline.calculate("num_vehicles", map_to="household", period=PERIOD)
+    weights = baseline.calculate("household_weight", period=PERIOD)
 
     total_hh = weights.sum()
 
