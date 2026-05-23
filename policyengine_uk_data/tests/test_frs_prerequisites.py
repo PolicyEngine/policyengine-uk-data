@@ -20,6 +20,10 @@ def test_current_frs_release_uses_survey_year_as_base_year():
     assert CURRENT_FRS_RELEASE.base_year == CURRENT_FRS_RELEASE.survey_year
 
 
+def test_current_frs_release_keeps_current_target_calibration_year():
+    assert CURRENT_FRS_RELEASE.calibration_year >= CURRENT_FRS_RELEASE.base_year
+
+
 def test_extract_zipped_folder_flattens_current_ukds_tab_layout(tmp_path):
     zip_path = tmp_path / CURRENT_FRS_RELEASE.raw_zip_name
     with zipfile.ZipFile(zip_path, "w") as zip_ref:

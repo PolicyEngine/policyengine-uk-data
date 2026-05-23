@@ -1,4 +1,5 @@
 from contextlib import nullcontext
+from inspect import signature
 from pathlib import Path
 from typing import Optional, Union
 
@@ -13,7 +14,20 @@ from policyengine_uk_data.utils.progress import ProcessingProgress
 
 
 def default_weight_dataset_key() -> str:
-    return str(CURRENT_FRS_RELEASE.base_year)
+    return str(CURRENT_FRS_RELEASE.calibration_year)
+
+
+def _call_matrix_fn(matrix_fn, dataset, time_period):
+    if time_period is None:
+        return matrix_fn(dataset)
+
+    parameters = signature(matrix_fn).parameters
+    accepts_time_period = "time_period" in parameters or any(
+        p.kind == p.VAR_KEYWORD for p in parameters.values()
+    )
+    if accepts_time_period:
+        return matrix_fn(dataset, time_period=time_period)
+    return matrix_fn(dataset)
 
 
 def load_weights(
@@ -104,6 +118,7 @@ def calibrate_local_areas(
     area_name: str = "area",
     get_performance=None,
     nested_progress=None,
+    time_period: int | str | None = None,
 ):
     """
     Generic calibration function for local areas (constituencies, local authorities, etc.)
@@ -135,11 +150,13 @@ def calibrate_local_areas(
         dataset = dataset.copy()
 
     with track_stage(f"{area_name}: build local target matrix"):
-        matrix, y, r = matrix_fn(dataset)
+        matrix, y, r = _call_matrix_fn(matrix_fn, dataset, time_period)
     m_c, y_c = matrix.copy(), y.copy()
 
     with track_stage(f"{area_name}: build national target matrix"):
-        m_national, y_national = national_matrix_fn(dataset)
+        m_national, y_national = _call_matrix_fn(
+            national_matrix_fn, dataset, time_period
+        )
     m_n, y_n = m_national.copy(), y_national.copy()
 
     with track_stage(f"{area_name}: prepare tensors and optimizer"):

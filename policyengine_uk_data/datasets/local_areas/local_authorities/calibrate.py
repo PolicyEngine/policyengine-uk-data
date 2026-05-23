@@ -15,11 +15,12 @@ def calibrate(
     excluded_training_targets=[],
     log_csv="la_calibration_log.csv",
     verbose: bool = False,
+    time_period: int | str | None = None,
 ):
     return calibrate_local_areas(
         dataset=dataset,
-        matrix_fn=lambda ds: create_local_authority_target_matrix(ds, ds.time_period),
-        national_matrix_fn=lambda ds: create_national_target_matrix(ds, ds.time_period),
+        matrix_fn=create_local_authority_target_matrix,
+        national_matrix_fn=create_national_target_matrix,
         area_count=360,
         weight_file="local_authority_weights.h5",
         excluded_training_targets=excluded_training_targets,
@@ -27,6 +28,7 @@ def calibrate(
         verbose=verbose,
         area_name="Local Authority",
         get_performance=get_performance,
+        time_period=time_period,
     )
 
 

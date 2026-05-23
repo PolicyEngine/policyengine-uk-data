@@ -6,6 +6,7 @@ class FRSRelease:
     name: str
     survey_year: int
     base_year: int
+    calibration_year: int
     ukds_study_number: int
     doi: str
     ukds_tab_zip_filename: str
@@ -53,6 +54,7 @@ CURRENT_FRS_RELEASE = FRSRelease(
     name="frs_2024_25",
     survey_year=2024,
     base_year=2024,
+    calibration_year=2025,
     ukds_study_number=9563,
     doi="http://doi.org/10.5255/UKDA-SN-9563-1",
     ukds_tab_zip_filename=(

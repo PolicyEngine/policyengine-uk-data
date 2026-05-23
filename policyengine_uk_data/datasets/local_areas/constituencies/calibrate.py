@@ -15,6 +15,7 @@ def calibrate(
     excluded_training_targets=[],
     log_csv="constituency_calibration_log.csv",
     verbose: bool = False,
+    time_period: int | str | None = None,
 ):
     return calibrate_local_areas(
         dataset=dataset,
@@ -27,6 +28,7 @@ def calibrate(
         verbose=verbose,
         area_name="Constituency",
         get_performance=get_performance,
+        time_period=time_period,
     )
 
 

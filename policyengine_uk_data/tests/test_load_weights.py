@@ -35,13 +35,13 @@ def test_load_weights_returns_2d_for_2d_input(tmp_path):
     np.testing.assert_allclose(out, weights)
 
 
-def test_load_weights_defaults_to_current_release_base_year(tmp_path):
+def test_load_weights_defaults_to_current_release_calibration_year(tmp_path):
     from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
     from policyengine_uk_data.utils.calibrate import load_weights
 
     weights = np.arange(6, dtype=float).reshape(2, 3)
     path = tmp_path / "w.h5"
-    _write_h5(path, str(CURRENT_FRS_RELEASE.base_year), weights)
+    _write_h5(path, str(CURRENT_FRS_RELEASE.calibration_year), weights)
 
     out = load_weights(path)
 
