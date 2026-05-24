@@ -142,8 +142,15 @@ def get_income_model_sample_size() -> int:
     return INCOME_MODEL_SAMPLE_SIZE
 
 
+def get_income_model_metadata() -> dict:
+    return {
+        **INCOME_MODEL_METADATA,
+        "sample_size": get_income_model_sample_size(),
+    }
+
+
 def _income_model_matches_current_release(model) -> bool:
-    if getattr(model, "metadata", {}) != INCOME_MODEL_METADATA:
+    if getattr(model, "metadata", {}) != get_income_model_metadata():
         return False
 
     cached_outputs = set(getattr(model.model, "imputed_variables", []))
@@ -160,7 +167,7 @@ def save_imputation_models():
     from policyengine_uk_data.utils import QRF
 
     income = QRF()
-    income.metadata = INCOME_MODEL_METADATA
+    income.metadata = get_income_model_metadata()
     spi = pd.read_csv(SPI_TAB_FOLDER / SPI_TAB_FILENAME, delimiter="\t")
     spi = generate_spi_table(spi, sample_size=get_income_model_sample_size())
     spi = spi[PREDICTORS + IMPUTATIONS]

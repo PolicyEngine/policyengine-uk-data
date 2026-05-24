@@ -219,10 +219,18 @@ def test_income_model_sample_size_is_reduced_in_testing(monkeypatch):
         income_module.get_income_model_sample_size()
         == income_module.INCOME_MODEL_SAMPLE_SIZE
     )
+    assert (
+        income_module.get_income_model_metadata()["sample_size"]
+        == income_module.INCOME_MODEL_SAMPLE_SIZE
+    )
 
     monkeypatch.setenv("TESTING", "1")
     assert (
         income_module.get_income_model_sample_size()
+        == income_module.TESTING_INCOME_MODEL_SAMPLE_SIZE
+    )
+    assert (
+        income_module.get_income_model_metadata()["sample_size"]
         == income_module.TESTING_INCOME_MODEL_SAMPLE_SIZE
     )
 
@@ -383,9 +391,37 @@ def test_income_model_cache_rejects_stale_spi_release(tmp_path, monkeypatch):
 
     cache = tmp_path / "income_spi_2022_23.pkl"
     stale_metadata = {
-        **income_module.INCOME_MODEL_METADATA,
+        **income_module.get_income_model_metadata(),
         "spi_release_name": "spi_2020_21",
         "spi_tab_filename": "put2021uk.tab",
+    }
+    with cache.open("wb") as f:
+        pickle.dump(
+            {
+                "model": SimpleNamespace(
+                    imputed_variables=list(income_module.IMPUTATIONS)
+                ),
+                "input_columns": income_module.PREDICTORS,
+                "metadata": stale_metadata,
+            },
+            f,
+        )
+
+    sentinel = object()
+    monkeypatch.setattr(income_module, "INCOME_MODEL_PATH", cache)
+    monkeypatch.setattr(income_module, "save_imputation_models", lambda: sentinel)
+
+    assert income_module.create_income_model() is sentinel
+
+
+def test_income_model_cache_rejects_stale_sample_size(tmp_path, monkeypatch):
+    from policyengine_uk_data.datasets.imputations import income as income_module
+
+    monkeypatch.delenv("TESTING", raising=False)
+    cache = tmp_path / "income_spi_2022_23.pkl"
+    stale_metadata = {
+        **income_module.get_income_model_metadata(),
+        "sample_size": income_module.TESTING_INCOME_MODEL_SAMPLE_SIZE,
     }
     with cache.open("wb") as f:
         pickle.dump(
@@ -410,6 +446,7 @@ def test_income_model_cache_accepts_current_spi_release(tmp_path, monkeypatch):
     from policyengine_uk_data.datasets.imputations import income as income_module
 
     cache = tmp_path / "income_spi_2022_23.pkl"
+    current_metadata = income_module.get_income_model_metadata()
     with cache.open("wb") as f:
         pickle.dump(
             {
@@ -417,7 +454,7 @@ def test_income_model_cache_accepts_current_spi_release(tmp_path, monkeypatch):
                     imputed_variables=list(income_module.IMPUTATIONS)
                 ),
                 "input_columns": income_module.PREDICTORS,
-                "metadata": income_module.INCOME_MODEL_METADATA,
+                "metadata": current_metadata,
             },
             f,
         )
@@ -429,6 +466,4 @@ def test_income_model_cache_accepts_current_spi_release(tmp_path, monkeypatch):
         lambda: pytest.fail("current SPI release cache should be reused"),
     )
 
-    assert income_module.create_income_model().metadata == (
-        income_module.INCOME_MODEL_METADATA
-    )
+    assert income_module.create_income_model().metadata == current_metadata
