@@ -11,10 +11,16 @@ import numpy as np
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk import Microsimulation
+from policyengine_uk_data.datasets.spi import (
+    AGE_RANGES,
+    REGION_MAP,
+    SPI_RELEASE_NAME,
+    SPI_TAB_FILENAME,
+)
 from policyengine_uk_data.utils.stack import stack_datasets
 from policyengine_uk_data.utils.subsample import subsample_dataset
 
-SPI_TAB_FOLDER = STORAGE_FOLDER / "spi_2020_21"
+SPI_TAB_FOLDER = STORAGE_FOLDER / SPI_RELEASE_NAME
 SPI_RENAMES = dict(
     private_pension_income="PENSION",
     self_employment_income="PROFITS",
@@ -37,7 +43,18 @@ SPI_RENAMES = dict(
 )
 
 
-def generate_spi_table(spi: pd.DataFrame):
+def _spi_age_bounds(age_code) -> tuple[int, int]:
+    try:
+        return AGE_RANGES[int(age_code)]
+    except (TypeError, ValueError, KeyError):
+        return AGE_RANGES[-1]
+
+
+def generate_spi_table(
+    spi: pd.DataFrame,
+    seed: int = 0,
+    sample_size: int | None = 100_000,
+):
     """
     Clean and transform SPI data for income imputation model training.
 
@@ -47,29 +64,12 @@ def generate_spi_table(spi: pd.DataFrame):
     Returns:
         Cleaned DataFrame with age and region mappings applied.
     """
-    LOWER = np.array([0, 16, 25, 35, 45, 55, 65, 75])
-    UPPER = np.array([16, 25, 35, 45, 55, 65, 75, 80])
+    rng = np.random.default_rng(seed)
     age_range = spi.AGERANGE
-    spi["age"] = LOWER[age_range] + np.random.rand(len(spi)) * (
-        UPPER[age_range] - LOWER[age_range]
-    )
+    bounds = np.array([_spi_age_bounds(age) for age in age_range])
+    spi["age"] = bounds[:, 0] + rng.random(len(spi)) * (bounds[:, 1] - bounds[:, 0])
 
-    REGIONS = {
-        1: "NORTH_EAST",
-        2: "NORTH_WEST",
-        3: "YORKSHIRE",
-        4: "EAST_MIDLANDS",
-        5: "WEST_MIDLANDS",
-        6: "EAST_OF_ENGLAND",
-        7: "LONDON",
-        8: "SOUTH_EAST",
-        9: "SOUTH_WEST",
-        10: "WALES",
-        11: "SCOTLAND",
-        12: "NORTHERN_IRELAND",
-    }
-
-    spi["region"] = np.array([REGIONS.get(x, "LONDON") for x in spi.GORCODE])
+    spi["region"] = spi.GORCODE.map(REGION_MAP).fillna("UNKNOWN")
 
     spi["gender"] = np.where(spi.SEX == 1, "MALE", "FEMALE")
 
@@ -78,11 +78,17 @@ def generate_spi_table(spi: pd.DataFrame):
 
     spi["employment_income"] = spi[["PAY", "EPB", "TAXTERM"]].sum(axis=1)
 
-    spi = pd.concat(
-        [
-            spi.sample(100_000, weights=spi.person_weight, replace=True),
-        ]
-    )
+    if sample_size is not None:
+        spi = pd.concat(
+            [
+                spi.sample(
+                    sample_size,
+                    weights=spi.person_weight,
+                    replace=True,
+                    random_state=seed,
+                ),
+            ]
+        )
 
     return spi
 
@@ -132,7 +138,7 @@ def save_imputation_models():
     from policyengine_uk_data.utils import QRF
 
     income = QRF()
-    spi = pd.read_csv(SPI_TAB_FOLDER / "put2021uk.tab", delimiter="\t")
+    spi = pd.read_csv(SPI_TAB_FOLDER / SPI_TAB_FILENAME, delimiter="\t")
     spi = generate_spi_table(spi)
     spi = spi[PREDICTORS + IMPUTATIONS]
     income.fit(spi[PREDICTORS], spi[IMPUTATIONS])

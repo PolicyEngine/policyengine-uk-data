@@ -30,6 +30,7 @@ if importlib.util.find_spec("policyengine_uk") is None:
 
 
 SPI_COLUMNS = [
+    "SEX",
     "SREF",
     "FACT",
     "DIVIDENDS",
@@ -166,3 +167,42 @@ def test_create_spi_marriage_allowance_uses_fiscal_year_parameters(tmp_path):
     # either, but require it's NOT the stale 2020-21 £1,250 figure.
     assert marriage_2025[0] != 1_250
     assert marriage_2025[0] >= 1_250  # PA has only risen since 2020
+
+
+def test_current_spi_release_metadata_points_to_2022_23():
+    from policyengine_uk_data.datasets.spi import (
+        SPI_FISCAL_YEAR,
+        SPI_H5_FILENAME,
+        SPI_RELEASE_NAME,
+        SPI_TAB_FILENAME,
+    )
+
+    assert SPI_RELEASE_NAME == "spi_2022_23"
+    assert SPI_TAB_FILENAME == "put2223uk.tab"
+    assert SPI_FISCAL_YEAR == 2022
+    assert SPI_H5_FILENAME == "spi_2022_23.h5"
+
+
+def test_income_spi_generation_handles_current_unknown_codes():
+    from policyengine_uk_data.datasets.imputations.income import generate_spi_table
+
+    data = {col: np.zeros(1, dtype=float) for col in SPI_COLUMNS}
+    data["SREF"] = [1]
+    data["FACT"] = [1]
+    data["SEX"] = [1]
+    data["GORCODE"] = [13]
+    data["AGERANGE"] = [-1]
+    spi = pd.DataFrame(data)
+
+    out = generate_spi_table(spi, seed=0, sample_size=5)
+
+    assert out["region"].tolist() == ["UNKNOWN"] * 5
+    assert out["age"].between(16, 70, inclusive="left").all()
+
+
+def test_income_projection_uses_current_spi_release():
+    from policyengine_uk_data.datasets.spi import SPI_FISCAL_YEAR, SPI_H5_FILENAME
+    from policyengine_uk_data.utils import incomes_projection
+
+    assert incomes_projection.SPI_DATASET.endswith(SPI_H5_FILENAME)
+    assert incomes_projection.SPI_FISCAL_YEAR == SPI_FISCAL_YEAR
