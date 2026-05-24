@@ -125,7 +125,20 @@ INCOME_COMPONENTS = [
 IMPUTATIONS = INCOME_COMPONENTS + ["gift_aid", "charitable_investment_gifts"]
 
 
-INCOME_MODEL_PATH = STORAGE_FOLDER / "income.pkl"
+INCOME_MODEL_METADATA = {
+    "spi_release_name": SPI_RELEASE_NAME,
+    "spi_tab_filename": SPI_TAB_FILENAME,
+    "imputations": tuple(IMPUTATIONS),
+}
+INCOME_MODEL_PATH = STORAGE_FOLDER / f"income_{SPI_RELEASE_NAME}.pkl"
+
+
+def _income_model_matches_current_release(model) -> bool:
+    if getattr(model, "metadata", {}) != INCOME_MODEL_METADATA:
+        return False
+
+    cached_outputs = set(getattr(model.model, "imputed_variables", []))
+    return cached_outputs == set(IMPUTATIONS)
 
 
 def save_imputation_models():
@@ -138,6 +151,7 @@ def save_imputation_models():
     from policyengine_uk_data.utils import QRF
 
     income = QRF()
+    income.metadata = INCOME_MODEL_METADATA
     spi = pd.read_csv(SPI_TAB_FOLDER / SPI_TAB_FILENAME, delimiter="\t")
     spi = generate_spi_table(spi)
     spi = spi[PREDICTORS + IMPUTATIONS]
@@ -150,10 +164,9 @@ def create_income_model(overwrite_existing: bool = False):
     """
     Create or load income imputation model.
 
-    If a cached model exists and its trained output columns don't match the
-    current ``IMPUTATIONS`` list, the cache is discarded and the model is
-    retrained. This handles the case where ``IMPUTATIONS`` is extended in
-    code but an older pickle is still on disk.
+    If a cached model exists and its training metadata or output columns don't
+    match the current SPI release and ``IMPUTATIONS`` list, the cache is
+    discarded and the model is retrained.
 
     Args:
         overwrite_existing: Whether to retrain model if it exists.
@@ -165,10 +178,9 @@ def create_income_model(overwrite_existing: bool = False):
 
     if INCOME_MODEL_PATH.exists() and not overwrite_existing:
         cached = QRF(file_path=INCOME_MODEL_PATH)
-        cached_outputs = set(getattr(cached.model, "imputed_variables", []))
-        if cached_outputs == set(IMPUTATIONS):
+        if _income_model_matches_current_release(cached):
             return cached
-        # Cached model was trained against a different output set; retrain.
+        # Cached model was trained against a different SPI release or output set.
     return save_imputation_models()
 
 

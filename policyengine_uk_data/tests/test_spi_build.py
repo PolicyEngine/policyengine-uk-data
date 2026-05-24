@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import importlib.util
 import inspect
+import pickle
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -206,3 +208,68 @@ def test_income_projection_uses_current_spi_release():
 
     assert incomes_projection.SPI_DATASET.endswith(SPI_H5_FILENAME)
     assert incomes_projection.SPI_FISCAL_YEAR == SPI_FISCAL_YEAR
+
+
+def test_income_model_cache_is_release_scoped():
+    from policyengine_uk_data.datasets.imputations.income import (
+        INCOME_MODEL_PATH,
+    )
+    from policyengine_uk_data.datasets.spi import SPI_RELEASE_NAME
+
+    assert INCOME_MODEL_PATH.name == f"income_{SPI_RELEASE_NAME}.pkl"
+
+
+def test_income_model_cache_rejects_stale_spi_release(tmp_path, monkeypatch):
+    from policyengine_uk_data.datasets.imputations import income as income_module
+
+    cache = tmp_path / "income_spi_2022_23.pkl"
+    stale_metadata = {
+        **income_module.INCOME_MODEL_METADATA,
+        "spi_release_name": "spi_2020_21",
+        "spi_tab_filename": "put2021uk.tab",
+    }
+    with cache.open("wb") as f:
+        pickle.dump(
+            {
+                "model": SimpleNamespace(
+                    imputed_variables=list(income_module.IMPUTATIONS)
+                ),
+                "input_columns": income_module.PREDICTORS,
+                "metadata": stale_metadata,
+            },
+            f,
+        )
+
+    sentinel = object()
+    monkeypatch.setattr(income_module, "INCOME_MODEL_PATH", cache)
+    monkeypatch.setattr(income_module, "save_imputation_models", lambda: sentinel)
+
+    assert income_module.create_income_model() is sentinel
+
+
+def test_income_model_cache_accepts_current_spi_release(tmp_path, monkeypatch):
+    from policyengine_uk_data.datasets.imputations import income as income_module
+
+    cache = tmp_path / "income_spi_2022_23.pkl"
+    with cache.open("wb") as f:
+        pickle.dump(
+            {
+                "model": SimpleNamespace(
+                    imputed_variables=list(income_module.IMPUTATIONS)
+                ),
+                "input_columns": income_module.PREDICTORS,
+                "metadata": income_module.INCOME_MODEL_METADATA,
+            },
+            f,
+        )
+
+    monkeypatch.setattr(income_module, "INCOME_MODEL_PATH", cache)
+    monkeypatch.setattr(
+        income_module,
+        "save_imputation_models",
+        lambda: pytest.fail("current SPI release cache should be reused"),
+    )
+
+    assert income_module.create_income_model().metadata == (
+        income_module.INCOME_MODEL_METADATA
+    )
