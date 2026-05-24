@@ -103,6 +103,7 @@ def main():
             "Clone and assign OA geography",
             "Calibrate constituency weights",
             "Calibrate local authority weights",
+            "Calibrate public service aggregates",
             "Calibrate fuel litres",
             "Save final dataset",
             "Create tiny datasets",
@@ -287,6 +288,17 @@ def main():
                     uprate_dataset,
                 )
                 update_dataset(materialize_step, "completed")
+
+            update_dataset("Calibrate public service aggregates", "processing")
+            from policyengine_uk_data.datasets.imputations.services.services import (
+                calibrate_rail_subsidy_spending,
+            )
+
+            calibrate_rail_subsidy_spending(
+                frs_calibrated,
+                frs_release.calibration_year,
+            )
+            update_dataset("Calibrate public service aggregates", "completed")
 
             update_dataset("Calibrate fuel litres", "processing")
             from policyengine_uk_data.datasets.imputations.consumption import (

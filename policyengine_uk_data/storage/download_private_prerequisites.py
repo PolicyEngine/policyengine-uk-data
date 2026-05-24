@@ -1,4 +1,9 @@
 from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
+from policyengine_uk_data.datasets.private_releases import (
+    CURRENT_ETB_RELEASE,
+    CURRENT_LCFS_RELEASE,
+    CURRENT_WAS_RELEASE,
+)
 from policyengine_uk_data.datasets.spi import SPI_RELEASE_NAME
 from policyengine_uk_data.utils.hf_destinations import PRIVATE_REPO
 from policyengine_uk_data.utils.huggingface import download
@@ -11,9 +16,9 @@ import warnings
 
 PRIVATE_PREREQUISITES = [
     (CURRENT_FRS_RELEASE.raw_zip_name, CURRENT_FRS_RELEASE.ukds_tab_subdir),
-    ("lcfs_2021_22.zip", None),
-    ("was_2006_20.zip", None),
-    ("etb_1977_21.zip", None),
+    (CURRENT_LCFS_RELEASE.raw_zip_name, CURRENT_LCFS_RELEASE.ukds_tab_subdir),
+    (CURRENT_WAS_RELEASE.raw_zip_name, CURRENT_WAS_RELEASE.ukds_tab_subdir),
+    (CURRENT_ETB_RELEASE.raw_zip_name, CURRENT_ETB_RELEASE.ukds_tab_subdir),
     (f"{SPI_RELEASE_NAME}.zip", None),
 ]
 

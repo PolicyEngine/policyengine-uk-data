@@ -13,20 +13,19 @@ changes) don't need a code edit.
 """
 
 import pandas as pd
-from pathlib import Path
-import numpy as np
+from policyengine_uk_data.datasets.private_releases import CURRENT_ETB_RELEASE
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk import Microsimulation
 
-ETB_TAB_FOLDER = STORAGE_FOLDER / "etb_1977_21"
+ETB_TAB_FOLDER = STORAGE_FOLDER / CURRENT_ETB_RELEASE.name
+VAT_MODEL_FILENAME = (
+    f"vat_{CURRENT_ETB_RELEASE.name}_{CURRENT_ETB_RELEASE.default_training_year}.pkl"
+)
 
-# Default ETB vintage used when training the imputation model. Kept at 2020
-# for backward compatibility with the checked-in vat.pkl fingerprint, but
-# exposed as a module constant rather than an inline magic number so later
-# updates require only a one-line change (not scattered `etb.year == 2020`
-# checks).
-DEFAULT_ETB_YEAR = 2020
+# Default ETB vintage used when training the imputation model. The ETB 1977-2024
+# file uses ``year == 2023`` for financial year ending 2024.
+DEFAULT_ETB_YEAR = CURRENT_ETB_RELEASE.default_training_year
 
 # Fallback VAT parameters used when `policyengine_uk` is unavailable (e.g.
 # unit-test environments). Values match the 2020-21 UK statutory position.
@@ -40,10 +39,36 @@ _FALLBACK_REDUCED_RATE_SHARE = 0.03
 VAT_RATE_BY_YEAR: dict[int, tuple[float, float]] = {
     2020: (0.2, 0.03),
     2021: (0.2, 0.03),
+    2022: (0.2, 0.03),
+    2023: (0.2, 0.03),
 }
 
 PREDICTORS = ["is_adult", "is_child", "is_SP_age", "household_net_income"]
 IMPUTATIONS = ["full_rate_vat_expenditure_rate"]
+
+
+def get_vat_model_path(year: int = DEFAULT_ETB_YEAR):
+    if year == DEFAULT_ETB_YEAR:
+        return STORAGE_FOLDER / VAT_MODEL_FILENAME
+    return STORAGE_FOLDER / f"vat_{CURRENT_ETB_RELEASE.name}_{year}.pkl"
+
+
+def get_vat_model_metadata(year: int = DEFAULT_ETB_YEAR) -> dict:
+    return {
+        "etb_release_name": CURRENT_ETB_RELEASE.name,
+        "etb_household_tab_filename": CURRENT_ETB_RELEASE.household_tab_filename,
+        "training_year": year,
+        "predictor_variables": tuple(PREDICTORS),
+        "impute_variables": tuple(IMPUTATIONS),
+    }
+
+
+def _vat_model_matches_current_release(model, year: int = DEFAULT_ETB_YEAR) -> bool:
+    if getattr(model, "metadata", {}) != get_vat_model_metadata(year):
+        return False
+
+    trained_outputs = getattr(model.model, "imputed_variables", None)
+    return list(trained_outputs) == IMPUTATIONS
 
 
 def _get_vat_parameters(year: int) -> tuple[float, float]:
@@ -106,15 +131,16 @@ def save_imputation_models(year: int = DEFAULT_ETB_YEAR):
     from policyengine_uk_data.utils.qrf import QRF
 
     vat = QRF()
+    vat.metadata = get_vat_model_metadata(year)
     etb = pd.read_csv(
-        ETB_TAB_FOLDER / "householdv2_1977-2021.tab",
+        ETB_TAB_FOLDER / CURRENT_ETB_RELEASE.household_tab_filename,
         delimiter="\t",
         low_memory=False,
     )
     etb = generate_etb_table(etb, year=year)
     etb = etb[PREDICTORS + IMPUTATIONS]
     vat.fit(etb[PREDICTORS], etb[IMPUTATIONS])
-    vat.save(STORAGE_FOLDER / "vat.pkl")
+    vat.save(get_vat_model_path(year))
     return vat
 
 
@@ -130,8 +156,11 @@ def create_vat_model(overwrite_existing: bool = False):
     """
     from policyengine_uk_data.utils.qrf import QRF
 
-    if (STORAGE_FOLDER / "vat.pkl").exists() and not overwrite_existing:
-        return QRF(file_path=STORAGE_FOLDER / "vat.pkl")
+    model_path = get_vat_model_path()
+    if model_path.exists() and not overwrite_existing:
+        cached = QRF(file_path=model_path)
+        if _vat_model_matches_current_release(cached):
+            return cached
     return save_imputation_models()
 
 
