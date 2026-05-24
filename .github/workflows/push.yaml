@@ -52,14 +52,14 @@ jobs:
         with:
           workload_identity_provider: "projects/322898545428/locations/global/workloadIdentityPools/policyengine-research-id-pool/providers/prod-github-provider"
           service_account: "policyengine-research@policyengine-research.iam.gserviceaccount.com"
-      - name: Install package
-        run: uv pip install -e ".[dev]" --system
+      - name: Sync locked environment
+        run: uv sync --frozen --all-extras
       - name: Download data inputs
-        run: make download
+        run: uv run --frozen make download
         env:
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
       - name: Build datasets
-        run: make data
+        run: uv run --frozen make data
       - name: Save calibration log (constituencies)
         uses: actions/upload-artifact@v7
         with:
@@ -72,9 +72,9 @@ jobs:
           name: la_calibration_log.csv
           path: la_calibration_log.csv
       - name: Run tests
-        run: make test
+        run: uv run --frozen make test
       - name: Upload data
-        run: make upload
+        run: uv run --frozen make upload
         env:
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
       - name: Publish a git tag
