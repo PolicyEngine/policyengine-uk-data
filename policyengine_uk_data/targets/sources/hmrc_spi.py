@@ -3,10 +3,9 @@
 Downloads and parses the SPI ODS (Tables 3.6 and 3.7) to get income
 distributions by total income band and income type for 2023-24.
 
-For future year projections, the microsimulation uprates these base
-year distributions forward using PolicyEngine's uprating factors.
-That projection logic is in utils/incomes_projection.py and is not
-part of the target download — it's a simulation step.
+For future year projections, utils/incomes_projection.py starts from
+the same parsed SPI band table and uprates it with PolicyEngine's
+uprating factors.
 
 Property income amounts are scaled up by 1.9x because the SPI only
 covers taxpayers with "some liability to tax", missing ~half of all
@@ -146,6 +145,86 @@ INCOME_VARIABLES = [
     "dividend_income",
 ]
 
+SPI_INCOME_TABLE_VARIABLES = [
+    "employment_income",
+    "self_employment_income",
+    "state_pension",
+    "private_pension_income",
+    "property_income",
+    "savings_interest_income",
+    "dividend_income",
+]
+
+
+def _format_bound(value: float) -> str:
+    if value == float("inf"):
+        return "inf"
+    return f"{float(value):_.0f}"
+
+
+def _format_band_label(lower: float, upper: float) -> str:
+    return f"{_format_bound(lower)}_to_{_format_bound(upper)}"
+
+
+def _income_band_table_from_ods(ods_bytes: bytes) -> pd.DataFrame:
+    """Parse the official SPI ODS into canonical income-band rows.
+
+    Amounts are returned in GBP and counts in people, matching the CSV
+    artifacts consumed by the projection and local-area calibration paths.
+    Property income is intentionally unscaled here; target creation applies
+    the rental-statistics scale factor at the point of use.
+    """
+    t36 = _parse_table_36(ods_bytes)
+    t37 = _parse_table_37(ods_bytes)
+    merged = t36.merge(t37, on="lower_bound", how="outer").sort_values("lower_bound")
+
+    rows = []
+    for idx, row in merged.reset_index(drop=True).iterrows():
+        lower = int(row["lower_bound"])
+        upper = _BAND_UPPER[idx] if idx < len(_BAND_UPPER) else float("inf")
+        output = {
+            "total_income_lower_bound": lower,
+            "total_income_upper_bound": upper,
+        }
+        for variable in SPI_INCOME_TABLE_VARIABLES:
+            count_col = f"{variable}_count"
+            amount_col = f"{variable}_amount"
+            if count_col in row.index:
+                output[count_col] = float(row[count_col]) * 1e3
+            if amount_col in row.index:
+                output[amount_col] = float(row[amount_col]) * 1e6
+        rows.append(output)
+
+    table = pd.DataFrame(rows)
+    aggregate = {
+        "total_income_lower_bound": _BAND_LOWER[0],
+        "total_income_upper_bound": float("inf"),
+    }
+    for variable in SPI_INCOME_TABLE_VARIABLES:
+        for suffix in ("count", "amount"):
+            column = f"{variable}_{suffix}"
+            if column in table:
+                aggregate[column] = table[column].sum()
+    return pd.concat([table, pd.DataFrame([aggregate])], ignore_index=True)
+
+
+def get_income_band_table(include_aggregate: bool = True) -> pd.DataFrame:
+    """Return the current official SPI income-band table.
+
+    The final aggregate row has lower bound 12,570 and upper bound infinity.
+    It is useful for local-area scaling, but target generation drops it to
+    avoid double-counting against the detailed bands.
+    """
+    config = load_config()
+    ods_bytes = _download_ods(config["hmrc"]["spi_collated"])
+    table = _income_band_table_from_ods(ods_bytes)
+    if include_aggregate:
+        return table
+    is_aggregate = (table["total_income_lower_bound"] == _BAND_LOWER[0]) & (
+        table["total_income_upper_bound"] == float("inf")
+    )
+    return table[~is_aggregate].reset_index(drop=True)
+
 
 def get_targets() -> list[Target]:
     """Build income-band targets from the live HMRC SPI ODS.
@@ -159,23 +238,19 @@ def get_targets() -> list[Target]:
 
     # Parse base year from official ODS
     try:
-        ods_bytes = _download_ods(ref)
-        t36 = _parse_table_36(ods_bytes)
-        t37 = _parse_table_37(ods_bytes)
-        merged = t36.merge(t37, on="lower_bound", how="outer")
+        merged = get_income_band_table(include_aggregate=False)
 
-        for idx, row in merged.iterrows():
-            lower = int(row["lower_bound"])
-            upper = _BAND_UPPER[idx] if idx < len(_BAND_UPPER) else float("inf")
-            band_label = f"{lower:_}_to_{upper:_}"
+        for _, row in merged.iterrows():
+            lower = float(row["total_income_lower_bound"])
+            upper = float(row["total_income_upper_bound"])
+            band_label = _format_band_label(lower, upper)
 
             for variable in INCOME_VARIABLES:
                 amount_col = f"{variable}_amount"
                 count_col = f"{variable}_count"
 
                 if amount_col in row.index and row[amount_col] > 0:
-                    # SPI amounts are in £millions, counts in thousands
-                    amount = float(row[amount_col]) * 1e6
+                    amount = float(row[amount_col])
                     if variable == "property_income":
                         amount *= _PROPERTY_INCOME_SCALE
                     targets.append(
@@ -199,7 +274,7 @@ def get_targets() -> list[Target]:
                             variable=variable,
                             source="hmrc_spi",
                             unit=Unit.COUNT,
-                            values={_SPI_YEAR: float(row[count_col]) * 1e3},
+                            values={_SPI_YEAR: float(row[count_col])},
                             is_count=True,
                             breakdown_variable="total_income",
                             lower_bound=float(lower),
@@ -222,9 +297,12 @@ def get_targets() -> list[Target]:
 def _read_projection_csv(csv_path: Path, ref: str) -> list[Target]:
     """Read projected future year targets from incomes_projection.csv."""
     incomes = pd.read_csv(csv_path)
-    # Drop aggregate rows (lower=12570, upper=inf) — these duplicate the
-    # per-band rows and would cause double-counting in the calibration.
-    incomes = incomes[incomes["total_income_upper_bound"] != float("inf")]
+    # Drop only the aggregate row (lower=12570, upper=inf). The detailed
+    # top band also has upper=inf and must remain a calibration target.
+    is_aggregate = (incomes["total_income_lower_bound"] == _BAND_LOWER[0]) & (
+        incomes["total_income_upper_bound"] == float("inf")
+    )
+    incomes = incomes[~is_aggregate]
     targets = []
 
     for year in incomes.year.unique():
@@ -235,7 +313,7 @@ def _read_projection_csv(csv_path: Path, ref: str) -> list[Target]:
         for _, row in year_df.iterrows():
             lower = row.total_income_lower_bound
             upper = row.total_income_upper_bound
-            band_label = f"{lower:_.0f}_to_{upper:_.0f}"
+            band_label = _format_band_label(lower, upper)
 
             for variable in INCOME_VARIABLES:
                 amount_col = f"{variable}_amount"
