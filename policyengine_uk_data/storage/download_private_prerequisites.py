@@ -1,4 +1,5 @@
 from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
+from policyengine_uk_data.datasets.spi import SPI_RELEASE_NAME
 from policyengine_uk_data.utils.hf_destinations import PRIVATE_REPO
 from policyengine_uk_data.utils.huggingface import download
 from pathlib import Path
@@ -13,7 +14,7 @@ PRIVATE_PREREQUISITES = [
     ("lcfs_2021_22.zip", None),
     ("was_2006_20.zip", None),
     ("etb_1977_21.zip", None),
-    ("spi_2020_21.zip", None),
+    (f"{SPI_RELEASE_NAME}.zip", None),
 ]
 
 

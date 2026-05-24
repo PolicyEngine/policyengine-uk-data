@@ -8,13 +8,20 @@ models trained on HMRC Survey of Personal Incomes (SPI) data.
 
 import pandas as pd
 import numpy as np
+import os
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk import Microsimulation
+from policyengine_uk_data.datasets.spi import (
+    AGE_RANGES,
+    REGION_MAP,
+    SPI_RELEASE_NAME,
+    SPI_TAB_FILENAME,
+)
 from policyengine_uk_data.utils.stack import stack_datasets
 from policyengine_uk_data.utils.subsample import subsample_dataset
 
-SPI_TAB_FOLDER = STORAGE_FOLDER / "spi_2020_21"
+SPI_TAB_FOLDER = STORAGE_FOLDER / SPI_RELEASE_NAME
 SPI_RENAMES = dict(
     private_pension_income="PENSION",
     self_employment_income="PROFITS",
@@ -37,7 +44,18 @@ SPI_RENAMES = dict(
 )
 
 
-def generate_spi_table(spi: pd.DataFrame):
+def _spi_age_bounds(age_code) -> tuple[int, int]:
+    try:
+        return AGE_RANGES[int(age_code)]
+    except (TypeError, ValueError, KeyError):
+        return AGE_RANGES[-1]
+
+
+def generate_spi_table(
+    spi: pd.DataFrame,
+    seed: int = 0,
+    sample_size: int | None = 100_000,
+):
     """
     Clean and transform SPI data for income imputation model training.
 
@@ -47,29 +65,12 @@ def generate_spi_table(spi: pd.DataFrame):
     Returns:
         Cleaned DataFrame with age and region mappings applied.
     """
-    LOWER = np.array([0, 16, 25, 35, 45, 55, 65, 75])
-    UPPER = np.array([16, 25, 35, 45, 55, 65, 75, 80])
+    rng = np.random.default_rng(seed)
     age_range = spi.AGERANGE
-    spi["age"] = LOWER[age_range] + np.random.rand(len(spi)) * (
-        UPPER[age_range] - LOWER[age_range]
-    )
+    bounds = np.array([_spi_age_bounds(age) for age in age_range])
+    spi["age"] = bounds[:, 0] + rng.random(len(spi)) * (bounds[:, 1] - bounds[:, 0])
 
-    REGIONS = {
-        1: "NORTH_EAST",
-        2: "NORTH_WEST",
-        3: "YORKSHIRE",
-        4: "EAST_MIDLANDS",
-        5: "WEST_MIDLANDS",
-        6: "EAST_OF_ENGLAND",
-        7: "LONDON",
-        8: "SOUTH_EAST",
-        9: "SOUTH_WEST",
-        10: "WALES",
-        11: "SCOTLAND",
-        12: "NORTHERN_IRELAND",
-    }
-
-    spi["region"] = np.array([REGIONS.get(x, "LONDON") for x in spi.GORCODE])
+    spi["region"] = spi.GORCODE.map(REGION_MAP).fillna("UNKNOWN")
 
     spi["gender"] = np.where(spi.SEX == 1, "MALE", "FEMALE")
 
@@ -78,11 +79,17 @@ def generate_spi_table(spi: pd.DataFrame):
 
     spi["employment_income"] = spi[["PAY", "EPB", "TAXTERM"]].sum(axis=1)
 
-    spi = pd.concat(
-        [
-            spi.sample(100_000, weights=spi.person_weight, replace=True),
-        ]
-    )
+    if sample_size is not None:
+        spi = pd.concat(
+            [
+                spi.sample(
+                    sample_size,
+                    weights=spi.person_weight,
+                    replace=True,
+                    random_state=seed,
+                ),
+            ]
+        )
 
     return spi
 
@@ -119,7 +126,35 @@ INCOME_COMPONENTS = [
 IMPUTATIONS = INCOME_COMPONENTS + ["gift_aid", "charitable_investment_gifts"]
 
 
-INCOME_MODEL_PATH = STORAGE_FOLDER / "income.pkl"
+INCOME_MODEL_METADATA = {
+    "spi_release_name": SPI_RELEASE_NAME,
+    "spi_tab_filename": SPI_TAB_FILENAME,
+    "imputations": tuple(IMPUTATIONS),
+}
+INCOME_MODEL_PATH = STORAGE_FOLDER / f"income_{SPI_RELEASE_NAME}.pkl"
+INCOME_MODEL_SAMPLE_SIZE = 100_000
+TESTING_INCOME_MODEL_SAMPLE_SIZE = 10_000
+
+
+def get_income_model_sample_size() -> int:
+    if os.environ.get("TESTING", "0") == "1":
+        return TESTING_INCOME_MODEL_SAMPLE_SIZE
+    return INCOME_MODEL_SAMPLE_SIZE
+
+
+def get_income_model_metadata() -> dict:
+    return {
+        **INCOME_MODEL_METADATA,
+        "sample_size": get_income_model_sample_size(),
+    }
+
+
+def _income_model_matches_current_release(model) -> bool:
+    if getattr(model, "metadata", {}) != get_income_model_metadata():
+        return False
+
+    cached_outputs = set(getattr(model.model, "imputed_variables", []))
+    return cached_outputs == set(IMPUTATIONS)
 
 
 def save_imputation_models():
@@ -132,8 +167,9 @@ def save_imputation_models():
     from policyengine_uk_data.utils import QRF
 
     income = QRF()
-    spi = pd.read_csv(SPI_TAB_FOLDER / "put2021uk.tab", delimiter="\t")
-    spi = generate_spi_table(spi)
+    income.metadata = get_income_model_metadata()
+    spi = pd.read_csv(SPI_TAB_FOLDER / SPI_TAB_FILENAME, delimiter="\t")
+    spi = generate_spi_table(spi, sample_size=get_income_model_sample_size())
     spi = spi[PREDICTORS + IMPUTATIONS]
     income.fit(spi[PREDICTORS], spi[IMPUTATIONS])
     income.save(INCOME_MODEL_PATH)
@@ -144,10 +180,9 @@ def create_income_model(overwrite_existing: bool = False):
     """
     Create or load income imputation model.
 
-    If a cached model exists and its trained output columns don't match the
-    current ``IMPUTATIONS`` list, the cache is discarded and the model is
-    retrained. This handles the case where ``IMPUTATIONS`` is extended in
-    code but an older pickle is still on disk.
+    If a cached model exists and its training metadata or output columns don't
+    match the current SPI release and ``IMPUTATIONS`` list, the cache is
+    discarded and the model is retrained.
 
     Args:
         overwrite_existing: Whether to retrain model if it exists.
@@ -159,10 +194,9 @@ def create_income_model(overwrite_existing: bool = False):
 
     if INCOME_MODEL_PATH.exists() and not overwrite_existing:
         cached = QRF(file_path=INCOME_MODEL_PATH)
-        cached_outputs = set(getattr(cached.model, "imputed_variables", []))
-        if cached_outputs == set(IMPUTATIONS):
+        if _income_model_matches_current_release(cached):
             return cached
-        # Cached model was trained against a different output set; retrain.
+        # Cached model was trained against a different SPI release or output set.
     return save_imputation_models()
 
 

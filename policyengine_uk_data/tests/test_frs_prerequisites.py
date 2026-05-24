@@ -10,6 +10,7 @@ from policyengine_uk_data.datasets.create_datasets import (
     _needs_calibration_year_materialization,
 )
 from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
+from policyengine_uk_data.datasets.spi import SPI_RELEASE_NAME
 from policyengine_uk_data.storage.download_private_prerequisites import (
     PRIVATE_PREREQUISITES,
     extract_zipped_folder,
@@ -21,6 +22,13 @@ def test_private_prerequisites_use_current_frs_release():
 
     assert CURRENT_FRS_RELEASE.raw_zip_name in prerequisite_names
     assert "frs_2023_24.zip" not in prerequisite_names
+
+
+def test_private_prerequisites_use_current_spi_release():
+    prerequisite_names = [filename for filename, _ in PRIVATE_PREREQUISITES]
+
+    assert f"{SPI_RELEASE_NAME}.zip" in prerequisite_names
+    assert "spi_2020_21.zip" not in prerequisite_names
 
 
 def test_current_frs_release_uses_survey_year_as_base_year():

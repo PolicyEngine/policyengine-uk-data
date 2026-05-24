@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import importlib.util
 import inspect
+import pickle
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -30,6 +32,7 @@ if importlib.util.find_spec("policyengine_uk") is None:
 
 
 SPI_COLUMNS = [
+    "SEX",
     "SREF",
     "FACT",
     "DIVIDENDS",
@@ -166,3 +169,301 @@ def test_create_spi_marriage_allowance_uses_fiscal_year_parameters(tmp_path):
     # either, but require it's NOT the stale 2020-21 £1,250 figure.
     assert marriage_2025[0] != 1_250
     assert marriage_2025[0] >= 1_250  # PA has only risen since 2020
+
+
+def test_current_spi_release_metadata_points_to_2022_23():
+    from policyengine_uk_data.datasets.spi import (
+        SPI_FISCAL_YEAR,
+        SPI_H5_FILENAME,
+        SPI_RELEASE_NAME,
+        SPI_TAB_FILENAME,
+    )
+
+    assert SPI_RELEASE_NAME == "spi_2022_23"
+    assert SPI_TAB_FILENAME == "put2223uk.tab"
+    assert SPI_FISCAL_YEAR == 2022
+    assert SPI_H5_FILENAME == "spi_2022_23.h5"
+
+
+def test_income_spi_generation_handles_current_unknown_codes():
+    from policyengine_uk_data.datasets.imputations.income import generate_spi_table
+
+    data = {col: np.zeros(1, dtype=float) for col in SPI_COLUMNS}
+    data["SREF"] = [1]
+    data["FACT"] = [1]
+    data["SEX"] = [1]
+    data["GORCODE"] = [13]
+    data["AGERANGE"] = [-1]
+    spi = pd.DataFrame(data)
+
+    out = generate_spi_table(spi, seed=0, sample_size=5)
+
+    assert out["region"].tolist() == ["UNKNOWN"] * 5
+    assert out["age"].between(16, 70, inclusive="left").all()
+
+
+def test_income_model_cache_is_release_scoped():
+    from policyengine_uk_data.datasets.imputations.income import (
+        INCOME_MODEL_PATH,
+    )
+    from policyengine_uk_data.datasets.spi import SPI_RELEASE_NAME
+
+    assert INCOME_MODEL_PATH.name == f"income_{SPI_RELEASE_NAME}.pkl"
+
+
+def test_income_model_sample_size_is_reduced_in_testing(monkeypatch):
+    from policyengine_uk_data.datasets.imputations import income as income_module
+
+    monkeypatch.delenv("TESTING", raising=False)
+    assert (
+        income_module.get_income_model_sample_size()
+        == income_module.INCOME_MODEL_SAMPLE_SIZE
+    )
+    assert (
+        income_module.get_income_model_metadata()["sample_size"]
+        == income_module.INCOME_MODEL_SAMPLE_SIZE
+    )
+
+    monkeypatch.setenv("TESTING", "1")
+    assert (
+        income_module.get_income_model_sample_size()
+        == income_module.TESTING_INCOME_MODEL_SAMPLE_SIZE
+    )
+    assert (
+        income_module.get_income_model_metadata()["sample_size"]
+        == income_module.TESTING_INCOME_MODEL_SAMPLE_SIZE
+    )
+
+
+def test_income_projection_uses_current_spi_release():
+    from policyengine_uk_data.utils import incomes_projection
+    from policyengine_uk_data.datasets.spi import SPI_FISCAL_YEAR, SPI_H5_FILENAME
+
+    assert incomes_projection.SPI_DATASET.endswith(SPI_H5_FILENAME)
+    assert incomes_projection.SPI_FISCAL_YEAR == SPI_FISCAL_YEAR
+    assert "savings_interest_income" in incomes_projection.ALL_INCOME_VARIABLES
+
+
+def test_income_projection_reads_spi_dataset_year_read_only(monkeypatch):
+    from policyengine_uk_data.utils import incomes_projection
+
+    calls = {}
+
+    class FakeStore:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return None
+
+        def __getitem__(self, key):
+            assert key == "time_period"
+            return pd.Series([2022])
+
+    def fake_hdf_store(path, mode=None):
+        calls["path"] = path
+        calls["mode"] = mode
+        return FakeStore()
+
+    monkeypatch.setattr(incomes_projection.pd, "HDFStore", fake_hdf_store)
+
+    assert incomes_projection._read_spi_dataset_year("/readonly/spi_2022_23.h5") == 2022
+    assert calls == {
+        "path": "/readonly/spi_2022_23.h5",
+        "mode": "r",
+    }
+
+
+def test_income_projection_builds_current_spi_dataset_when_missing(
+    tmp_path,
+    monkeypatch,
+):
+    from policyengine_uk_data.utils import incomes_projection
+
+    tab_dir = tmp_path / "spi_2022_23"
+    tab_dir.mkdir()
+    tab_path = tab_dir / "put2223uk.tab"
+    tab_path.write_text("fake tab")
+
+    calls = {}
+
+    class FakeDataset:
+        def save(self, path):
+            calls["saved_path"] = path
+            path.write_text("fake h5")
+
+    def fake_create_spi(path, fiscal_year):
+        calls["tab_path"] = path
+        calls["fiscal_year"] = fiscal_year
+        return FakeDataset()
+
+    monkeypatch.setattr(incomes_projection, "STORAGE_FOLDER", tmp_path)
+    monkeypatch.setattr(incomes_projection, "SPI_RELEASE_NAME", "spi_2022_23")
+    monkeypatch.setattr(incomes_projection, "SPI_TAB_FILENAME", "put2223uk.tab")
+    monkeypatch.setattr(incomes_projection, "SPI_H5_FILENAME", "spi_2022_23.h5")
+    monkeypatch.setattr(incomes_projection, "SPI_FISCAL_YEAR", 2022)
+    monkeypatch.setattr(incomes_projection, "create_spi", fake_create_spi)
+    monkeypatch.setattr(incomes_projection, "_read_spi_dataset_year", lambda path: 2022)
+
+    dataset_path = incomes_projection.ensure_spi_dataset()
+
+    assert dataset_path == str(tmp_path / "spi_2022_23.h5")
+    assert calls == {
+        "tab_path": tab_path,
+        "fiscal_year": 2022,
+        "saved_path": tmp_path / "spi_2022_23.h5",
+    }
+
+
+def test_income_projection_rebuilds_stale_spi_dataset_year(
+    tmp_path,
+    monkeypatch,
+):
+    from policyengine_uk_data.utils import incomes_projection
+
+    tab_dir = tmp_path / "spi_2022_23"
+    tab_dir.mkdir()
+    (tab_dir / "put2223uk.tab").write_text("fake tab")
+    dataset_path = tmp_path / "spi_2022_23.h5"
+    dataset_path.write_text("stale h5")
+
+    read_years = iter([2026, 2022])
+    calls = {}
+
+    class FakeDataset:
+        def save(self, path):
+            calls["saved_path"] = path
+            path.write_text("rebuilt h5")
+
+    monkeypatch.setattr(incomes_projection, "STORAGE_FOLDER", tmp_path)
+    monkeypatch.setattr(incomes_projection, "SPI_RELEASE_NAME", "spi_2022_23")
+    monkeypatch.setattr(incomes_projection, "SPI_TAB_FILENAME", "put2223uk.tab")
+    monkeypatch.setattr(incomes_projection, "SPI_H5_FILENAME", "spi_2022_23.h5")
+    monkeypatch.setattr(incomes_projection, "SPI_FISCAL_YEAR", 2022)
+    monkeypatch.setattr(
+        incomes_projection,
+        "_read_spi_dataset_year",
+        lambda path: next(read_years),
+    )
+    monkeypatch.setattr(
+        incomes_projection,
+        "create_spi",
+        lambda path, fiscal_year: FakeDataset(),
+    )
+
+    assert incomes_projection.ensure_spi_dataset() == str(dataset_path)
+    assert calls == {"saved_path": dataset_path}
+    assert dataset_path.read_text() == "rebuilt h5"
+
+
+def test_income_projection_loads_local_h5_dataset(monkeypatch):
+    from policyengine_uk_data.utils import incomes_projection
+
+    calls = {}
+
+    class FakeDataset:
+        def __init__(self, path):
+            calls["path"] = path
+            self.household = pd.DataFrame(
+                {"region": ["UNKNOWN", "LONDON", "SOUTH_EAST"]}
+            )
+
+    monkeypatch.setattr(
+        incomes_projection,
+        "ensure_spi_dataset",
+        lambda: "/tmp/spi_2022_23.h5",
+    )
+    monkeypatch.setattr(incomes_projection, "UKSingleYearDataset", FakeDataset)
+
+    dataset = incomes_projection.load_spi_dataset()
+
+    assert isinstance(dataset, FakeDataset)
+    assert calls == {"path": "/tmp/spi_2022_23.h5"}
+    assert dataset.household["region"].tolist() == [
+        "SOUTH_EAST",
+        "LONDON",
+        "SOUTH_EAST",
+    ]
+
+
+def test_income_model_cache_rejects_stale_spi_release(tmp_path, monkeypatch):
+    from policyengine_uk_data.datasets.imputations import income as income_module
+
+    cache = tmp_path / "income_spi_2022_23.pkl"
+    stale_metadata = {
+        **income_module.get_income_model_metadata(),
+        "spi_release_name": "spi_2020_21",
+        "spi_tab_filename": "put2021uk.tab",
+    }
+    with cache.open("wb") as f:
+        pickle.dump(
+            {
+                "model": SimpleNamespace(
+                    imputed_variables=list(income_module.IMPUTATIONS)
+                ),
+                "input_columns": income_module.PREDICTORS,
+                "metadata": stale_metadata,
+            },
+            f,
+        )
+
+    sentinel = object()
+    monkeypatch.setattr(income_module, "INCOME_MODEL_PATH", cache)
+    monkeypatch.setattr(income_module, "save_imputation_models", lambda: sentinel)
+
+    assert income_module.create_income_model() is sentinel
+
+
+def test_income_model_cache_rejects_stale_sample_size(tmp_path, monkeypatch):
+    from policyengine_uk_data.datasets.imputations import income as income_module
+
+    monkeypatch.delenv("TESTING", raising=False)
+    cache = tmp_path / "income_spi_2022_23.pkl"
+    stale_metadata = {
+        **income_module.get_income_model_metadata(),
+        "sample_size": income_module.TESTING_INCOME_MODEL_SAMPLE_SIZE,
+    }
+    with cache.open("wb") as f:
+        pickle.dump(
+            {
+                "model": SimpleNamespace(
+                    imputed_variables=list(income_module.IMPUTATIONS)
+                ),
+                "input_columns": income_module.PREDICTORS,
+                "metadata": stale_metadata,
+            },
+            f,
+        )
+
+    sentinel = object()
+    monkeypatch.setattr(income_module, "INCOME_MODEL_PATH", cache)
+    monkeypatch.setattr(income_module, "save_imputation_models", lambda: sentinel)
+
+    assert income_module.create_income_model() is sentinel
+
+
+def test_income_model_cache_accepts_current_spi_release(tmp_path, monkeypatch):
+    from policyengine_uk_data.datasets.imputations import income as income_module
+
+    cache = tmp_path / "income_spi_2022_23.pkl"
+    current_metadata = income_module.get_income_model_metadata()
+    with cache.open("wb") as f:
+        pickle.dump(
+            {
+                "model": SimpleNamespace(
+                    imputed_variables=list(income_module.IMPUTATIONS)
+                ),
+                "input_columns": income_module.PREDICTORS,
+                "metadata": current_metadata,
+            },
+            f,
+        )
+
+    monkeypatch.setattr(income_module, "INCOME_MODEL_PATH", cache)
+    monkeypatch.setattr(
+        income_module,
+        "save_imputation_models",
+        lambda: pytest.fail("current SPI release cache should be reused"),
+    )
+
+    assert income_module.create_income_model().metadata == current_metadata

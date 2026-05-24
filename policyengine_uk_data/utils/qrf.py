@@ -39,6 +39,7 @@ class QRF:
                 data = pickle.load(f)
                 self.model = data["model"]
                 self.input_columns = data["input_columns"]
+                self.metadata = data.get("metadata", {})
 
     def fit(self, X, y):
         """
@@ -74,4 +75,11 @@ class QRF:
             file_path: Path where model should be saved.
         """
         with open(file_path, "wb") as f:
-            pickle.dump({"model": self.model, "input_columns": self.input_columns}, f)
+            pickle.dump(
+                {
+                    "model": self.model,
+                    "input_columns": self.input_columns,
+                    "metadata": getattr(self, "metadata", {}),
+                },
+                f,
+            )

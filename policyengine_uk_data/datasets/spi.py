@@ -3,6 +3,11 @@ import pandas as pd
 import numpy as np
 from policyengine_uk.data import UKSingleYearDataset
 
+SPI_RELEASE_NAME = "spi_2022_23"
+SPI_TAB_FILENAME = "put2223uk.tab"
+SPI_FISCAL_YEAR = 2022
+SPI_H5_FILENAME = "spi_2022_23.h5"
+
 
 # Age-range midpoints for random age imputation.
 # Key -1 covers records with no reported AGERANGE — use a broad working-age
@@ -86,8 +91,8 @@ def create_spi(
     """Build a :class:`UKSingleYearDataset` from an SPI microdata `.tab` file.
 
     Args:
-        spi_data_file_path: Path to the SPI `.tab` file (e.g. `put2021uk.tab`).
-        fiscal_year: UK fiscal year for the dataset (e.g. 2020 → 2020-21).
+        spi_data_file_path: Path to the SPI `.tab` file (e.g. `put2223uk.tab`).
+        fiscal_year: UK fiscal year for the dataset (e.g. 2022 → 2022-23).
         output_file_path: Unused here — callers may save the returned dataset
             themselves with ``dataset.save(path)``. Kept as a kwarg so
             existing call sites don't break.
@@ -142,8 +147,9 @@ def create_spi(
     # generator so builds are reproducible (previously used the unseeded
     # global np.random.rand).
     percent_along_age_range = rng.random(len(df))
-    min_age = np.array([AGE_RANGES[age][0] for age in age_range])
-    max_age = np.array([AGE_RANGES[age][1] for age in age_range])
+    bounds = np.array([AGE_RANGES.get(int(age), AGE_RANGES[-1]) for age in age_range])
+    min_age = bounds[:, 0]
+    max_age = bounds[:, 1]
     person["age"] = (min_age + (max_age - min_age) * percent_along_age_range).astype(
         int
     )
@@ -174,8 +180,8 @@ def create_spi(
 
 
 if __name__ == "__main__":
-    spi_data_file_path = STORAGE_FOLDER / "spi_2020_21" / "put2021uk.tab"
-    fiscal_year = 2020
-    output_file_path = STORAGE_FOLDER / "spi_2020.h5"
+    spi_data_file_path = STORAGE_FOLDER / SPI_RELEASE_NAME / SPI_TAB_FILENAME
+    fiscal_year = SPI_FISCAL_YEAR
+    output_file_path = STORAGE_FOLDER / SPI_H5_FILENAME
     spi = create_spi(spi_data_file_path, fiscal_year, output_file_path)
     spi.save(output_file_path)
