@@ -17,7 +17,7 @@ import warnings
 import numpy as np
 from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
 
-POPULATION_TARGET = 69.5  # ONS 2022-based projection for 2025, millions
+POPULATION_TARGET = 69.5  # ONS 2024-based projection for 2025, millions
 TOLERANCE = 0.04  # 4% — covers ~1.6%-3.3% stochastic calibration variance
 MIN_HOUSEHOLDS_M = 25
 MAX_HOUSEHOLDS_M = 34

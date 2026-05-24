@@ -1,6 +1,6 @@
 """ONS population projections and demographic targets.
 
-Downloads the ONS 2022-based principal population projection for the
+Downloads the ONS 2024-based principal population projection for the
 UK to extract total population and gender × age band targets.
 
 For regional age breakdowns (12 regions × 9 age bands), reads the
@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 _UK_ZIP_URL = (
     "https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/"
     "populationandmigration/populationprojections/datasets/"
-    "z1zippedpopulationprojectionsdatafilesuk/2022based/uk.zip"
+    "z1zippedpopulationprojectionsdatafilesuk/2024based/uk.zip"
 )
 
 _REF_REGION = (
@@ -81,7 +81,8 @@ def _download_uk_projection() -> pd.DataFrame:
     r = requests.get(_UK_ZIP_URL, headers=HEADERS, allow_redirects=True, timeout=120)
     r.raise_for_status()
     z = zipfile.ZipFile(io.BytesIO(r.content))
-    with z.open("uk/uk_ppp_machine_readable.xlsx") as f:
+    projection_member = _find_projection_member(z.namelist())
+    with z.open(projection_member) as f:
         df = pd.read_excel(
             io.BytesIO(f.read()),
             sheet_name="Population",
@@ -90,20 +91,40 @@ def _download_uk_projection() -> pd.DataFrame:
     return df
 
 
+def _find_projection_member(names: list[str]) -> str:
+    """Find the UK principal projection workbook inside the ONS zip."""
+    for name in names:
+        if name.endswith("uk_ppp_machine_readable.xlsx"):
+            return name
+    raise RuntimeError(
+        "ONS UK projection zip did not contain uk_ppp_machine_readable.xlsx"
+    )
+
+
 def _aggregate_ages(
     df: pd.DataFrame, sex: str, low: int, high: int, years: list[int]
 ) -> dict[int, float]:
     """Sum population for a sex and age range across years."""
     sex_filter = "Females" if sex == "female" else "Males"
-    mask = (df["Sex"] == sex_filter) & (
-        df["Age"].apply(lambda a: isinstance(a, int) and low <= a <= high)
-    )
+    ages = pd.to_numeric(df["Age"], errors="coerce")
+    mask = (df["Sex"] == sex_filter) & ages.between(low, high)
     subset = df[mask]
     result = {}
     for y in years:
-        if y in subset.columns:
-            result[y] = float(subset[y].sum())
+        column = _year_column(subset, y)
+        if column is not None:
+            result[y] = float(subset[column].sum())
     return result
+
+
+def _year_column(df: pd.DataFrame, year: int) -> int | str | None:
+    """Return the workbook column for a year across ONS vintages."""
+    if year in df.columns:
+        return year
+    string_year = str(year)
+    if string_year in df.columns:
+        return string_year
+    return None
 
 
 def _parse_uk_totals(df: pd.DataFrame) -> list[Target]:
@@ -113,8 +134,9 @@ def _parse_uk_totals(df: pd.DataFrame) -> list[Target]:
     # UK total
     uk_pop = {}
     for y in _YEARS:
-        if y in df.columns:
-            uk_pop[y] = float(df[y].sum())
+        column = _year_column(df, y)
+        if column is not None:
+            uk_pop[y] = float(df[column].sum())
     if uk_pop:
         targets.append(
             Target(

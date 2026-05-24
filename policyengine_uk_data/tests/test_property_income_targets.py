@@ -10,16 +10,20 @@ from policyengine_uk_data.targets import get_all_targets
 def test_property_income_targets_scaled():
     """Property income targets should be ~1.9x the raw SPI values.
 
-    Raw SPI 2022-23 total is ~£27bn. After scaling, targets for the
-    base year should be ~£52bn (matching HMRC rental income stats).
+    Raw SPI 2023-24 total is scaled up to better match HMRC rental
+    income statistics, which cover more landlords than SPI.
     """
-    targets = get_all_targets(year=2023)
+    base_year = 2024
+    targets = get_all_targets(year=base_year)
     total = sum(
-        t.values[2023]
+        t.values[base_year]
         for t in targets
-        if "property_income" in t.name and "count" not in t.name and 2023 in t.values
+        if "property_income" in t.name
+        and "count" not in t.name
+        and base_year in t.values
     )
-    # Raw SPI gives ~£27bn, scaled by 1.9x should give ~£52bn
+    # Raw SPI gives roughly half of all landlord income; scaling should
+    # leave the current base-year target in this broad administrative range.
     assert total > 45e9, (
         f"Property income target total £{total / 1e9:.1f}bn is below £45bn. "
         "Scaling factor may not be applied."
