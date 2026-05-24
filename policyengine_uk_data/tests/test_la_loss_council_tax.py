@@ -49,8 +49,8 @@ def test_band_count_columns_exist_for_every_wired_band():
 
 def test_england_and_wales_have_band_a_to_h_populated():
     """E/W rows should have non-null counts for A-H. If the CSV regresses
-    to NaN there, the loss matrix will silently fall back to the
-    national-share estimate and the calibrator loses its real signal."""
+    to NaN there, the loss matrix will mask the cell and the calibrator
+    loses its real signal."""
     ew = CT_DATA[CT_DATA["country"].isin(["ENGLAND", "WALES"])]
     for band in WIRED_BANDS:
         non_null = ew[f"count_band_{band}"].notna().sum()
@@ -62,7 +62,7 @@ def test_england_and_wales_have_band_a_to_h_populated():
 
 def test_scotland_band_counts_are_null_as_documented():
     """Scotland VOA band counts are absent — they should consistently be
-    NaN so the loss matrix routes them through the fallback."""
+    NaN so the loss matrix masks them."""
     scotland = CT_DATA[CT_DATA["country"] == "SCOTLAND"]
     for band in WIRED_BANDS:
         assert scotland[f"count_band_{band}"].isna().all(), (

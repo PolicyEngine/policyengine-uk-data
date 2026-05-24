@@ -14,6 +14,12 @@ Sources:
 - Council tax bands A-H: VOA Council Tax Stock of Properties (per LA)
 - Council tax £ paid (net of CTR): MHCLG taxbase × Band D (England),
   Welsh Government Council Tax Income (Wales)
+
+Missing-source policy: local target cells stay NaN when no direct LA
+source is available. The local-area calibrator masks those cells out of
+the local loss. National targets are supplied by a separate national
+target matrix, so this module should not fabricate local targets by
+allocating national totals across missing-source LAs.
 """
 
 from policyengine_uk import Microsimulation
@@ -55,7 +61,6 @@ def create_local_authority_target_matrix(
 
     sim = Microsimulation(dataset=dataset, reform=reform)
     sim.default_calculation_period = time_period
-    original_weights = sim.calculate("household_weight", time_period).values
 
     matrix = pd.DataFrame()
     y = pd.DataFrame()
@@ -154,31 +159,20 @@ def create_local_authority_target_matrix(
     has_ons_data = (
         ons_merged["net_income_bhc"].notna() & ons_merged["households"].notna()
     ).values
-    total_households = ons_merged["households"].sum()
-    la_household_share = np.where(
-        ons_merged["households"].notna(),
-        ons_merged["households"].values / total_households,
-        1 / len(la_codes),
-    )
-
-    national_bhc = (original_weights * hbai_net_income).sum()
-    national_ahc = (original_weights * hbai_net_income_ahc).sum()
-    national_hc = (original_weights * housing_costs).sum()
-
     y["ons/equiv_net_income_bhc"] = np.where(
         has_ons_data,
         ons_merged["equiv_net_income_bhc_target"].values,
-        national_bhc * la_household_share,
+        np.nan,
     )
     y["ons/equiv_net_income_ahc"] = np.where(
         has_ons_data,
         ons_merged["equiv_net_income_ahc_target"].values,
-        national_ahc * la_household_share,
+        np.nan,
     )
     y["ons/equiv_housing_costs"] = np.where(
         has_ons_data,
         ons_merged["equiv_housing_costs_target"].values,
-        national_hc * la_household_share,
+        np.nan,
     )
 
     # ── Tenure targets ─────────────────────────────────────────────
@@ -216,9 +210,10 @@ def create_local_authority_target_matrix(
         ("social_rent", "social_rent_pct"),
     ]:
         targets = tenure_merged[pct_col] / 100 * tenure_merged["households"]
-        national = (original_weights * matrix[f"tenure/{tenure_key}"].values).sum()
         y[f"tenure/{tenure_key}"] = np.where(
-            has_tenure, targets.values, national * la_household_share
+            has_tenure,
+            targets.values,
+            np.nan,
         )
 
     # ── Private rent amounts ───────────────────────────────────────
@@ -247,12 +242,10 @@ def create_local_authority_target_matrix(
         & tenure_merged["private_rent_pct"].notna()
         & tenure_merged["households"].notna()
     ).values
-    national_rent = (original_weights * private_rent_amount).sum()
-
     y["rent/private_rent"] = np.where(
         has_rent,
         tenure_merged["private_rent_target"].values,
-        national_rent * la_household_share,
+        np.nan,
     )
 
     # ── Council tax band counts (LA targets) ───────────────────────
