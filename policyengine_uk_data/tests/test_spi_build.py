@@ -217,6 +217,7 @@ def test_income_projection_uses_current_spi_release():
 
     assert incomes_projection.SPI_DATASET.endswith(SPI_H5_FILENAME)
     assert incomes_projection.SPI_FISCAL_YEAR == SPI_FISCAL_YEAR
+    assert "savings_interest_income" in incomes_projection.ALL_INCOME_VARIABLES
 
 
 def test_income_projection_builds_current_spi_dataset_when_missing(
@@ -248,6 +249,7 @@ def test_income_projection_builds_current_spi_dataset_when_missing(
     monkeypatch.setattr(incomes_projection, "SPI_H5_FILENAME", "spi_2022_23.h5")
     monkeypatch.setattr(incomes_projection, "SPI_FISCAL_YEAR", 2022)
     monkeypatch.setattr(incomes_projection, "create_spi", fake_create_spi)
+    monkeypatch.setattr(incomes_projection, "_read_spi_dataset_year", lambda path: 2022)
 
     dataset_path = incomes_projection.ensure_spi_dataset()
 
@@ -257,6 +259,77 @@ def test_income_projection_builds_current_spi_dataset_when_missing(
         "fiscal_year": 2022,
         "saved_path": tmp_path / "spi_2022_23.h5",
     }
+
+
+def test_income_projection_rebuilds_stale_spi_dataset_year(
+    tmp_path,
+    monkeypatch,
+):
+    from policyengine_uk_data.utils import incomes_projection
+
+    tab_dir = tmp_path / "spi_2022_23"
+    tab_dir.mkdir()
+    (tab_dir / "put2223uk.tab").write_text("fake tab")
+    dataset_path = tmp_path / "spi_2022_23.h5"
+    dataset_path.write_text("stale h5")
+
+    read_years = iter([2026, 2022])
+    calls = {}
+
+    class FakeDataset:
+        def save(self, path):
+            calls["saved_path"] = path
+            path.write_text("rebuilt h5")
+
+    monkeypatch.setattr(incomes_projection, "STORAGE_FOLDER", tmp_path)
+    monkeypatch.setattr(incomes_projection, "SPI_RELEASE_NAME", "spi_2022_23")
+    monkeypatch.setattr(incomes_projection, "SPI_TAB_FILENAME", "put2223uk.tab")
+    monkeypatch.setattr(incomes_projection, "SPI_H5_FILENAME", "spi_2022_23.h5")
+    monkeypatch.setattr(incomes_projection, "SPI_FISCAL_YEAR", 2022)
+    monkeypatch.setattr(
+        incomes_projection,
+        "_read_spi_dataset_year",
+        lambda path: next(read_years),
+    )
+    monkeypatch.setattr(
+        incomes_projection,
+        "create_spi",
+        lambda path, fiscal_year: FakeDataset(),
+    )
+
+    assert incomes_projection.ensure_spi_dataset() == str(dataset_path)
+    assert calls == {"saved_path": dataset_path}
+    assert dataset_path.read_text() == "rebuilt h5"
+
+
+def test_income_projection_loads_local_h5_dataset(monkeypatch):
+    from policyengine_uk_data.utils import incomes_projection
+
+    calls = {}
+
+    class FakeDataset:
+        def __init__(self, path):
+            calls["path"] = path
+            self.household = pd.DataFrame(
+                {"region": ["UNKNOWN", "LONDON", "SOUTH_EAST"]}
+            )
+
+    monkeypatch.setattr(
+        incomes_projection,
+        "ensure_spi_dataset",
+        lambda: "/tmp/spi_2022_23.h5",
+    )
+    monkeypatch.setattr(incomes_projection, "UKSingleYearDataset", FakeDataset)
+
+    dataset = incomes_projection.load_spi_dataset()
+
+    assert isinstance(dataset, FakeDataset)
+    assert calls == {"path": "/tmp/spi_2022_23.h5"}
+    assert dataset.household["region"].tolist() == [
+        "SOUTH_EAST",
+        "LONDON",
+        "SOUTH_EAST",
+    ]
 
 
 def test_income_model_cache_rejects_stale_spi_release(tmp_path, monkeypatch):

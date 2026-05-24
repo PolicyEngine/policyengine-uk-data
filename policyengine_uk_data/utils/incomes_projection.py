@@ -4,6 +4,7 @@ from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk_data.utils import uprate_values
 import warnings
 from policyengine_uk import Microsimulation
+from policyengine_uk.data import UKSingleYearDataset
 from microcalibrate import Calibration
 from policyengine_uk_data.datasets.spi import (
     SPI_FISCAL_YEAR,
@@ -18,10 +19,18 @@ warnings.filterwarnings("ignore")
 SPI_DATASET = str(STORAGE_FOLDER / SPI_H5_FILENAME)
 
 
+def _read_spi_dataset_year(dataset_path) -> int:
+    with pd.HDFStore(dataset_path) as store:
+        return int(store["time_period"].iloc[0])
+
+
 def ensure_spi_dataset() -> str:
     """Create the SPI H5 projection input from the current TAB release if needed."""
     dataset_path = STORAGE_FOLDER / SPI_H5_FILENAME
-    if dataset_path.exists():
+    if (
+        dataset_path.exists()
+        and _read_spi_dataset_year(dataset_path) == SPI_FISCAL_YEAR
+    ):
         return str(dataset_path)
 
     tab_path = STORAGE_FOLDER / SPI_RELEASE_NAME / SPI_TAB_FILENAME
@@ -32,7 +41,21 @@ def ensure_spi_dataset() -> str:
         )
 
     create_spi(tab_path, SPI_FISCAL_YEAR).save(dataset_path)
+    dataset_year = _read_spi_dataset_year(dataset_path)
+    if dataset_year != SPI_FISCAL_YEAR:
+        raise ValueError(
+            f"Built SPI dataset {dataset_path} for {dataset_year}, "
+            f"expected {SPI_FISCAL_YEAR}."
+        )
     return str(dataset_path)
+
+
+def load_spi_dataset() -> UKSingleYearDataset:
+    dataset = UKSingleYearDataset(ensure_spi_dataset())
+    dataset.household["region"] = dataset.household["region"].replace(
+        {"UNKNOWN": "SOUTH_EAST"}
+    )
+    return dataset
 
 
 tax_benefit = pd.read_csv(STORAGE_FOLDER / "tax_benefit.csv")
@@ -62,6 +85,7 @@ ALL_INCOME_VARIABLES = [
     "state_pension",
     "private_pension_income",
     "property_income",
+    "savings_interest_income",
     "dividend_income",
 ]
 
@@ -172,10 +196,11 @@ def get_loss_results(dataset, time_period, reform=None):
 
 
 def create_income_projections():
-    spi_dataset = ensure_spi_dataset()
-    loss_matrix, targets_array = create_target_matrix(spi_dataset, SPI_FISCAL_YEAR)
+    loss_matrix, targets_array = create_target_matrix(
+        load_spi_dataset(), SPI_FISCAL_YEAR
+    )
 
-    sim = Microsimulation(dataset=spi_dataset)
+    sim = Microsimulation(dataset=load_spi_dataset())
     household_weights = sim.calculate("household_weight", SPI_FISCAL_YEAR).values
 
     calibration = Calibration(
@@ -188,7 +213,7 @@ def create_income_projections():
     calibration.calibrate()
     reweighted_weights = calibration.weights
 
-    sim = Microsimulation(dataset=spi_dataset)
+    sim = Microsimulation(dataset=load_spi_dataset())
     sim.set_input("household_weight", SPI_FISCAL_YEAR, reweighted_weights)
 
     incomes = pd.read_csv(STORAGE_FOLDER / "incomes.csv")
