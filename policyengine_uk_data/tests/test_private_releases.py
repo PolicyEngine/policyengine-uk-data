@@ -9,10 +9,9 @@ def test_current_lcfs_release_points_to_2023_24_ukds_files():
     assert CURRENT_LCFS_RELEASE.name == "lcfs_2023_24"
     assert CURRENT_LCFS_RELEASE.ukds_study_number == 9468
     assert CURRENT_LCFS_RELEASE.doi == "10.5255/UKDA-SN-9468-3"
-    assert CURRENT_LCFS_RELEASE.household_tab_filename == "9468_dvhh_ukanon_v2_2023.tab"
-    assert (
-        CURRENT_LCFS_RELEASE.person_tab_filename == "9468_dvper_ukanon_202324_2023.tab"
-    )
+    assert CURRENT_LCFS_RELEASE.ukds_tab_subdir == "UKDA-9468-tab/tab"
+    assert CURRENT_LCFS_RELEASE.household_tab_filename == "dvhh_ukanon_v2_2023.tab"
+    assert CURRENT_LCFS_RELEASE.person_tab_filename == "dvper_ukanon_202324_2023.tab"
     assert CURRENT_LCFS_RELEASE.fuel_price_year == 2023
 
 
@@ -21,9 +20,14 @@ def test_current_was_release_points_to_round_8_ukds_files():
     assert CURRENT_WAS_RELEASE.latest_round == 8
     assert CURRENT_WAS_RELEASE.ukds_study_number == 7215
     assert CURRENT_WAS_RELEASE.doi == "10.5255/UKDA-SN-7215-20"
+    assert CURRENT_WAS_RELEASE.ukds_tab_subdir == "UKDA-7215-tab/tab"
     assert (
         CURRENT_WAS_RELEASE.household_tab_filename
-        == "7215_was_round_8_hhold_eul_may_2025_230525.tab"
+        == "was_round_8_hhold_eul_may_2025_230525.tab"
+    )
+    assert (
+        CURRENT_WAS_RELEASE.person_tab_filename
+        == "was_round_8_person_eul_may_2025_230525.tab"
     )
 
 
@@ -33,9 +37,9 @@ def test_current_etb_release_points_to_2023_24_ukds_files():
     assert CURRENT_ETB_RELEASE.default_training_year == 2023
     assert CURRENT_ETB_RELEASE.ukds_study_number == 8856
     assert CURRENT_ETB_RELEASE.doi == "10.5255/UKDA-SN-8856-4"
-    assert (
-        CURRENT_ETB_RELEASE.household_tab_filename == "8856_householdv2_1977-2024.tab"
-    )
+    assert CURRENT_ETB_RELEASE.ukds_tab_subdir == "UKDA-8856-tab/tab"
+    assert CURRENT_ETB_RELEASE.household_tab_filename == "householdv2_1977-2024.tab"
+    assert CURRENT_ETB_RELEASE.person_tab_filename == "personv2_2018-2024.tab"
 
 
 def test_consumption_model_metadata_tracks_private_releases():

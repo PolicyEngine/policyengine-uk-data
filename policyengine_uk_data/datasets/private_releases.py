@@ -8,6 +8,7 @@ class LCFSRelease:
     fuel_price_year: int
     ukds_study_number: int
     doi: str
+    ukds_tab_subdir: str
     household_tab_filename: str
     person_tab_filename: str
 
@@ -23,6 +24,7 @@ class WASRelease:
     end_year: int
     ukds_study_number: int
     doi: str
+    ukds_tab_subdir: str
     household_tab_filename: str
     person_tab_filename: str
 
@@ -38,6 +40,7 @@ class ETBRelease:
     default_training_year: int
     ukds_study_number: int
     doi: str
+    ukds_tab_subdir: str
     household_tab_filename: str
     person_tab_filename: str
 
@@ -52,8 +55,9 @@ CURRENT_LCFS_RELEASE = LCFSRelease(
     fuel_price_year=2023,
     ukds_study_number=9468,
     doi="10.5255/UKDA-SN-9468-3",
-    household_tab_filename="9468_dvhh_ukanon_v2_2023.tab",
-    person_tab_filename="9468_dvper_ukanon_202324_2023.tab",
+    ukds_tab_subdir="UKDA-9468-tab/tab",
+    household_tab_filename="dvhh_ukanon_v2_2023.tab",
+    person_tab_filename="dvper_ukanon_202324_2023.tab",
 )
 
 
@@ -63,8 +67,9 @@ CURRENT_WAS_RELEASE = WASRelease(
     end_year=2022,
     ukds_study_number=7215,
     doi="10.5255/UKDA-SN-7215-20",
-    household_tab_filename="7215_was_round_8_hhold_eul_may_2025_230525.tab",
-    person_tab_filename="7215_was_round_8_person_eul_may_2025_230525.tab",
+    ukds_tab_subdir="UKDA-7215-tab/tab",
+    household_tab_filename="was_round_8_hhold_eul_may_2025_230525.tab",
+    person_tab_filename="was_round_8_person_eul_may_2025_230525.tab",
 )
 
 
@@ -74,6 +79,7 @@ CURRENT_ETB_RELEASE = ETBRelease(
     default_training_year=2023,
     ukds_study_number=8856,
     doi="10.5255/UKDA-SN-8856-4",
-    household_tab_filename="8856_householdv2_1977-2024.tab",
-    person_tab_filename="8856_personv2_2018-2024.tab",
+    ukds_tab_subdir="UKDA-8856-tab/tab",
+    household_tab_filename="householdv2_1977-2024.tab",
+    person_tab_filename="personv2_2018-2024.tab",
 )

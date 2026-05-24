@@ -37,24 +37,30 @@ def test_private_prerequisites_use_current_spi_release():
 
 
 def test_private_prerequisites_use_current_lcfs_release():
-    prerequisite_names = [filename for filename, _ in PRIVATE_PREREQUISITES]
+    prerequisites = dict(PRIVATE_PREREQUISITES)
 
-    assert CURRENT_LCFS_RELEASE.raw_zip_name in prerequisite_names
-    assert "lcfs_2021_22.zip" not in prerequisite_names
+    assert prerequisites[CURRENT_LCFS_RELEASE.raw_zip_name] == (
+        CURRENT_LCFS_RELEASE.ukds_tab_subdir
+    )
+    assert "lcfs_2021_22.zip" not in prerequisites
 
 
 def test_private_prerequisites_use_current_was_release():
-    prerequisite_names = [filename for filename, _ in PRIVATE_PREREQUISITES]
+    prerequisites = dict(PRIVATE_PREREQUISITES)
 
-    assert CURRENT_WAS_RELEASE.raw_zip_name in prerequisite_names
-    assert "was_2006_20.zip" not in prerequisite_names
+    assert prerequisites[CURRENT_WAS_RELEASE.raw_zip_name] == (
+        CURRENT_WAS_RELEASE.ukds_tab_subdir
+    )
+    assert "was_2006_20.zip" not in prerequisites
 
 
 def test_private_prerequisites_use_current_etb_release():
-    prerequisite_names = [filename for filename, _ in PRIVATE_PREREQUISITES]
+    prerequisites = dict(PRIVATE_PREREQUISITES)
 
-    assert CURRENT_ETB_RELEASE.raw_zip_name in prerequisite_names
-    assert "etb_1977_21.zip" not in prerequisite_names
+    assert prerequisites[CURRENT_ETB_RELEASE.raw_zip_name] == (
+        CURRENT_ETB_RELEASE.ukds_tab_subdir
+    )
+    assert "etb_1977_21.zip" not in prerequisites
 
 
 def test_current_frs_release_uses_survey_year_as_base_year():

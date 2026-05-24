@@ -16,9 +16,9 @@ import warnings
 
 PRIVATE_PREREQUISITES = [
     (CURRENT_FRS_RELEASE.raw_zip_name, CURRENT_FRS_RELEASE.ukds_tab_subdir),
-    (CURRENT_LCFS_RELEASE.raw_zip_name, None),
-    (CURRENT_WAS_RELEASE.raw_zip_name, None),
-    (CURRENT_ETB_RELEASE.raw_zip_name, None),
+    (CURRENT_LCFS_RELEASE.raw_zip_name, CURRENT_LCFS_RELEASE.ukds_tab_subdir),
+    (CURRENT_WAS_RELEASE.raw_zip_name, CURRENT_WAS_RELEASE.ukds_tab_subdir),
+    (CURRENT_ETB_RELEASE.raw_zip_name, CURRENT_ETB_RELEASE.ukds_tab_subdir),
     (f"{SPI_RELEASE_NAME}.zip", None),
 ]
 
