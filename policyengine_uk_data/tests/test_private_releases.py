@@ -63,6 +63,9 @@ def test_etb_model_metadata_tracks_private_release():
     from policyengine_uk_data.datasets.imputations.services.etb import (
         get_public_services_model_metadata,
     )
+    from policyengine_uk_data.datasets.imputations.services.services import (
+        ETB_SURVEY_YEAR,
+    )
     from policyengine_uk_data.datasets.imputations.vat import (
         DEFAULT_ETB_YEAR,
         get_vat_model_metadata,
@@ -72,5 +75,6 @@ def test_etb_model_metadata_tracks_private_release():
     services_metadata = get_public_services_model_metadata()
 
     assert DEFAULT_ETB_YEAR == CURRENT_ETB_RELEASE.default_training_year
+    assert ETB_SURVEY_YEAR == CURRENT_ETB_RELEASE.default_training_year
     assert vat_metadata["etb_release_name"] == CURRENT_ETB_RELEASE.name
     assert services_metadata["etb_release_name"] == CURRENT_ETB_RELEASE.name

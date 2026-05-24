@@ -6,16 +6,20 @@ NHS usage, education spending, and transport subsidies to UK households.
 """
 
 from policyengine_uk.data import UKSingleYearDataset
+from policyengine_uk import Microsimulation
 from policyengine_uk.system import system
+from policyengine_uk_data.datasets.private_releases import CURRENT_ETB_RELEASE
 from .nhs import impute_nhs_usage
 from .etb import impute_public_services, create_efrs_input_dataset
 
-# ETB survey year (most recent year in ETB data)
-ETB_SURVEY_YEAR = 2021
+# ETB survey year used by the current training data.
+ETB_SURVEY_YEAR = CURRENT_ETB_RELEASE.default_training_year
 
-# Fallback fare index for 2021 if parameter not yet available in policyengine-uk
-# This is the cumulative fare index from base year 2020 (+1.0% from 2020)
-FALLBACK_FARE_INDEX_2021 = 1.010
+RAIL_SUBSIDY_TARGETS = {
+    # ORR/GOV.UK rail finance statistics report GBP 21.6bn of government
+    # support to the rail industry in 2024-25.
+    2025: 21.6e9,
+}
 
 
 def get_fare_index_survey_year() -> float:
@@ -28,8 +32,38 @@ def get_fare_index_survey_year() -> float:
     try:
         return system.parameters.gov.dft.rail.fare_index(ETB_SURVEY_YEAR)
     except AttributeError:
-        # Parameter not yet available in policyengine-uk
-        return FALLBACK_FARE_INDEX_2021
+        return 1.0
+
+
+def calibrate_rail_subsidy_spending(
+    dataset: UKSingleYearDataset,
+    time_period: int,
+) -> float | None:
+    target = RAIL_SUBSIDY_TARGETS.get(time_period)
+    if target is None:
+        return None
+
+    original_time_period = dataset.time_period
+    dataset.time_period = str(original_time_period)
+    try:
+        simulation = Microsimulation(dataset=dataset)
+        actual = simulation.calculate(
+            "rail_subsidy_spending",
+            period=time_period,
+            map_to="household",
+        ).sum()
+    finally:
+        dataset.time_period = original_time_period
+    if actual <= 0:
+        raise ValueError(
+            f"Cannot calibrate rail_subsidy_spending: aggregate is {actual}."
+        )
+
+    scale = target / actual
+    dataset.household["rail_usage"] *= scale
+    if "rail_subsidy_spending" in dataset.household:
+        dataset.household["rail_subsidy_spending"] *= scale
+    return scale
 
 
 def impute_services(

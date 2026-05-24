@@ -114,36 +114,36 @@ LCFS_ACCOMM_MAP = {
 }
 
 HOUSEHOLD_LCF_RENAMES = {
-    "G018": "is_adult",
-    "G019": "is_child",
-    "Gorx": "region",
-    "P389p": "hbai_household_net_income",
+    "g018": "is_adult",
+    "g019": "is_child",
+    "gorx": "region",
+    "p389p": "hbai_household_net_income",
     "p344p": "household_gross_income",
     "weighta": "household_weight",
 }
 PERSON_LCF_RENAMES = {
-    "B303p": "employment_income",
-    "B3262p": "self_employment_income",
-    "B3381": "state_pension",
-    "P049p": "private_pension_income",
+    "b303p": "employment_income",
+    "b3262p": "self_employment_income",
+    "b3381": "state_pension",
+    "p049p": "private_pension_income",
 }
 
 CONSUMPTION_VARIABLE_RENAMES = {
-    "P601": "food_and_non_alcoholic_beverages_consumption",
-    "P602": "alcohol_and_tobacco_consumption",
-    "P603": "clothing_and_footwear_consumption",
-    "P604": "housing_water_and_electricity_consumption",
-    "P605": "household_furnishings_consumption",
-    "P606": "health_consumption",
-    "P607": "transport_consumption",
-    "P608": "communication_consumption",
-    "P609": "recreation_consumption",
-    "P610": "education_consumption",
-    "P611": "restaurants_and_hotels_consumption",
-    "P612": "miscellaneous_consumption",
-    "C72211": "petrol_spending",
-    "C72212": "diesel_spending",
-    "P537": "domestic_energy_consumption",  # aggregate kept for backward compat
+    "p601": "food_and_non_alcoholic_beverages_consumption",
+    "p602": "alcohol_and_tobacco_consumption",
+    "p603": "clothing_and_footwear_consumption",
+    "p604": "housing_water_and_electricity_consumption",
+    "p605": "household_furnishings_consumption",
+    "p606": "health_consumption",
+    "p607": "transport_consumption",
+    "p608": "communication_consumption",
+    "p609": "recreation_consumption",
+    "p610": "education_consumption",
+    "p611": "restaurants_and_hotels_consumption",
+    "p612": "miscellaneous_consumption",
+    "c72211": "petrol_spending",
+    "c72212": "diesel_spending",
+    "p537": "domestic_energy_consumption",  # aggregate kept for backward compat
 }
 
 PREDICTOR_VARIABLES = [
@@ -220,6 +220,7 @@ def get_consumption_model_metadata() -> dict:
         "frs_base_year": CURRENT_FRS_RELEASE.base_year,
         "predictor_variables": tuple(PREDICTOR_VARIABLES),
         "impute_variables": tuple(IMPUTATIONS),
+        "domestic_energy_consumption_source": "calibrated_electricity_plus_gas",
     }
 
 
@@ -396,10 +397,10 @@ def _derive_energy_from_lcfs(household: pd.DataFrame) -> pd.DataFrame:
 
     All values are annualised (multiply weekly × 52) downstream with other variables.
     """
-    p537 = household["P537"]
-    b226 = household["B226"]
-    b489 = household["B489"]
-    b490 = household["B490"]
+    p537 = household["p537"]
+    b226 = household["b226"]
+    b489 = household["b489"]
+    b490 = household["b490"]
 
     # Mean electricity share from DD-billed households (B226/P537 median ≈ 0.55)
     dd_mask = (b226 > 0) & (p537 > 0)
@@ -441,6 +442,12 @@ def _derive_energy_from_lcfs(household: pd.DataFrame) -> pd.DataFrame:
     household["electricity_consumption"] = electricity
     household["gas_consumption"] = gas
     return household
+
+
+def _normalise_lcfs_columns(data: pd.DataFrame) -> pd.DataFrame:
+    data = data.copy()
+    data.columns = [column.lower() for column in data.columns]
+    return data
 
 
 def _calibrate_energy_to_need(
@@ -562,13 +569,16 @@ def generate_lcfs_table(lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame)
     calibrates to NEED 2023 income-band targets, and includes housing predictors
     (tenure_type, accommodation_type) alongside the existing income/demographic ones.
     """
+    lcfs_person = _normalise_lcfs_columns(lcfs_person)
+    lcfs_household = _normalise_lcfs_columns(lcfs_household)
+
     person = lcfs_person.rename(columns=PERSON_LCF_RENAMES)
     household = lcfs_household.rename(columns=HOUSEHOLD_LCF_RENAMES)
     household["region"] = household["region"].map(REGIONS)
 
     # Housing predictors — map LCFS codes to FRS enum strings
-    household["tenure_type"] = lcfs_household["A122"].map(LCFS_TENURE_MAP)
-    household["accommodation_type"] = lcfs_household["A121"].map(LCFS_ACCOMM_MAP)
+    household["tenure_type"] = lcfs_household["a122"].map(LCFS_TENURE_MAP)
+    household["accommodation_type"] = lcfs_household["a121"].map(LCFS_ACCOMM_MAP)
 
     # Derive gas and electricity before renaming/annualising P537
     household = _derive_energy_from_lcfs(household)
@@ -588,13 +598,17 @@ def generate_lcfs_table(lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame)
     for variable in annualise:
         household[variable] = household[variable] * WEEKS_IN_YEAR
     for variable in PERSON_LCF_RENAMES.values():
+        totals_by_case = person.groupby("case")[variable].sum()
         household[variable] = (
-            person[variable].groupby(person.case).sum()[household.case] * WEEKS_IN_YEAR
+            household["case"].map(totals_by_case).fillna(0) * WEEKS_IN_YEAR
         )
     household.household_weight *= 1_000
 
     # Calibrate energy to NEED 2023 targets by income band
     household = _calibrate_energy_to_need(household)
+    household["domestic_energy_consumption"] = (
+        household["electricity_consumption"] + household["gas_consumption"]
+    )
 
     # Impute has_fuel_consumption from WAS vehicle ownership
     household = impute_has_fuel_to_lcfs(household)
@@ -869,6 +883,11 @@ def impute_consumption(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
                 if mask.sum() > 0 and wm > 0:
                     arr[mask] *= target / wm
         dataset.household[col] = arr
+
+    dataset.household["domestic_energy_consumption"] = (
+        dataset.household["electricity_consumption"]
+        + dataset.household["gas_consumption"]
+    )
 
     # Zero out car-fuel spending for non-ICE households
     no_fuel = has_fuel_consumption == 0
