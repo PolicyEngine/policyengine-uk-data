@@ -202,14 +202,6 @@ def test_income_spi_generation_handles_current_unknown_codes():
     assert out["age"].between(16, 70, inclusive="left").all()
 
 
-def test_income_projection_uses_current_spi_release():
-    from policyengine_uk_data.datasets.spi import SPI_FISCAL_YEAR, SPI_H5_FILENAME
-    from policyengine_uk_data.utils import incomes_projection
-
-    assert incomes_projection.SPI_DATASET.endswith(SPI_H5_FILENAME)
-    assert incomes_projection.SPI_FISCAL_YEAR == SPI_FISCAL_YEAR
-
-
 def test_income_model_cache_is_release_scoped():
     from policyengine_uk_data.datasets.imputations.income import (
         INCOME_MODEL_PATH,

@@ -5,11 +5,9 @@ from policyengine_uk_data.utils import uprate_values
 import warnings
 from policyengine_uk import Microsimulation
 from microcalibrate import Calibration
-from policyengine_uk_data.datasets.spi import SPI_FISCAL_YEAR, SPI_H5_FILENAME
+from policyengine_uk_data.datasets import SPI_2020_21
 
 warnings.filterwarnings("ignore")
-
-SPI_DATASET = str(STORAGE_FOLDER / SPI_H5_FILENAME)
 
 tax_benefit = pd.read_csv(STORAGE_FOLDER / "tax_benefit.csv")
 tax_benefit["name"] = tax_benefit["name"].apply(lambda x: f"obr/{x}")
@@ -80,13 +78,10 @@ def create_target_matrix(
     incomes = pd.read_csv(STORAGE_FOLDER / "incomes.csv")
     for variable in REWEIGHT_VARIABLES:
         incomes[variable + "_count"] = uprate_values(
-            incomes[variable + "_count"],
-            "household_weight",
-            SPI_FISCAL_YEAR,
-            time_period,
+            incomes[variable + "_count"], "household_weight", 2021, time_period
         )
         incomes[variable + "_amount"] = uprate_values(
-            incomes[variable + "_amount"], variable, SPI_FISCAL_YEAR, time_period
+            incomes[variable + "_amount"], variable, 2021, time_period
         )
 
     for i, row in incomes.iterrows():
@@ -148,10 +143,10 @@ def get_loss_results(dataset, time_period, reform=None):
 
 
 def create_income_projections():
-    loss_matrix, targets_array = create_target_matrix(SPI_DATASET, SPI_FISCAL_YEAR)
+    loss_matrix, targets_array = create_target_matrix(SPI_2020_21, 2022)
 
-    sim = Microsimulation(dataset=SPI_DATASET)
-    household_weights = sim.calculate("household_weight", SPI_FISCAL_YEAR).values
+    sim = Microsimulation(dataset=SPI_2020_21)
+    household_weights = sim.calculate("household_weight", 2022).values
 
     calibration = Calibration(
         weights=household_weights,
@@ -163,8 +158,8 @@ def create_income_projections():
     calibration.calibrate()
     reweighted_weights = calibration.weights
 
-    sim = Microsimulation(dataset=SPI_DATASET)
-    sim.set_input("household_weight", SPI_FISCAL_YEAR, reweighted_weights)
+    sim = Microsimulation(dataset=SPI_2020_21)
+    sim.set_input("household_weight", 2022, reweighted_weights)
 
     incomes = pd.read_csv(STORAGE_FOLDER / "incomes.csv")
 
@@ -172,7 +167,7 @@ def create_income_projections():
     lower_bounds = incomes.total_income_lower_bound
     upper_bounds = incomes.total_income_upper_bound
 
-    for year in range(SPI_FISCAL_YEAR, 2030):
+    for year in range(2022, 2030):
         year_df = pd.DataFrame()
         year_df["total_income_lower_bound"] = lower_bounds
         year_df["total_income_upper_bound"] = upper_bounds
