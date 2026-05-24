@@ -220,6 +220,36 @@ def test_income_projection_uses_current_spi_release():
     assert "savings_interest_income" in incomes_projection.ALL_INCOME_VARIABLES
 
 
+def test_income_projection_reads_spi_dataset_year_read_only(monkeypatch):
+    from policyengine_uk_data.utils import incomes_projection
+
+    calls = {}
+
+    class FakeStore:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return None
+
+        def __getitem__(self, key):
+            assert key == "time_period"
+            return pd.Series([2022])
+
+    def fake_hdf_store(path, mode=None):
+        calls["path"] = path
+        calls["mode"] = mode
+        return FakeStore()
+
+    monkeypatch.setattr(incomes_projection.pd, "HDFStore", fake_hdf_store)
+
+    assert incomes_projection._read_spi_dataset_year("/readonly/spi_2022_23.h5") == 2022
+    assert calls == {
+        "path": "/readonly/spi_2022_23.h5",
+        "mode": "r",
+    }
+
+
 def test_income_projection_builds_current_spi_dataset_when_missing(
     tmp_path,
     monkeypatch,

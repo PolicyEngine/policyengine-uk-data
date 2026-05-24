@@ -20,7 +20,7 @@ SPI_DATASET = str(STORAGE_FOLDER / SPI_H5_FILENAME)
 
 
 def _read_spi_dataset_year(dataset_path) -> int:
-    with pd.HDFStore(dataset_path) as store:
+    with pd.HDFStore(dataset_path, mode="r") as store:
         return int(store["time_period"].iloc[0])
 
 
