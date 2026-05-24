@@ -35,6 +35,22 @@ def _subset_source(tmp_path: Path, rows: int) -> Path:
     return subset_path
 
 
+def _assert_pip_components_are_split(person: pd.DataFrame) -> None:
+    pip = person[["pip_dl_category", "pip_m_category"]]
+    receives_daily_living = pip.pip_dl_category != "NONE"
+    receives_mobility = pip.pip_m_category != "NONE"
+    receives_both = receives_daily_living & receives_mobility
+
+    assert receives_both.any()
+    assert (receives_daily_living & ~receives_mobility).any()
+    assert (~receives_daily_living & receives_mobility).any()
+    assert (pip.pip_dl_category != pip.pip_m_category).any()
+    assert (
+        pip.loc[receives_both, "pip_dl_category"]
+        != pip.loc[receives_both, "pip_m_category"]
+    ).any()
+
+
 def test_policybench_transfer_dataset_validates(tmp_path: Path):
     dataset = create_enhanced_cps(
         source_file_path=_subset_source(tmp_path, 10),
@@ -98,6 +114,15 @@ def test_checked_in_enhanced_cps_h5_uses_pip_categories():
     assert "pip_m_reported" not in dataset.person.columns
     assert "pip_dl_category" in dataset.person.columns
     assert "pip_m_category" in dataset.person.columns
+    _assert_pip_components_are_split(dataset.person)
+
+
+def test_policybench_transfer_splits_pip_components(tmp_path: Path):
+    dataset = create_enhanced_cps(
+        source_file_path=_subset_source(tmp_path, 1_000),
+        calibrate=False,
+    )
+    _assert_pip_components_are_split(dataset.person)
 
 
 def test_policybench_transfer_runs_uk_microsimulation(tmp_path: Path):

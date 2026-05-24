@@ -41,6 +41,8 @@ USD_TO_GBP_SOURCE_URL = (
 NEW_STATE_PENSION_2025 = 224.96 * 52
 DIVIDEND_YIELD_FOR_WEALTH_IMPUTATION = 0.03
 RENTAL_YIELD_FOR_WEALTH_IMPUTATION = 0.04
+PIP_BOTH_COMPONENT_SHARE = 0.67
+PIP_DAILY_LIVING_ONLY_SHARE = 0.22
 
 REGION_SHARES = (
     ("NORTH_EAST", 0.04),
@@ -215,12 +217,25 @@ def _capital_gains_amount(person_inputs: dict, exchange_rate: float) -> float:
     )
 
 
-def _pip_category(person: dict) -> str:
+def _deterministic_fraction(identifier: int, salt: int) -> float:
+    value = (int(identifier) + salt * 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
+    value = (value ^ (value >> 30)) * 0xBF58476D1CE4E5B9
+    value &= 0xFFFFFFFFFFFFFFFF
+    value = (value ^ (value >> 27)) * 0x94D049BB133111EB
+    value &= 0xFFFFFFFFFFFFFFFF
+    value ^= value >> 31
+    return value / 2**64
+
+
+def _pip_recipient(person: dict) -> bool:
     inputs = person.get("inputs", {})
     disabled = bool(inputs.get("is_disabled", False))
     age = int(person.get("age", 0))
-    if not disabled or age < 16:
-        return "NONE"
+    return disabled and age >= 16
+
+
+def _pip_enhanced_probability(person: dict) -> float:
+    inputs = person.get("inputs", {})
 
     severe_signal = (
         float(inputs.get("disability_benefits", 0.0)) > 0
@@ -232,7 +247,54 @@ def _pip_category(person: dict) -> str:
         + float(inputs.get("self_employment_income", 0.0))
         < 12_000
     )
-    return "ENHANCED" if severe_signal or low_earnings else "STANDARD"
+    if severe_signal and low_earnings:
+        return 0.75
+    if severe_signal:
+        return 0.65
+    if low_earnings:
+        return 0.55
+    return 0.35
+
+
+def _pip_component_categories(person: dict, person_id: int) -> tuple[str, str]:
+    """Return deterministic transfer-side PIP DL and mobility categories.
+
+    The transfer source has only broad disability signals, not UK PIP
+    assessment outcomes. Use those signals for the recipient pool, then split
+    components deterministically so daily living and mobility are not identical
+    by construction.
+    """
+
+    if not _pip_recipient(person):
+        return "NONE", "NONE"
+
+    component_draw = _deterministic_fraction(person_id, salt=17)
+    receives_daily_living = component_draw < (
+        PIP_BOTH_COMPONENT_SHARE + PIP_DAILY_LIVING_ONLY_SHARE
+    )
+    receives_mobility = (
+        component_draw < PIP_BOTH_COMPONENT_SHARE
+        or component_draw >= PIP_BOTH_COMPONENT_SHARE + PIP_DAILY_LIVING_ONLY_SHARE
+    )
+    enhanced_probability = _pip_enhanced_probability(person)
+
+    daily_living = "NONE"
+    if receives_daily_living:
+        daily_living = (
+            "ENHANCED"
+            if _deterministic_fraction(person_id, salt=31) < enhanced_probability
+            else "STANDARD"
+        )
+
+    mobility = "NONE"
+    if receives_mobility:
+        mobility = (
+            "ENHANCED"
+            if _deterministic_fraction(person_id, salt=43) < enhanced_probability
+            else "STANDARD"
+        )
+
+    return daily_living, mobility
 
 
 def _household_cash_income(people: list[dict], exchange_rate: float) -> float:
@@ -591,7 +653,10 @@ def _build_base_dataset(
         for person_index, person in enumerate(people, start=1):
             inputs = person.get("inputs", {})
             person_id = household_id * 10 + person_index
-            pip_category = _pip_category(person)
+            pip_dl_category, pip_m_category = _pip_component_categories(
+                person,
+                person_id,
+            )
 
             person_rows.append(
                 {
@@ -670,8 +735,8 @@ def _build_base_dataset(
                     if bool(inputs.get("is_blind", False))
                     else 0.0,
                     "is_disabled_for_benefits": bool(inputs.get("is_disabled", False)),
-                    "pip_dl_category": pip_category,
-                    "pip_m_category": pip_category,
+                    "pip_dl_category": pip_dl_category,
+                    "pip_m_category": pip_m_category,
                     "hours_worked": float(
                         inputs.get(
                             "weekly_hours_worked",
