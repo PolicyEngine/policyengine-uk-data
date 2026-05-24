@@ -5,10 +5,35 @@ from policyengine_uk_data.utils import uprate_values
 import warnings
 from policyengine_uk import Microsimulation
 from microcalibrate import Calibration
+from policyengine_uk_data.datasets.spi import (
+    SPI_FISCAL_YEAR,
+    SPI_H5_FILENAME,
+    SPI_RELEASE_NAME,
+    SPI_TAB_FILENAME,
+    create_spi,
+)
 
 warnings.filterwarnings("ignore")
 
-SPI_2020_21 = str(STORAGE_FOLDER / "spi_2020.h5")
+SPI_DATASET = str(STORAGE_FOLDER / SPI_H5_FILENAME)
+
+
+def ensure_spi_dataset() -> str:
+    """Create the SPI H5 projection input from the current TAB release if needed."""
+    dataset_path = STORAGE_FOLDER / SPI_H5_FILENAME
+    if dataset_path.exists():
+        return str(dataset_path)
+
+    tab_path = STORAGE_FOLDER / SPI_RELEASE_NAME / SPI_TAB_FILENAME
+    if not tab_path.exists():
+        raise FileNotFoundError(
+            f"Missing SPI TAB file for projections: {tab_path}. "
+            "Run make download before refreshing income projections."
+        )
+
+    create_spi(tab_path, SPI_FISCAL_YEAR).save(dataset_path)
+    return str(dataset_path)
+
 
 tax_benefit = pd.read_csv(STORAGE_FOLDER / "tax_benefit.csv")
 tax_benefit["name"] = tax_benefit["name"].apply(lambda x: f"obr/{x}")
@@ -79,10 +104,13 @@ def create_target_matrix(
     incomes = pd.read_csv(STORAGE_FOLDER / "incomes.csv")
     for variable in REWEIGHT_VARIABLES:
         incomes[variable + "_count"] = uprate_values(
-            incomes[variable + "_count"], "household_weight", 2021, time_period
+            incomes[variable + "_count"],
+            "household_weight",
+            SPI_FISCAL_YEAR,
+            time_period,
         )
         incomes[variable + "_amount"] = uprate_values(
-            incomes[variable + "_amount"], variable, 2021, time_period
+            incomes[variable + "_amount"], variable, SPI_FISCAL_YEAR, time_period
         )
 
     for i, row in incomes.iterrows():
@@ -144,10 +172,11 @@ def get_loss_results(dataset, time_period, reform=None):
 
 
 def create_income_projections():
-    loss_matrix, targets_array = create_target_matrix(SPI_2020_21, 2022)
+    spi_dataset = ensure_spi_dataset()
+    loss_matrix, targets_array = create_target_matrix(spi_dataset, SPI_FISCAL_YEAR)
 
-    sim = Microsimulation(dataset=SPI_2020_21)
-    household_weights = sim.calculate("household_weight", 2022).values
+    sim = Microsimulation(dataset=spi_dataset)
+    household_weights = sim.calculate("household_weight", SPI_FISCAL_YEAR).values
 
     calibration = Calibration(
         weights=household_weights,
@@ -159,8 +188,8 @@ def create_income_projections():
     calibration.calibrate()
     reweighted_weights = calibration.weights
 
-    sim = Microsimulation(dataset=SPI_2020_21)
-    sim.set_input("household_weight", 2022, reweighted_weights)
+    sim = Microsimulation(dataset=spi_dataset)
+    sim.set_input("household_weight", SPI_FISCAL_YEAR, reweighted_weights)
 
     incomes = pd.read_csv(STORAGE_FOLDER / "incomes.csv")
 
@@ -168,7 +197,7 @@ def create_income_projections():
     lower_bounds = incomes.total_income_lower_bound
     upper_bounds = incomes.total_income_upper_bound
 
-    for year in range(2022, 2030):
+    for year in range(SPI_FISCAL_YEAR, 2030):
         year_df = pd.DataFrame()
         year_df["total_income_lower_bound"] = lower_bounds
         year_df["total_income_upper_bound"] = upper_bounds

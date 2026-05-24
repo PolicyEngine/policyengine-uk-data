@@ -211,10 +211,52 @@ def test_income_model_cache_is_release_scoped():
     assert INCOME_MODEL_PATH.name == f"income_{SPI_RELEASE_NAME}.pkl"
 
 
-def test_income_projection_imports_legacy_refresh_dataset():
+def test_income_projection_uses_current_spi_release():
+    from policyengine_uk_data.utils import incomes_projection
+    from policyengine_uk_data.datasets.spi import SPI_FISCAL_YEAR, SPI_H5_FILENAME
+
+    assert incomes_projection.SPI_DATASET.endswith(SPI_H5_FILENAME)
+    assert incomes_projection.SPI_FISCAL_YEAR == SPI_FISCAL_YEAR
+
+
+def test_income_projection_builds_current_spi_dataset_when_missing(
+    tmp_path,
+    monkeypatch,
+):
     from policyengine_uk_data.utils import incomes_projection
 
-    assert incomes_projection.SPI_2020_21.endswith("spi_2020.h5")
+    tab_dir = tmp_path / "spi_2022_23"
+    tab_dir.mkdir()
+    tab_path = tab_dir / "put2223uk.tab"
+    tab_path.write_text("fake tab")
+
+    calls = {}
+
+    class FakeDataset:
+        def save(self, path):
+            calls["saved_path"] = path
+            path.write_text("fake h5")
+
+    def fake_create_spi(path, fiscal_year):
+        calls["tab_path"] = path
+        calls["fiscal_year"] = fiscal_year
+        return FakeDataset()
+
+    monkeypatch.setattr(incomes_projection, "STORAGE_FOLDER", tmp_path)
+    monkeypatch.setattr(incomes_projection, "SPI_RELEASE_NAME", "spi_2022_23")
+    monkeypatch.setattr(incomes_projection, "SPI_TAB_FILENAME", "put2223uk.tab")
+    monkeypatch.setattr(incomes_projection, "SPI_H5_FILENAME", "spi_2022_23.h5")
+    monkeypatch.setattr(incomes_projection, "SPI_FISCAL_YEAR", 2022)
+    monkeypatch.setattr(incomes_projection, "create_spi", fake_create_spi)
+
+    dataset_path = incomes_projection.ensure_spi_dataset()
+
+    assert dataset_path == str(tmp_path / "spi_2022_23.h5")
+    assert calls == {
+        "tab_path": tab_path,
+        "fiscal_year": 2022,
+        "saved_path": tmp_path / "spi_2022_23.h5",
+    }
 
 
 def test_income_model_cache_rejects_stale_spi_release(tmp_path, monkeypatch):
