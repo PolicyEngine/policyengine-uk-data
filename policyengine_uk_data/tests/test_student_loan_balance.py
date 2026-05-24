@@ -17,13 +17,13 @@ _WEALTH_SPEC.loader.exec_module(wealth)
 
 def test_generate_was_table_derives_student_loan_balance():
     row = {column: 0 for column in wealth.WAS_RENAMES}
-    row["R7xshhwgt"] = 1
-    row["GORR7"] = 11
-    row["DVPriRntW7"] = 1
-    row["TotpenR7_aggr"] = 100
-    row["DvvalDBTR7_aggr"] = 25
-    row["Tot_LosR7_aggr"] = 20_000
-    row["Tot_los_exc_SLCR7_aggr"] = 5_000
+    row["R8xshhwgt"] = 1
+    row["GORR8"] = 11
+    row["DVPriRntR8"] = 1
+    row["totalpenr8_aggr"] = 100
+    row["dvvaldbt_scaper8_aggr"] = 25
+    row["Tot_LosR8_aggr"] = 20_000
+    row["Tot_los_exc_SLCR8_aggr"] = 5_000
 
     was = wealth.generate_was_table(pd.DataFrame([row]))
 
@@ -33,15 +33,17 @@ def test_generate_was_table_derives_student_loan_balance():
 
 
 def test_create_wealth_model_reuses_current_cached_model(tmp_path, monkeypatch):
-    model_path = tmp_path / "wealth.pkl"
+    model_path = tmp_path / wealth.WEALTH_MODEL_FILENAME
     model_path.write_bytes(b"placeholder")
     cached_model = SimpleNamespace(
-        model=SimpleNamespace(imputed_variables=list(wealth.IMPUTE_VARIABLES))
+        metadata=wealth.get_wealth_model_metadata(),
+        model=SimpleNamespace(imputed_variables=list(wealth.IMPUTE_VARIABLES)),
     )
 
     class DummyQRF:
         def __init__(self, file_path=None):
             assert file_path == model_path
+            self.metadata = cached_model.metadata
             self.model = cached_model.model
 
     monkeypatch.setattr(wealth, "STORAGE_FOLDER", tmp_path)
@@ -57,13 +59,38 @@ def test_create_wealth_model_reuses_current_cached_model(tmp_path, monkeypatch):
 
 
 def test_create_wealth_model_retrains_when_cached_outputs_stale(tmp_path, monkeypatch):
-    model_path = tmp_path / "wealth.pkl"
+    model_path = tmp_path / wealth.WEALTH_MODEL_FILENAME
     model_path.write_bytes(b"placeholder")
 
     class DummyQRF:
         def __init__(self, file_path=None):
             assert file_path == model_path
+            self.metadata = wealth.get_wealth_model_metadata()
             self.model = SimpleNamespace(imputed_variables=["owned_land"])
+
+    fresh_model = object()
+
+    monkeypatch.setattr(wealth, "STORAGE_FOLDER", tmp_path)
+    monkeypatch.setattr(wealth, "QRF", DummyQRF)
+    monkeypatch.setattr(wealth, "save_imputation_models", lambda: fresh_model)
+
+    assert wealth.create_wealth_model() is fresh_model
+
+
+def test_create_wealth_model_retrains_when_cached_release_stale(tmp_path, monkeypatch):
+    model_path = tmp_path / wealth.WEALTH_MODEL_FILENAME
+    model_path.write_bytes(b"placeholder")
+
+    class DummyQRF:
+        def __init__(self, file_path=None):
+            assert file_path == model_path
+            self.metadata = {
+                **wealth.get_wealth_model_metadata(),
+                "was_release_name": "was_2006_20",
+            }
+            self.model = SimpleNamespace(
+                imputed_variables=list(wealth.IMPUTE_VARIABLES)
+            )
 
     fresh_model = object()
 

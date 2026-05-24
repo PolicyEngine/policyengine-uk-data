@@ -13,6 +13,10 @@ from policyengine_uk_data.datasets.imputations.consumption import (
     fuel_spending_litre_proxy_uprating,
     uprate_lcfs_table,
 )
+from policyengine_uk_data.datasets.private_releases import (
+    CURRENT_LCFS_RELEASE,
+    CURRENT_WAS_RELEASE,
+)
 from policyengine_uk_data.sources.road_fuel_volume import (
     FISCAL_YEAR_AVERAGE_DUTY_RATE,
     HMRC_ROAD_FUEL_CLEARANCES_MLITRES,
@@ -167,23 +171,24 @@ def test__given_lcfs_training_table__then_fuel_uprating_preserves_litre_proxy():
 
     # When
     out = uprate_lcfs_table(household.copy(), "2024")
+    start_year = CURRENT_LCFS_RELEASE.fuel_price_year
     petrol_expected = fuel_spending_litre_proxy_uprating(
         variable="petrol_spending",
-        start_year=2021,
+        start_year=start_year,
         end_year=2024,
     )
     diesel_expected = fuel_spending_litre_proxy_uprating(
         variable="diesel_spending",
-        start_year=2021,
+        start_year=start_year,
         end_year=2024,
     )
-    volume_only = road_fuel_volume_uprating(start_year=2021, end_year=2024)
+    volume_only = road_fuel_volume_uprating(start_year=start_year, end_year=2024)
 
     # Then
     assert out["petrol_spending"].iloc[0] == petrol_expected
     assert out["diesel_spending"].iloc[0] == diesel_expected
-    assert petrol_expected > volume_only
-    assert diesel_expected > volume_only
+    assert petrol_expected != volume_only
+    assert diesel_expected != volume_only
     assert petrol_expected != 1.3
 
 
@@ -191,6 +196,8 @@ def test__given_fuel_method_change__then_consumption_model_filename_is_versioned
     # Then
     assert CONSUMPTION_MODEL_FILENAME != "consumption.pkl"
     assert "fuel_litre_proxy" in CONSUMPTION_MODEL_FILENAME
+    assert CURRENT_LCFS_RELEASE.name in CONSUMPTION_MODEL_FILENAME
+    assert CURRENT_WAS_RELEASE.name in CONSUMPTION_MODEL_FILENAME
 
 
 def test__given_obr_2027_volume__then_rate_difference_matches_cost_benchmark():

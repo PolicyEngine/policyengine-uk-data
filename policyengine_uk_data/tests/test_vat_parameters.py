@@ -40,6 +40,13 @@ def test_vat_rate_by_year_fallback_matches_2020_statute():
     assert VAT_RATE_BY_YEAR[2020] == (0.2, 0.03)
 
 
+def test_default_etb_year_tracks_current_release():
+    from policyengine_uk_data.datasets.imputations.vat import DEFAULT_ETB_YEAR
+    from policyengine_uk_data.datasets.private_releases import CURRENT_ETB_RELEASE
+
+    assert DEFAULT_ETB_YEAR == CURRENT_ETB_RELEASE.default_training_year == 2023
+
+
 def test_generate_etb_table_uses_year_param():
     """Changing the `year` arg filters ETB rows by that year.
 

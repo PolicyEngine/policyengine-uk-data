@@ -10,6 +10,11 @@ from policyengine_uk_data.datasets.create_datasets import (
     _needs_calibration_year_materialization,
 )
 from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
+from policyengine_uk_data.datasets.private_releases import (
+    CURRENT_ETB_RELEASE,
+    CURRENT_LCFS_RELEASE,
+    CURRENT_WAS_RELEASE,
+)
 from policyengine_uk_data.datasets.spi import SPI_RELEASE_NAME
 from policyengine_uk_data.storage.download_private_prerequisites import (
     PRIVATE_PREREQUISITES,
@@ -29,6 +34,27 @@ def test_private_prerequisites_use_current_spi_release():
 
     assert f"{SPI_RELEASE_NAME}.zip" in prerequisite_names
     assert "spi_2020_21.zip" not in prerequisite_names
+
+
+def test_private_prerequisites_use_current_lcfs_release():
+    prerequisite_names = [filename for filename, _ in PRIVATE_PREREQUISITES]
+
+    assert CURRENT_LCFS_RELEASE.raw_zip_name in prerequisite_names
+    assert "lcfs_2021_22.zip" not in prerequisite_names
+
+
+def test_private_prerequisites_use_current_was_release():
+    prerequisite_names = [filename for filename, _ in PRIVATE_PREREQUISITES]
+
+    assert CURRENT_WAS_RELEASE.raw_zip_name in prerequisite_names
+    assert "was_2006_20.zip" not in prerequisite_names
+
+
+def test_private_prerequisites_use_current_etb_release():
+    prerequisite_names = [filename for filename, _ in PRIVATE_PREREQUISITES]
+
+    assert CURRENT_ETB_RELEASE.raw_zip_name in prerequisite_names
+    assert "etb_1977_21.zip" not in prerequisite_names
 
 
 def test_current_frs_release_uses_survey_year_as_base_year():

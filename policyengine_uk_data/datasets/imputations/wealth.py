@@ -8,12 +8,14 @@ Survey (WAS) data.
 
 import numpy as np
 import pandas as pd
+from policyengine_uk_data.datasets.private_releases import CURRENT_WAS_RELEASE
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk import Microsimulation
 from policyengine_uk_data.utils.qrf import QRF
 
-WAS_TAB_FOLDER = STORAGE_FOLDER / "was_2006_20"
+WAS_TAB_FOLDER = STORAGE_FOLDER / CURRENT_WAS_RELEASE.name
+WEALTH_MODEL_FILENAME = f"wealth_{CURRENT_WAS_RELEASE.name}.pkl"
 
 REGIONS = {
     1: "NORTH_EAST",
@@ -58,45 +60,45 @@ IMPUTE_VARIABLES = [
 ]
 
 WAS_RENAMES = {
-    "R7xshhwgt": "household_weight",
+    "R8xshhwgt": "household_weight",
     # Components for estimating land holdings.
-    "DVLUKValR7_sum": "owned_land",  # In the UK.
-    "DVPropertyR7": "property_wealth",
-    "DVFESHARESR7_aggr": "emp_shares_options",
-    "DVFShUKVR7_aggr": "uk_shares",
-    "DVIISAVR7_aggr": "investment_isas",
-    "DVFCollVR7_aggr": "unit_investment_trusts",
-    "TotpenR7_aggr": "pensions",
-    "DvvalDBTR7_aggr": "db_pensions",
+    "DVLUKValR8_sum": "owned_land",  # In the UK.
+    "DVPropertyR8": "property_wealth",
+    "DVFESHARESR8_aggr": "emp_shares_options",
+    "DVFShUKVR8_aggr": "uk_shares",
+    "DVIISAVR8_aggr": "investment_isas",
+    "DVFCollVR8_aggr": "unit_investment_trusts",
+    "totalpenr8_aggr": "pensions",
+    "dvvaldbt_scaper8_aggr": "db_pensions",
     # Predictors for fusing to FRS.
-    "dvtotgirR7": "gross_income",
-    "NumAdultW7": "num_adults",
-    "NumCh18W7": "num_children",
+    "dvtotgirR8": "gross_income",
+    "NumAdultR8": "num_adults",
+    "NumCh18R8": "num_children",
     # Household Gross Annual income from occupational or private pensions
-    "DVGIPPENR7_AGGR": "private_pension_income",
-    "DVGISER7_AGGR": "self_employment_income",
+    "DVGIPPENR8_AGGR": "private_pension_income",
+    "DVGISER8_AGGR": "self_employment_income",
     # Household Gross annual income from investments
-    "DVGIINVR7_aggr": "capital_income",
+    "DVGIINVR8_aggr": "capital_income",
     # Household Total Annual Gross employee income
-    "DVGIEMPR7_AGGR": "employment_income",
-    "HBedrmW7": "num_bedrooms",
-    "GORR7": "region",
-    "DVPriRntW7": "is_renter",  # {1, 2} TODO: Get codebook values.
-    "CTAmtW7": "council_tax",
+    "DVGIEMPR8_AGGR": "employment_income",
+    "HBedRmR8": "num_bedrooms",
+    "GORR8": "region",
+    "DVPriRntR8": "is_renter",  # {1, 2} TODO: Get codebook values.
+    "CTAmtR8": "council_tax",
     # Other columns for reference.
-    "DVLOSValR7_sum": "non_uk_land",
-    "HFINWNTR7_Sum": "net_financial_wealth",
-    "DVLUKDebtR7_sum": "uk_land_debt",
-    "HFINWR7_Sum": "gross_financial_wealth",
-    "TotWlthR7": "wealth",
-    "DVhvalueR7": "main_residence_value",
-    "DVHseValR7_sum": "other_residential_property_value",
-    "DVBlDValR7_sum": "non_residential_property_value",
-    "DVTotinc_bhcR7": "household_net_income",
-    "DVSaValR7_aggr": "savings",
-    "vcarnr7": "num_vehicles",
-    "Tot_LosR7_aggr": "total_loans",
-    "Tot_los_exc_SLCR7_aggr": "total_loans_exc_slc",
+    "DVLOSValR8_sum": "non_uk_land",
+    "HFINWNTR8_Sum": "net_financial_wealth",
+    "DVLUKDebtR8_sum": "uk_land_debt",
+    "HFINWR8_SUM": "gross_financial_wealth",
+    "TotalWlthR8": "wealth",
+    "DVhvalueR8": "main_residence_value",
+    "DVHseValR8_sum": "other_residential_property_value",
+    "DVBlDValR8_sum": "non_residential_property_value",
+    "DVTotinc_bhcR8": "household_net_income",
+    "DVSaValR8_aggr": "savings",
+    "vcarnr8": "num_vehicles",
+    "Tot_LosR8_aggr": "total_loans",
+    "Tot_los_exc_SLCR8_aggr": "total_loans_exc_slc",
 }
 
 
@@ -155,8 +157,27 @@ def generate_was_table(was: pd.DataFrame):
     return was
 
 
-def _wealth_model_outputs_are_current(model: QRF) -> bool:
-    """Check whether a cached wealth model includes all current output columns."""
+WEALTH_MODEL_METADATA = {
+    "was_release_name": CURRENT_WAS_RELEASE.name,
+    "was_household_tab_filename": CURRENT_WAS_RELEASE.household_tab_filename,
+    "predictor_variables": tuple(PREDICTOR_VARIABLES),
+    "impute_variables": tuple(IMPUTE_VARIABLES),
+}
+
+
+def get_wealth_model_metadata() -> dict:
+    return dict(WEALTH_MODEL_METADATA)
+
+
+def get_wealth_model_path():
+    return STORAGE_FOLDER / WEALTH_MODEL_FILENAME
+
+
+def _wealth_model_matches_current_release(model: QRF) -> bool:
+    """Check whether a cached wealth model was trained with current inputs."""
+    if getattr(model, "metadata", {}) != get_wealth_model_metadata():
+        return False
+
     trained_outputs = getattr(model.model, "imputed_variables", None)
     return list(trained_outputs) == IMPUTE_VARIABLES
 
@@ -256,19 +277,20 @@ def save_imputation_models():
         Trained QRF model.
     """
     was = pd.read_csv(
-        WAS_TAB_FOLDER / "was_round_7_hhold_eul_march_2022.tab",
+        WAS_TAB_FOLDER / CURRENT_WAS_RELEASE.household_tab_filename,
         sep="\t",
         low_memory=False,
     )
     was = generate_was_table(was)
 
     wealth = QRF()
+    wealth.metadata = get_wealth_model_metadata()
 
     wealth.fit(
         was[PREDICTOR_VARIABLES],
         was[IMPUTE_VARIABLES],
     )
-    wealth.save(STORAGE_FOLDER / "wealth.pkl")
+    wealth.save(get_wealth_model_path())
     return wealth
 
 
@@ -282,9 +304,10 @@ def create_wealth_model(overwrite_existing: bool = False):
     Returns:
         QRF model for wealth imputation.
     """
-    if (STORAGE_FOLDER / "wealth.pkl").exists() and not overwrite_existing:
-        wealth = QRF(file_path=STORAGE_FOLDER / "wealth.pkl")
-        if _wealth_model_outputs_are_current(wealth):
+    model_path = get_wealth_model_path()
+    if model_path.exists() and not overwrite_existing:
+        wealth = QRF(file_path=model_path)
+        if _wealth_model_matches_current_release(wealth):
             return wealth
     return save_imputation_models()
 

@@ -23,12 +23,16 @@ Key features:
 import pandas as pd
 import numpy as np
 from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
+from policyengine_uk_data.datasets.private_releases import (
+    CURRENT_LCFS_RELEASE,
+    CURRENT_WAS_RELEASE,
+)
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk import Microsimulation
 from policyengine_uk_data.datasets.frs import WEEKS_IN_YEAR
 
-LCFS_TAB_FOLDER = STORAGE_FOLDER / "lcfs_2021_22"
+LCFS_TAB_FOLDER = STORAGE_FOLDER / CURRENT_LCFS_RELEASE.name
 
 # Default seed for the stochastic ICE-vehicle flag drawn from
 # `NTS_2024_ICE_VEHICLE_SHARE`. Kept at 42 for backward compatibility with
@@ -39,20 +43,31 @@ _HAS_FUEL_SEED = 42
 # EV/ICE vehicle mix from NTS 2024
 NTS_2024_ICE_VEHICLE_SHARE = 0.90
 
-# DESNZ weekly road-fuel price statistics, "Data" sheet, fiscal-year average
-# UK pump prices over 2021-04-01 to 2022-03-31. Data source:
+# DESNZ weekly road-fuel price statistics, fiscal-year average UK pump prices.
+# 2023 prices cover 2023-04-01 to 2024-03-31 for the current LCFS release.
+# Data source:
 # https://www.data.gov.uk/dataset/21db6396-3daf-4d90-8b3f-054995256018/petrol-and-diesel-prices
 # LCFS records nominal fuel spending, while PolicyEngine derives litres via
 # ``spending / model pump price``.
 LCFS_FUEL_PRICE_GBP_PER_LITRE = {
-    "petrol_spending": {2021: 1.3890790089424998},
-    "diesel_spending": {2021: 1.4291180616502566},
+    "petrol_spending": {
+        2021: 1.3890790089424998,
+        2023: 1.4615903846153844,
+    },
+    "diesel_spending": {
+        2021: 1.4291180616502566,
+        2023: 1.5348538461538461,
+    },
 }
 FUEL_PRICE_PARAMETER_NAME = {
     "petrol_spending": "petrol",
     "diesel_spending": "diesel",
 }
-CONSUMPTION_MODEL_FILENAME = "consumption_fuel_litre_proxy_2026_05.pkl"
+CONSUMPTION_MODEL_FILENAME = (
+    f"consumption_{CURRENT_LCFS_RELEASE.name}_{CURRENT_WAS_RELEASE.name}"
+    "_fuel_litre_proxy_2026_05.pkl"
+)
+HAS_FUEL_MODEL_FILENAME = f"has_fuel_{CURRENT_WAS_RELEASE.name}.pkl"
 
 REGIONS = {
     1: "NORTH_EAST",
@@ -84,7 +99,7 @@ LCFS_TENURE_MAP = {
 }
 
 # LCFS A121 → FRS accommodation_type mapping
-# LCFS coding inferred from LCFS 2021/22 user guide:
+# LCFS coding inferred from the LCFS user guide:
 # 1=detached house, 2=semi-detached, 3=terraced, 4=flat (purpose-built),
 # 5=flat/other (converted), 6=caravan/mobile, 7=bungalow/other house, 8=other
 LCFS_ACCOMM_MAP = {
@@ -163,6 +178,60 @@ IMPUTATIONS = [
     "electricity_consumption",
     "gas_consumption",
 ]
+
+HAS_FUEL_PREDICTOR_VARIABLES = [
+    "household_net_income",
+    "num_adults",
+    "num_children",
+    "private_pension_income",
+    "employment_income",
+    "self_employment_income",
+    "region",
+]
+
+
+def get_has_fuel_model_path():
+    return STORAGE_FOLDER / HAS_FUEL_MODEL_FILENAME
+
+
+def get_has_fuel_model_metadata() -> dict:
+    return {
+        "was_release_name": CURRENT_WAS_RELEASE.name,
+        "was_household_tab_filename": CURRENT_WAS_RELEASE.household_tab_filename,
+        "predictor_variables": tuple(HAS_FUEL_PREDICTOR_VARIABLES),
+        "impute_variables": ("has_fuel_consumption",),
+        "ice_vehicle_share": NTS_2024_ICE_VEHICLE_SHARE,
+        "seed": _HAS_FUEL_SEED,
+    }
+
+
+def get_consumption_model_path():
+    return STORAGE_FOLDER / CONSUMPTION_MODEL_FILENAME
+
+
+def get_consumption_model_metadata() -> dict:
+    return {
+        "lcfs_release_name": CURRENT_LCFS_RELEASE.name,
+        "lcfs_household_tab_filename": CURRENT_LCFS_RELEASE.household_tab_filename,
+        "lcfs_person_tab_filename": CURRENT_LCFS_RELEASE.person_tab_filename,
+        "lcfs_fuel_price_year": CURRENT_LCFS_RELEASE.fuel_price_year,
+        "was_release_name": CURRENT_WAS_RELEASE.name,
+        "was_household_tab_filename": CURRENT_WAS_RELEASE.household_tab_filename,
+        "frs_base_year": CURRENT_FRS_RELEASE.base_year,
+        "predictor_variables": tuple(PREDICTOR_VARIABLES),
+        "impute_variables": tuple(IMPUTATIONS),
+    }
+
+
+def _qrf_model_matches_current_metadata(
+    model, metadata: dict, outputs: list[str]
+) -> bool:
+    if getattr(model, "metadata", {}) != metadata:
+        return False
+
+    trained_outputs = getattr(model.model, "imputed_variables", None)
+    return list(trained_outputs) == outputs
+
 
 # ── NEED 2023 calibration targets ─────────────────────────────────────────────
 # Source: NEED 2023 headline tables (published 2025), England & Wales, ~18M dwellings.
@@ -420,21 +489,27 @@ def create_has_fuel_model():
     from policyengine_uk_data.utils.qrf import QRF
     from policyengine_uk_data.datasets.imputations.wealth import (
         WAS_TAB_FOLDER,
-        REGIONS,
+        generate_was_table,
     )
 
-    model_path = STORAGE_FOLDER / "has_fuel_model.pkl"
+    model_path = get_has_fuel_model_path()
     if model_path.exists():
-        return QRF(file_path=model_path)
+        cached = QRF(file_path=model_path)
+        if _qrf_model_matches_current_metadata(
+            cached,
+            get_has_fuel_model_metadata(),
+            ["has_fuel_consumption"],
+        ):
+            return cached
 
     was = pd.read_csv(
-        WAS_TAB_FOLDER / "was_round_7_hhold_eul_march_2022.tab",
+        WAS_TAB_FOLDER / CURRENT_WAS_RELEASE.household_tab_filename,
         sep="\t",
         low_memory=False,
     )
-    was.columns = [c.lower() for c in was.columns]
+    was = generate_was_table(was)
 
-    num_vehicles = was["vcarnr7"].fillna(0).clip(lower=0)
+    num_vehicles = was["num_vehicles"].fillna(0).clip(lower=0)
     has_vehicle = num_vehicles > 0
     # Use a local RNG so we don't mutate the global np.random state (which
     # would silently change any unrelated consumer of np.random that runs
@@ -444,30 +519,16 @@ def create_has_fuel_model():
         has_vehicle & (rng.random(len(was)) < NTS_2024_ICE_VEHICLE_SHARE)
     ).astype(float)
 
-    was_df = pd.DataFrame(
-        {
-            "household_net_income": was["dvtotinc_bhcr7"],
-            "num_adults": was["numadultr7"],
-            "num_children": was["numch18r7"],
-            "private_pension_income": was["dvgippenr7_aggr"],
-            "employment_income": was["dvgiempr7_aggr"],
-            "self_employment_income": was["dvgiser7_aggr"],
-            "region": was["gorr7"].map(REGIONS),
-            "has_fuel_consumption": has_fuel,
-        }
-    ).dropna()
+    was_df = was[HAS_FUEL_PREDICTOR_VARIABLES].copy()
+    was_df["has_fuel_consumption"] = has_fuel
+    was_df = was_df.dropna()
 
-    predictors = [
-        "household_net_income",
-        "num_adults",
-        "num_children",
-        "private_pension_income",
-        "employment_income",
-        "self_employment_income",
-        "region",
-    ]
     model = QRF()
-    model.fit(was_df[predictors], was_df[["has_fuel_consumption"]])
+    model.metadata = get_has_fuel_model_metadata()
+    model.fit(
+        was_df[HAS_FUEL_PREDICTOR_VARIABLES],
+        was_df[["has_fuel_consumption"]],
+    )
     model.save(model_path)
     return model
 
@@ -544,7 +605,7 @@ def generate_lcfs_table(lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame)
 def uprate_lcfs_table(household: pd.DataFrame, time_period: str) -> pd.DataFrame:
     from policyengine_uk.system import system
 
-    start_period = 2021
+    start_period = CURRENT_LCFS_RELEASE.fuel_price_year
     target_year = int(str(time_period)[:4])
     for variable in FUEL_PRICE_PARAMETER_NAME:
         household[variable] *= fuel_spending_litre_proxy_uprating(
@@ -688,27 +749,35 @@ def save_imputation_models():
     from policyengine_uk_data.utils.qrf import QRF
 
     consumption = QRF()
+    consumption.metadata = get_consumption_model_metadata()
     lcfs_household = pd.read_csv(
-        LCFS_TAB_FOLDER / "lcfs_2021_dvhh_ukanon.tab",
+        LCFS_TAB_FOLDER / CURRENT_LCFS_RELEASE.household_tab_filename,
         delimiter="\t",
         low_memory=False,
     )
     lcfs_person = pd.read_csv(
-        LCFS_TAB_FOLDER / "lcfs_2021_dvper_ukanon202122.tab", delimiter="\t"
+        LCFS_TAB_FOLDER / CURRENT_LCFS_RELEASE.person_tab_filename,
+        delimiter="\t",
     )
     household = generate_lcfs_table(lcfs_person, lcfs_household)
     household = uprate_lcfs_table(household, str(CURRENT_FRS_RELEASE.base_year))
     consumption.fit(household[PREDICTOR_VARIABLES], household[IMPUTATIONS])
-    consumption.save(STORAGE_FOLDER / CONSUMPTION_MODEL_FILENAME)
+    consumption.save(get_consumption_model_path())
     return consumption
 
 
 def create_consumption_model(overwrite_existing: bool = False):
     from policyengine_uk_data.utils.qrf import QRF
 
-    model_path = STORAGE_FOLDER / CONSUMPTION_MODEL_FILENAME
+    model_path = get_consumption_model_path()
     if model_path.exists() and not overwrite_existing:
-        return QRF(file_path=model_path)
+        cached = QRF(file_path=model_path)
+        if _qrf_model_matches_current_metadata(
+            cached,
+            get_consumption_model_metadata(),
+            IMPUTATIONS,
+        ):
+            return cached
     return save_imputation_models()
 
 

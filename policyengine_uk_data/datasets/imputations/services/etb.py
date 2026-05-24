@@ -7,17 +7,16 @@ public services received by households based on demographic characteristics.
 
 import pandas as pd
 import numpy as np
-from pathlib import Path
-import logging
 from policyengine_uk import Microsimulation
-from huggingface_hub import hf_hub_download
-import os
+from policyengine_uk_data.datasets.private_releases import CURRENT_ETB_RELEASE
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk_data.utils.qrf import QRF
 from policyengine_uk.data import UKSingleYearDataset
 
 # Constants
 WEEKS_IN_YEAR = 52
+ETB_TAB_FOLDER = STORAGE_FOLDER / CURRENT_ETB_RELEASE.name
+PUBLIC_SERVICES_MODEL_FILENAME = f"public_services_{CURRENT_ETB_RELEASE.name}.pkl"
 
 # Variables used to predict public service receipt
 PREDICTORS = [
@@ -40,18 +39,41 @@ OUTPUTS = [
 ]
 
 
-def create_public_services_model(overwrite_existing: bool = False) -> None:
+def get_public_services_model_path():
+    return STORAGE_FOLDER / PUBLIC_SERVICES_MODEL_FILENAME
+
+
+def get_public_services_model_metadata() -> dict:
+    return {
+        "etb_release_name": CURRENT_ETB_RELEASE.name,
+        "etb_household_tab_filename": CURRENT_ETB_RELEASE.household_tab_filename,
+        "predictor_variables": tuple(PREDICTORS),
+        "output_variables": tuple(OUTPUTS),
+    }
+
+
+def _public_services_model_matches_current_release(model: QRF) -> bool:
+    if getattr(model, "metadata", {}) != get_public_services_model_metadata():
+        return False
+
+    trained_outputs = getattr(model.model, "imputed_variables", None)
+    return list(trained_outputs) == OUTPUTS
+
+
+def create_public_services_model(overwrite_existing: bool = False) -> QRF:
     """
     Create and save a model for imputing public service receipt values.
 
     Args:
         overwrite_existing: Whether to overwrite an existing model file.
     """
-    # Check if model already exists and we're not overwriting
-    if (STORAGE_FOLDER / "public_services.pkl").exists() and not overwrite_existing:
-        return
+    model_path = get_public_services_model_path()
+    if model_path.exists() and not overwrite_existing:
+        cached = QRF(file_path=model_path)
+        if _public_services_model_matches_current_release(cached):
+            return cached
 
-    etb_path = STORAGE_FOLDER / "etb_1977_21" / "householdv2_1977-2021.tab"
+    etb_path = ETB_TAB_FOLDER / CURRENT_ETB_RELEASE.household_tab_filename
 
     # Load Effects of Taxes and Benefits (ETB) dataset
     etb = pd.read_csv(etb_path, delimiter="\t")
@@ -102,7 +124,9 @@ def create_public_services_model(overwrite_existing: bool = False) -> None:
 
     # Train model
     model = QRF()
+    model.metadata = get_public_services_model_metadata()
     model.fit(X=train[PREDICTORS], y=train[OUTPUTS])
+    model.save(model_path)
 
     return model
 
