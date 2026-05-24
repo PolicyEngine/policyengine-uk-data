@@ -33,6 +33,20 @@ DISABILITY_CATEGORY_COLUMNS = (
     "pip_dl_category",
 )
 
+BASE_DISABILITY_FLAG_REPORTED_AMOUNT_COLUMNS = (
+    "attendance_allowance_reported",
+    "dla_sc_reported",
+    "dla_m_reported",
+    "pip_m_reported",
+    "pip_dl_reported",
+    "sda_reported",
+    "incapacity_benefit_reported",
+    "iidb_reported",
+    "afcs_reported",
+    "esa_contrib_reported",
+    "esa_income_reported",
+)
+
 SAFETY_MARGIN = 0.1
 SURVEY_REPORTED_AMOUNT_WEEKS_IN_YEAR = 365.25 / 7
 
@@ -54,6 +68,16 @@ def _reported_amount(person: pd.DataFrame, column: str) -> pd.Series:
     if column not in person.columns:
         return pd.Series(0.0, index=person.index)
     return pd.to_numeric(person[column], errors="coerce").fillna(0.0)
+
+
+def _reported_amount_sum(
+    person: pd.DataFrame,
+    columns: tuple[str, ...],
+) -> pd.Series:
+    total = pd.Series(0.0, index=person.index)
+    for column in columns:
+        total += _reported_amount(person, column)
+    return total
 
 
 def _category_from_reported_amount(
@@ -148,15 +172,20 @@ def add_disability_benefit_flags_from_reported_amounts(
         person = person.copy()
 
     dwp = _dwp_flag_parameters(int(year))
+    attendance_allowance = _reported_amount(person, "attendance_allowance_reported")
     dla_sc = _reported_amount(person, "dla_sc_reported")
-    dla_m = _reported_amount(person, "dla_m_reported")
-    pip_m = _reported_amount(person, "pip_m_reported")
     pip_dl = _reported_amount(person, "pip_dl_reported")
     afcs = _reported_amount(person, "afcs_reported")
 
-    person["is_disabled_for_benefits"] = (dla_sc + dla_m + pip_m + pip_dl) > 0
+    person["is_disabled_for_benefits"] = (
+        _reported_amount_sum(person, BASE_DISABILITY_FLAG_REPORTED_AMOUNT_COLUMNS) > 0
+    )
 
     threshold_safety_gap = 1 * SURVEY_REPORTED_AMOUNT_WEEKS_IN_YEAR
+    aa_higher = (
+        dwp.attendance_allowance.higher * SURVEY_REPORTED_AMOUNT_WEEKS_IN_YEAR
+        - threshold_safety_gap
+    )
     dla_sc_higher = (
         dwp.dla.self_care.higher * SURVEY_REPORTED_AMOUNT_WEEKS_IN_YEAR
         - threshold_safety_gap
@@ -166,9 +195,16 @@ def add_disability_benefit_flags_from_reported_amounts(
         - threshold_safety_gap
     )
 
-    person["is_enhanced_disabled_for_benefits"] = dla_sc > dla_sc_higher
+    person["is_enhanced_disabled_for_benefits"] = (
+        (attendance_allowance >= aa_higher)
+        | (dla_sc > dla_sc_higher)
+        | (pip_dl >= pip_dl_enhanced)
+    )
     person["is_severely_disabled_for_benefits"] = (
-        (dla_sc >= dla_sc_higher) | (pip_dl >= pip_dl_enhanced) | (afcs > 0)
+        (attendance_allowance > 0)
+        | (dla_sc >= dla_sc_higher)
+        | (pip_dl >= pip_dl_enhanced)
+        | (afcs > 0)
     )
 
     return person

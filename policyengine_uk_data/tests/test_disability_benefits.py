@@ -60,6 +60,7 @@ def test_reported_amounts_recompute_disability_flags():
     dwp = CountryTaxBenefitSystem().parameters(year).gov.dwp
     person = pd.DataFrame(
         {
+            "attendance_allowance_reported": [0.0, 0.0, 0.0],
             "dla_sc_reported": [
                 0.0,
                 dwp.dla.self_care.higher * (365.25 / 7),
@@ -85,13 +86,52 @@ def test_reported_amounts_recompute_disability_flags():
     assert result["is_enhanced_disabled_for_benefits"].tolist() == [
         False,
         True,
-        False,
+        True,
     ]
     assert result["is_severely_disabled_for_benefits"].tolist() == [
         False,
         True,
         True,
     ]
+
+
+def test_reported_amounts_widen_base_disability_flag():
+    year = 2025
+    person = pd.DataFrame(
+        {
+            "attendance_allowance_reported": [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            "sda_reported": [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            "incapacity_benefit_reported": [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+            "iidb_reported": [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+            "afcs_reported": [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
+            "esa_contrib_reported": [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+            "esa_income_reported": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+        }
+    )
+
+    result = add_disability_benefit_flags_from_reported_amounts(person, year)
+
+    assert result["is_disabled_for_benefits"].all()
+
+
+def test_attendance_allowance_feeds_stronger_disability_flags():
+    year = 2025
+    dwp = CountryTaxBenefitSystem().parameters(year).gov.dwp
+    weeks = 365.25 / 7
+    person = pd.DataFrame(
+        {
+            "attendance_allowance_reported": [
+                dwp.attendance_allowance.lower * weeks,
+                dwp.attendance_allowance.higher * weeks,
+            ],
+        }
+    )
+
+    result = add_disability_benefit_flags_from_reported_amounts(person, year)
+
+    assert result["is_disabled_for_benefits"].tolist() == [True, True]
+    assert result["is_enhanced_disabled_for_benefits"].tolist() == [False, True]
+    assert result["is_severely_disabled_for_benefits"].tolist() == [True, True]
 
 
 def test_drop_internal_disability_reported_amounts_keeps_categories():
