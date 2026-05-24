@@ -47,7 +47,7 @@ BASE_DISABILITY_FLAG_REPORTED_AMOUNT_COLUMNS = (
     "esa_income_reported",
 )
 
-SAFETY_MARGIN = 0.1
+CATEGORY_THRESHOLD_WEEKLY_TOLERANCE = 1.0
 SURVEY_REPORTED_AMOUNT_WEEKS_IN_YEAR = 365.25 / 7
 
 
@@ -88,9 +88,14 @@ def _category_from_reported_amount(
     weekly_amount = weekly_amount.to_numpy(dtype=float) / MODEL_WEEKS_IN_YEAR
     category = np.full(len(weekly_amount), "NONE", dtype=object)
     for category_name, weekly_rate in thresholds:
-        category[weekly_amount >= float(weekly_rate) * (1 - SAFETY_MARGIN)] = (
-            category_name
+        # FRS benefit amounts are weekly survey responses annualised upstream;
+        # allow GBP 1/week of rounding noise without discounting rates by a
+        # percentage that can promote people into higher award categories.
+        threshold = max(
+            0.0,
+            float(weekly_rate) - CATEGORY_THRESHOLD_WEEKLY_TOLERANCE,
         )
+        category[weekly_amount >= threshold] = category_name
     return category
 
 

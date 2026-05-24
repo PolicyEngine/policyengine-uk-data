@@ -16,32 +16,36 @@ from policyengine_uk_data.datasets.disability_benefits import (
 def test_reported_amounts_map_to_disability_categories():
     year = 2025
     dwp = CountryTaxBenefitSystem().parameters(year).baseline.gov.dwp
+
+    def annual_near_threshold(weekly_rate):
+        return (weekly_rate - 0.5) * WEEKS_IN_YEAR
+
     person = pd.DataFrame(
         {
             "attendance_allowance_reported": [
                 0,
-                dwp.attendance_allowance.lower * WEEKS_IN_YEAR * 0.91,
-                dwp.attendance_allowance.higher * WEEKS_IN_YEAR * 0.91,
+                annual_near_threshold(dwp.attendance_allowance.lower),
+                annual_near_threshold(dwp.attendance_allowance.higher),
             ],
             "dla_sc_reported": [
                 0,
-                dwp.dla.self_care.lower * WEEKS_IN_YEAR * 0.91,
-                dwp.dla.self_care.middle * WEEKS_IN_YEAR * 0.91,
+                annual_near_threshold(dwp.dla.self_care.lower),
+                annual_near_threshold(dwp.dla.self_care.middle),
             ],
             "dla_m_reported": [
                 0,
-                dwp.dla.mobility.lower * WEEKS_IN_YEAR * 0.91,
-                dwp.dla.mobility.higher * WEEKS_IN_YEAR * 0.91,
+                annual_near_threshold(dwp.dla.mobility.lower),
+                annual_near_threshold(dwp.dla.mobility.higher),
             ],
             "pip_m_reported": [
                 0,
-                dwp.pip.mobility.standard * WEEKS_IN_YEAR * 0.91,
-                dwp.pip.mobility.enhanced * WEEKS_IN_YEAR * 0.91,
+                annual_near_threshold(dwp.pip.mobility.standard),
+                annual_near_threshold(dwp.pip.mobility.enhanced),
             ],
             "pip_dl_reported": [
                 0,
-                dwp.pip.daily_living.standard * WEEKS_IN_YEAR * 0.91,
-                dwp.pip.daily_living.enhanced * WEEKS_IN_YEAR * 0.91,
+                annual_near_threshold(dwp.pip.daily_living.standard),
+                annual_near_threshold(dwp.pip.daily_living.enhanced),
             ],
         }
     )
@@ -53,6 +57,30 @@ def test_reported_amounts_map_to_disability_categories():
     assert result["dla_m_category"].tolist() == ["NONE", "LOWER", "HIGHER"]
     assert result["pip_m_category"].tolist() == ["NONE", "STANDARD", "ENHANCED"]
     assert result["pip_dl_category"].tolist() == ["NONE", "STANDARD", "ENHANCED"]
+
+
+def test_reported_amounts_do_not_use_percentage_category_margin():
+    year = 2025
+    dwp = CountryTaxBenefitSystem().parameters(year).baseline.gov.dwp
+    person = pd.DataFrame(
+        {
+            "attendance_allowance_reported": [
+                dwp.attendance_allowance.higher * WEEKS_IN_YEAR * 0.91,
+            ],
+            "pip_dl_reported": [
+                dwp.pip.daily_living.standard * WEEKS_IN_YEAR * 0.91,
+            ],
+            "pip_m_reported": [
+                dwp.pip.mobility.enhanced * WEEKS_IN_YEAR * 0.91,
+            ],
+        }
+    )
+
+    result = add_disability_benefit_categories_from_reported_amounts(person, year)
+
+    assert result["aa_category"].tolist() == ["LOWER"]
+    assert result["pip_dl_category"].tolist() == ["NONE"]
+    assert result["pip_m_category"].tolist() == ["STANDARD"]
 
 
 def test_reported_amounts_recompute_disability_flags():
