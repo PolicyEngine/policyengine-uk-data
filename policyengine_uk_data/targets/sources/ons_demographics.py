@@ -81,9 +81,7 @@ def _download_uk_projection() -> pd.DataFrame:
     r = requests.get(_UK_ZIP_URL, headers=HEADERS, allow_redirects=True, timeout=120)
     r.raise_for_status()
     z = zipfile.ZipFile(io.BytesIO(r.content))
-    projection_member = next(
-        name for name in z.namelist() if name.endswith("uk_ppp_machine_readable.xlsx")
-    )
+    projection_member = _find_projection_member(z.namelist())
     with z.open(projection_member) as f:
         df = pd.read_excel(
             io.BytesIO(f.read()),
@@ -91,6 +89,16 @@ def _download_uk_projection() -> pd.DataFrame:
             engine="openpyxl",
         )
     return df
+
+
+def _find_projection_member(names: list[str]) -> str:
+    """Find the UK principal projection workbook inside the ONS zip."""
+    for name in names:
+        if name.endswith("uk_ppp_machine_readable.xlsx"):
+            return name
+    raise RuntimeError(
+        "ONS UK projection zip did not contain uk_ppp_machine_readable.xlsx"
+    )
 
 
 def _aggregate_ages(
