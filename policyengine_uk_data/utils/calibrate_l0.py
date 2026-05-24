@@ -150,7 +150,7 @@ def calibrate_l0(
     national_matrix_fn,
     area_count: int,
     weight_file: str,
-    dataset_key: str = "2025",
+    dataset_key: str | None = None,
     epochs: int = 1000,
     lambda_l0: float = 0.01,
     lambda_l2: float = 1e-6,
@@ -162,6 +162,7 @@ def calibrate_l0(
     area_name: str = "area",
     get_performance=None,
     nested_progress=None,
+    time_period: int | str | None = None,
 ):
     """Calibrate local area weights using L0-regularised optimisation.
 
@@ -187,20 +188,32 @@ def calibrate_l0(
         area_name: Area type name for logging.
         get_performance: Performance evaluation function.
         nested_progress: Progress tracker for nested display.
+        time_period: Target period to pass to matrix functions. Defaults to
+            dataset_key when the key is a year.
 
     Returns:
         dataset with calibrated household_weight.
     """
     from l0.calibration import SparseCalibrationWeights
+    from policyengine_uk_data.utils.calibrate import (
+        _call_matrix_fn,
+        default_weight_dataset_key,
+    )
 
     if excluded_training_targets is None:
         excluded_training_targets = []
+    if dataset_key is None:
+        dataset_key = default_weight_dataset_key()
+    if time_period is None and str(dataset_key).isdigit():
+        time_period = dataset_key
 
     dataset = dataset.copy()
 
     # Build target matrices using existing functions
-    metrics, targets, country_mask = matrix_fn(dataset)
-    national_metrics, national_targets = national_matrix_fn(dataset)
+    metrics, targets, country_mask = _call_matrix_fn(matrix_fn, dataset, time_period)
+    national_metrics, national_targets = _call_matrix_fn(
+        national_matrix_fn, dataset, time_period
+    )
 
     n_records = len(dataset.household)
 

@@ -9,6 +9,7 @@ import pytest
 from huggingface_hub import CommitOperationAdd
 from huggingface_hub.errors import EntryNotFoundError, RevisionNotFoundError
 
+from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
 from policyengine_uk_data.utils.data_upload import (
     _get_model_package_version,
     get_finalized_release_manifest,
@@ -182,6 +183,37 @@ def test_build_release_manifest_tracks_uk_release_artifacts(tmp_path):
     assert manifest["artifacts"]["enhanced_frs_2023_24"]["metadata"] == {
         "repo_type": "model",
         "visibility": "private",
+    }
+
+
+def test_build_release_manifest_defaults_to_current_frs_release(tmp_path):
+    enhanced_path = _write_file(
+        tmp_path / CURRENT_FRS_RELEASE.enhanced_dataset_file,
+        b"enhanced-frs",
+    )
+    baseline_path = _write_file(
+        tmp_path / CURRENT_FRS_RELEASE.base_dataset_file,
+        b"baseline-frs",
+    )
+
+    manifest = build_release_manifest(
+        files_with_repo_paths=[
+            (enhanced_path, CURRENT_FRS_RELEASE.enhanced_dataset_file),
+            (baseline_path, CURRENT_FRS_RELEASE.base_dataset_file),
+        ],
+        version="1.40.4",
+        repo_id=PRIVATE_REPO,
+        model_package_version="2.74.0",
+        model_package_git_sha="deadbeef",
+        model_package_data_build_fingerprint="sha256:fingerprint",
+        core_package_metadata=EXPECTED_CORE_PACKAGE,
+        data_package_git_sha="cafebabe",
+        created_at="2026-04-10T12:00:00Z",
+    )
+
+    assert manifest["default_datasets"] == {
+        "national": CURRENT_FRS_RELEASE.enhanced_dataset_name,
+        "baseline": CURRENT_FRS_RELEASE.base_dataset_name,
     }
 
 

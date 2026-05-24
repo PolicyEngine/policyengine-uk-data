@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 
 from policyengine_uk_data.storage import STORAGE_FOLDER
+from policyengine_uk_data.utils.calibrate import default_weight_dataset_key
 
 logger = logging.getLogger(__name__)
 
@@ -206,7 +207,7 @@ def publish_local_h5s(
     dataset,
     weight_file: str,
     area_type: str = "constituency",
-    dataset_key: str = "2025",
+    dataset_key: str | None = None,
     output_dir: Optional[Path] = None,
     min_weight: float = 0.0,
 ) -> pd.DataFrame:
@@ -228,6 +229,9 @@ def publish_local_h5s(
         DataFrame with per-area statistics: code, n_households,
         n_active, total_weight.
     """
+    if dataset_key is None:
+        dataset_key = default_weight_dataset_key()
+
     if output_dir is None:
         output_dir = LOCAL_H5_DIR / area_type
 

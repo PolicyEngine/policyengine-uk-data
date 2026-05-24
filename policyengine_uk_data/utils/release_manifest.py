@@ -7,9 +7,11 @@ import json
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Mapping, Optional, Sequence, Tuple
 
+from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
 from policyengine_uk_data.utils.hf_destinations import PRIVATE_REPO, PUBLIC_REPO
 
 RELEASE_MANIFEST_SCHEMA_VERSION = 1
+LEGACY_DEFAULT_FRS_RELEASES = ("frs_2023_24",)
 
 
 def _utc_timestamp() -> str:
@@ -560,12 +562,16 @@ def _update_default_datasets(
     defaults = manifest.setdefault("default_datasets", {})
     if default_datasets:
         defaults.update(default_datasets)
-    if "national" not in defaults and "enhanced_frs_2023_24" in manifest.get(
-        "artifacts", {}
-    ):
-        defaults["national"] = "enhanced_frs_2023_24"
-    if "baseline" not in defaults and "frs_2023_24" in manifest.get("artifacts", {}):
-        defaults["baseline"] = "frs_2023_24"
+    artifacts = manifest.get("artifacts", {})
+    frs_releases = (CURRENT_FRS_RELEASE.name, *LEGACY_DEFAULT_FRS_RELEASES)
+    for frs_release in frs_releases:
+        enhanced_frs_release = f"enhanced_{frs_release}"
+        if "national" not in defaults and enhanced_frs_release in artifacts:
+            defaults["national"] = enhanced_frs_release
+        if "baseline" not in defaults and frs_release in artifacts:
+            defaults["baseline"] = frs_release
+        if "national" in defaults and "baseline" in defaults:
+            break
 
 
 def _normalize_existing_manifest(

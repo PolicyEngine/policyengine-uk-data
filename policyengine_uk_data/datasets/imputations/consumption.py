@@ -22,6 +22,7 @@ Key features:
 
 import pandas as pd
 import numpy as np
+from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk import Microsimulation
@@ -696,7 +697,7 @@ def save_imputation_models():
         LCFS_TAB_FOLDER / "lcfs_2021_dvper_ukanon202122.tab", delimiter="\t"
     )
     household = generate_lcfs_table(lcfs_person, lcfs_household)
-    household = uprate_lcfs_table(household, "2024")
+    household = uprate_lcfs_table(household, str(CURRENT_FRS_RELEASE.base_year))
     consumption.fit(household[PREDICTOR_VARIABLES], household[IMPUTATIONS])
     consumption.save(STORAGE_FOLDER / CONSUMPTION_MODEL_FILENAME)
     return consumption

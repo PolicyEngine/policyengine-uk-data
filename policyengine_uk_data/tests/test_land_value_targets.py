@@ -1,6 +1,7 @@
 """Tests for ONS land value calibration targets."""
 
 import pytest
+from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
 from policyengine_uk_data.targets.sources._land import (
     CORPORATE_LAND_VALUES,
     HOUSEHOLD_LAND_VALUES,
@@ -17,7 +18,12 @@ LAND_TARGETS = {
 # fixture is only a stable regression base from its dataset year onward.
 # Keep the broader year coverage in the target-registry tests, and only run the
 # simulation-vs-target aggregate check for years the fixture can represent.
-MODEL_CHECK_YEARS = [2023, 2025]
+MODEL_CHECK_YEARS = sorted(
+    {
+        CURRENT_FRS_RELEASE.base_year,
+        CURRENT_FRS_RELEASE.calibration_year,
+    }
+)
 
 TOLERANCES = {
     "land_value": 0.65,
@@ -28,7 +34,7 @@ TOLERANCES = {
 }
 
 
-@pytest.mark.parametrize("year", MODEL_CHECK_YEARS, ids=["2023", "2025"])
+@pytest.mark.parametrize("year", MODEL_CHECK_YEARS, ids=map(str, MODEL_CHECK_YEARS))
 @pytest.mark.parametrize("variable", list(LAND_TARGETS), ids=list(LAND_TARGETS))
 def test_land_value_aggregate(baseline, variable, year):
     """Check weighted aggregate land values against ONS targets."""
@@ -48,7 +54,7 @@ def test_land_value_aggregate(baseline, variable, year):
 
 def test_land_value_composition(baseline):
     """Household + corporate land should equal total land value."""
-    year = 2025
+    year = CURRENT_FRS_RELEASE.calibration_year
     weights = baseline.calculate("household_weight", period=year).values
     total = baseline.calculate("land_value", map_to="household", period=year).values
     hh = baseline.calculate(
@@ -69,7 +75,7 @@ def test_land_value_composition(baseline):
 
 def test_household_land_less_than_property_wealth(baseline):
     """Household land value should not exceed total property wealth."""
-    year = 2025
+    year = CURRENT_FRS_RELEASE.calibration_year
     weights = baseline.calculate("household_weight", period=year).values
     hh_land = baseline.calculate(
         "household_land_value", map_to="household", period=year

@@ -1,4 +1,5 @@
 from contextlib import nullcontext
+from inspect import signature
 from pathlib import Path
 from typing import Optional, Union
 
@@ -8,12 +9,30 @@ import numpy as np
 import h5py
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
+from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
 from policyengine_uk_data.utils.progress import ProcessingProgress
+
+
+def default_weight_dataset_key() -> str:
+    return str(CURRENT_FRS_RELEASE.calibration_year)
+
+
+def _call_matrix_fn(matrix_fn, dataset, time_period):
+    if time_period is None:
+        return matrix_fn(dataset)
+
+    parameters = signature(matrix_fn).parameters
+    accepts_time_period = "time_period" in parameters or any(
+        p.kind == p.VAR_KEYWORD for p in parameters.values()
+    )
+    if accepts_time_period:
+        return matrix_fn(dataset, time_period=time_period)
+    return matrix_fn(dataset)
 
 
 def load_weights(
     weight_file: Union[str, Path],
-    dataset_key: str = "2025",
+    dataset_key: str | None = None,
     n_areas: Optional[int] = None,
     n_records: Optional[int] = None,
 ) -> np.ndarray:
@@ -50,6 +69,8 @@ def load_weights(
     path = Path(weight_file)
     if not path.is_absolute():
         path = STORAGE_FOLDER / path
+    if dataset_key is None:
+        dataset_key = default_weight_dataset_key()
 
     with h5py.File(path, "r") as f:
         if dataset_key not in f:
@@ -89,7 +110,7 @@ def calibrate_local_areas(
     national_matrix_fn,
     area_count: int,
     weight_file: str,
-    dataset_key: str = "2025",
+    dataset_key: str | None = None,
     epochs: int = 512,
     excluded_training_targets=[],
     log_csv=None,
@@ -97,6 +118,7 @@ def calibrate_local_areas(
     area_name: str = "area",
     get_performance=None,
     nested_progress=None,
+    time_period: int | str | None = None,
 ):
     """
     Generic calibration function for local areas (constituencies, local authorities, etc.)
@@ -114,6 +136,11 @@ def calibrate_local_areas(
         verbose: Whether to print progress
         area_name: Name of the area type for logging
     """
+    if dataset_key is None:
+        dataset_key = default_weight_dataset_key()
+    if time_period is None and str(dataset_key).isdigit():
+        time_period = dataset_key
+
     progress_tracker = ProcessingProgress() if verbose else None
 
     def track_stage(stage_name: str):
@@ -125,11 +152,13 @@ def calibrate_local_areas(
         dataset = dataset.copy()
 
     with track_stage(f"{area_name}: build local target matrix"):
-        matrix, y, r = matrix_fn(dataset)
+        matrix, y, r = _call_matrix_fn(matrix_fn, dataset, time_period)
     m_c, y_c = matrix.copy(), y.copy()
 
     with track_stage(f"{area_name}: build national target matrix"):
-        m_national, y_national = national_matrix_fn(dataset)
+        m_national, y_national = _call_matrix_fn(
+            national_matrix_fn, dataset, time_period
+        )
     m_n, y_n = m_national.copy(), y_national.copy()
 
     with track_stage(f"{area_name}: prepare tensors and optimizer"):

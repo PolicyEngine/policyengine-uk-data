@@ -1,3 +1,7 @@
+from policyengine_uk_data.storage.download_private_prerequisites import (
+    PRIVATE_PREREQUISITES,
+)
+from policyengine_uk_data.utils.hf_destinations import PRIVATE_REPO
 from policyengine_uk_data.utils.huggingface import upload
 from pathlib import Path
 import zipfile
@@ -12,16 +16,7 @@ def zip_folder(folder):
 
 FOLDER = Path(__file__).parent
 
-FILES = [
-    "frs_2020_21.zip",
-    "frs_2022_23.zip",
-    "lcfs_2021_22.zip",
-    "was_2006_20.zip",
-    "etb_1977_21.zip",
-    "spi_2020_21.zip",
-]
-
-FILES = [Path(FOLDER / file) for file in FILES]
+FILES = [Path(FOLDER / filename) for filename, _ in PRIVATE_PREREQUISITES]
 
 for file in FILES:
     if not file.exists():
@@ -29,7 +24,7 @@ for file in FILES:
     if not file.exists():
         raise FileNotFoundError(f"File {file} not found")
     upload(
-        repo="policyengine/policyengine-uk-data",
+        repo=PRIVATE_REPO,
         repo_file_path=file.name,
         local_file_path=file,
     )

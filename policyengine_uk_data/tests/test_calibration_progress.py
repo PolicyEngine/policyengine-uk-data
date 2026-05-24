@@ -3,6 +3,7 @@ import time
 import numpy as np
 import pandas as pd
 
+from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
 from policyengine_uk_data.utils.calibrate import calibrate_local_areas
 
 
@@ -74,3 +75,44 @@ def test_calibrate_local_areas_logs_setup_stage_heartbeats_in_ci(
         "[calibration] completed: Constituency: build national target matrix" in output
     )
     assert "[calibration] epoch 1/1: calculating loss" in output
+
+
+def test_calibrate_local_areas_defaults_time_period_to_dataset_key(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(
+        "policyengine_uk_data.utils.calibrate.STORAGE_FOLDER",
+        tmp_path,
+    )
+
+    dataset = _DummyDataset([10.0, 20.0, 30.0])
+    local_periods = []
+    national_periods = []
+
+    def matrix_fn(_dataset, time_period=None):
+        local_periods.append(time_period)
+        matrix = pd.DataFrame({"metric": [1.0, 0.0, 1.0]})
+        targets = pd.DataFrame({"metric": [2.0]})
+        mask = np.ones((1, 3))
+        return matrix, targets, mask
+
+    def national_matrix_fn(_dataset, time_period=None):
+        national_periods.append(time_period)
+        matrix = pd.DataFrame({"national_metric": [1.0, 1.0, 1.0]})
+        targets = pd.Series({"national_metric": 3.0})
+        return matrix, targets
+
+    calibrate_local_areas(
+        dataset=dataset,
+        matrix_fn=matrix_fn,
+        national_matrix_fn=national_matrix_fn,
+        area_count=1,
+        weight_file="weights.h5",
+        epochs=1,
+        verbose=False,
+    )
+
+    expected_period = str(CURRENT_FRS_RELEASE.calibration_year)
+    assert local_periods == [expected_period]
+    assert national_periods == [expected_period]

@@ -9,9 +9,10 @@ from policyengine_uk import Microsimulation
 import argparse
 from datetime import datetime
 from policyengine_core.data import Dataset
+from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
 from policyengine_uk_data.storage import STORAGE_FOLDER
 
-efrs = Dataset.from_file(STORAGE_FOLDER / "enhanced_frs_2022_23.h5")
+efrs = Dataset.from_file(STORAGE_FOLDER / CURRENT_FRS_RELEASE.enhanced_dataset_file)
 
 baseline = Microsimulation(dataset=efrs)
 
@@ -109,7 +110,7 @@ def update_impacts(config_path: Path, dry_run: bool = False, verbose: bool = Tru
         with open(config_path, "w") as f:
             yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
-        print(f"\nConfiguration updated successfully!")
+        print("\nConfiguration updated successfully!")
         print(f"Backup saved to: {backup_path}")
     else:
         print("\nDry run - no changes written to file.")

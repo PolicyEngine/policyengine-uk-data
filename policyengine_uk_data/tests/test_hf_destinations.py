@@ -2,14 +2,12 @@
 `PRIVATE_REPO` / `PUBLIC_REPO` constants in
 :mod:`policyengine_uk_data.utils.hf_destinations`.
 
-Motivation (bug-hunt finding S1):
+Motivation:
 
-- ``storage/upload_private_prerequisites.py`` uploads UKDS-licensed FRS/LCFS/
-  WAS/ETB/SPI zips with a literal ``repo="policyengine/policyengine-uk-data"``
-  argument — i.e. the PUBLIC repo.
-- ``utils/data_upload.py::upload_data_files`` defaults ``hf_repo_name`` to the
-  PUBLIC repo, while the sibling ``upload_files_to_hf`` defaults to the
-  PRIVATE repo.
+- UKDS-licensed FRS/LCFS/WAS/ETB/SPI zips, FRS-derived H5s, and calibration
+  weights must use the PRIVATE repo.
+- ``utils/data_upload.py::upload_data_files`` historically defaulted to a
+  public repo, while sibling upload helpers defaulted to the private repo.
 - Mixed literals across the codebase mean one typo in a future script could
   silently leak microdata.
 
@@ -27,12 +25,9 @@ The test is marked ``xfail`` until every call site is migrated. It will
 begin failing (i.e. "pass unexpectedly") as a signal that the clean-up is
 complete, at which point the ``xfail`` decorator should be removed.
 
-**Do NOT silence this test by changing the destinations in place.** The
-existing destinations are preserved by repo policy (see CLAUDE.md rule 1
-and the policyengine-uk-data private/public split). Resolving the naming
-inconsistency requires a data-controller decision — either rename the HF
-repos or migrate each script individually with sign-off — not a blanket
-string swap in this PR.
+The broad AST guard remains ``xfail`` while the repo still has mixed call
+patterns. The focused tests below enforce the restricted storage scripts
+that this PR intentionally migrates to ``PRIVATE_REPO``.
 """
 
 from __future__ import annotations
@@ -140,6 +135,29 @@ def _collect_violations() -> list[str]:
     return violations
 
 
+def _assert_storage_call_uses_private_repo(
+    relative_path: str,
+    call_name: str,
+    keyword: str,
+) -> None:
+    path = Path(__file__).resolve().parent.parent / relative_path
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    matches: list[ast.AST] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if _call_name(node) != call_name:
+            continue
+        value = _kwarg_value(node, keyword)
+        if value is not None:
+            matches.append(value)
+
+    assert matches, f"No {call_name}(..., {keyword}=...) calls found in {path}"
+    for value in matches:
+        assert isinstance(value, ast.Name)
+        assert value.id == "PRIVATE_REPO"
+
+
 @pytest.mark.xfail(
     reason=(
         "Known naming inconsistency; existing destinations intentionally "
@@ -174,3 +192,33 @@ def test_hf_destinations_constants_are_distinct_and_well_formed() -> None:
     assert ALLOWED_REPOS == {PRIVATE_REPO, PUBLIC_REPO}
     for repo in ALLOWED_REPOS:
         assert repo.startswith("policyengine/"), repo
+
+
+def test_childcare_takeup_uses_private_enhanced_frs_uri() -> None:
+    from policyengine_uk_data.datasets.childcare.takeup_rate import (
+        ENHANCED_FRS_DATASET,
+    )
+    from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
+    from policyengine_uk_data.utils.hf_destinations import PRIVATE_REPO, PUBLIC_REPO
+
+    assert ENHANCED_FRS_DATASET == (
+        f"hf://{PRIVATE_REPO}/{CURRENT_FRS_RELEASE.enhanced_dataset_file}"
+    )
+    assert not ENHANCED_FRS_DATASET.startswith(f"hf://{PUBLIC_REPO}/")
+
+
+@pytest.mark.parametrize(
+    ("relative_path", "call_name", "keyword"),
+    [
+        ("storage/upload_private_prerequisites.py", "upload", "repo"),
+        ("storage/download_private_prerequisites.py", "download", "repo"),
+        ("storage/download_completed_datasets.py", "download", "repo"),
+        ("storage/upload_completed_datasets.py", "upload_data_files", "hf_repo_name"),
+    ],
+)
+def test_restricted_storage_scripts_use_private_repo_constant(
+    relative_path: str,
+    call_name: str,
+    keyword: str,
+) -> None:
+    _assert_storage_call_uses_private_repo(relative_path, call_name, keyword)

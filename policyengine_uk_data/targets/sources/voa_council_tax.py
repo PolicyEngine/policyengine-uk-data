@@ -12,6 +12,7 @@ Sources:
 from functools import lru_cache
 from html import unescape
 from io import BytesIO
+import logging
 import re
 import time
 from urllib.parse import urljoin
@@ -30,6 +31,7 @@ from policyengine_uk_data.targets.sources._common import HEADERS, load_config
 _SHEET = "CTSOP2.0"
 _HEADER_ROW = 5
 _BANDS = ["A", "B", "C", "D", "E", "F", "G", "H"]
+logger = logging.getLogger(__name__)
 _SCOTLAND_REF = "https://www.gov.scot/publications/council-tax-datasets/"
 _SCOTLAND_WORKBOOK_URL = (
     "https://www.gov.scot/binaries/content/documents/govscot/publications/"
@@ -42,6 +44,20 @@ _SCOTLAND_WORKBOOK_LINK = re.compile(
     r'href="([^"]*chargeable-dwellings---september-2025-data[^"]+?\.xlsx)"',
     re.IGNORECASE,
 )
+_SCOTLAND_FALLBACK_TOTAL_2025 = 2_623_149
+_SCOTLAND_FALLBACK_BAND_SHARES_2024_25 = {
+    # Shares published by the Scottish Government in council-tax reform
+    # analysis from the CTAXBASE council tax datasets. They are used only
+    # when gov.scot's CloudFront challenge blocks the workbook download.
+    "A": 0.191,
+    "B": 0.223,
+    "C": 0.163,
+    "D": 0.140,
+    "E": 0.139,
+    "F": 0.084,
+    "G": 0.054,
+    "H": 0.006,
+}
 _VOA_NAME_TO_REGION = {
     "North East": "NORTH_EAST",
     "North West": "NORTH_WEST",
@@ -150,6 +166,48 @@ def _to_float(value) -> float:
     return 0.0
 
 
+def _fallback_scotland_band_counts() -> dict[str, float]:
+    counts = {
+        band: _SCOTLAND_FALLBACK_TOTAL_2025 * share
+        for band, share in _SCOTLAND_FALLBACK_BAND_SHARES_2024_25.items()
+    }
+    counts["Total"] = _SCOTLAND_FALLBACK_TOTAL_2025
+    return counts
+
+
+def _get_scotland_band_counts() -> dict[str, float]:
+    try:
+        scotland_ws = _download_scotland_workbook()["Chargeable Dwellings 2025"]
+    except Exception as error:
+        logger.warning(
+            "Using fallback Scotland council tax band distribution: %s",
+            error,
+        )
+        return _fallback_scotland_band_counts()
+
+    scotland_row = 8
+    scotland_col_index = {
+        "A": 2,
+        "B": 3,
+        "C": 4,
+        "D": 5,
+        "E": 6,
+        "F": 7,
+        "G": 8,
+        "H": 9,
+        "Total": 10,
+    }
+    return {
+        band: _to_float(
+            scotland_ws.cell(
+                row=scotland_row,
+                column=scotland_col_index[band],
+            ).value
+        )
+        for band in [*_BANDS, "Total"]
+    }
+
+
 def get_targets() -> list[Target]:
     """Build council tax band targets from the latest VOA workbook."""
     wb = _download_workbook()
@@ -210,19 +268,7 @@ def get_targets() -> list[Target]:
             )
         )
 
-    scotland_ws = _download_scotland_workbook()["Chargeable Dwellings 2025"]
-    scotland_row = 8
-    scotland_col_index = {
-        "A": 2,
-        "B": 3,
-        "C": 4,
-        "D": 5,
-        "E": 6,
-        "F": 7,
-        "G": 8,
-        "H": 9,
-        "Total": 10,
-    }
+    scotland_band_counts = _get_scotland_band_counts()
     for band in _BANDS:
         targets.append(
             Target(
@@ -232,14 +278,7 @@ def get_targets() -> list[Target]:
                 unit=Unit.COUNT,
                 geographic_level=GeographicLevel.REGION,
                 geo_name="SCOTLAND",
-                values={
-                    year: _to_float(
-                        scotland_ws.cell(
-                            row=scotland_row,
-                            column=scotland_col_index[band],
-                        ).value
-                    )
-                },
+                values={year: scotland_band_counts[band]},
                 is_count=True,
                 reference_url=_SCOTLAND_REF,
             )
@@ -252,14 +291,7 @@ def get_targets() -> list[Target]:
             unit=Unit.COUNT,
             geographic_level=GeographicLevel.REGION,
             geo_name="SCOTLAND",
-            values={
-                year: _to_float(
-                    scotland_ws.cell(
-                        row=scotland_row,
-                        column=scotland_col_index["Total"],
-                    ).value
-                )
-            },
+            values={year: scotland_band_counts["Total"]},
             is_count=True,
             reference_url=_SCOTLAND_REF,
         )
