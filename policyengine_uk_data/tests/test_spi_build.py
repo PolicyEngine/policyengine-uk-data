@@ -211,6 +211,12 @@ def test_income_model_cache_is_release_scoped():
     assert INCOME_MODEL_PATH.name == f"income_{SPI_RELEASE_NAME}.pkl"
 
 
+def test_income_projection_imports_legacy_refresh_dataset():
+    from policyengine_uk_data.utils import incomes_projection
+
+    assert incomes_projection.SPI_2020_21.endswith("spi_2020.h5")
+
+
 def test_income_model_cache_rejects_stale_spi_release(tmp_path, monkeypatch):
     from policyengine_uk_data.datasets.imputations import income as income_module
 

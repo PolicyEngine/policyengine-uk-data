@@ -5,9 +5,10 @@ from policyengine_uk_data.utils import uprate_values
 import warnings
 from policyengine_uk import Microsimulation
 from microcalibrate import Calibration
-from policyengine_uk_data.datasets import SPI_2020_21
 
 warnings.filterwarnings("ignore")
+
+SPI_2020_21 = str(STORAGE_FOLDER / "spi_2020.h5")
 
 tax_benefit = pd.read_csv(STORAGE_FOLDER / "tax_benefit.csv")
 tax_benefit["name"] = tax_benefit["name"].apply(lambda x: f"obr/{x}")
