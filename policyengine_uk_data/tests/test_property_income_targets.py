@@ -57,8 +57,16 @@ def test_projected_property_income_reasonable():
         for t in targets
         if "property_income" in t.name and "count" not in t.name and 2025 in t.values
     )
-    # With 1.9x scaling, 2025 projection should be ~£67bn
+    # With 1.9x scaling, 2025 projection should be ~£57bn
     assert 50e9 < total < 90e9, (
         f"Property income target total for 2025 is £{total / 1e9:.1f}bn, "
         "outside expected £50-90bn range."
+    )
+
+
+def test_projected_targets_keep_top_open_ended_band():
+    """Projection target parsing should keep the true top income band."""
+    targets = get_all_targets(year=2025)
+    assert any(
+        t.name == "hmrc/property_income_income_band_1_000_000_to_inf" for t in targets
     )

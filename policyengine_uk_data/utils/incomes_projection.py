@@ -1,11 +1,6 @@
-import numpy as np
 import pandas as pd
-from policyengine_uk_data.storage import STORAGE_FOLDER
-from policyengine_uk_data.utils import uprate_values
-import warnings
-from policyengine_uk import Microsimulation
 from policyengine_uk.data import UKSingleYearDataset
-from microcalibrate import Calibration
+
 from policyengine_uk_data.datasets.spi import (
     SPI_FISCAL_YEAR,
     SPI_H5_FILENAME,
@@ -13,10 +8,22 @@ from policyengine_uk_data.datasets.spi import (
     SPI_TAB_FILENAME,
     create_spi,
 )
+from policyengine_uk_data.storage import STORAGE_FOLDER
+from policyengine_uk_data.targets.sources.hmrc_spi import (
+    SPI_INCOME_TABLE_VARIABLES,
+    _SPI_YEAR,
+    get_income_band_table,
+)
+from policyengine_uk_data.utils.uprating import uprate_values
 
-warnings.filterwarnings("ignore")
 
 SPI_DATASET = str(STORAGE_FOLDER / SPI_H5_FILENAME)
+BASE_YEAR = _SPI_YEAR
+MAX_YEAR = 2029
+
+# The projection artifact keeps savings interest for diagnostics and future
+# consumers, even though current target creation excludes it.
+ALL_INCOME_VARIABLES = SPI_INCOME_TABLE_VARIABLES
 
 
 def _read_spi_dataset_year(dataset_path) -> int:
@@ -25,7 +32,12 @@ def _read_spi_dataset_year(dataset_path) -> int:
 
 
 def ensure_spi_dataset() -> str:
-    """Create the SPI H5 projection input from the current TAB release if needed."""
+    """Create the SPI H5 projection input from the current TAB release if needed.
+
+    Kept for workflows that need the private SPI microdata directly. The
+    projection CSV is now generated from official aggregate ODS tables instead
+    of a reweighted SPI microdataset.
+    """
     dataset_path = STORAGE_FOLDER / SPI_H5_FILENAME
     if (
         dataset_path.exists()
@@ -58,190 +70,71 @@ def load_spi_dataset() -> UKSingleYearDataset:
     return dataset
 
 
-tax_benefit = pd.read_csv(STORAGE_FOLDER / "tax_benefit.csv")
-tax_benefit["name"] = tax_benefit["name"].apply(lambda x: f"obr/{x}")
-demographics = pd.read_csv(STORAGE_FOLDER / "demographics.csv")
-demographics["name"] = demographics["name"].apply(lambda x: f"ons/{x}")
-statistics = pd.concat([tax_benefit, demographics])
-dfs = []
+def load_base_income_table() -> pd.DataFrame:
+    """Load the current official SPI income-band table.
 
-MIN_YEAR = 2018
-MAX_YEAR = 2029
-
-for time_period in range(MIN_YEAR, MAX_YEAR + 1):
-    time_period_df = statistics[["name", "unit", "reference", str(time_period)]].rename(
-        columns={str(time_period): "value"}
-    )
-    time_period_df["time_period"] = time_period
-    dfs.append(time_period_df)
-
-statistics = pd.concat(dfs)
-statistics = statistics[statistics.value.notnull()]
-
-# All income types available in SPI data.
-ALL_INCOME_VARIABLES = [
-    "employment_income",
-    "self_employment_income",
-    "state_pension",
-    "private_pension_income",
-    "property_income",
-    "savings_interest_income",
-    "dividend_income",
-]
-
-# Only reweight against employment and self-employment targets.
-# Reweighting against all 6 income types simultaneously inflates
-# dividends, property, and pension income by ~2.5x because the
-# optimiser inflates high-income band weights to match dividend
-# targets concentrated in the £1M+ band (see issue #218).
-# The other income types flow naturally from the SPI distribution.
-REWEIGHT_VARIABLES = [
-    "employment_income",
-    "self_employment_income",
-]
-
-
-def create_target_matrix(
-    dataset: str,
-    time_period: str,
-    reform=None,
-) -> np.ndarray:
-    """Create a target matrix for reweighting SPI data.
-
-    Only includes employment and self-employment income targets
-    to avoid inflating other income types (see issue #218).
+    The row with lower bound 12,570 and upper bound infinity is the aggregate
+    above-personal-allowance row used by local-area income scaling.
     """
-    from policyengine_uk import Microsimulation
-
-    sim = Microsimulation(dataset=dataset, reform=reform)
-    sim.default_calculation_period = time_period
-
-    household_from_person = lambda values: sim.map_result(values, "person", "household")
-
-    df = pd.DataFrame()
-
-    target_names = []
-    target_values = []
-
-    income_df = sim.calculate_dataframe(["total_income"] + REWEIGHT_VARIABLES)
-
-    incomes = pd.read_csv(STORAGE_FOLDER / "incomes.csv")
-    for variable in REWEIGHT_VARIABLES:
-        incomes[variable + "_count"] = uprate_values(
-            incomes[variable + "_count"],
-            "household_weight",
-            SPI_FISCAL_YEAR,
-            time_period,
-        )
-        incomes[variable + "_amount"] = uprate_values(
-            incomes[variable + "_amount"], variable, SPI_FISCAL_YEAR, time_period
-        )
-
-    for i, row in incomes.iterrows():
-        lower = row.total_income_lower_bound
-        upper = row.total_income_upper_bound
-        in_income_band = (income_df.total_income >= lower) & (
-            income_df.total_income < upper
-        )
-        for variable in REWEIGHT_VARIABLES:
-            name_amount = (
-                "hmrc/" + variable + f"_income_band_{i}_{lower:_}_to_{upper:_}"
-            )
-            df[name_amount] = household_from_person(
-                income_df[variable] * in_income_band
-            )
-            target_values.append(row[variable + "_amount"])
-            target_names.append(name_amount)
-            name_count = (
-                "hmrc/" + variable + f"_count_income_band_{i}_{lower:_}_to_{upper:_}"
-            )
-            df[name_count] = household_from_person(
-                (income_df[variable] > 0) * in_income_band
-            )
-            target_values.append(row[variable + "_count"])
-            target_names.append(name_count)
-
-    combined_targets = pd.DataFrame(
-        {
-            "value": target_values,
-        },
-        index=target_names,
-    )
-
-    return df, combined_targets.value
+    return get_income_band_table(include_aggregate=True)
 
 
-def get_loss_results(dataset, time_period, reform=None):
-    matrix, targets = create_target_matrix(dataset, time_period, reform)
-    from policyengine_uk import Microsimulation
+def project_income_table(
+    base_income_table: pd.DataFrame,
+    *,
+    base_year: int = BASE_YEAR,
+    max_year: int = MAX_YEAR,
+) -> pd.DataFrame:
+    """Project SPI income-band rows from the official base year.
 
-    weights = (
-        Microsimulation(dataset=dataset, reform=reform)
-        .calculate("household_weight", time_period)
-        .values
-    )
-    estimates = weights @ matrix
-    df = pd.DataFrame(
-        {
-            "name": estimates.index,
-            "estimate": estimates.values,
-            "target": targets,
-        },
-    )
-    df["error"] = df["estimate"] - df["target"]
-    df["abs_error"] = df["error"].abs()
-    df["rel_error"] = df["error"] / df["target"]
-    df["abs_rel_error"] = df["rel_error"].abs()
-    return df.reset_index(drop=True)
+    Counts follow the household-weight/population index. Amounts follow the
+    PolicyEngine uprating index for each income variable. This intentionally
+    preserves the official base-year band distribution instead of reweighting
+    older SPI microdata to a newer aggregate target set.
+    """
+    projected = []
+    bounds = base_income_table[["total_income_lower_bound", "total_income_upper_bound"]]
 
-
-def create_income_projections():
-    loss_matrix, targets_array = create_target_matrix(
-        load_spi_dataset(), SPI_FISCAL_YEAR
-    )
-
-    sim = Microsimulation(dataset=load_spi_dataset())
-    household_weights = sim.calculate("household_weight", SPI_FISCAL_YEAR).values
-
-    calibration = Calibration(
-        weights=household_weights,
-        targets=targets_array.values,
-        target_names=targets_array.index.tolist(),
-        estimate_matrix=loss_matrix,
-        epochs=1_000,
-    )
-    calibration.calibrate()
-    reweighted_weights = calibration.weights
-
-    sim = Microsimulation(dataset=load_spi_dataset())
-    sim.set_input("household_weight", SPI_FISCAL_YEAR, reweighted_weights)
-
-    incomes = pd.read_csv(STORAGE_FOLDER / "incomes.csv")
-
-    projection_df = pd.DataFrame()
-    lower_bounds = incomes.total_income_lower_bound
-    upper_bounds = incomes.total_income_upper_bound
-
-    for year in range(SPI_FISCAL_YEAR, 2030):
-        year_df = pd.DataFrame()
-        year_df["total_income_lower_bound"] = lower_bounds
-        year_df["total_income_upper_bound"] = upper_bounds
+    for year in range(base_year, max_year + 1):
+        year_df = bounds.copy()
         for variable in ALL_INCOME_VARIABLES:
-            count_values = []
-            amount_values = []
-            for i, (lower, upper) in enumerate(zip(lower_bounds, upper_bounds)):
-                in_band = sim.calculate("total_income", year).between(lower, upper)
-                value = sim.calculate(variable, year)
-                count_in_band_with_nonzero_value = round(((value > 0) * in_band).sum())
-                amount_in_band = round(value[in_band].sum())
-                count_values.append(count_in_band_with_nonzero_value)
-                amount_values.append(amount_in_band)
-            year_df[f"{variable}_count"] = count_values
-            year_df[f"{variable}_amount"] = amount_values
-        year_df["year"] = year
-        projection_df = pd.concat([projection_df, year_df])
+            count_col = f"{variable}_count"
+            amount_col = f"{variable}_amount"
 
+            if count_col in base_income_table:
+                year_df[count_col] = (
+                    uprate_values(
+                        base_income_table[count_col],
+                        "household_weight",
+                        base_year,
+                        year,
+                    )
+                    .round()
+                    .astype(int)
+                )
+            if amount_col in base_income_table:
+                year_df[amount_col] = (
+                    uprate_values(
+                        base_income_table[amount_col],
+                        variable,
+                        base_year,
+                        year,
+                    )
+                    .round()
+                    .astype(int)
+                )
+        year_df["year"] = year
+        projected.append(year_df)
+
+    return pd.concat(projected, ignore_index=True)
+
+
+def create_income_projections() -> pd.DataFrame:
+    base_income_table = load_base_income_table()
+    projection_df = project_income_table(base_income_table)
     projection_df.to_csv(STORAGE_FOLDER / "incomes_projection.csv", index=False)
+    base_income_table.to_csv(STORAGE_FOLDER / "incomes.csv", index=False)
+    return projection_df
 
 
 if __name__ == "__main__":
