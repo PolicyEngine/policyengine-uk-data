@@ -8,6 +8,7 @@ models trained on HMRC Survey of Personal Incomes (SPI) data.
 
 import pandas as pd
 import numpy as np
+import os
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk import Microsimulation
@@ -131,6 +132,14 @@ INCOME_MODEL_METADATA = {
     "imputations": tuple(IMPUTATIONS),
 }
 INCOME_MODEL_PATH = STORAGE_FOLDER / f"income_{SPI_RELEASE_NAME}.pkl"
+INCOME_MODEL_SAMPLE_SIZE = 100_000
+TESTING_INCOME_MODEL_SAMPLE_SIZE = 10_000
+
+
+def get_income_model_sample_size() -> int:
+    if os.environ.get("TESTING", "0") == "1":
+        return TESTING_INCOME_MODEL_SAMPLE_SIZE
+    return INCOME_MODEL_SAMPLE_SIZE
 
 
 def _income_model_matches_current_release(model) -> bool:
@@ -153,7 +162,7 @@ def save_imputation_models():
     income = QRF()
     income.metadata = INCOME_MODEL_METADATA
     spi = pd.read_csv(SPI_TAB_FOLDER / SPI_TAB_FILENAME, delimiter="\t")
-    spi = generate_spi_table(spi)
+    spi = generate_spi_table(spi, sample_size=get_income_model_sample_size())
     spi = spi[PREDICTORS + IMPUTATIONS]
     income.fit(spi[PREDICTORS], spi[IMPUTATIONS])
     income.save(INCOME_MODEL_PATH)

@@ -211,6 +211,22 @@ def test_income_model_cache_is_release_scoped():
     assert INCOME_MODEL_PATH.name == f"income_{SPI_RELEASE_NAME}.pkl"
 
 
+def test_income_model_sample_size_is_reduced_in_testing(monkeypatch):
+    from policyengine_uk_data.datasets.imputations import income as income_module
+
+    monkeypatch.delenv("TESTING", raising=False)
+    assert (
+        income_module.get_income_model_sample_size()
+        == income_module.INCOME_MODEL_SAMPLE_SIZE
+    )
+
+    monkeypatch.setenv("TESTING", "1")
+    assert (
+        income_module.get_income_model_sample_size()
+        == income_module.TESTING_INCOME_MODEL_SAMPLE_SIZE
+    )
+
+
 def test_income_projection_uses_current_spi_release():
     from policyengine_uk_data.utils import incomes_projection
     from policyengine_uk_data.datasets.spi import SPI_FISCAL_YEAR, SPI_H5_FILENAME
