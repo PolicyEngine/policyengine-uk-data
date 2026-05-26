@@ -62,12 +62,47 @@ class _StubDataset:
     regression test.
     """
 
-    def __init__(self, weights: np.ndarray):
+    def __init__(self, weights: np.ndarray, **household_columns):
         self.household = pd.DataFrame({"household_weight": weights.astype(float)})
+        for column, values in household_columns.items():
+            self.household[column] = values
 
     def copy(self) -> "_StubDataset":
-        copy = _StubDataset(self.household["household_weight"].to_numpy())
+        extra_columns = {
+            column: self.household[column].to_numpy(copy=True)
+            for column in self.household.columns
+            if column != "household_weight"
+        }
+        copy = _StubDataset(
+            self.household["household_weight"].to_numpy(),
+            **extra_columns,
+        )
         return copy
+
+
+def test_initialize_weight_priors_gives_zero_weight_rows_balanced_mass():
+    from policyengine_uk_data.utils.calibrate import initialize_weight_priors
+
+    weights = np.array([1_500.0, 0.0, 625.0, 0.0], dtype=np.float64)
+
+    priors = initialize_weight_priors(weights)
+
+    assert np.all(priors > 0)
+    assert priors.sum() == pytest.approx(weights.sum())
+    assert priors[[0, 2]].sum() == pytest.approx(weights.sum() / 2)
+    assert priors[[1, 3]].sum() == pytest.approx(weights.sum() / 2)
+    assert priors[1] == pytest.approx(priors[3])
+    assert priors[0] / priors[2] == pytest.approx(weights[0] / weights[2])
+
+
+def test_initialize_weight_priors_preserves_positive_weights_exactly():
+    from policyengine_uk_data.utils.calibrate import initialize_weight_priors
+
+    weights = np.array([1_500.0, 400.0, 625.0], dtype=np.float64)
+
+    priors = initialize_weight_priors(weights)
+
+    np.testing.assert_array_equal(priors, weights)
 
 
 def test_calibrate_local_areas_saves_weights_in_nonverbose_branch(
@@ -159,3 +194,67 @@ def test_calibrate_local_areas_masks_nan_local_targets(tmp_path, monkeypatch):
     with h5py.File(tmp_path / weight_file, "r") as f:
         weights = f["2025"][:]
         assert np.isfinite(weights).all()
+
+
+def test_calibrate_local_areas_logs_loss_targets_and_source_diagnostics(
+    tmp_path, monkeypatch
+):
+    import h5py
+
+    from policyengine_uk_data.utils import calibrate as calibrate_module
+    from policyengine_uk_data.utils.calibrate import calibrate_local_areas
+
+    monkeypatch.setattr(calibrate_module, "STORAGE_FOLDER", tmp_path)
+
+    matrix_fn, national_matrix_fn = _make_toy_inputs(n_households=4, area_count=2)
+    dataset = _StubDataset(
+        np.array([4.0, 0.0, 4.0, 0.0]),
+        household_is_spi_synthetic=[False, True, False, True],
+    )
+
+    def get_performance(weights, _m_c, _y_c, m_n, y_n, _excluded_targets):
+        estimates = weights.sum(axis=0) @ m_n
+        error = float(estimates.iloc[0] - y_n.iloc[0])
+        return pd.DataFrame(
+            {
+                "name": ["UK"],
+                "metric": ["national_total"],
+                "estimate": [float(estimates.iloc[0])],
+                "target": [float(y_n.iloc[0])],
+                "error": [error],
+                "abs_error": [abs(error)],
+                "rel_abs_error": [abs(error) / float(y_n.iloc[0])],
+                "validation": [False],
+            }
+        )
+
+    weight_file = "toy_diagnostic_weights.h5"
+    log_csv = tmp_path / "diagnostics.csv"
+    calibrate_local_areas(
+        dataset=dataset,
+        matrix_fn=matrix_fn,
+        national_matrix_fn=national_matrix_fn,
+        area_count=2,
+        weight_file=weight_file,
+        dataset_key="2025",
+        epochs=1,
+        log_csv=log_csv,
+        get_performance=get_performance,
+        verbose=False,
+    )
+
+    with h5py.File(tmp_path / weight_file, "r") as f:
+        weights = f["2025"][:]
+        assert weights[:, [1, 3]].sum() > 0
+
+    diagnostics = pd.read_csv(log_csv)
+    row = diagnostics.iloc[0]
+    assert row["target_name"] == "UK/national_total"
+    assert np.isfinite(row["loss"])
+    assert np.isfinite(row["training_loss"])
+    assert np.isfinite(row["saved_weights_loss"])
+    assert row["initial_zero_weight_rows"] == 2
+    assert row["initial_zero_weight_prior_share"] == pytest.approx(0.5)
+    assert row["household_is_spi_synthetic_rows"] == 2
+    assert row["household_is_spi_synthetic_prior_share"] == pytest.approx(0.5)
+    assert row["household_is_spi_synthetic_household_weight"] > 0

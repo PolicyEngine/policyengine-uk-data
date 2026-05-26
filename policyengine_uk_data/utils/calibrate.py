@@ -13,6 +13,9 @@ from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
 from policyengine_uk_data.utils.progress import ProcessingProgress
 
 
+DEFAULT_ZERO_WEIGHT_PRIOR_TOTAL_SHARE = 0.5
+
+
 def default_weight_dataset_key() -> str:
     return str(CURRENT_FRS_RELEASE.calibration_year)
 
@@ -104,6 +107,104 @@ def load_weights(
     return arr
 
 
+def initialize_weight_priors(
+    original_weights: np.ndarray,
+    zero_weight_total_share: float = DEFAULT_ZERO_WEIGHT_PRIOR_TOTAL_SHARE,
+) -> np.ndarray:
+    """Build deterministic positive household priors for calibration.
+
+    SPI synthetic households enter the enhanced FRS with zero household
+    weight. Giving those rows tiny random priors makes them technically
+    positive but practically unavailable in log-space optimization. When
+    zero-weight rows are present, preserve the relative distribution of
+    positive survey weights while reserving a fixed share of total prior mass
+    for the zero-weight rows.
+    """
+    weights = np.asarray(original_weights, dtype=np.float64)
+    if weights.ndim != 1:
+        raise ValueError("original_weights must be one-dimensional")
+    if np.any(weights < 0):
+        raise ValueError("original_weights must be non-negative")
+    if weights.size == 0:
+        return weights.copy()
+    if not 0 < zero_weight_total_share < 1:
+        raise ValueError("zero_weight_total_share must be between 0 and 1")
+
+    positive_mask = weights > 0
+    zero_mask = ~positive_mask
+    if not zero_mask.any():
+        return weights.copy()
+
+    positive_total = float(weights[positive_mask].sum())
+    if positive_total <= 0:
+        return np.full_like(weights, 1.0, dtype=np.float64)
+
+    priors = np.empty_like(weights, dtype=np.float64)
+    priors[positive_mask] = weights[positive_mask] * (1 - zero_weight_total_share)
+    priors[zero_mask] = positive_total * zero_weight_total_share / zero_mask.sum()
+    return priors
+
+
+def _as_bool_mask(series: pd.Series) -> np.ndarray:
+    if pd.api.types.is_bool_dtype(series):
+        return series.fillna(False).to_numpy(dtype=bool)
+    if pd.api.types.is_numeric_dtype(series):
+        return series.fillna(0).to_numpy(dtype=float) != 0
+    return (
+        series.fillna("").astype(str).str.lower().isin({"true", "1", "yes"}).to_numpy()
+    )
+
+
+def _weight_share(weight: float, total: float) -> float:
+    return weight / total if total > 0 else 0.0
+
+
+def _household_weight_diagnostics(
+    dataset: UKSingleYearDataset,
+    household_weights: np.ndarray,
+    household_priors: np.ndarray,
+) -> dict[str, float | int]:
+    household_weights = np.asarray(household_weights, dtype=np.float64)
+    household_priors = np.asarray(household_priors, dtype=np.float64)
+    original_weights = dataset.household.household_weight.values.astype(np.float64)
+    total_weight = float(household_weights.sum())
+    total_prior = float(household_priors.sum())
+    zero_initial = original_weights <= 0
+
+    zero_weight = float(household_weights[zero_initial].sum())
+    zero_prior = float(household_priors[zero_initial].sum())
+    diagnostics: dict[str, float | int] = {
+        "total_household_weight": total_weight,
+        "prior_total_household_weight": total_prior,
+        "initial_zero_weight_rows": int(zero_initial.sum()),
+        "initial_zero_weight_household_weight": zero_weight,
+        "initial_zero_weight_household_weight_share": _weight_share(
+            zero_weight, total_weight
+        ),
+        "initial_zero_weight_prior_household_weight": zero_prior,
+        "initial_zero_weight_prior_share": _weight_share(zero_prior, total_prior),
+    }
+
+    for column in dataset.household.columns:
+        if not column.startswith("household_is_"):
+            continue
+        mask = _as_bool_mask(dataset.household[column])
+        source_weight = float(household_weights[mask].sum())
+        source_prior = float(household_priors[mask].sum())
+        diagnostics[f"{column}_rows"] = int(mask.sum())
+        diagnostics[f"{column}_positive_weight_rows"] = int(
+            (household_weights[mask] > 0).sum()
+        )
+        diagnostics[f"{column}_household_weight"] = source_weight
+        diagnostics[f"{column}_household_weight_share"] = _weight_share(
+            source_weight, total_weight
+        )
+        diagnostics[f"{column}_prior_household_weight"] = source_prior
+        diagnostics[f"{column}_prior_share"] = _weight_share(source_prior, total_prior)
+
+    return diagnostics
+
+
 def calibrate_local_areas(
     dataset: UKSingleYearDataset,
     matrix_fn,
@@ -119,6 +220,7 @@ def calibrate_local_areas(
     get_performance=None,
     nested_progress=None,
     time_period: int | str | None = None,
+    zero_weight_prior_total_share: float = DEFAULT_ZERO_WEIGHT_PRIOR_TOTAL_SHARE,
 ):
     """
     Generic calibration function for local areas (constituencies, local authorities, etc.)
@@ -135,6 +237,8 @@ def calibrate_local_areas(
         log_csv: CSV file to log performance to
         verbose: Whether to print progress
         area_name: Name of the area type for logging
+        zero_weight_prior_total_share: Share of prior household mass to reserve for
+            rows whose incoming household_weight is zero.
     """
     if dataset_key is None:
         dataset_key = default_weight_dataset_key()
@@ -173,10 +277,12 @@ def calibrate_local_areas(
         areas_per_household = np.maximum(
             areas_per_household, 1
         )  # avoid division by zero
-        original_weights = np.log(
-            dataset.household.household_weight.values / areas_per_household
-            + np.random.random(len(dataset.household.household_weight.values)) * 0.01
+        household_prior_weights = initialize_weight_priors(
+            dataset.household.household_weight.values,
+            zero_weight_total_share=zero_weight_prior_total_share,
         )
+        area_prior_weights = household_prior_weights / areas_per_household
+        original_weights = np.log(np.clip(area_prior_weights, 1e-12, None))
         weights = torch.tensor(
             np.ones((area_count, len(original_weights))) * original_weights,
             dtype=torch.float32,
@@ -289,6 +395,52 @@ def calibrate_local_areas(
     final_weights = (torch.exp(weights) * r).detach().numpy()
     performance = pd.DataFrame()
 
+    def log_performance(
+        epoch: int,
+        final_weights: np.ndarray,
+        training_loss: float,
+        local_close: float,
+        national_close: float,
+        validation_loss: float | None = None,
+    ):
+        nonlocal performance
+
+        if not log_csv or get_performance is None:
+            return
+
+        saved_weights_tensor = torch.tensor(final_weights, dtype=torch.float32)
+        saved_weights_loss = float(loss(saved_weights_tensor).item())
+        performance_step = get_performance(
+            final_weights,
+            m_c,
+            y_c,
+            m_n,
+            y_n,
+            excluded_training_targets,
+        )
+        performance_step["epoch"] = epoch
+        performance_step["loss"] = performance_step.rel_abs_error**2
+        performance_step["training_loss"] = training_loss
+        performance_step["saved_weights_loss"] = saved_weights_loss
+        performance_step["validation_loss"] = validation_loss
+        performance_step["local_pct_close_10pct"] = local_close
+        performance_step["national_pct_close_10pct"] = national_close
+        performance_step["target_name"] = [
+            f"{area}/{metric}"
+            for area, metric in zip(performance_step.name, performance_step.metric)
+        ]
+
+        diagnostics = _household_weight_diagnostics(
+            dataset,
+            final_weights.sum(axis=0),
+            household_prior_weights,
+        )
+        for key, value in diagnostics.items():
+            performance_step[key] = value
+
+        performance = pd.concat([performance, performance_step], ignore_index=True)
+        performance.to_csv(log_csv, index=False)
+
     if verbose and progress_tracker:
         with progress_tracker.track_calibration(
             epochs, nested_progress
@@ -307,12 +459,14 @@ def calibrate_local_areas(
 
                 if dropout_targets:
                     validation_loss = loss(weights_, validation=True)
+                    validation_loss_value = float(validation_loss.item())
                     update_calibration(
                         epoch + 1,
-                        loss_value=validation_loss.item(),
+                        loss_value=validation_loss_value,
                         calculating_loss=False,
                     )
                 else:
+                    validation_loss_value = None
                     update_calibration(
                         epoch + 1,
                         loss_value=loss_value.item(),
@@ -322,28 +476,14 @@ def calibrate_local_areas(
                 if epoch % 10 == 0:
                     final_weights = (torch.exp(weights) * r).detach().numpy()
 
-                    # Log performance if requested and get_performance function is available
-                    if log_csv and get_performance:
-                        performance_step = get_performance(
-                            final_weights,
-                            m_c,
-                            y_c,
-                            m_n,
-                            y_n,
-                            excluded_training_targets,
-                        )
-                        performance_step["epoch"] = epoch
-                        performance_step["loss"] = performance_step.rel_abs_error**2
-                        performance_step["target_name"] = [
-                            f"{area}/{metric}"
-                            for area, metric in zip(
-                                performance_step.name, performance_step.metric
-                            )
-                        ]
-                        performance = pd.concat(
-                            [performance, performance_step], ignore_index=True
-                        )
-                        performance.to_csv(log_csv, index=False)
+                    log_performance(
+                        epoch=epoch,
+                        final_weights=final_weights,
+                        training_loss=float(loss_value.item()),
+                        validation_loss=validation_loss_value,
+                        local_close=local_close,
+                        national_close=national_close,
+                    )
 
                     # Save weights
                     with h5py.File(STORAGE_FOLDER / weight_file, "w") as f:
@@ -376,28 +516,14 @@ def calibrate_local_areas(
             if epoch % 10 == 0:
                 final_weights = (torch.exp(weights) * r).detach().numpy()
 
-                # Log performance if requested and get_performance function is available
-                if log_csv:
-                    performance_step = get_performance(
-                        final_weights,
-                        m_c,
-                        y_c,
-                        m_n,
-                        y_n,
-                        excluded_training_targets,
-                    )
-                    performance_step["epoch"] = epoch
-                    performance_step["loss"] = performance_step.rel_abs_error**2
-                    performance_step["target_name"] = [
-                        f"{area}/{metric}"
-                        for area, metric in zip(
-                            performance_step.name, performance_step.metric
-                        )
-                    ]
-                    performance = pd.concat(
-                        [performance, performance_step], ignore_index=True
-                    )
-                    performance.to_csv(log_csv, index=False)
+                log_performance(
+                    epoch=epoch,
+                    final_weights=final_weights,
+                    training_loss=float(loss_value.item()),
+                    validation_loss=None,
+                    local_close=local_close,
+                    national_close=national_close,
+                )
 
                 # Save weights
                 with h5py.File(STORAGE_FOLDER / weight_file, "w") as f:
