@@ -1,21 +1,16 @@
 import pandas as pd
 import numpy as np
-from policyengine_core.data import Dataset
 from policyengine_uk_data.utils.stack import stack_datasets
 
 # Fit a spline to each income band's percentiles
 from scipy.interpolate import UnivariateSpline
 
 from policyengine_uk_data.storage import STORAGE_FOLDER
-from tqdm import tqdm
-import copy
 
 import torch
 from torch.optim import Adam
-from tqdm import tqdm
 from policyengine_uk.data import UKSingleYearDataset
 import logging
-from policyengine_uk_data.utils.subsample import subsample_dataset
 
 capital_gains = pd.read_csv(
     STORAGE_FOLDER / "capital_gains_distribution_advani_summers.csv.gz"
@@ -34,7 +29,6 @@ def impute_cg_to_doubled_dataset(
     """Assumes that the capital gains distribution is the same for all years."""
 
     from policyengine_uk import Microsimulation
-    from policyengine_uk.system import system
 
     sim = Microsimulation(dataset=dataset)
     ti = sim.calculate("total_income").values
@@ -142,8 +136,11 @@ def impute_cg_to_doubled_dataset(
 
 
 def impute_capital_gains(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
+    dataset = dataset.copy()
+    dataset.household["household_is_capital_gains_clone"] = False
     zero_weight_copy = dataset.copy()
     zero_weight_copy.household.household_weight = 1
+    zero_weight_copy.household["household_is_capital_gains_clone"] = True
     data = stack_datasets(
         dataset,
         zero_weight_copy,

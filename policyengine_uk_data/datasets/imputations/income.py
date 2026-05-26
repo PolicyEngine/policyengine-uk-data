@@ -258,8 +258,10 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     for column in ("gift_aid", "charitable_investment_gifts"):
         if column not in dataset.person.columns:
             dataset.person[column] = 0.0
+    dataset.household["household_is_spi_synthetic"] = False
     zero_weight_copy = dataset.copy()
     zero_weight_copy.household.household_weight = 0
+    zero_weight_copy.household["household_is_spi_synthetic"] = True
     zero_weight_copy = subsample_dataset(zero_weight_copy, 10_000)
 
     model = create_income_model()
