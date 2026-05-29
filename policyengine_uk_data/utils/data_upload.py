@@ -1,5 +1,5 @@
 from io import BytesIO
-from typing import Any, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 from huggingface_hub import HfApi, CommitOperationAdd, hf_hub_download
 from huggingface_hub.errors import EntryNotFoundError, RevisionNotFoundError
 from google.cloud import storage
@@ -296,6 +296,7 @@ def create_release_manifest_commit_operations(
     core_package_metadata: Optional[Mapping[str, Any]] = None,
     data_package_git_sha: Optional[str] = None,
     existing_manifest: Optional[Dict] = None,
+    additional_compatible_specifiers: Optional[Sequence[str]] = None,
 ) -> Tuple[Dict, List[CommitOperationAdd]]:
     manifest = build_release_manifest(
         files_with_repo_paths=files_with_repo_paths,
@@ -309,6 +310,7 @@ def create_release_manifest_commit_operations(
         core_package_metadata=core_package_metadata,
         data_package_git_sha=data_package_git_sha,
         existing_manifest=existing_manifest,
+        additional_compatible_specifiers=additional_compatible_specifiers,
     )
     validate_release_manifest(
         manifest,
@@ -337,6 +339,7 @@ def upload_data_files(
     hf_repo_name: str = PUBLIC_REPO,
     hf_repo_type: str = "model",
     version: str = None,
+    additional_compatible_specifiers: Optional[Sequence[str]] = None,
 ):
     if version is None:
         version = metadata.version("policyengine-uk-data")
@@ -346,6 +349,7 @@ def upload_data_files(
         version=version,
         hf_repo_name=hf_repo_name,
         hf_repo_type=hf_repo_type,
+        additional_compatible_specifiers=additional_compatible_specifiers,
     )
 
     upload_files_to_gcs(
@@ -360,6 +364,7 @@ def upload_files_to_hf(
     version: str,
     hf_repo_name: str = PRIVATE_REPO,
     hf_repo_type: str = "model",
+    additional_compatible_specifiers: Optional[Sequence[str]] = None,
 ):
     """
     Upload files to Hugging Face repository and tag the commit with the version.
@@ -414,6 +419,7 @@ def upload_files_to_hf(
         core_package_metadata=core_package_metadata,
         data_package_git_sha=_get_data_package_git_sha(),
         existing_manifest=existing_manifest,
+        additional_compatible_specifiers=additional_compatible_specifiers,
     )
     if finalized_manifest is not None:
         if candidate_manifest == finalized_manifest:

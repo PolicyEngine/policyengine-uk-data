@@ -186,6 +186,37 @@ def test_build_release_manifest_tracks_uk_release_artifacts(tmp_path):
     }
 
 
+def test_build_release_manifest_adds_additional_compatible_specifiers(tmp_path):
+    dataset_path = _write_file(
+        tmp_path / "enhanced_frs_2023_24.h5",
+        b"enhanced-frs",
+    )
+
+    manifest = build_release_manifest(
+        files_with_repo_paths=[(dataset_path, "enhanced_frs_2023_24.h5")],
+        version="1.40.4",
+        repo_id=PRIVATE_REPO,
+        model_package_version="2.74.0",
+        model_package_git_sha="deadbeef",
+        model_package_data_build_fingerprint="sha256:fingerprint",
+        core_package_metadata=EXPECTED_CORE_PACKAGE,
+        data_package_git_sha="cafebabe",
+        additional_compatible_specifiers=("==2.89.0", ">=2.90.0,<3"),
+        created_at="2026-04-10T12:00:00Z",
+    )
+
+    assert manifest["compatible_model_packages"] == [
+        {"name": "policyengine-uk", "specifier": "==2.74.0"},
+        {"name": "policyengine-uk", "specifier": "==2.89.0"},
+        {"name": "policyengine-uk", "specifier": ">=2.90.0,<3"},
+    ]
+    validate_release_manifest(
+        manifest,
+        version="1.40.4",
+        repo_id=PRIVATE_REPO,
+    )
+
+
 def test_build_release_manifest_defaults_to_current_frs_release(tmp_path):
     enhanced_path = _write_file(
         tmp_path / CURRENT_FRS_RELEASE.enhanced_dataset_file,
@@ -590,6 +621,7 @@ def test_upload_files_to_hf_adds_uk_release_manifest_operations(tmp_path):
         upload_files_to_hf(
             files=[dataset_path],
             version="1.40.4",
+            additional_compatible_specifiers=("==2.89.0",),
         )
 
     operations = mock_api.create_commit.call_args.kwargs["operations"]
@@ -612,6 +644,10 @@ def test_upload_files_to_hf_adds_uk_release_manifest_operations(tmp_path):
     payload = release_ops[0].path_or_fileobj.getvalue()
     manifest = json.loads(payload.decode("utf-8"))
     _assert_single_uk_data_release_version(manifest)
+    assert manifest["compatible_model_packages"] == [
+        {"name": "policyengine-uk", "specifier": "==2.74.0"},
+        {"name": "policyengine-uk", "specifier": "==2.89.0"},
+    ]
     assert manifest["compatible_core_packages"] == EXPECTED_COMPATIBLE_CORE_PACKAGES
     assert manifest["build"]["built_with_core_package"] == EXPECTED_CORE_PACKAGE
     assert manifest["build"]["metadata"] == {

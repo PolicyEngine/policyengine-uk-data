@@ -129,15 +129,19 @@ def _model_package_compatibility(
     *,
     model_package_name: str,
     model_package_version: str | None,
+    additional_compatible_specifiers: Sequence[str] | None = None,
 ) -> list[Dict[str, str]]:
-    if not model_package_version:
-        return []
-    return [
-        {
-            "name": model_package_name,
-            "specifier": f"=={model_package_version}",
-        }
-    ]
+    compatible_packages = []
+    if model_package_version:
+        compatible_packages.append(
+            {
+                "name": model_package_name,
+                "specifier": f"=={model_package_version}",
+            }
+        )
+    for specifier in additional_compatible_specifiers or ():
+        compatible_packages.append({"name": model_package_name, "specifier": specifier})
+    return compatible_packages
 
 
 def _core_package_compatibility(
@@ -506,11 +510,13 @@ def _update_compatibility(
     model_package_name: str,
     model_package_version: str | None,
     core_package_metadata: Mapping[str, Any] | None,
+    additional_compatible_specifiers: Sequence[str] | None = None,
 ) -> None:
     manifest.setdefault("compatible_model_packages", [])
     model_package_compatibility = _model_package_compatibility(
         model_package_name=model_package_name,
         model_package_version=model_package_version,
+        additional_compatible_specifiers=additional_compatible_specifiers,
     )
     if model_package_compatibility:
         manifest["compatible_model_packages"] = model_package_compatibility
@@ -607,6 +613,7 @@ def build_release_manifest(
     existing_manifest: Mapping | None = None,
     default_datasets: Optional[Mapping[str, str]] = None,
     created_at: str | None = None,
+    additional_compatible_specifiers: Sequence[str] | None = None,
 ) -> Dict:
     manifest = _normalize_existing_manifest(
         existing_manifest,
@@ -644,6 +651,7 @@ def build_release_manifest(
         model_package_name=model_package_name,
         model_package_version=model_package_version,
         core_package_metadata=core_package_metadata,
+        additional_compatible_specifiers=additional_compatible_specifiers,
     )
     _update_artifacts(
         manifest,
