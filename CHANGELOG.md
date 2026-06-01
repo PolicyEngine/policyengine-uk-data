@@ -1,3 +1,10 @@
+## [1.56.0] - 2026-06-01
+
+### Added
+
+- Add release-manifest support for declaring additional compatible UK model versions.
+
+
 ## [1.55.12] - 2026-05-24
 
 No significant changes.
