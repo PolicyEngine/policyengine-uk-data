@@ -1251,9 +1251,12 @@ def create_frs(
     lha_category = sim.calculate("LHA_category", year)
     brma = np.empty(len(region), dtype=object)
 
-    # Sample from a random BRMA in the region, weighted by the number of observations in each BRMA
+    # Sample from a random BRMA in the region, weighted by the number of observations in each BRMA.
+    # Use a seeded generator so the assignment is reproducible across builds;
+    # pandas .sample() otherwise draws from the unseeded global numpy RNG.
     lha_list_of_rents = pd.read_csv(STORAGE_FOLDER / "lha_list_of_rents.csv.gz")
     lha_list_of_rents = lha_list_of_rents.copy()
+    brma_rng = np.random.default_rng(0)
 
     for possible_region in lha_list_of_rents.region.unique():
         for possible_lha_category in lha_list_of_rents.lha_category.unique():
@@ -1262,7 +1265,7 @@ def create_frs(
             )
             mask = (region == possible_region) & (lha_category == possible_lha_category)
             brma[mask] = lha_list_of_rents[lor_mask].brma.sample(
-                n=len(region[mask]), replace=True
+                n=len(region[mask]), replace=True, random_state=brma_rng
             )
 
     # Convert benunit-level BRMAs to household-level BRMAs (pick a random one)
@@ -1276,7 +1279,9 @@ def create_frs(
         }
     )
 
-    df = df.groupby("household_id").brma.aggregate(lambda x: x.sample(n=1).iloc[0])
+    df = df.groupby("household_id").brma.aggregate(
+        lambda x: x.sample(n=1, random_state=brma_rng).iloc[0]
+    )
     brmas = df[sim.calculate("household_id")].values
 
     pe_household["brma"] = brmas
