@@ -1251,9 +1251,12 @@ def create_frs(
     lha_category = sim.calculate("LHA_category", year)
     brma = np.empty(len(region), dtype=object)
 
-    # Sample from a random BRMA in the region, weighted by the number of observations in each BRMA
+    # Sample from a random BRMA in the region, weighted by the number of observations in each BRMA.
+    # Use a seeded generator so the assignment is reproducible across builds;
+    # pandas .sample() otherwise draws from the unseeded global numpy RNG.
     lha_list_of_rents = pd.read_csv(STORAGE_FOLDER / "lha_list_of_rents.csv.gz")
     lha_list_of_rents = lha_list_of_rents.copy()
+    brma_rng = np.random.default_rng(0)
 
     for possible_region in lha_list_of_rents.region.unique():
         for possible_lha_category in lha_list_of_rents.lha_category.unique():
@@ -1262,7 +1265,7 @@ def create_frs(
             )
             mask = (region == possible_region) & (lha_category == possible_lha_category)
             brma[mask] = lha_list_of_rents[lor_mask].brma.sample(
-                n=len(region[mask]), replace=True
+                n=len(region[mask]), replace=True, random_state=brma_rng
             )
 
     # Convert benunit-level BRMAs to household-level BRMAs (pick a random one)
@@ -1276,7 +1279,9 @@ def create_frs(
         }
     )
 
-    df = df.groupby("household_id").brma.aggregate(lambda x: x.sample(n=1).iloc[0])
+    df = df.groupby("household_id").brma.aggregate(
+        lambda x: x.sample(n=1, random_state=brma_rng).iloc[0]
+    )
     brmas = df[sim.calculate("household_id")].values
 
     pe_household["brma"] = brmas
@@ -1430,9 +1435,15 @@ def create_frs(
 
     pe_benunit["is_married"] = frs["benunit"].famtypb2.isin([5, 7])
 
-    # Stochastically set property_purchased based on UK housing transaction rate.
-    # Previously defaulted to True in policyengine-uk, causing all households
-    # to be charged SDLT as if they just bought their property (£370bn total).
+    # Assign property_purchased to a share of households matching the UK
+    # housing transaction rate, so only genuine purchasers are charged SDLT.
+    #
+    # This MUST be deterministic: a rules engine's inputs have to be
+    # reproducible across builds. Use a seeded Generator (not global
+    # np.random, whose state depends on whatever ran earlier in the build)
+    # so the same FRS input always yields the same assignment. An unseeded
+    # draw previously made the build non-reproducible and intermittently
+    # spiked the first decile's effective tax rate.
     #
     # Sources:
     # - Transactions: HMRC 2024 - 1.1m/year
@@ -1443,11 +1454,13 @@ def create_frs(
     #
     # Verification against official SDLT revenue (2024-25):
     # - Official SDLT: £13.9bn (https://www.gov.uk/government/statistics/uk-stamp-tax-statistics)
-    # - With fix (3.85%): £15.7bn (close to official)
-    # - Without fix (100%): £370bn (26x too high)
+    # - With 3.85% purchasers: £15.7bn (close to official)
+    # - With every household a purchaser: £370bn (26x too high)
     PROPERTY_PURCHASE_RATE = 0.0385
+    PROPERTY_PURCHASE_SEED = 0
+    purchase_rng = np.random.default_rng(PROPERTY_PURCHASE_SEED)
     pe_household["property_purchased"] = (
-        np.random.random(len(pe_household)) < PROPERTY_PURCHASE_RATE
+        purchase_rng.random(len(pe_household)) < PROPERTY_PURCHASE_RATE
     )
 
     if not include_internal_disability_reported_amounts:
