@@ -1430,9 +1430,15 @@ def create_frs(
 
     pe_benunit["is_married"] = frs["benunit"].famtypb2.isin([5, 7])
 
-    # Stochastically set property_purchased based on UK housing transaction rate.
-    # Previously defaulted to True in policyengine-uk, causing all households
-    # to be charged SDLT as if they just bought their property (£370bn total).
+    # Assign property_purchased to a share of households matching the UK
+    # housing transaction rate, so only genuine purchasers are charged SDLT.
+    #
+    # This MUST be deterministic: a rules engine's inputs have to be
+    # reproducible across builds. Use a seeded Generator (not global
+    # np.random, whose state depends on whatever ran earlier in the build)
+    # so the same FRS input always yields the same assignment. An unseeded
+    # draw previously made the build non-reproducible and intermittently
+    # spiked the first decile's effective tax rate.
     #
     # Sources:
     # - Transactions: HMRC 2024 - 1.1m/year
@@ -1443,11 +1449,13 @@ def create_frs(
     #
     # Verification against official SDLT revenue (2024-25):
     # - Official SDLT: £13.9bn (https://www.gov.uk/government/statistics/uk-stamp-tax-statistics)
-    # - With fix (3.85%): £15.7bn (close to official)
-    # - Without fix (100%): £370bn (26x too high)
+    # - With 3.85% purchasers: £15.7bn (close to official)
+    # - With every household a purchaser: £370bn (26x too high)
     PROPERTY_PURCHASE_RATE = 0.0385
+    PROPERTY_PURCHASE_SEED = 0
+    purchase_rng = np.random.default_rng(PROPERTY_PURCHASE_SEED)
     pe_household["property_purchased"] = (
-        np.random.random(len(pe_household)) < PROPERTY_PURCHASE_RATE
+        purchase_rng.random(len(pe_household)) < PROPERTY_PURCHASE_RATE
     )
 
     if not include_internal_disability_reported_amounts:

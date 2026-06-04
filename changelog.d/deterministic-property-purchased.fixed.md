@@ -1,0 +1,1 @@
+Make property_purchased assignment deterministic by drawing from a seeded numpy Generator instead of the global unseeded np.random. Dataset builds are now reproducible: the same FRS input yields the same property_purchased vector, instead of an arbitrary share of households being marked as purchasers on each build.
