@@ -1,3 +1,10 @@
+## [1.56.1] - 2026-06-04
+
+### Fixed
+
+- Make the FRS dataset build deterministic. Several assignments drew from the unseeded global numpy RNG, so otherwise-identical builds produced different datasets: property_purchased (which households are charged stamp duty), capital gains imputation quantiles (CGT revenue), and BRMA assignment (LHA/housing-benefit geography). Each now draws from a seeded generator, so the same inputs always produce the same dataset.
+
+
 ## [1.56.0] - 2026-06-01
 
 ### Added
