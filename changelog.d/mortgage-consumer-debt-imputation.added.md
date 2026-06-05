@@ -1,0 +1,1 @@
+Impute household `mortgage_debt` (gross outstanding mortgage debt, WAS `HMortGR8`) and `consumer_debt` (non-mortgage, non-student-loan borrowing) from the Wealth and Assets Survey, enabling a net wealth measure that can be negative for households whose debts exceed their assets.

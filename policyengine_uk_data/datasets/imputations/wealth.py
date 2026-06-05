@@ -57,7 +57,16 @@ IMPUTE_VARIABLES = [
     "savings",
     "num_vehicles",
     "student_loan_balance",
+    # Liabilities, so a net wealth measure can go negative for households whose
+    # debts exceed their assets. mortgage_debt is gross outstanding household
+    # mortgage debt (WAS HMortGR8); consumer_debt is non-mortgage,
+    # non-student-loan borrowing (personal loans, credit, hire purchase).
+    "mortgage_debt",
+    "consumer_debt",
 ]
+
+# Imputed liabilities, clipped at zero on write (a debt cannot be negative).
+DEBT_COLUMNS = {"mortgage_debt", "consumer_debt"}
 
 WAS_RENAMES = {
     "R8xshhwgt": "household_weight",
@@ -89,6 +98,7 @@ WAS_RENAMES = {
     "DVLOSValR8_sum": "non_uk_land",
     "HFINWNTR8_Sum": "net_financial_wealth",
     "DVLUKDebtR8_sum": "uk_land_debt",
+    "HMortGR8": "mortgage_debt",  # gross outstanding household mortgage debt
     "HFINWR8_SUM": "gross_financial_wealth",
     "TotalWlthR8": "wealth",
     "DVhvalueR8": "main_residence_value",
@@ -153,6 +163,8 @@ def generate_was_table(was: pd.DataFrame):
         ]
     ].sum(axis=1)
     was["student_loan_balance"] = was["total_loans"] - was["total_loans_exc_slc"]
+    # Non-mortgage, non-student-loan borrowing (personal loans, credit, etc.).
+    was["consumer_debt"] = was["total_loans_exc_slc"]
     was["region"] = was["region"].map(REGIONS)
     return was
 
@@ -347,7 +359,10 @@ def impute_wealth(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
                 person=dataset.person,
             )
             continue
-        dataset.household[column] = output_df[column].values
+        values = output_df[column]
+        if column in DEBT_COLUMNS:
+            values = values.clip(lower=0)  # a liability cannot be negative
+        dataset.household[column] = values.values
 
     dataset.validate()
 
