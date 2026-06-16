@@ -599,9 +599,16 @@ def generate_lcfs_table(lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame)
     # Recorded household-level only — LCFS has no person-level fare field — so
     # this is the household total; allocating to individuals (e.g. for an
     # age-targeted fare reform) requires an external age-usage profile (NTS).
+    # Sum whichever of the granular sub-codes are present: they are sparse and
+    # the exact set can vary across LCFS vintages. A wholesale disappearance
+    # (all zero) is caught by the bus_fare_spending aggregate smoke test.
     household["bus_fare_spending"] = sum(
-        pd.to_numeric(household[code], errors="coerce").fillna(0)
-        for code in BUS_FARE_LCFS_CODES
+        (
+            pd.to_numeric(household[code], errors="coerce").fillna(0)
+            for code in BUS_FARE_LCFS_CODES
+            if code in household.columns
+        ),
+        pd.Series(0.0, index=household.index),
     )
 
     # Annualise weekly LCFS values. Use the same WEEKS_IN_YEAR constant
