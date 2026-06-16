@@ -146,6 +146,15 @@ CONSUMPTION_VARIABLE_RENAMES = {
     "p537": "domestic_energy_consumption",  # aggregate kept for backward compat
 }
 
+# LCFS detailed COICOP codes for passenger transport by road (7.3.2): bus and
+# coach fares. There is no single P-code for bus fares alone — P607
+# (transport_consumption) bundles vehicle purchase, running costs, fuel, air and
+# rail — so bus_fare_spending is summed from the detailed 7.3.2 codes. Excludes
+# rail (7.3.1, c731xx), air (7.3.3), combined tickets (7.3.5) and taxis (7.3.6).
+# Codes verified present in the LCFS 2021/22 dvhh file; see the LCFS data
+# dictionary for sub-code definitions.
+BUS_FARE_LCFS_CODES = ["c73212", "c73213", "c73214"]
+
 PREDICTOR_VARIABLES = [
     "is_adult",
     "is_child",
@@ -174,6 +183,7 @@ IMPUTATIONS = [
     "miscellaneous_consumption",
     "petrol_spending",
     "diesel_spending",
+    "bus_fare_spending",  # COICOP 7.3.2 bus & coach fares (see BUS_FARE_LCFS_CODES)
     "domestic_energy_consumption",  # aggregate; backward compat with price cap subsidy
     "electricity_consumption",
     "gas_consumption",
@@ -585,11 +595,21 @@ def generate_lcfs_table(lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame)
 
     household = household.rename(columns=CONSUMPTION_VARIABLE_RENAMES)
 
+    # Bus & coach fares (COICOP 7.3.2), summed from the detailed LCFS codes.
+    # Recorded household-level only — LCFS has no person-level fare field — so
+    # this is the household total; allocating to individuals (e.g. for an
+    # age-targeted fare reform) requires an external age-usage profile (NTS).
+    household["bus_fare_spending"] = sum(
+        pd.to_numeric(household[code], errors="coerce").fillna(0)
+        for code in BUS_FARE_LCFS_CODES
+    )
+
     # Annualise weekly LCFS values. Use the same WEEKS_IN_YEAR constant
     # (365.25 / 7 ≈ 52.1786) as `datasets/frs.py` rather than a bare `* 52`,
     # which underestimates annual totals by ~0.34% and skews VAT / energy
     # imputation targets against FRS income.
     annualise = list(CONSUMPTION_VARIABLE_RENAMES.values()) + [
+        "bus_fare_spending",
         "hbai_household_net_income",
         "household_gross_income",
         "electricity_consumption",
