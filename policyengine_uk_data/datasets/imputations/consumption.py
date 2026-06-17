@@ -146,13 +146,15 @@ CONSUMPTION_VARIABLE_RENAMES = {
     "p537": "domestic_energy_consumption",  # aggregate kept for backward compat
 }
 
-# LCFS detailed COICOP codes for passenger transport by road (7.3.2): bus and
-# coach fares. There is no single P-code for bus fares alone — P607
+# LCFS detailed COICOP codes for bus & coach fares (passenger transport by
+# road). There is no single P-code for bus fares alone — P607
 # (transport_consumption) bundles vehicle purchase, running costs, fuel, air and
-# rail — so bus_fare_spending is summed from the detailed 7.3.2 codes. Excludes
-# rail (7.3.1, c731xx), air (7.3.3), combined tickets (7.3.5) and taxis (7.3.6).
-# Codes verified present in the LCFS 2021/22 dvhh file; see the LCFS data
-# dictionary for sub-code definitions.
+# rail — so bus_fare_spending is summed from the detailed codes. Excludes rail
+# (c731xx), air, combined tickets and taxis (which the LCFS codes separately).
+# Present in the LCFS 2021/22 dvhh file; re-confirm against the data dictionary
+# whenever CURRENT_LCFS_RELEASE is bumped, as detailed sub-codes can change
+# between vintages (these resolve directly against the current release at build
+# time, so a renamed/removed code fails loudly rather than silently zeroing).
 BUS_FARE_LCFS_CODES = ["c73212", "c73213", "c73214"]
 
 PREDICTOR_VARIABLES = [
