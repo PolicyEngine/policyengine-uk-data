@@ -11,6 +11,7 @@ Sources:
 
 import io
 import logging
+import time
 from functools import lru_cache
 
 import openpyxl
@@ -37,12 +38,46 @@ _FY_COL_TO_YEAR = {
 }
 
 
-@lru_cache(maxsize=1)
+# OBR occasionally rate-limits CI runners (HTTP 429) or returns transient 5xx
+# errors. Retry with exponential backoff so a single throttled response does not
+# drop the whole OBR target set and red an unrelated build.
+_DOWNLOAD_MAX_ATTEMPTS = 4
+_DOWNLOAD_RETRY_STATUSES = {429, 500, 502, 503, 504}
+
+
+@lru_cache(maxsize=2)
 def _download_workbook(url: str) -> openpyxl.Workbook:
-    """Download an xlsx from OBR and return an openpyxl workbook."""
-    r = requests.get(url, headers=HEADERS, allow_redirects=True, timeout=60)
-    r.raise_for_status()
-    return openpyxl.load_workbook(io.BytesIO(r.content), data_only=False)
+    """Download an xlsx from OBR and return an openpyxl workbook.
+
+    Retries transient HTTP errors (429/5xx) and connection failures with
+    exponential backoff, honouring a numeric Retry-After header when present.
+    """
+    last_error: Exception | None = None
+    for attempt in range(_DOWNLOAD_MAX_ATTEMPTS):
+        wait = 2**attempt
+        try:
+            r = requests.get(url, headers=HEADERS, allow_redirects=True, timeout=60)
+        except requests.RequestException as e:
+            last_error = e  # connection/timeout — retryable
+        else:
+            if r.status_code not in _DOWNLOAD_RETRY_STATUSES:
+                r.raise_for_status()
+                return openpyxl.load_workbook(io.BytesIO(r.content), data_only=False)
+            last_error = requests.HTTPError(
+                f"{r.status_code} for url: {url}", response=r
+            )
+            retry_after = r.headers.get("Retry-After", "")
+            if retry_after.isdigit():
+                wait = int(retry_after)
+        if attempt < _DOWNLOAD_MAX_ATTEMPTS - 1:
+            logger.warning(
+                "OBR download %s failed (%s); retrying in %ss",
+                url,
+                last_error,
+                wait,
+            )
+            time.sleep(wait)
+    raise last_error
 
 
 def _read_row_values(ws, row_num: int, col_letters: list[str]) -> dict[int, float]:

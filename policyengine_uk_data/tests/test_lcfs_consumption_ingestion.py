@@ -30,6 +30,9 @@ def test_generate_lcfs_table_accepts_current_lowercase_tab_headers(monkeypatch):
             **{f"p{code}": [1.0] for code in range(601, 613)},
             "c72211": [5.0],
             "c72212": [6.0],
+            "c73212": [2.0],
+            "c73213": [3.0],
+            "c73214": [1.0],
         }
     )
     person = pd.DataFrame(
@@ -50,6 +53,8 @@ def test_generate_lcfs_table_accepts_current_lowercase_tab_headers(monkeypatch):
     assert result["accommodation_type"].iloc[0] == "HOUSE_SEMI_DETACHED"
     assert result["employment_income"].iloc[0] == 300.0 * WEEKS_IN_YEAR
     assert result["household_weight"].iloc[0] == 500
+    # Bus fare = sum of the COICOP 7.3.2 codes (2 + 3 + 1), annualised.
+    assert result["bus_fare_spending"].iloc[0] == 6.0 * WEEKS_IN_YEAR
     assert (
         result["domestic_energy_consumption"].iloc[0]
         == result["electricity_consumption"].iloc[0] + result["gas_consumption"].iloc[0]
