@@ -12,16 +12,14 @@ AGGREGATES = {
     # DfT Annual Bus Statistics (year ending March 2025) report GBP 3.4bn
     # passenger fare receipts for local bus services in England. The LCFS input
     # is UK household bus/coach fare spending, so this is an order-of-magnitude
-    # smoke target until a direct UK/GB household target is available.
-    "bus_fare_spending": 3.4e9,
+    # target. Enable once a dataset built with the bus_fare_spending imputation
+    # is published — the column is absent from the currently-released dataset.
+    # "bus_fare_spending": 3.4e9,
 }
 
 
 @pytest.mark.parametrize("variable", AGGREGATES.keys())
 def test_aggregates(baseline, variable: str):
-    if variable not in baseline.input_variables:
-        pytest.skip(f"{variable} is not present in the loaded dataset")
-
     estimate = baseline.calculate(variable, map_to="household", period=2025).sum()
 
     assert abs(estimate / AGGREGATES[variable] - 1) < 0.7, (
