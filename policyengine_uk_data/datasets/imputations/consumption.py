@@ -151,10 +151,11 @@ CONSUMPTION_VARIABLE_RENAMES = {
 # (transport_consumption) bundles vehicle purchase, running costs, fuel, air and
 # rail — so bus_fare_spending is summed from the detailed codes. Excludes rail
 # (c731xx), air, combined tickets and taxis (which the LCFS codes separately).
-# Present in the LCFS 2021/22 dvhh file; re-confirm against the data dictionary
-# whenever CURRENT_LCFS_RELEASE is bumped, as detailed sub-codes can change
-# between vintages (these resolve directly against the current release at build
-# time, so a renamed/removed code fails loudly rather than silently zeroing).
+# Confirmed present in the LCFS 2021/22 and 2023/24 (current release) dvhh
+# files; re-confirm whenever CURRENT_LCFS_RELEASE is bumped, as detailed
+# sub-codes can change between vintages (these resolve directly against the
+# current release at build time, so a renamed/removed code fails loudly rather
+# than silently zeroing).
 BUS_FARE_LCFS_CODES = ["c73212", "c73213", "c73214"]
 
 PREDICTOR_VARIABLES = [
