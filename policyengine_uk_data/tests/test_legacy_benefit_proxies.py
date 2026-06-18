@@ -427,6 +427,8 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
                 "eduma": 0,
                 "edumaamt": 0,
                 "empstati": 8,
+                "mjobsect": 0,
+                "sic": 0,
                 "fsbval": 0,
                 "fsfvval": 0,
                 "fsmval": 0,

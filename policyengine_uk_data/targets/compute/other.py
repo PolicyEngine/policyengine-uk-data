@@ -28,6 +28,13 @@ def compute_vehicles(target, ctx) -> np.ndarray:
     return (ctx.pe("num_vehicles") >= 2).astype(float)
 
 
+def compute_public_sector_employment(target, ctx) -> np.ndarray:
+    """Count people whose main job is in the public sector, per household."""
+    sector = ctx.pe_person("employment_sector")
+    is_public = (sector == "PUBLIC").astype(float)
+    return ctx.household_from_person(is_public)
+
+
 def compute_housing(target, ctx) -> np.ndarray:
     """Compute housing targets (mortgage, private rent, social rent)."""
     name = target.name

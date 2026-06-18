@@ -35,6 +35,7 @@ from policyengine_uk_data.targets.compute import (
     compute_person_support,
     compute_obr_council_tax,
     compute_pip_claimants,
+    compute_public_sector_employment,
     compute_regional_age,
     compute_savings_interest,
     compute_scotland_demographics,
@@ -275,6 +276,10 @@ def _compute_column(target: Target, ctx: _SimContext, year: int) -> np.ndarray |
         return compute_household_type(target, ctx)
     if target.variable == "tenure_type" and target.is_count:
         return compute_tenure(target, ctx)
+
+    # Public sector employment (ONS PSE)
+    if target.variable == "employment_sector" and target.is_count:
+        return compute_public_sector_employment(target, ctx)
 
     # Income bands (HMRC SPI)
     if target.breakdown_variable == "total_income":

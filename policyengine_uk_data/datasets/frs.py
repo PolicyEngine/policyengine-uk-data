@@ -749,6 +749,22 @@ def create_frs(
         person.empstati, 1, range(12), EMPLOYMENTS
     ).fillna("LONG_TERM_DISABLED")
 
+    # Add employer sector of the main job from FRS `mjobsect`
+    # (1 = private, 2 = public; missing/blank = not in paid work).
+    EMPLOYMENT_SECTORS = ["NOT_EMPLOYED", "PRIVATE", "PUBLIC"]
+    pe_person["employment_sector"] = categorical(
+        pd.to_numeric(person.mjobsect, errors="coerce"),
+        0,
+        [0, 1, 2],
+        EMPLOYMENT_SECTORS,
+    ).fillna("NOT_EMPLOYED")
+
+    # Standard Industrial Classification (2007) division of the main job from
+    # FRS `sic` (0 if unknown; 84 = public administration and defence).
+    pe_person["sic_industry_division"] = (
+        pd.to_numeric(person.sic, errors="coerce").fillna(0).clip(lower=0).astype(int)
+    )
+
     REGIONS = [
         "NORTH_EAST",
         "NORTH_WEST",
