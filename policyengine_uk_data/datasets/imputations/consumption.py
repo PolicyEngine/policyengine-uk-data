@@ -781,6 +781,51 @@ def calibrate_dataset_fuel_litre_proxies_to_road_fuel(
     )
 
 
+# England → UK uplift for England-only DfT bus figures: ONS mid-2023 population
+# ratio (UK 68.3M / England 57.7M ≈ 1.18), a best approximation since DfT
+# publishes no single GB/UK bus-finance total. Indicative — bus use per head
+# varies by nation. https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/populationestimates
+ENGLAND_TO_UK_POPULATION_UPLIFT = 68.3 / 57.7  # ≈ 1.18
+
+BUS_FARE_TARGETS = {
+    # DfT Annual Bus Statistics, year ending March 2025 (England), table
+    # BUS05aii: passenger fare receipts on local bus services were GBP 3.4bn
+    # (52% of GBP 6.6bn total operating revenue), uplifted England → UK by
+    # population (≈ GBP 4.0bn UK). Without anchoring, the imputed aggregate
+    # inherits the broader transport-consumption over-estimate (~GBP 10bn).
+    # https://www.gov.uk/government/statistics/annual-bus-statistics-year-ending-march-2025/annual-bus-statistics-year-ending-march-2025
+    2025: 3.4e9 * ENGLAND_TO_UK_POPULATION_UPLIFT,
+}
+
+
+def calibrate_bus_fare_spending(
+    dataset: UKSingleYearDataset,
+    time_period: int,
+) -> float | None:
+    """Scale bus_fare_spending to the DfT passenger-fare total (BUS_FARE_TARGETS)."""
+    target = BUS_FARE_TARGETS.get(time_period)
+    if target is None:
+        return None
+
+    original_time_period = dataset.time_period
+    dataset.time_period = str(original_time_period)
+    try:
+        simulation = Microsimulation(dataset=dataset)
+        actual = simulation.calculate(
+            "bus_fare_spending",
+            period=time_period,
+            map_to="household",
+        ).sum()
+    finally:
+        dataset.time_period = original_time_period
+    if actual <= 0:
+        raise ValueError(f"Cannot calibrate bus_fare_spending: aggregate is {actual}.")
+
+    scale = target / actual
+    dataset.household["bus_fare_spending"] *= scale
+    return scale
+
+
 def save_imputation_models():
     from policyengine_uk_data.utils.qrf import QRF
 

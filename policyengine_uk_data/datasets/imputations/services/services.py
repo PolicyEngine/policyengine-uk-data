@@ -21,6 +21,24 @@ RAIL_SUBSIDY_TARGETS = {
     2025: 21.6e9,
 }
 
+# England → UK uplift for England-only DfT bus figures. DfT publishes no single
+# GB/UK bus-finance total, so we scale by the ONS mid-2023 population ratio
+# (UK 68.3M / England 57.7M ≈ 1.18) as a best approximation. This is indicative:
+# bus use per head varies by nation (London lifts England's per-capita use), so
+# the true UK factor is likely a little below the population ratio.
+# ONS mid-year population estimates:
+# https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/populationestimates
+ENGLAND_TO_UK_POPULATION_UPLIFT = 68.3 / 57.7  # ≈ 1.18
+
+BUS_SUBSIDY_TARGETS = {
+    # DfT Annual Bus Statistics, year ending March 2025 (England), table
+    # BUS05bii: total net government support for local bus services was
+    # GBP 3.0bn (of which GBP 0.8bn concessionary travel reimbursement),
+    # uplifted England → UK by population (≈ GBP 3.5bn UK).
+    # https://www.gov.uk/government/statistics/annual-bus-statistics-year-ending-march-2025/annual-bus-statistics-year-ending-march-2025
+    2025: 3.0e9 * ENGLAND_TO_UK_POPULATION_UPLIFT,
+}
+
 
 def get_fare_index_survey_year() -> float:
     """
@@ -63,6 +81,36 @@ def calibrate_rail_subsidy_spending(
     dataset.household["rail_usage"] *= scale
     if "rail_subsidy_spending" in dataset.household:
         dataset.household["rail_subsidy_spending"] *= scale
+    return scale
+
+
+def calibrate_bus_subsidy_spending(
+    dataset: UKSingleYearDataset,
+    time_period: int,
+) -> float | None:
+    """Scale bus_subsidy_spending to the DfT net-support total (BUS_SUBSIDY_TARGETS)."""
+    target = BUS_SUBSIDY_TARGETS.get(time_period)
+    if target is None:
+        return None
+
+    original_time_period = dataset.time_period
+    dataset.time_period = str(original_time_period)
+    try:
+        simulation = Microsimulation(dataset=dataset)
+        actual = simulation.calculate(
+            "bus_subsidy_spending",
+            period=time_period,
+            map_to="household",
+        ).sum()
+    finally:
+        dataset.time_period = original_time_period
+    if actual <= 0:
+        raise ValueError(
+            f"Cannot calibrate bus_subsidy_spending: aggregate is {actual}."
+        )
+
+    scale = target / actual
+    dataset.household["bus_subsidy_spending"] *= scale
     return scale
 
 
