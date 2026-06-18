@@ -762,10 +762,7 @@ def create_frs(
     # Standard Industrial Classification (2007) division of the main job from
     # FRS `sic` (0 if unknown; 84 = public administration and defence).
     pe_person["sic_industry_division"] = (
-        pd.to_numeric(person.sic, errors="coerce")
-        .fillna(0)
-        .clip(lower=0)
-        .astype(int)
+        pd.to_numeric(person.sic, errors="coerce").fillna(0).clip(lower=0).astype(int)
     )
 
     REGIONS = [
