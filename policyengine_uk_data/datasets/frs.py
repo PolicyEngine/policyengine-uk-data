@@ -752,23 +752,18 @@ def create_frs(
     # Add employer sector of the main job from FRS `mjobsect`
     # (1 = private, 2 = public; missing/blank = not in paid work).
     EMPLOYMENT_SECTORS = ["NOT_EMPLOYED", "PRIVATE", "PUBLIC"]
-    mjobsect = (
-        pd.to_numeric(person.mjobsect, errors="coerce")
-        if "mjobsect" in person.columns
-        else pd.Series(0, index=person.index)
-    )
     pe_person["employment_sector"] = categorical(
-        mjobsect, 0, [0, 1, 2], EMPLOYMENT_SECTORS
+        pd.to_numeric(person.mjobsect, errors="coerce"),
+        0,
+        [0, 1, 2],
+        EMPLOYMENT_SECTORS,
     ).fillna("NOT_EMPLOYED")
 
     # Standard Industrial Classification (2007) division of the main job from
     # FRS `sic` (0 if unknown; 84 = public administration and defence).
-    sic = (
-        pd.to_numeric(person.sic, errors="coerce")
-        if "sic" in person.columns
-        else pd.Series(0, index=person.index)
+    pe_person["sic_industry_division"] = (
+        pd.to_numeric(person.sic, errors="coerce").fillna(0).clip(lower=0).astype(int)
     )
-    pe_person["sic_industry_division"] = sic.fillna(0).clip(lower=0).astype(int)
 
     REGIONS = [
         "NORTH_EAST",
