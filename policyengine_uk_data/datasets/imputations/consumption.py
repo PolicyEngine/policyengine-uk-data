@@ -781,16 +781,20 @@ def calibrate_dataset_fuel_litre_proxies_to_road_fuel(
     )
 
 
+# England → UK uplift for England-only DfT bus figures: ONS mid-2023 population
+# ratio (UK 68.3M / England 57.7M ≈ 1.18), a best approximation since DfT
+# publishes no single GB/UK bus-finance total. Indicative — bus use per head
+# varies by nation. https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/populationestimates
+ENGLAND_TO_UK_POPULATION_UPLIFT = 68.3 / 57.7  # ≈ 1.18
+
 BUS_FARE_TARGETS = {
     # DfT Annual Bus Statistics, year ending March 2025 (England), table
     # BUS05aii: passenger fare receipts on local bus services were GBP 3.4bn
-    # (52% of GBP 6.6bn total operating revenue).
+    # (52% of GBP 6.6bn total operating revenue), uplifted England → UK by
+    # population (≈ GBP 4.0bn UK). Without anchoring, the imputed aggregate
+    # inherits the broader transport-consumption over-estimate (~GBP 10bn).
     # https://www.gov.uk/government/statistics/annual-bus-statistics-year-ending-march-2025/annual-bus-statistics-year-ending-march-2025
-    # England-coverage figure used as the UK anchor: DfT publishes no single
-    # GB/UK total and GB/UK would be ~10-20% higher. Without this the imputed
-    # aggregate inherits the broader transport-consumption over-estimate
-    # (~GBP 10bn, ~3x too high).
-    2025: 3.4e9,
+    2025: 3.4e9 * ENGLAND_TO_UK_POPULATION_UPLIFT,
 }
 
 

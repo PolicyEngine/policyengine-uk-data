@@ -7,14 +7,14 @@ AGGREGATES = {
     # support to the rail industry in 2024-25.
     "rail_subsidy_spending": 21.6e9,
     # DfT Annual Bus Statistics (year ending March 2025, England), table
-    # BUS05bii: total net government support for local bus services ~GBP 3.0bn.
-    # bus_subsidy_spending is calibrated to this in the build.
-    "bus_subsidy_spending": 3.0e9,
+    # BUS05bii: net government support ~GBP 3.0bn, uplifted England→UK by
+    # population (~GBP 3.5bn). bus_subsidy_spending is calibrated to this.
+    "bus_subsidy_spending": 3.0e9 * 68.3 / 57.7,
     # DfT Annual Bus Statistics (year ending March 2025, England), table
-    # BUS05aii: passenger fare receipts ~GBP 3.4bn. bus_fare_spending is
-    # calibrated to this in the build. Enable once a dataset built with that
-    # calibration is published (the released dataset predates it).
-    # "bus_fare_spending": 3.4e9,
+    # BUS05aii: passenger fare receipts ~GBP 3.4bn, uplifted England→UK by
+    # population (~GBP 4.0bn). bus_fare_spending is calibrated to this. Enable
+    # once a dataset built with that calibration is published (released predates).
+    # "bus_fare_spending": 3.4e9 * 68.3 / 57.7,
 }
 
 

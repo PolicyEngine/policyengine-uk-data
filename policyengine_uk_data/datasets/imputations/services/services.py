@@ -21,15 +21,22 @@ RAIL_SUBSIDY_TARGETS = {
     2025: 21.6e9,
 }
 
+# England → UK uplift for England-only DfT bus figures. DfT publishes no single
+# GB/UK bus-finance total, so we scale by the ONS mid-2023 population ratio
+# (UK 68.3M / England 57.7M ≈ 1.18) as a best approximation. This is indicative:
+# bus use per head varies by nation (London lifts England's per-capita use), so
+# the true UK factor is likely a little below the population ratio.
+# ONS mid-year population estimates:
+# https://www.ons.gov.uk/peoplepopulationandcommunity/populationandmigration/populationestimates
+ENGLAND_TO_UK_POPULATION_UPLIFT = 68.3 / 57.7  # ≈ 1.18
+
 BUS_SUBSIDY_TARGETS = {
     # DfT Annual Bus Statistics, year ending March 2025 (England), table
     # BUS05bii: total net government support for local bus services was
-    # GBP 3.0bn (of which GBP 0.8bn concessionary travel reimbursement).
+    # GBP 3.0bn (of which GBP 0.8bn concessionary travel reimbursement),
+    # uplifted England → UK by population (≈ GBP 3.5bn UK).
     # https://www.gov.uk/government/statistics/annual-bus-statistics-year-ending-march-2025/annual-bus-statistics-year-ending-march-2025
-    # England-coverage figure used as the UK anchor: DfT publishes no single
-    # GB/UK total and GB/UK would be ~10-20% higher, but this is far better
-    # than the unanchored aggregate, which drifts well below the true total.
-    2025: 3.0e9,
+    2025: 3.0e9 * ENGLAND_TO_UK_POPULATION_UPLIFT,
 }
 
 
