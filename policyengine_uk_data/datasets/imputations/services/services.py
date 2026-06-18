@@ -21,6 +21,17 @@ RAIL_SUBSIDY_TARGETS = {
     2025: 21.6e9,
 }
 
+BUS_SUBSIDY_TARGETS = {
+    # DfT Annual Bus Statistics, year ending March 2025 (England), table
+    # BUS05bii: total net government support for local bus services was
+    # GBP 3.0bn (of which GBP 0.8bn concessionary travel reimbursement).
+    # https://www.gov.uk/government/statistics/annual-bus-statistics-year-ending-march-2025/annual-bus-statistics-year-ending-march-2025
+    # England-coverage figure used as the UK anchor: DfT publishes no single
+    # GB/UK total and GB/UK would be ~10-20% higher, but this is far better
+    # than the unanchored aggregate, which drifts well below the true total.
+    2025: 3.0e9,
+}
+
 
 def get_fare_index_survey_year() -> float:
     """
@@ -63,6 +74,36 @@ def calibrate_rail_subsidy_spending(
     dataset.household["rail_usage"] *= scale
     if "rail_subsidy_spending" in dataset.household:
         dataset.household["rail_subsidy_spending"] *= scale
+    return scale
+
+
+def calibrate_bus_subsidy_spending(
+    dataset: UKSingleYearDataset,
+    time_period: int,
+) -> float | None:
+    """Scale bus_subsidy_spending to the DfT net-support total (BUS_SUBSIDY_TARGETS)."""
+    target = BUS_SUBSIDY_TARGETS.get(time_period)
+    if target is None or "bus_subsidy_spending" not in dataset.household:
+        return None
+
+    original_time_period = dataset.time_period
+    dataset.time_period = str(original_time_period)
+    try:
+        simulation = Microsimulation(dataset=dataset)
+        actual = simulation.calculate(
+            "bus_subsidy_spending",
+            period=time_period,
+            map_to="household",
+        ).sum()
+    finally:
+        dataset.time_period = original_time_period
+    if actual <= 0:
+        raise ValueError(
+            f"Cannot calibrate bus_subsidy_spending: aggregate is {actual}."
+        )
+
+    scale = target / actual
+    dataset.household["bus_subsidy_spending"] *= scale
     return scale
 
 

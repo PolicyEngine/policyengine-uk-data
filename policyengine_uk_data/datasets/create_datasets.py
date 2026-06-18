@@ -292,9 +292,14 @@ def main():
             update_dataset("Calibrate public service aggregates", "processing")
             from policyengine_uk_data.datasets.imputations.services.services import (
                 calibrate_rail_subsidy_spending,
+                calibrate_bus_subsidy_spending,
             )
 
             calibrate_rail_subsidy_spending(
+                frs_calibrated,
+                frs_release.calibration_year,
+            )
+            calibrate_bus_subsidy_spending(
                 frs_calibrated,
                 frs_release.calibration_year,
             )
@@ -303,9 +308,14 @@ def main():
             update_dataset("Calibrate fuel litres", "processing")
             from policyengine_uk_data.datasets.imputations.consumption import (
                 calibrate_dataset_fuel_litre_proxies_to_road_fuel,
+                calibrate_bus_fare_spending,
             )
 
             calibrate_dataset_fuel_litre_proxies_to_road_fuel(frs_calibrated)
+            calibrate_bus_fare_spending(
+                frs_calibrated,
+                frs_release.calibration_year,
+            )
             update_dataset("Calibrate fuel litres", "completed")
 
             update_dataset("Save final dataset", "processing")
