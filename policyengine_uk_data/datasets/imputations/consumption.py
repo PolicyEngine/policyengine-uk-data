@@ -804,7 +804,7 @@ def calibrate_bus_fare_spending(
 ) -> float | None:
     """Scale bus_fare_spending to the DfT passenger-fare total (BUS_FARE_TARGETS)."""
     target = BUS_FARE_TARGETS.get(time_period)
-    if target is None or "bus_fare_spending" not in dataset.household:
+    if target is None:
         return None
 
     original_time_period = dataset.time_period

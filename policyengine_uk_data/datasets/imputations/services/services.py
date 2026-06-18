@@ -90,7 +90,7 @@ def calibrate_bus_subsidy_spending(
 ) -> float | None:
     """Scale bus_subsidy_spending to the DfT net-support total (BUS_SUBSIDY_TARGETS)."""
     target = BUS_SUBSIDY_TARGETS.get(time_period)
-    if target is None or "bus_subsidy_spending" not in dataset.household:
+    if target is None:
         return None
 
     original_time_period = dataset.time_period
