@@ -1,4 +1,3 @@
-import os
 from dataclasses import dataclass
 
 
@@ -51,7 +50,7 @@ class FRSRelease:
         return f"{self.tiny_enhanced_dataset_name}.h5"
 
 
-FRS_2024_25 = FRSRelease(
+CURRENT_FRS_RELEASE = FRSRelease(
     name="frs_2024_25",
     survey_year=2024,
     base_year=2024,
@@ -67,47 +66,3 @@ FRS_2024_25 = FRSRelease(
     ),
     ukds_tab_subdir="UKDA-9563-tab/tab",
 )
-
-# FRS 2023-24 (UKDS SN 9252). The raw tabs live flat at the root of the HF
-# `frs_2023_24.zip`, so the extractor's flat-file fallback handles them (the
-# UKDA-9252 subdir below is provenance only). The zip filename/sha256 here
-# describe the HuggingFace prerequisite the build actually downloads; neither
-# is verified at build time. Provided so the 2023-24 enhanced FRS can be
-# rebuilt with the current loader (which now populates employment_sector and
-# sic_industry_division), then published by the data controller.
-FRS_2023_24 = FRSRelease(
-    name="frs_2023_24",
-    survey_year=2023,
-    base_year=2023,
-    calibration_year=2024,
-    ukds_study_number=9252,
-    doi="http://doi.org/10.5255/UKDA-SN-9252-1",
-    ukds_tab_zip_filename="frs_2023_24.zip",
-    ukds_tab_zip_sha256=(
-        "86843cef448510d3b54aa1218a3bf17f5804c1af91a7a71f31176c231b2f1058"
-    ),
-    ukds_tab_subdir="UKDA-9252-tab/tab",
-)
-
-RELEASES = {release.name: release for release in (FRS_2024_25, FRS_2023_24)}
-
-DEFAULT_FRS_RELEASE = "frs_2024_25"
-
-
-def get_frs_release() -> FRSRelease:
-    """Resolve the FRS release to build/load.
-
-    Defaults to the current release (2024-25). Set the
-    ``PE_UK_DATA_FRS_RELEASE`` environment variable (e.g. ``frs_2023_24``) to
-    target another release without editing code — used to rebuild and publish
-    an earlier enhanced FRS with the current loader.
-    """
-    name = os.environ.get("PE_UK_DATA_FRS_RELEASE", DEFAULT_FRS_RELEASE)
-    if name not in RELEASES:
-        raise ValueError(
-            f"Unknown FRS release {name!r}; choose from {sorted(RELEASES)}."
-        )
-    return RELEASES[name]
-
-
-CURRENT_FRS_RELEASE = get_frs_release()
