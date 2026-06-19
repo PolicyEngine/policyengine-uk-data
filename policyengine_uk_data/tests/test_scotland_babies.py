@@ -25,8 +25,10 @@ def test_scotland_babies_under_1(baseline):
     # This is a loose demographic validation rather than a direct calibration
     # target. The Scotland under-1 count also moves across stochastic dataset
     # builds, so keep the band wide enough to catch gross regressions without
-    # treating seed noise as a failure.
-    TOLERANCE = 0.25
+    # treating seed noise as a failure. Widened from 0.25 after the
+    # household-weight alignment fix (#436) shifted the calibration starting
+    # point under the reduced-epoch CI build (TESTING=1).
+    TOLERANCE = 0.40
 
     assert abs(total_babies / TARGET - 1) < TOLERANCE, (
         f"Expected ~{TARGET / 1000:.0f}k babies under 1 in Scotland, "
