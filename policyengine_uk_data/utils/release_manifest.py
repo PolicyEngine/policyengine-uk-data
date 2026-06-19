@@ -27,12 +27,17 @@ def _compute_file_checksum(file_path: Path) -> str:
 
 
 def _artifact_key(path_in_repo: str) -> str:
-    return str(PurePosixPath(path_in_repo).with_suffix(""))
+    path = PurePosixPath(path_in_repo)
+    if path.name.endswith(".csv.gz"):
+        return str(path.with_suffix("").with_suffix(""))
+    return str(path.with_suffix(""))
 
 
 def _artifact_kind(path_in_repo: str) -> str:
     path = PurePosixPath(path_in_repo)
     suffix = path.suffix.lower()
+    if "weight" in path.stem:
+        return "weights"
     if suffix == ".h5":
         if "weight" in path.stem:
             return "weights"

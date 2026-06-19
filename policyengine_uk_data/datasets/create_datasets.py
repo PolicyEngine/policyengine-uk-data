@@ -103,6 +103,7 @@ def main():
             "Clone and assign OA geography",
             "Calibrate constituency weights",
             "Calibrate local authority weights",
+            "Export long local geography weights",
             "Calibrate public service aggregates",
             "Calibrate fuel litres",
             "Save final dataset",
@@ -279,6 +280,18 @@ def main():
             )
             update_dataset("Calibrate local authority weights", "completed")
 
+            update_dataset("Export long local geography weights", "processing")
+            from policyengine_uk_data.calibration.long_geography import (
+                LONG_GEOGRAPHY_WEIGHTS_FILE,
+                write_long_geography_weights,
+            )
+
+            write_long_geography_weights(
+                dataset=frs_calibrated_constituencies,
+                output_path=STORAGE_FOLDER / LONG_GEOGRAPHY_WEIGHTS_FILE,
+            )
+            update_dataset("Export long local geography weights", "completed")
+
             frs_calibrated = frs_calibrated_constituencies
             if materialize_base_year:
                 update_dataset(materialize_step, "processing")
@@ -349,6 +362,7 @@ def main():
                 "enhanced_dataset": frs_release.enhanced_dataset_file,
                 "tiny_base_dataset": frs_release.tiny_base_dataset_file,
                 "tiny_enhanced_dataset": frs_release.tiny_enhanced_dataset_file,
+                "long_geography_weights": "local_geography_weights.csv.gz",
                 "imputations_applied": "consumption, wealth, VAT, services, income, capital_gains, salary_sacrifice, student_loan_plan",
                 "calibration": "national, LA and  constituency targets",
             },

@@ -20,7 +20,6 @@ from policyengine_uk.data import UKSingleYearDataset
 
 from policyengine_uk_data.calibration.oa_assignment import (
     assign_random_geography,
-    GeographyAssignment,
 )
 
 logger = logging.getLogger(__name__)
@@ -98,8 +97,6 @@ def clone_and_assign(
     benunit = dataset.benunit
 
     n_households = len(hh)
-    n_persons = len(person)
-    n_benunits = len(benunit)
 
     logger.info(
         "Cloning %d households x %d = %d total records",
@@ -192,6 +189,9 @@ def clone_and_assign(
 
         # Clone household table
         hh_clone = hh.copy()
+        hh_clone["source_household_id"] = hh_id_col
+        if "source_year" not in hh_clone.columns:
+            hh_clone["source_year"] = dataset.time_period
         hh_clone["household_id"] = new_hh_ids
         hh_clone["household_weight"] = hh["household_weight"].values / n_clones
 

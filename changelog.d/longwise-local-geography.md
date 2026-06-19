@@ -1,0 +1,1 @@
+- Add an OA-first long-format local geography weights artifact (`local_geography_weights.csv.gz`) so UK constituency and local-authority consumers can migrate away from dense area-by-household weight matrices.

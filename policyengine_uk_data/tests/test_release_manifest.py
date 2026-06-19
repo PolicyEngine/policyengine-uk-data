@@ -113,12 +113,17 @@ def test_build_release_manifest_tracks_uk_release_artifacts(tmp_path):
         tmp_path / "local_authority_weights.h5",
         weights_bytes,
     )
+    long_weights_path = _write_file(
+        tmp_path / "local_geography_weights.csv.gz",
+        b"long-geography-weights",
+    )
 
     manifest = build_release_manifest(
         files_with_repo_paths=[
             (enhanced_path, "enhanced_frs_2023_24.h5"),
             (baseline_path, "frs_2023_24.h5"),
             (weights_path, "local_authority_weights.h5"),
+            (long_weights_path, "local_geography_weights.csv.gz"),
         ],
         version="1.40.4",
         repo_id=PRIVATE_REPO,
@@ -177,6 +182,10 @@ def test_build_release_manifest_tracks_uk_release_artifacts(tmp_path):
     )
     assert manifest["artifacts"]["frs_2023_24"]["sha256"] == _sha256(baseline_bytes)
     assert manifest["artifacts"]["local_authority_weights"]["kind"] == "weights"
+    assert manifest["artifacts"]["local_geography_weights"]["kind"] == "weights"
+    assert manifest["artifacts"]["local_geography_weights"]["path"] == (
+        "local_geography_weights.csv.gz"
+    )
     assert manifest["artifacts"]["enhanced_frs_2023_24"]["uri"] == (
         f"hf://model/{PRIVATE_REPO}@1.40.4/enhanced_frs_2023_24.h5"
     )
