@@ -21,6 +21,9 @@ import numpy as np
 import pandas as pd
 
 from policyengine_uk_data.storage import STORAGE_FOLDER
+from policyengine_uk_data.calibration.long_geography import (
+    build_area_household_indices,
+)
 from policyengine_uk_data.utils.calibrate import default_weight_dataset_key
 
 logger = logging.getLogger(__name__)
@@ -43,19 +46,7 @@ def _get_area_household_indices(
     Returns:
         Dict mapping area code to array of household row indices.
     """
-    geo_col = "constituency_code_oa" if area_type == "constituency" else "la_code_oa"
-    hh_codes = dataset.household[geo_col].values
-
-    area_to_indices: dict[str, list[int]] = {code: [] for code in area_codes}
-    for j, code in enumerate(hh_codes):
-        code_str = str(code)
-        if code_str in area_to_indices:
-            area_to_indices[code_str].append(j)
-
-    return {
-        code: np.array(indices, dtype=np.int64)
-        for code, indices in area_to_indices.items()
-    }
+    return build_area_household_indices(dataset, area_type, area_codes)
 
 
 def _extract_entity_subset(
