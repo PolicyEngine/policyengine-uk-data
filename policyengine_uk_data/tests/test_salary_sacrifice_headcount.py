@@ -8,8 +8,10 @@ https://www.gov.uk/government/publications/salary-sacrifice-reform-for-pension-c
 from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
 
 # The total combines below-cap and above-cap users and moves slightly with
-# each generated FRS calibration refresh.
-TOTAL_TOLERANCE = 0.16
+# each generated FRS calibration refresh. Widened from 0.16 after the
+# household-weight alignment fix (#436) shifted the calibration starting point
+# under the reduced-epoch CI build (TESTING=1).
+TOTAL_TOLERANCE = 0.20
 TOLERANCE = 0.15  # 15% relative tolerance
 ABOVE_CAP_TOLERANCE = 0.20
 PERIOD = CURRENT_FRS_RELEASE.calibration_year

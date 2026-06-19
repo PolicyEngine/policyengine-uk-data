@@ -548,7 +548,14 @@ def create_frs(
     person = frs["person"]
     benunit = frs["benunit"]
     household = frs["househol"]
-    household = household.set_index("household_id")
+    # Sort by household_id so positional reads below (e.g.
+    # `household.gross4.values`) align with `pe_household["household_id"]`,
+    # which is built from the sorted unique person household ids. Without this
+    # the household grossing weight and every other household-level variable
+    # land on the wrong household whenever the raw FRS household table is not
+    # already ordered by sernum (the case from the 2024-25 FRS onward),
+    # scrambling weights and collapsing the population.
+    household = household.set_index("household_id").sort_index()
     pension = frs["pension"]
     oddjob = frs["oddjob"]
     account = frs["accounts"]
