@@ -72,3 +72,26 @@ def test_country_populations_sum_to_uk(baseline):
         f"Country populations sum to {country_sum / 1e6:.1f}M "
         f"but UK total is {uk_pop / 1e6:.1f}M."
     )
+
+
+# ONS 2024-based projection: UK 18-24 population ~5.4M for 2025. This by-age
+# check catches the household-weight alignment bug (PR #436): when the raw FRS
+# household table is not sorted by sernum (FRS 2024-25), grossing weights land
+# on the wrong households and the modelled young-adult population collapses
+# (18-24 fell to ~3.4M). The total-population test does NOT catch it because
+# calibration patches the *total* (and the 65+ band) while leaving 18-24
+# scrambled. Calibration doesn't pin single-age bands tightly, so this uses a
+# broad floor rather than a tight tolerance: ~3.4M (broken) vs ~4.5-5M (raw
+# 4.96M / fixed).
+YOUNG_ADULT_MIN_M = 4.0
+
+
+def test_young_adult_population_not_collapsed(baseline):
+    """18-24 population is not collapsed by misaligned household weights."""
+    age = baseline.calculate("age", PERIOD)
+    pop_18_24 = ((age >= 18) & (age <= 24)).sum() / 1e6
+    assert pop_18_24 > YOUNG_ADULT_MIN_M, (
+        f"Modelled 18-24 population {pop_18_24:.1f}M is below "
+        f"{YOUNG_ADULT_MIN_M}M (ONS ~5.4M) — household weights may be "
+        "misaligned (see PR #436)."
+    )
