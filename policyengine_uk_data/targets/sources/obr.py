@@ -103,8 +103,7 @@ def _find_receipts_sheet(wb):
         if title and "current receipts" in str(title).lower():
             return wb[name]
     raise ValueError(
-        "OBR receipts: no worksheet titled 'Current receipts' found in "
-        f"{wb.sheetnames}"
+        f"OBR receipts: no worksheet titled 'Current receipts' found in {wb.sheetnames}"
     )
 
 
