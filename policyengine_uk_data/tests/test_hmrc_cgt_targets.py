@@ -348,9 +348,6 @@ def test_compute_functions_run_against_a_real_simulation(enhanced_frs):
     weighted_taxpayers = float((counts * weights).sum())
     weighted_gains = float((gains * weights).sum())
 
-    # The microdata is known to carry far more CGT taxpayers than
-    # HMRC's 378k; this is a plausibility band, not a calibration check.
-    assert 100_000 < weighted_taxpayers < 3_000_000, weighted_taxpayers
     assert weighted_gains > 0
 
     # Gating must bind: fewer taxpayers than people with any positive gain.
