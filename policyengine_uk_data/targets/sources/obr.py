@@ -97,13 +97,35 @@ def _find_receipts_sheet(wb):
     EFO releases renumber their tables between vintages. Referring to a sheet by
     number means a renumbering turns every lookup on it into a silent no-op, so
     the sheet is matched on its title instead.
+
+    Several sheets mention "receipts" (e.g. "Other receipts", "Property
+    transactions taxes: Receipts by sector"), so the match is on the full
+    "current receipts" phrase. If a future vintage makes that ambiguous, prefer
+    the cash-basis sheet and otherwise raise rather than silently taking
+    whichever happens to come first.
     """
-    for name in wb.sheetnames:
-        title = wb[name].cell(row=2, column=2).value
-        if title and "current receipts" in str(title).lower():
-            return wb[name]
+    matches = [
+        name
+        for name in wb.sheetnames
+        if (title := wb[name].cell(row=2, column=2).value)
+        and "current receipts" in str(title).lower()
+    ]
+    if not matches:
+        raise ValueError(
+            f"OBR receipts: no worksheet titled 'Current receipts' found in {wb.sheetnames}"
+        )
+    if len(matches) == 1:
+        return wb[matches[0]]
+    cash = [
+        name
+        for name in matches
+        if "cash" in str(wb[name].cell(row=2, column=2).value).lower()
+    ]
+    if len(cash) == 1:
+        return wb[cash[0]]
     raise ValueError(
-        f"OBR receipts: no worksheet titled 'Current receipts' found in {wb.sheetnames}"
+        "OBR receipts: could not identify a single current-receipts sheet; "
+        f"candidates were {matches}. Refusing to guess."
     )
 
 
@@ -120,8 +142,9 @@ def _parse_receipts(wb: openpyxl.Workbook) -> list[Target]:
     """Parse tax receipts from the OBR EFO.
 
     Income tax uses Table 3.4 (accrued basis) for consistency with
-    the standard fiscal forecasting convention. Other receipts use
-    Table 3.9 (cash basis) since they only appear there.
+    the standard fiscal forecasting convention. Other receipts use the
+    current-receipts table (cash basis) since they only appear there; that
+    table is located by title because EFO vintages renumber the sheets.
     """
     config = load_config()
     vintage = config["obr"]["vintage"]
@@ -186,12 +209,13 @@ def _parse_receipts(wb: openpyxl.Workbook) -> list[Target]:
         "sdlt": ("Stamp duty land tax", "stamp_duty_land_tax"),
     }
 
-    missing: list[str] = []
+    recovered: list[str] = []
     for name, (label, variable) in cash_rows.items():
         try:
             row_num = _find_row(ws39, label, col="B", max_row=80)
             values = read_39(ws39, row_num)
             if values:
+                recovered.append(label)
                 targets.append(
                     Target(
                         name=f"obr/{name}",
@@ -205,14 +229,16 @@ def _parse_receipts(wb: openpyxl.Workbook) -> list[Target]:
                 )
         except ValueError:
             logger.warning("OBR receipts: row '%s' not found", label)
-            missing.append(label)
 
-    if len(missing) == len(cash_rows):
+    # Guard on targets actually produced, not on exceptions caught: a layout
+    # change that shifts the value columns finds every row and still yields
+    # nothing, which is the same silent failure by a different route.
+    if not recovered:
         raise ValueError(
             "OBR receipts: none of the cash-basis rows "
-            f"({', '.join(cash_rows[k][0] for k in cash_rows)}) were found on "
-            f"sheet '{ws39.title}'. The EFO layout has probably changed again; "
-            "silently dropping every receipts target is never correct."
+            f"({', '.join(cash_rows[k][0] for k in cash_rows)}) produced values "
+            f"on sheet '{ws39.title}'. The EFO layout has probably changed "
+            "again; silently dropping every receipts target is never correct."
         )
 
     return targets
