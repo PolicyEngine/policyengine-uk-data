@@ -1,0 +1,1 @@
+- Add HMRC capital gains calibration targets (`hmrc/capital_gains_total`, `hmrc/cgt_taxpayers`) so the calibration constrains the distribution of gains, not just CGT revenue. Both apply an annual-exempt-amount gate that tracks the policy year, matching HMRC's CGT-taxpayer concept.
