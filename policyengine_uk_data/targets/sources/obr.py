@@ -91,6 +91,23 @@ def _read_row_values(ws, row_num: int, col_letters: list[str]) -> dict[int, floa
     return result
 
 
+def _find_receipts_sheet(wb):
+    """Return the current-receipts worksheet, located by title.
+
+    EFO releases renumber their tables between vintages. Referring to a sheet by
+    number means a renumbering turns every lookup on it into a silent no-op, so
+    the sheet is matched on its title instead.
+    """
+    for name in wb.sheetnames:
+        title = wb[name].cell(row=2, column=2).value
+        if title and "current receipts" in str(title).lower():
+            return wb[name]
+    raise ValueError(
+        "OBR receipts: no worksheet titled 'Current receipts' found in "
+        f"{wb.sheetnames}"
+    )
+
+
 def _find_row(ws, label: str, col: str = "B", max_row: int = 80) -> int:
     """Find the row number where a cell starts with label."""
     for row in range(1, max_row + 1):
@@ -157,8 +174,11 @@ def _parse_receipts(wb: openpyxl.Workbook) -> list[Target]:
     except ValueError:
         logger.warning("OBR receipts: income tax row not found in 3.4")
 
-    # Other receipts from Table 3.9 (cash basis)
-    ws39 = wb["3.9"]
+    # Other receipts from the current-receipts table (cash basis). The sheet is
+    # located by title rather than number: EFO vintages renumber the tables, and
+    # in March 2026 current receipts moved to 3.8 while 3.9 became the APD
+    # forecast, which silently yielded no targets at all.
+    ws39 = _find_receipts_sheet(wb)
     cash_rows = {
         "ni": ("National insurance contributions", "ni_employee"),
         "vat": ("Value added tax", "vat"),
@@ -167,6 +187,7 @@ def _parse_receipts(wb: openpyxl.Workbook) -> list[Target]:
         "sdlt": ("Stamp duty land tax", "stamp_duty_land_tax"),
     }
 
+    missing: list[str] = []
     for name, (label, variable) in cash_rows.items():
         try:
             row_num = _find_row(ws39, label, col="B", max_row=80)
@@ -185,6 +206,15 @@ def _parse_receipts(wb: openpyxl.Workbook) -> list[Target]:
                 )
         except ValueError:
             logger.warning("OBR receipts: row '%s' not found", label)
+            missing.append(label)
+
+    if len(missing) == len(cash_rows):
+        raise ValueError(
+            "OBR receipts: none of the cash-basis rows "
+            f"({', '.join(cash_rows[k][0] for k in cash_rows)}) were found on "
+            f"sheet '{ws39.title}'. The EFO layout has probably changed again; "
+            "silently dropping every receipts target is never correct."
+        )
 
     return targets
 
