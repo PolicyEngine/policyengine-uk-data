@@ -65,13 +65,32 @@ _AGE_BANDS = [
     (80, 89),
 ]
 
+# Five-year bands. The previous 15-year bands (0-14, 15-29, ...) pinned only
+# the band totals, leaving the age composition *within* a band unconstrained
+# nationally: the calibration could satisfy 15-29 while starving 18-24, which
+# is what collapsed the modelled young-adult population to ~3.4M against ONS's
+# ~5.4M. Regional targets already use finer bands, but they do not constrain
+# the national weights. The ONS projection is published by single year of age,
+# so this is a change of aggregation only - no new source data.
 _GENDER_BANDS = [
-    (0, 14),
-    (15, 29),
-    (30, 44),
-    (45, 59),
-    (60, 74),
-    (75, 90),
+    (0, 4),
+    (5, 9),
+    (10, 14),
+    (15, 19),
+    (20, 24),
+    (25, 29),
+    (30, 34),
+    (35, 39),
+    (40, 44),
+    (45, 49),
+    (50, 54),
+    (55, 59),
+    (60, 64),
+    (65, 69),
+    (70, 74),
+    (75, 79),
+    (80, 84),
+    (85, 90),
 ]
 
 
@@ -186,7 +205,11 @@ def _parse_regional_from_csv() -> list[Target]:
 
     # Skip rows now handled by dedicated modules (ons_households.py,
     # ons_tenure.py) and rows handled elsewhere in this module
-    _SKIP_PREFIXES = ("tenure_", "scotland_households")
+    # female_/male_ rows in demographics.csv are the superseded 15-year gender
+    # bands. The live ONS projection now supplies five-year bands under the
+    # same naming scheme, so emitting the CSV rows as well would double-count
+    # the population and constrain overlapping ranges against each other.
+    _SKIP_PREFIXES = ("tenure_", "scotland_households", "female_", "male_")
     _SKIP_NAMES = {
         "couple_3_plus_children_households",
         "couple_no_children_households",
