@@ -1,0 +1,1 @@
+- Narrow the national gender x age calibration targets from 15-year to five-year bands. The wide bands pinned only their own totals, leaving age composition inside them unconstrained nationally, which collapsed the modelled 18-24 population to ~3.4M against ONS's ~5.4M. Also skip the superseded 15-year rows in `demographics.csv` so the two sets cannot double-count.
