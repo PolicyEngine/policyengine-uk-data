@@ -158,3 +158,146 @@ def impute_capital_gains(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
 
     data.validate()
     return data
+
+
+# --- HMRC size-band donor stack ------------------------------------------
+#
+# The Advani & Summers spline stops at each income band's p95, so the
+# imputation above cannot produce the large gains HMRC observes: in the
+# built data no individual gain exceeds ~£2m, while HMRC attributes ~61% of
+# all chargeable gains to gains of £1m or more (Capital Gains Tax
+# statistics, Table 2.1a). Calibration cannot fix that on its own — there
+# are no records carrying large gains for it to upweight.
+#
+# Following the SPI synthetic-household precedent in income.py, we stack a
+# small set of donor households, one group per HMRC size-of-gain band, each
+# carrying that band's published mean gain. Calibration then adjusts how
+# much weight each band's donors receive, pulled by the per-band HMRC
+# targets in targets/sources/hmrc_cgt.py.
+#
+# Donors enter at the weight that already reproduces the published band —
+# band taxpayer count / DONORS_PER_BAND — NOT at zero. Zero-weight rows are
+# given an equal share of prior mass by calibrate.initialize_weight_priors
+# (the SPI mechanism), which for donors carrying multi-million-pound gains
+# injected ~£2.3trn of initial gains in a CI build and left calibration
+# 18x over the band targets. On-target initial weights make the band
+# estimates start at the published values, so calibration only fine-tunes.
+#
+# Donor households are sampled with probability proportional to
+# percent_with_gains at their first adult's total income (the same Advani &
+# Summers table used above), so large gains land on the income profiles
+# most likely to realise gains rather than on uniformly random households.
+
+HMRC_SIZE_BANDS_FILE = "capital_gains_size_distribution_hmrc.csv"
+DONORS_PER_BAND = 300
+_DONOR_SEED = 1
+# HMRC's rows below £12,300 mix AEA regimes and are definitionally
+# incomplete (see the CSV header note); the spline body already covers
+# gains of that size, so donors start at the £12,300 band.
+_MIN_DONOR_BAND_LOWER = 12_300
+
+
+def load_hmrc_size_bands() -> pd.DataFrame:
+    """HMRC Table 2.1a size-of-gain bands used for donors and targets."""
+    bands = pd.read_csv(STORAGE_FOLDER / HMRC_SIZE_BANDS_FILE, comment="#")
+    bands = bands[bands.lower_limit >= _MIN_DONOR_BAND_LOWER].reset_index(drop=True)
+    bands["upper_limit"] = bands.lower_limit.shift(-1).fillna(np.inf)
+    bands["taxpayers"] = bands.taxpayers_thousands * 1e3
+    bands["gains"] = bands.gains_gbp_millions * 1e6
+    bands["mean_gain"] = bands.gains / bands.taxpayers
+    return bands
+
+
+def stack_cgt_band_donors(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
+    """Stack donor households carrying HMRC band mean gains at band-exact
+    initial weights."""
+    from policyengine_uk import Microsimulation
+
+    dataset = dataset.copy()
+    dataset.household["household_is_cgt_band_donor"] = False
+    if "capital_gains" not in dataset.person.columns:
+        dataset.person["capital_gains"] = 0.0
+
+    bands = load_hmrc_size_bands()
+    rng = np.random.default_rng(_DONOR_SEED)
+
+    sim = Microsimulation(dataset=dataset)
+    ti = sim.calculate("total_income").values
+    first_adult = sim.calculate("adult_index").values == 1
+
+    fa_household_id = dataset.person.person_household_id.values[first_adult]
+    fa_income = ti[first_adult]
+    income_band = (
+        np.searchsorted(
+            capital_gains.minimum_total_income.values, fa_income, side="right"
+        )
+        - 1
+    )
+    propensity = capital_gains.percent_with_gains.values[
+        np.clip(income_band, 0, len(capital_gains) - 1)
+    ]
+
+    n_donors = DONORS_PER_BAND * len(bands)
+    selected = rng.choice(
+        fa_household_id,
+        size=min(n_donors, len(fa_household_id)),
+        replace=False,
+        p=propensity / propensity.sum(),
+    )
+    band_of_household = dict(
+        zip(
+            selected,
+            np.repeat(bands.mean_gain.values, DONORS_PER_BAND)[: len(selected)],
+        )
+    )
+    # Initial weight per donor reproduces the band's published taxpayer
+    # count exactly (see module comment above).
+    weight_of_household = dict(
+        zip(
+            selected,
+            np.repeat(bands.taxpayers.values / DONORS_PER_BAND, DONORS_PER_BAND)[
+                : len(selected)
+            ],
+        )
+    )
+
+    person_filter = dataset.person.person_household_id.isin(selected)
+    donor_person = dataset.person[person_filter].reset_index(drop=True).copy()
+    donor_benunit = (
+        dataset.benunit[dataset.benunit.benunit_id.isin(donor_person.person_benunit_id)]
+        .reset_index(drop=True)
+        .copy()
+    )
+    donor_household = (
+        dataset.household[dataset.household.household_id.isin(selected)]
+        .reset_index(drop=True)
+        .copy()
+    )
+
+    donor_household["household_weight"] = (
+        donor_household.household_id.map(weight_of_household).fillna(0.0).values
+    )
+    donor_household["household_is_cgt_band_donor"] = True
+
+    # The band mean gain goes to each donor household's first adult;
+    # everyone else in the household carries no gain, mirroring the
+    # one-gainer-per-household convention of the imputation above.
+    donor_first_adult = first_adult[person_filter.values]
+    donor_person["capital_gains"] = 0.0
+    donor_gains = (
+        donor_person.person_household_id.map(band_of_household).fillna(0.0).values
+    )
+    donor_person.loc[donor_first_adult, "capital_gains"] = donor_gains[
+        donor_first_adult
+    ]
+
+    donor = UKSingleYearDataset(
+        person=donor_person,
+        benunit=donor_benunit,
+        household=donor_household,
+        fiscal_year=dataset.time_period,
+    )
+
+    data = stack_datasets(dataset, donor)
+    data.validate()
+    return data
