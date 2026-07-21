@@ -1,0 +1,39 @@
+# HMRC Capital Gains Tax statistics, Table 2.1a: estimated number of taxpayers,
+# amounts of gains and tax liabilities by size of gain, for individuals,
+# 2023 to 2024 tax year (provisional).
+#
+# Collection: https://www.gov.uk/government/statistics/capital-gains-tax-statistics
+# File:       Table_2_2025_Size_of_gain.ods, sheet "2_1a_2023-24"
+# URL:        https://assets.publishing.service.gov.uk/media/6878ac562bad77c3dae4dcef/Table_2_2025_Size_of_gain.ods
+# Published:  24 July 2025 release.
+#
+# Committed rather than downloaded at build time because the asset URL embeds a
+# content hash that changes with every HMRC release, so it is not a stable
+# fetch target. This follows the precedent in
+# policyengine_uk_data/targets/sources/ons_demographics.py.
+#
+# Units: taxpayers in thousands, gains in £ millions, as published.
+#
+# IMPORTANT DEFINITIONAL NOTE: HMRC's published figures "only include taxpayers
+# who have a CGT liability". They are therefore not the same population as
+# "everyone with gains above the annual exempt amount", and are narrower than
+# the set of people carrying a positive imputed gain in the microdata. The
+# under-£12,300 rows are correspondingly small and should not be read as the
+# true count of people with small gains.
+#
+# Trailing "All" row is the published total and may not equal the sum of the
+# bands due to rounding.
+lower_limit,taxpayers_thousands,gains_gbp_millions,tax_gbp_millions
+0,2,1,9
+3000,0,1,0
+6000,61,461,18
+10000,23,251,20
+12300,79,1418,169
+25000,74,2645,423
+50000,53,3731,706
+100000,37,5649,1077
+250000,14,4766,826
+500000,8,5705,895
+1000000,5,6390,1067
+2000000,3,9189,1718
+5000000,2,22714,4532

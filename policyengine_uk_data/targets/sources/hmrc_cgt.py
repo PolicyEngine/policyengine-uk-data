@@ -138,6 +138,103 @@ def _project_gains(base_value: float) -> dict[int, float]:
     return values
 
 
+# --- Size-of-gain band targets --------------------------------------------
+#
+# The aggregate count and total above cannot, on their own, constrain the
+# *shape* of the gains distribution: the published enhanced FRS carried
+# only ~1.6% of gains in gains of £1m+ against HMRC's ~61%, while still
+# being able to satisfy an aggregate total. HMRC Table 2.1a (committed as
+# capital_gains_size_distribution_hmrc.csv) publishes taxpayer counts and
+# gains by size of gain, so each band becomes a target pair. The
+# zero-weight donor households stacked in
+# datasets/imputations/capital_gains.py carry each band's mean gain, which
+# gives the calibration records it can weight to satisfy these targets.
+#
+# Bands below £12,300 are skipped: HMRC's sub-AEA rows mix exemption
+# regimes and are definitionally incomplete (see the CSV header), and the
+# spline-imputed body already covers small gains.
+
+_SIZE_BANDS_FILE = "capital_gains_size_distribution_hmrc.csv"
+_MIN_BAND_LOWER = 12_300
+
+
+def _load_size_bands():
+    import pandas as pd
+
+    from policyengine_uk_data.storage import STORAGE_FOLDER
+
+    bands = pd.read_csv(STORAGE_FOLDER / _SIZE_BANDS_FILE, comment="#")
+    bands = bands[bands.lower_limit >= _MIN_BAND_LOWER].reset_index(drop=True)
+    bands["upper_limit"] = bands.lower_limit.shift(-1).fillna(np.inf)
+    return bands
+
+
+def _band_mask(ctx, year: int, lower: float, upper: float) -> np.ndarray:
+    """People whose above-AEA gains fall inside [lower, upper)."""
+    gains = np.asarray(ctx.pe_person("capital_gains"), dtype=float)
+    aea = _annual_exempt_amount(ctx, year)
+    return (gains > aea) & (gains >= lower) & (gains < upper)
+
+
+def _make_band_count_compute(lower: float, upper: float):
+    def compute(ctx, target: Target, year: int) -> np.ndarray:
+        mask = _band_mask(ctx, year, lower, upper)
+        return np.asarray(
+            ctx.household_from_person(mask.astype(float)), dtype=float
+        )
+
+    return compute
+
+
+def _make_band_gains_compute(lower: float, upper: float):
+    def compute(ctx, target: Target, year: int) -> np.ndarray:
+        gains = np.asarray(ctx.pe_person("capital_gains"), dtype=float)
+        mask = _band_mask(ctx, year, lower, upper)
+        return np.asarray(
+            ctx.household_from_person(gains * mask), dtype=float
+        )
+
+    return compute
+
+
+def _band_targets(reference_url: str) -> list[Target]:
+    targets = []
+    for row in _load_size_bands().itertuples():
+        lower = float(row.lower_limit)
+        upper = float(row.upper_limit)
+        count = float(row.taxpayers_thousands) * 1e3
+        gains = float(row.gains_gbp_millions) * 1e6
+        label = f"{int(lower)}"
+        targets.append(
+            Target(
+                name=f"hmrc/cgt_taxpayers_band_{label}",
+                variable="capital_gains",
+                source="hmrc",
+                unit=Unit.COUNT,
+                values={
+                    year: count for year in range(_CGT_BASE_YEAR, _MAX_YEAR + 1)
+                },
+                is_count=True,
+                reference_url=reference_url,
+                forecast_vintage="2023-24 outturn",
+                custom_compute=_make_band_count_compute(lower, upper),
+            )
+        )
+        targets.append(
+            Target(
+                name=f"hmrc/capital_gains_band_{label}",
+                variable="capital_gains",
+                source="hmrc",
+                unit=Unit.GBP,
+                values=_project_gains(gains),
+                reference_url=reference_url,
+                forecast_vintage="2023-24 outturn",
+                custom_compute=_make_band_gains_compute(lower, upper),
+            )
+        )
+    return targets
+
+
 def get_targets() -> list[Target]:
     try:
         reference_url = load_config()["hmrc"]["capital_gains_statistics"]
@@ -174,4 +271,4 @@ def get_targets() -> list[Target]:
             forecast_vintage="2023-24 outturn",
             custom_compute=compute_cgt_taxpayers,
         ),
-    ]
+    ] + _band_targets(reference_url)

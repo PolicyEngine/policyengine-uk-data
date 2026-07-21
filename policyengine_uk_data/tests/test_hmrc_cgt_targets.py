@@ -91,7 +91,13 @@ def test_aea_tracks_the_year():
 
 def test_targets_load_with_expected_base_year_values():
     targets = {t.name: t for t in get_targets()}
-    assert set(targets) == {"hmrc/capital_gains_total", "hmrc/cgt_taxpayers"}
+    # Aggregate targets plus the per-size-band targets (tested in
+    # test_cgt_band_donors.py).
+    assert {"hmrc/capital_gains_total", "hmrc/cgt_taxpayers"} <= set(targets)
+    assert all(
+        name.startswith(("hmrc/capital_gains", "hmrc/cgt_taxpayers"))
+        for name in targets
+    )
 
     gains = targets["hmrc/capital_gains_total"]
     assert gains.values[_CGT_BASE_YEAR] == pytest.approx(_CGT_TOTAL_GAINS)

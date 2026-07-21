@@ -180,6 +180,14 @@ def main():
 
             update_dataset("Impute capital gains", "processing")
             frs = impute_capital_gains(frs)
+            # Zero-weight donors for the HMRC size-of-gain bands the spline
+            # cannot reach; weighted (or not) by calibration via the
+            # per-band targets in targets/sources/hmrc_cgt.py.
+            from policyengine_uk_data.datasets.imputations.capital_gains import (
+                stack_cgt_band_donors,
+            )
+
+            frs = stack_cgt_band_donors(frs)
             update_dataset("Impute capital gains", "completed")
 
             update_dataset("Impute salary sacrifice", "processing")
@@ -363,7 +371,7 @@ def main():
                 "tiny_base_dataset": frs_release.tiny_base_dataset_file,
                 "tiny_enhanced_dataset": frs_release.tiny_enhanced_dataset_file,
                 "long_geography_weights": "local_geography_weights.csv.gz",
-                "imputations_applied": "consumption, wealth, VAT, services, income, capital_gains, salary_sacrifice, student_loan_plan",
+                "imputations_applied": "consumption, wealth, VAT, services, income, capital_gains, cgt_band_donors, salary_sacrifice, student_loan_plan",
                 "calibration": "national, LA and  constituency targets",
             },
         )
