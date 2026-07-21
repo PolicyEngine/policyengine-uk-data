@@ -189,7 +189,14 @@ def impute_capital_gains(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
 # most likely to realise gains rather than on uniformly random households.
 
 HMRC_SIZE_BANDS_FILE = "capital_gains_size_distribution_hmrc.csv"
-DONORS_PER_BAND = 300
+# Few, heavy donors rather than many light ones: the L0-regularised
+# calibration pays a gate penalty per active record, so a band represented
+# by 300 rows of weight ~7 is far more expensive to keep than 30 rows of
+# weight ~67 carrying the same band total. The first full build with 300
+# donors/band shrank donor weight ~8x and left the top bands 94-97% under
+# target; fewer gates make satisfying the band targets cheap for the
+# optimiser while donors still spread across income profiles.
+DONORS_PER_BAND = 30
 _DONOR_SEED = 1
 # HMRC's rows below £12,300 mix AEA regimes and are definitionally
 # incomplete (see the CSV header note); the spline body already covers
