@@ -88,3 +88,7 @@ jobs:
 
       - name: Run tests
         run: uv run --frozen make test
+        env:
+          # Relaxes built-dataset outcome tolerances to match the reduced
+          # fidelity of the TESTING build above (see test_cgt_band_donors).
+          TESTING: "1"

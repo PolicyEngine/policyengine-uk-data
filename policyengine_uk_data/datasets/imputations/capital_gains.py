@@ -170,11 +170,18 @@ def impute_capital_gains(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
 # are no records carrying large gains for it to upweight.
 #
 # Following the SPI synthetic-household precedent in income.py, we stack a
-# small set of zero-weight donor households, one group per HMRC size-of-gain
-# band, each carrying that band's published mean gain. Calibration then
-# decides how much weight each band's donors receive, pulled by the
-# per-band HMRC targets in targets/sources/hmrc_cgt.py. At zero initial
-# weight the donors change nothing unless the calibration needs them.
+# small set of donor households, one group per HMRC size-of-gain band, each
+# carrying that band's published mean gain. Calibration then adjusts how
+# much weight each band's donors receive, pulled by the per-band HMRC
+# targets in targets/sources/hmrc_cgt.py.
+#
+# Donors enter at the weight that already reproduces the published band —
+# band taxpayer count / DONORS_PER_BAND — NOT at zero. Zero-weight rows are
+# given an equal share of prior mass by calibrate.initialize_weight_priors
+# (the SPI mechanism), which for donors carrying multi-million-pound gains
+# injected ~£2.3trn of initial gains in a CI build and left calibration
+# 18x over the band targets. On-target initial weights make the band
+# estimates start at the published values, so calibration only fine-tunes.
 #
 # Donor households are sampled with probability proportional to
 # percent_with_gains at their first adult's total income (the same Advani &
@@ -202,7 +209,8 @@ def load_hmrc_size_bands() -> pd.DataFrame:
 
 
 def stack_cgt_band_donors(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
-    """Stack zero-weight donor households carrying HMRC band mean gains."""
+    """Stack donor households carrying HMRC band mean gains at band-exact
+    initial weights."""
     from policyengine_uk import Microsimulation
 
     dataset = dataset.copy()
@@ -242,6 +250,16 @@ def stack_cgt_band_donors(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
             np.repeat(bands.mean_gain.values, DONORS_PER_BAND)[: len(selected)],
         )
     )
+    # Initial weight per donor reproduces the band's published taxpayer
+    # count exactly (see module comment above).
+    weight_of_household = dict(
+        zip(
+            selected,
+            np.repeat(bands.taxpayers.values / DONORS_PER_BAND, DONORS_PER_BAND)[
+                : len(selected)
+            ],
+        )
+    )
 
     person_filter = dataset.person.person_household_id.isin(selected)
     donor_person = dataset.person[person_filter].reset_index(drop=True).copy()
@@ -256,7 +274,9 @@ def stack_cgt_band_donors(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         .copy()
     )
 
-    donor_household["household_weight"] = 0.0
+    donor_household["household_weight"] = (
+        donor_household.household_id.map(weight_of_household).fillna(0.0).values
+    )
     donor_household["household_is_cgt_band_donor"] = True
 
     # The band mean gain goes to each donor household's first adult;
