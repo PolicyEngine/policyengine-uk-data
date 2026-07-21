@@ -121,3 +121,97 @@ def test_stack_cgt_band_donors(frs):
     # Every band is populated with its full donor allocation.
     counts = gainers.capital_gains.round(6).value_counts()
     assert (counts == DONORS_PER_BAND).all()
+
+
+# --- Outcome tests on the built dataset -----------------------------------
+#
+# These run against the built enhanced FRS (CI builds the datasets before
+# running the suite, so they bind there; locally they skip when the built
+# file is absent or predates the band-donor change). They pin the *result*:
+# the calibrated weights must reproduce HMRC's CGT statistics, not merely
+# be pulled toward them. Tolerances are deliberately loose enough for
+# calibration noise but tight enough to fail on the pre-change pathologies
+# they were written against (1.86m taxpayers vs HMRC's 378k; 1.6% of gains
+# from £1m+ gains vs HMRC's ~61%; no gain above ~£2m).
+
+# HMRC CGT statistics, 2023-24 outturn (Table 2.1a).
+_HMRC_TAXPAYERS = 378_000
+_HMRC_TOTAL_GAINS = 65.9e9
+_HMRC_SHARE_1M_PLUS = 0.61
+_AEA = 3_000
+
+
+def _built_with_band_donors(enhanced_frs):
+    if "household_is_cgt_band_donor" not in enhanced_frs.household.columns:
+        pytest.skip("enhanced FRS predates the CGT band donor stack")
+    return enhanced_frs
+
+
+def _person_gains_and_weights(enhanced_frs):
+    person = enhanced_frs.person
+    weights = person.person_household_id.map(
+        enhanced_frs.household.set_index("household_id").household_weight
+    ).values
+    return person.capital_gains.values, weights
+
+
+@pytest.mark.slow
+def test_built_band_donors_receive_weight(enhanced_frs):
+    """Calibration must actually use the donors, not leave them all at zero."""
+    enhanced_frs = _built_with_band_donors(enhanced_frs)
+    donors = enhanced_frs.household[enhanced_frs.household.household_is_cgt_band_donor]
+    assert len(donors) > 0
+    assert donors.household_weight.sum() > 0, (
+        "All band donors were pruned to zero weight; the per-band HMRC "
+        "targets are not binding."
+    )
+
+
+@pytest.mark.slow
+def test_built_cgt_taxpayer_count(enhanced_frs):
+    enhanced_frs = _built_with_band_donors(enhanced_frs)
+    gains, weights = _person_gains_and_weights(enhanced_frs)
+    taxpayers = float(weights[gains > _AEA].sum())
+    assert taxpayers < 2 * _HMRC_TAXPAYERS, (
+        f"{taxpayers / 1e3:.0f}k weighted CGT taxpayers against HMRC's "
+        f"{_HMRC_TAXPAYERS / 1e3:.0f}k; the count targets are not binding "
+        "(the pre-fix build carried 1.86m)."
+    )
+    assert taxpayers > 0.25 * _HMRC_TAXPAYERS, (
+        f"Only {taxpayers / 1e3:.0f}k weighted CGT taxpayers; calibration "
+        "has collapsed the gains distribution."
+    )
+
+
+@pytest.mark.slow
+def test_built_total_gains(enhanced_frs):
+    enhanced_frs = _built_with_band_donors(enhanced_frs)
+    gains, weights = _person_gains_and_weights(enhanced_frs)
+    total = float((gains * weights)[gains > _AEA].sum())
+    assert abs(total / _HMRC_TOTAL_GAINS - 1) < 0.5, (
+        f"£{total / 1e9:.1f}bn of above-AEA gains against HMRC's "
+        f"£{_HMRC_TOTAL_GAINS / 1e9:.1f}bn "
+        f"(relative error {abs(total / _HMRC_TOTAL_GAINS - 1):.0%})."
+    )
+
+
+@pytest.mark.slow
+def test_built_gains_concentration(enhanced_frs):
+    """The upper tail must exist and carry a realistic share of gains."""
+    enhanced_frs = _built_with_band_donors(enhanced_frs)
+    gains, weights = _person_gains_and_weights(enhanced_frs)
+    weighted = gains * weights
+    total = float(weighted[gains > _AEA].sum())
+    share_1m = float(weighted[gains >= 1e6].sum()) / total
+    assert gains.max() > 2e6, (
+        f"Largest gain is £{gains.max() / 1e6:.1f}m; the spline ceiling "
+        "(~£2m) is still binding, so the £2m+ HMRC bands are empty."
+    )
+    assert share_1m > 0.5 * _HMRC_SHARE_1M_PLUS, (
+        f"Gains of £1m+ carry {share_1m:.0%} of above-AEA gains against "
+        f"HMRC's ~{_HMRC_SHARE_1M_PLUS:.0%} (the pre-fix build carried 1.6%)."
+    )
+    assert share_1m < 0.9, (
+        f"Gains of £1m+ carry {share_1m:.0%} of gains; the tail has "
+        "overshot the published distribution."
+    )
