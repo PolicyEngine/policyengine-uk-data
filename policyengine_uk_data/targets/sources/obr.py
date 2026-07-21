@@ -45,12 +45,40 @@ _DOWNLOAD_MAX_ATTEMPTS = 4
 _DOWNLOAD_RETRY_STATUSES = {429, 500, 502, 503, 504}
 
 
+# obr.uk serves 403 Forbidden to GitHub Actions runner IPs (observed on the
+# 2026-07-21 push builds: every attempt 403'd while the same URLs work from
+# residential connections). A 403 is not retryable, and losing the workbook
+# silently drops 28 OBR targets and calibrates a degraded dataset. The EFO
+# workbooks for the vintage pinned in sources.yaml are therefore committed
+# under storage/obr_efo/ — following the committed-not-fetched precedent of
+# capital_gains_size_distribution_hmrc.csv and ons_demographics.py — and
+# used as a fallback whenever the download fails. Update them together with
+# the sources.yaml URLs when a new EFO vintage is adopted.
+_EFO_FALLBACKS = {
+    "receipts": "efo_receipts.xlsx",
+    "expenditure": "efo_expenditure.xlsx",
+}
+
+
+def _fallback_workbook(url: str) -> openpyxl.Workbook | None:
+    from policyengine_uk_data.storage import STORAGE_FOLDER
+
+    for slug, filename in _EFO_FALLBACKS.items():
+        if slug in url:
+            path = STORAGE_FOLDER / "obr_efo" / filename
+            if path.exists():
+                return openpyxl.load_workbook(path, data_only=False)
+    return None
+
+
 @lru_cache(maxsize=2)
 def _download_workbook(url: str) -> openpyxl.Workbook:
     """Download an xlsx from OBR and return an openpyxl workbook.
 
     Retries transient HTTP errors (429/5xx) and connection failures with
-    exponential backoff, honouring a numeric Retry-After header when present.
+    exponential backoff, honouring a numeric Retry-After header when
+    present. Falls back to the committed workbook in storage/obr_efo/ when
+    the download ultimately fails (obr.uk 403s CI runner IPs).
     """
     last_error: Exception | None = None
     for attempt in range(_DOWNLOAD_MAX_ATTEMPTS):
@@ -60,12 +88,13 @@ def _download_workbook(url: str) -> openpyxl.Workbook:
         except requests.RequestException as e:
             last_error = e  # connection/timeout — retryable
         else:
-            if r.status_code not in _DOWNLOAD_RETRY_STATUSES:
-                r.raise_for_status()
+            if r.status_code < 400:
                 return openpyxl.load_workbook(io.BytesIO(r.content), data_only=False)
             last_error = requests.HTTPError(
                 f"{r.status_code} for url: {url}", response=r
             )
+            if r.status_code not in _DOWNLOAD_RETRY_STATUSES:
+                break  # 403 and other permanent errors: don't burn retries
             retry_after = r.headers.get("Retry-After", "")
             if retry_after.isdigit():
                 wait = int(retry_after)
@@ -77,6 +106,14 @@ def _download_workbook(url: str) -> openpyxl.Workbook:
                 wait,
             )
             time.sleep(wait)
+    fallback = _fallback_workbook(url)
+    if fallback is not None:
+        logger.warning(
+            "OBR download %s failed (%s); using committed workbook fallback",
+            url,
+            last_error,
+        )
+        return fallback
     raise last_error
 
 
