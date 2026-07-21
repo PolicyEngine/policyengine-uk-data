@@ -188,6 +188,14 @@ def test_built_band_donors_receive_weight(enhanced_frs):
 
 @pytest.mark.slow
 def test_built_cgt_taxpayer_count(enhanced_frs):
+    if _REDUCED_BUILD_SLACK > 1:
+        # The taxpayer count converges slowly: the imputation hands a gain
+        # to an adult in every clone-half household, and pulling those
+        # weights down to HMRC's 378k is precisely what the full 512-epoch
+        # calibration achieves and a TESTING build (32 epochs) cannot —
+        # reduced builds sit near 5m no matter how the donors are seeded.
+        # The full push-workflow build runs this test with strict bounds.
+        pytest.skip("count convergence requires the full calibration")
     enhanced_frs = _built_with_band_donors(enhanced_frs)
     gains, weights = _person_gains_and_weights(enhanced_frs)
     taxpayers = float(weights[gains > _AEA].sum())
