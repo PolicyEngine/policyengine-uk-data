@@ -117,9 +117,7 @@ def test_stack_cgt_band_donors(frs):
     # One gainer per donor household, at exactly a band mean.
     assert gainers.person_household_id.is_unique
     assert len(gainers) == len(donors)
-    assert set(np.round(gainers.capital_gains, 6)) == set(
-        np.round(bands.mean_gain, 6)
-    )
+    assert set(np.round(gainers.capital_gains, 6)) == set(np.round(bands.mean_gain, 6))
     # Every band is populated with its full donor allocation.
     counts = gainers.capital_gains.round(6).value_counts()
     assert (counts == DONORS_PER_BAND).all()

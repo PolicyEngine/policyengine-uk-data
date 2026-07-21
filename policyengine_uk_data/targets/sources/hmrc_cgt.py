@@ -179,9 +179,7 @@ def _band_mask(ctx, year: int, lower: float, upper: float) -> np.ndarray:
 def _make_band_count_compute(lower: float, upper: float):
     def compute(ctx, target: Target, year: int) -> np.ndarray:
         mask = _band_mask(ctx, year, lower, upper)
-        return np.asarray(
-            ctx.household_from_person(mask.astype(float)), dtype=float
-        )
+        return np.asarray(ctx.household_from_person(mask.astype(float)), dtype=float)
 
     return compute
 
@@ -190,9 +188,7 @@ def _make_band_gains_compute(lower: float, upper: float):
     def compute(ctx, target: Target, year: int) -> np.ndarray:
         gains = np.asarray(ctx.pe_person("capital_gains"), dtype=float)
         mask = _band_mask(ctx, year, lower, upper)
-        return np.asarray(
-            ctx.household_from_person(gains * mask), dtype=float
-        )
+        return np.asarray(ctx.household_from_person(gains * mask), dtype=float)
 
     return compute
 
@@ -211,9 +207,7 @@ def _band_targets(reference_url: str) -> list[Target]:
                 variable="capital_gains",
                 source="hmrc",
                 unit=Unit.COUNT,
-                values={
-                    year: count for year in range(_CGT_BASE_YEAR, _MAX_YEAR + 1)
-                },
+                values={year: count for year in range(_CGT_BASE_YEAR, _MAX_YEAR + 1)},
                 is_count=True,
                 reference_url=reference_url,
                 forecast_vintage="2023-24 outturn",

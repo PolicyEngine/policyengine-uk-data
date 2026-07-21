@@ -237,7 +237,10 @@ def stack_cgt_band_donors(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         p=propensity / propensity.sum(),
     )
     band_of_household = dict(
-        zip(selected, np.repeat(bands.mean_gain.values, DONORS_PER_BAND)[: len(selected)])
+        zip(
+            selected,
+            np.repeat(bands.mean_gain.values, DONORS_PER_BAND)[: len(selected)],
+        )
     )
 
     person_filter = dataset.person.person_household_id.isin(selected)
@@ -261,8 +264,12 @@ def stack_cgt_band_donors(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     # one-gainer-per-household convention of the imputation above.
     donor_first_adult = first_adult[person_filter.values]
     donor_person["capital_gains"] = 0.0
-    donor_gains = donor_person.person_household_id.map(band_of_household).fillna(0.0).values
-    donor_person.loc[donor_first_adult, "capital_gains"] = donor_gains[donor_first_adult]
+    donor_gains = (
+        donor_person.person_household_id.map(band_of_household).fillna(0.0).values
+    )
+    donor_person.loc[donor_first_adult, "capital_gains"] = donor_gains[
+        donor_first_adult
+    ]
 
     donor = UKSingleYearDataset(
         person=donor_person,
