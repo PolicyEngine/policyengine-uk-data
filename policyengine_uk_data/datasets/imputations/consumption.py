@@ -797,12 +797,53 @@ BUS_FARE_TARGETS = {
     2025: 3.4e9 * ENGLAND_TO_UK_POPULATION_UPLIFT,
 }
 
+# DfT BUS05ai, year ending March 2025: England passenger fare receipts by area
+# — England GBP 3,417m, of which London GBP 1,347m and England outside London
+# GBP 2,070m. The LCFS imputation under-captures London fares (Oyster/
+# contactless spend is poorly separated in household diaries), and a
+# national-only calibration smears the shortfall across the other English
+# regions, overstating outside-London fare exposure by ~47%.
+# https://www.gov.uk/government/statistical-data-sets/bus-statistics-data-tables
+BUS_FARE_LONDON_SHARE_OF_ENGLAND = 1347 / 3417
+
+# NTS0705a 2024, 'Other local bus' (outside London) average trips per person
+# per year by household income quintile (England). Anchors the income
+# distribution of household fare spending, assuming a common average fare per
+# trip across quintiles: the raw LCFS spend gradient runs the wrong way
+# (richer households record more bus & coach spend, while NTS shows the lowest
+# quintile makes ~3.7x the local bus trips of the highest).
+# https://www.gov.uk/government/statistical-data-sets/nts07-car-ownership-and-access
+NTS_BUS_TRIPS_BY_INCOME_QUINTILE = {1: 47.6, 2: 37.5, 3: 24.8, 4: 18.5, 5: 13.0}
+
+ENGLAND_REGIONS_OUTSIDE_LONDON = {
+    "NORTH_EAST",
+    "NORTH_WEST",
+    "YORKSHIRE",
+    "EAST_MIDLANDS",
+    "WEST_MIDLANDS",
+    "EAST_OF_ENGLAND",
+    "SOUTH_EAST",
+    "SOUTH_WEST",
+}
+
 
 def calibrate_bus_fare_spending(
     dataset: UKSingleYearDataset,
     time_period: int,
 ) -> float | None:
-    """Scale bus_fare_spending to the DfT passenger-fare total (BUS_FARE_TARGETS)."""
+    """Calibrate bus_fare_spending to DfT and NTS anchors.
+
+    Three constraints, applied in order (the distributional anchors preserve
+    the national total):
+
+    1. National total: DfT BUS05aii passenger fare receipts (BUS_FARE_TARGETS).
+    2. Within-England regional split: DfT BUS05ai London / outside-London
+       receipts (BUS_FARE_LONDON_SHARE_OF_ENGLAND).
+    3. Income distribution: England quintile fare shares proportional to
+       population-weighted NTS0705a local-bus trip rates
+       (NTS_BUS_TRIPS_BY_INCOME_QUINTILE), alternated with (2) in a small
+       IPF loop.
+    """
     target = BUS_FARE_TARGETS.get(time_period)
     if target is None:
         return None
@@ -811,18 +852,86 @@ def calibrate_bus_fare_spending(
     dataset.time_period = str(original_time_period)
     try:
         simulation = Microsimulation(dataset=dataset)
-        actual = simulation.calculate(
+        fares = simulation.calculate(
             "bus_fare_spending",
             period=time_period,
             map_to="household",
-        ).sum()
+        )
+        actual = fares.sum()
+        region = np.array(
+            simulation.calculate(
+                "region", period=time_period, map_to="household"
+            ).values
+        ).astype(str)
+        decile = np.array(
+            simulation.calculate(
+                "household_income_decile", period=time_period, map_to="household"
+            ).values,
+            dtype=float,
+        )
+        people = np.array(
+            simulation.calculate(
+                "people", period=time_period, map_to="household"
+            ).values,
+            dtype=float,
+        )
+        weights = np.array(fares.weights, dtype=float)
     finally:
         dataset.time_period = original_time_period
     if actual <= 0:
         raise ValueError(f"Cannot calibrate bus_fare_spending: aggregate is {actual}.")
 
     scale = target / actual
-    dataset.household["bus_fare_spending"] *= scale
+    values = np.array(dataset.household["bus_fare_spending"], dtype=float) * scale
+
+    is_london = region == "LONDON"
+    outside_london = np.isin(region, list(ENGLAND_REGIONS_OUTSIDE_LONDON))
+    in_england = is_london | outside_london
+    quintile = np.where(
+        decile >= 1, np.clip(((decile - 1) // 2 + 1).astype(int), 1, 5), 0
+    )
+
+    def _wsum(mask_or_values):
+        return float((np.asarray(mask_or_values, dtype=float) * weights).sum())
+
+    england_total = _wsum(values * in_england)
+    quintile_population = {
+        q: _wsum(people * (in_england & (quintile == q)))
+        for q in NTS_BUS_TRIPS_BY_INCOME_QUINTILE
+    }
+    target_norm = sum(
+        quintile_population[q] * rate
+        for q, rate in NTS_BUS_TRIPS_BY_INCOME_QUINTILE.items()
+    )
+    for _ in range(3):
+        for q, rate in NTS_BUS_TRIPS_BY_INCOME_QUINTILE.items():
+            mask = in_england & (quintile == q)
+            current = _wsum(values * mask)
+            if current > 0:
+                quintile_target = (
+                    quintile_population[q] * rate / target_norm * england_total
+                )
+                values = np.where(mask, values * quintile_target / current, values)
+        london_actual = _wsum(values * is_london)
+        outside_actual = _wsum(values * outside_london)
+        if london_actual > 0 and outside_actual > 0:
+            values = np.where(
+                is_london,
+                values
+                * BUS_FARE_LONDON_SHARE_OF_ENGLAND
+                * england_total
+                / london_actual,
+                np.where(
+                    outside_london,
+                    values
+                    * (1 - BUS_FARE_LONDON_SHARE_OF_ENGLAND)
+                    * england_total
+                    / outside_actual,
+                    values,
+                ),
+            )
+
+    dataset.household["bus_fare_spending"] = values
     return scale
 
 
