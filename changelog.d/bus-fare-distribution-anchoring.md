@@ -1,0 +1,1 @@
+- Anchor the distribution of bus_fare_spending to DfT BUS05ai (London/outside-London receipts split) and NTS0705a (local-bus trip rates by income quintile), preserving the national BUS05aii total, with post-build validation tests.
