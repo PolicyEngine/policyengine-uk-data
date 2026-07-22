@@ -20,6 +20,8 @@ isolation. They lock in the anchors applied by
 
 from __future__ import annotations
 
+import os
+
 import numpy as np
 
 from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
@@ -31,8 +33,13 @@ from policyengine_uk_data.datasets.imputations.consumption import (
 )
 
 PERIOD = CURRENT_FRS_RELEASE.calibration_year
-TOTAL_TOLERANCE = 0.05
-SHARE_TOLERANCE = 0.03  # absolute share points on the London/England split
+# The anchoring is a deterministic post-processing rescale, but PR CI builds
+# with TESTING=1 (reduced calibration epochs), which shifts weights and decile
+# boundaries slightly relative to a full build — widen tolerances there, per
+# repo convention (cf. test_cgt_band_donors, test_salary_sacrifice_headcount).
+_REDUCED_BUILD = os.environ.get("TESTING") == "1"
+TOTAL_TOLERANCE = 0.10 if _REDUCED_BUILD else 0.05
+SHARE_TOLERANCE = 0.05 if _REDUCED_BUILD else 0.03  # abs points, London/England
 
 
 def _household_arrays(baseline):
