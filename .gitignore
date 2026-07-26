@@ -1,6 +1,9 @@
 *.egg-info
 **/__pycache__
 **/.DS_STORE
+**/.DS_Store
+**/__MACOSX
+**/._*
 **/*.h5
 **/*.csv
 **/*.zip
