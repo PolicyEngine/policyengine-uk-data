@@ -837,9 +837,7 @@ def create_frs(
         ),
         index=household.index,
     )
-    ctannual_tax_only = np.maximum(
-        household.ctannual - scottish_water_annual, 0
-    )
+    ctannual_tax_only = np.maximum(household.ctannual - scottish_water_annual, 0)
 
     # Only ~25% of household report Council Tax bills - use
     # these to build a model to impute missing values
