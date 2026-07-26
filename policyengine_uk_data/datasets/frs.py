@@ -817,6 +817,28 @@ def create_frs(
 
     # Impute Council Tax
 
+    # In Scotland, council tax bills are collected together with Scottish
+    # Water and sewerage charges, and the FRS CTANNUAL variable includes
+    # them. Net them off (they are weekly variables; CTANNUAL is annual) so
+    # council_tax is tax only: the water charges are already captured
+    # separately in water_and_sewerage_charges, so leaving them in both
+    # double-counts them and overstates Scottish council tax by roughly
+    # £500 per household (~25% of the Scottish total).
+    SCOTLAND_GVTREGNO = 12
+    scottish_water_annual = pd.Series(
+        np.where(
+            household.gvtregno == SCOTLAND_GVTREGNO,
+            (
+                np.maximum(household.csewamt.fillna(0), 0)
+                + np.maximum(household.cwatamtd.fillna(0), 0)
+            )
+            * (365.25 / 7),
+            0,
+        ),
+        index=household.index,
+    )
+    ctannual_tax_only = np.maximum(household.ctannual - scottish_water_annual, 0)
+
     # Only ~25% of household report Council Tax bills - use
     # these to build a model to impute missing values
     CT_valid = household.ctannual > 0
@@ -826,7 +848,7 @@ def create_frs(
     region = household.gvtregno[CT_valid]
     band = household.ctband[CT_valid]
     single_person = (household.adulth == 1)[CT_valid]
-    ctannual = household.ctannual[CT_valid]
+    ctannual = ctannual_tax_only[CT_valid]
 
     # Build the table
     ct_mean = ctannual.groupby([region, band, single_person], dropna=False).mean()
@@ -851,7 +873,7 @@ def create_frs(
             # uses -1 for missing values
             (household.ctannual < 0) | household.ctannual.isna(),
             np.maximum(ct_imputed, 0).values,
-            household.ctannual,
+            ctannual_tax_only,
         )
     )
     pe_household["council_tax"] = council_tax.fillna(0)

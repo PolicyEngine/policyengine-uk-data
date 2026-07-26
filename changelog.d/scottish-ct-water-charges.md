@@ -1,0 +1,1 @@
+Net Scottish Water and sewerage charges out of FRS-reported council tax (CTANNUAL includes them in Scotland), fixing a ~£500-per-household double count that overstated Scottish council tax by roughly 25% relative to Scottish Government receipts; the charges remain captured in water_and_sewerage_charges.
