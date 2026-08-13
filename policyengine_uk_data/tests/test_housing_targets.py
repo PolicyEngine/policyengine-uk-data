@@ -5,6 +5,8 @@ See: https://github.com/PolicyEngine/policyengine-uk-data/issues/317
 
 from policyengine_uk_data.targets.sources.housing import (
     _MORTGAGE_TOTAL,
+    _SOCIAL_RENT_HOUSEHOLDS,
+    _SOCIAL_RENT_WEEKLY_MEAN,
     _PRIVATE_RENT_TOTAL,
     _SOCIAL_RENT_TOTAL,
     get_targets,
@@ -24,15 +26,17 @@ def test_social_rent_total_in_range():
     assert 20e9 < _SOCIAL_RENT_TOTAL < 40e9
 
 
-def test_social_rent_basis_matches_published_ehs_mean():
-    """The social basis should track the latest published EHS mean.
+def test_social_rent_basis_components():
+    """Pin the documented EHS basis so a silent edit is visible in review.
 
-    EHS 2024-25 reports a £129/week mean social rent. Pinning this catches
-    the target silently going stale against a newer EHS release, which is
-    how it drifted ~10% low against its own 2025 target year.
+    This does NOT detect a newer EHS release — it only fails if someone
+    changes the constant without changing this pin. A real staleness check
+    would have to fetch EHS, as ons_tenure.py and ons_households.py do for
+    their sources. Tracked as future work in the module docstring.
     """
-    implied_weekly = _SOCIAL_RENT_TOTAL / 5.0e6 / 52
-    assert 125 < implied_weekly < 135, implied_weekly
+    assert _SOCIAL_RENT_WEEKLY_MEAN == 129  # EHS 2024-25
+    assert _SOCIAL_RENT_HOUSEHOLDS == 5.0e6
+    assert _SOCIAL_RENT_TOTAL == 129 * 52 * 5.0e6
 
 
 def test_mortgage_total_in_range():

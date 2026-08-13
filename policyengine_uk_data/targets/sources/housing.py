@@ -30,8 +30,11 @@ _PRIVATE_RENT_TOTAL = 1_374 * 12 * 5.4e6  # ~£89bn
 # Mortgage: avg £1,100/month × 7.5m owner-occupiers with mortgage
 _MORTGAGE_TOTAL = 1_100 * 12 * 7.5e6  # ~£99bn
 
-# Social rent: EHS 2024-25 mean £129/week × 52 × 5.0m UK social renters
-_SOCIAL_RENT_TOTAL = 129 * 52 * 5.0e6  # ~£33.5bn
+# Social rent basis, kept as named components so the arithmetic is auditable
+# and the vintage is explicit rather than buried in a product.
+_SOCIAL_RENT_WEEKLY_MEAN = 129  # EHS 2024-25 (was 118 in EHS 2023-24)
+_SOCIAL_RENT_HOUSEHOLDS = 5.0e6  # UK, derived: share x ONS household total
+_SOCIAL_RENT_TOTAL = _SOCIAL_RENT_WEEKLY_MEAN * 52 * _SOCIAL_RENT_HOUSEHOLDS
 
 _EHS_REF = (
     "https://www.gov.uk/government/statistics/"
