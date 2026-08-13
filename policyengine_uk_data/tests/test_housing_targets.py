@@ -20,8 +20,19 @@ def test_private_rent_total_in_range():
 
 
 def test_social_rent_total_in_range():
-    """Social rent total should be £20bn-£40bn (5.0m × ~£118/wk)."""
+    """Social rent total should be £20bn-£40bn (5.0m × ~£129/wk)."""
     assert 20e9 < _SOCIAL_RENT_TOTAL < 40e9
+
+
+def test_social_rent_basis_matches_published_ehs_mean():
+    """The social basis should track the latest published EHS mean.
+
+    EHS 2024-25 reports a £129/week mean social rent. Pinning this catches
+    the target silently going stale against a newer EHS release, which is
+    how it drifted ~10% low against its own 2025 target year.
+    """
+    implied_weekly = _SOCIAL_RENT_TOTAL / 5.0e6 / 52
+    assert 125 < implied_weekly < 135, implied_weekly
 
 
 def test_mortgage_total_in_range():
