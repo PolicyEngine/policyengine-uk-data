@@ -52,7 +52,6 @@ from policyengine_uk_data.targets.compute import (
     compute_two_child_limit,
     compute_uc_by_children,
     compute_uc_by_family_type,
-    compute_uc_jobseeker,
     compute_uc_outside_cap,
     compute_uc_payment_dist,
     compute_uk_population,
@@ -392,15 +391,6 @@ def _compute_column(target: Target, ctx: _SimContext, year: int) -> np.ndarray |
         "obr/salary_sacrifice_employer_ni_relief",
     ):
         return compute_ss_ni_relief(target, ctx)
-
-    # UC jobseeker splits
-    if name in (
-        "obr/universal_credit_jobseekers",
-        "obr/universal_credit_non_jobseekers",
-        "obr/universal_credit_jobseekers_count",
-        "obr/universal_credit_non_jobseekers_count",
-    ):
-        return compute_uc_jobseeker(target, ctx)
 
     # UC outside benefit cap
     if name == "obr/universal_credit_outside_cap":

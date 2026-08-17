@@ -8,6 +8,7 @@ Verifies that:
 """
 
 from policyengine_uk_data.targets import get_all_targets
+from policyengine_uk_data.targets.build_loss_matrix import _compute_column
 
 
 def test_registry_loads():
@@ -60,6 +61,24 @@ def test_dwp_pip_targets():
     names = {t.name for t in targets}
     assert "dwp/pip_dl_standard_claimants" in names
     assert "dwp/pip_dl_enhanced_claimants" in names
+
+
+def test_dwp_uc_households_target_uses_count_fallback():
+    """The UC household total should be registered and produce a matrix column."""
+    target = next(
+        target
+        for target in get_all_targets(year=2025)
+        if target.name == "dwp/uc/households"
+    )
+
+    class DummyCtx:
+        @staticmethod
+        def pe_count(variable):
+            assert variable == "universal_credit"
+            return [1, 0, 1]
+
+    assert target.values[2025] == 6.7e6
+    assert _compute_column(target, DummyCtx(), 2025) == [1, 0, 1]
 
 
 def test_voa_council_tax_targets():
