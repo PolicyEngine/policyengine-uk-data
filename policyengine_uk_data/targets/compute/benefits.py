@@ -98,24 +98,6 @@ def compute_uc_payment_dist(target, ctx) -> np.ndarray:
     return ctx.household_from_family(in_band)
 
 
-def compute_uc_jobseeker(target, ctx) -> np.ndarray:
-    """Compute UC jobseeker / non-jobseeker splits."""
-    family = ctx.sim.populations["benunit"]
-    uc = ctx.sim.calculate("universal_credit")
-    on_uc = uc > 0
-    unemployed = family.any(ctx.sim.calculate("employment_status") == "UNEMPLOYED")
-
-    if "non_jobseekers" in target.name:
-        mask = on_uc * ~unemployed
-    else:
-        mask = on_uc * unemployed
-
-    if "_count" in target.name:
-        return ctx.household_from_family(mask)
-    else:
-        return ctx.household_from_family(uc * mask)
-
-
 def compute_uc_outside_cap(target, ctx) -> np.ndarray:
     """Compute OBR UC outside benefit cap."""
     uc = ctx.sim.calculate("universal_credit")
