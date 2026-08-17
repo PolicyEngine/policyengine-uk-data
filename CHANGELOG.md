@@ -1,3 +1,10 @@
+## [1.56.15] - 2026-08-17
+
+### Fixed
+
+- Correct Universal Credit caseload calibration by preserving the published family-type values, adding explicit 2025 and 2026 household totals from DWP deductions statistics, and removing dead OBR jobseeker-split dispatch logic.
+
+
 ## [1.56.14] - 2026-07-26
 
 No significant changes.
