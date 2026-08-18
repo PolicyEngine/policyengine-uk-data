@@ -546,7 +546,12 @@ def create_frs(
     frs["person"] = pd.concat([frs["adult"], frs["child"]]).sort_index().fillna(0)
 
     person = frs["person"]
-    benunit = frs["benunit"]
+    # Sort by benunit_id for the same reason the household table is sorted
+    # below: the model declares benunit entities in sorted-id order
+    # (np.unique(benunit_id)), so if the raw table order differs (the case
+    # from the 2024-25 FRS onward), every benunit-level variable — including
+    # benunit_id itself — lands on the wrong benefit unit.
+    benunit = frs["benunit"].sort_values("benunit_id").reset_index(drop=True)
     household = frs["househol"]
     # Sort by household_id so positional reads below (e.g.
     # `household.gross4.values`) align with `pe_household["household_id"]`,
@@ -1478,7 +1483,7 @@ def create_frs(
 
     # Add marital status at the benefit unit level
 
-    pe_benunit["is_married"] = frs["benunit"].famtypb2.isin([5, 7])
+    pe_benunit["is_married"] = benunit.famtypb2.isin([5, 7])
 
     # Assign property_purchased to a share of households matching the UK
     # housing transaction rate, so only genuine purchasers are charged SDLT.
