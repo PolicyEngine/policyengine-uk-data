@@ -4,13 +4,18 @@ Single source of truth, imported by both the take-up optimisation
 (``takeup_rate.py``) and the test that checks the built dataset against these
 targets. They were previously duplicated, and had drifted: the test still
 asserted the 0.6 / 660 Tax-Free Childcare targets from the September 2024
-release after ``takeup_rate.py`` had moved to 0.63 / 985.
+release after ``takeup_rate.py`` had moved to the June 2025 figures.
 
 TFC targets are from HMRC "Tax-Free Childcare statistics: June 2025"
 (published 27 August 2025, covering the 2024-25 outturn):
 
   - spending: £632.2m (Table 1, annual government top-up)
-  - caseload: 985 thousand children received TFC in 2024-25 (annual unique)
+  - caseload: 1,085 thousand children with used accounts in 2024-25 (Table 2)
+
+The caseload target was previously recorded as 985 thousand, citing the same
+release. That release reports 1,085,020 children with used accounts in
+2024-25, unrevised in the March 2026 release, and 985,000 does not appear
+anywhere in it. Corrected here to match the cited source.
 
 The prior 0.6 / 660 targets were calibrated against the September 2024 release
 (2023-24 outturn) and have since been overtaken by the TFC account expansion
@@ -28,7 +33,7 @@ TARGETS = {
         "universal": 1.7,
     },
     "caseload": {
-        "tfc": 985,
+        "tfc": 1_085,
         "extended": 740,
         "targeted": 130,
         "universal": 490,
@@ -45,8 +50,8 @@ TOLERANCE = 0.4
 # failing, and so that closing the gap is a visible change.
 KNOWN_MISSES = {
     ("spending", "tfc"): (
-        "TFC spending is ~1.9x its target while caseload is on target, so the "
-        "gap is the average award rather than take-up. No uniform take-up rate "
-        "hits both. See PolicyEngine/policyengine-uk-data#470."
+        "TFC spending is ~1.9x its target while caseload is within 2% of its "
+        "own, so the gap is the average award rather than take-up. No uniform "
+        "take-up rate hits both. See PolicyEngine/policyengine-uk-data#470."
     ),
 }
