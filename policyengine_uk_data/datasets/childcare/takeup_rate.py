@@ -2,49 +2,17 @@ import numpy as np
 from scipy.optimize import minimize
 from policyengine_uk import Microsimulation
 from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
+from policyengine_uk_data.datasets.childcare.targets import TARGETS
 from policyengine_uk_data.utils.hf_destinations import PRIVATE_REPO
 
 ENHANCED_FRS_DATASET = (
     f"hf://{PRIVATE_REPO}/{CURRENT_FRS_RELEASE.enhanced_dataset_file}"
 )
 
-# 🎯 Calibration targets
-#
-# TFC targets refreshed from HMRC "Tax-Free Childcare statistics: June 2025"
-# (published 27 Aug 2025, covering 2024-25 outturn):
-#   - spending: £632.2 m (Table 1, annual government top-up)
-#   - caseload: 985 thousand children received TFC in 2024-25 (annual unique)
-# The prior 0.6 / 660 targets were calibrated against the Sep 2024 release
-# (2023-24 outturn) and have since been overtaken by the TFC account
-# expansion and the Sep 2025 "30 free hours for under-5s" boost in uptake.
-#
-# Other programme targets kept at their prior DfE values.
-targets = {
-    "spending": {
-        "tfc": 0.63,
-        "extended": 2.5,
-        "targeted": 0.6,
-        "universal": 1.7,
-    },
-    "caseload": {
-        "tfc": 985,
-        "extended": 740,
-        "targeted": 130,
-        "universal": 490,
-    },
-}
-
-# UK government aggregate Tax-Free Childcare statistics:
-# https://www.gov.uk/government/statistics/tax-free-childcare-statistics-june-2025
-
-# This is the Department for Education (DfE) data for the other childcare programmes:
-# https://skillsfunding.service.gov.uk/view-latest-funding/national-funding-allocations/DSG/2024-to-2025
-
-# For our calculations, please refer to this file:
-# https://docs.google.com/spreadsheets/d/1HLwxCJAJQNHa64peQFfV47MuNqoOHBJ9lnFENXMTguE/edit?gid=2100110594#gid=2100110594
+# 🎯 Calibration targets — see childcare/targets.py for sourcing.
+targets = TARGETS
 
 
-# 📦 Simulation runner
 def simulate_childcare_programs(
     params: list[float], seed: int = 42
 ) -> tuple[dict[str, float], dict[str, float]]:
