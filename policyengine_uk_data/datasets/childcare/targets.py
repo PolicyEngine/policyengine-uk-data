@@ -89,22 +89,57 @@ than a calibration error, and no change to these targets addresses it.
 published figures in a follow-up change; see "Funded early education and
 childcare", reporting year 2026
 (https://explore-education-statistics.service.gov.uk/find-statistics/funded-early-education-and-childcare/2026).
+**Universal and early learning for 2-year-olds.** From DfE, "Funded early
+education and childcare", reporting year 2026, national figures for January
+2024 (``data/headline_figures_feeac_2011_2026.csv`` in the release bundle):
+https://explore-education-statistics.service.gov.uk/find-statistics/funded-early-education-and-childcare/2026
+
+  registered for the universal entitlement, excluding reception   778,327
+  registered for the working parent entitlement, aged 3 to 4      361,790
+  => registered for the universal entitlement only                416,537
+
+  early learning for 2-year-olds, registered                      115,852
+  early learning for 2-year-olds, eligible                        154,957
+
+The universal figure nets off the working parent entitlement because
+``universal_childcare_entitlement_eligible`` in policyengine-uk ends with
+``& ~has_extended_childcare`` — the schemes are modelled as mutually
+exclusive, so the comparator is children on the universal entitlement *only*,
+not the 1.13 million headline. The prior 490 thousand target was 1.18x that
+figure and the prior 130 thousand target was 1.12x the EL2 count, both
+unsourced.
+
+The universal and targeted **spending** figures are a modelled
+full-entitlement value, not an observed outturn. DfE publishes January
+headcounts of children registered for at least some provision; it does not
+say each child took all 570 hours, and publishes no per-programme spending.
+These are the caseloads at the statutory 570 hours and the DfE funding rate
+for the age band in 2024-25 (£5.88 an hour for 3 and 4-year-olds, £8.28 for
+2-year-olds):
+
+  universal  416,537 x 570 x 5.88 = £1.396bn   (prior target £1.70bn)
+  targeted   115,852 x 570 x 8.28 = £0.547bn   (prior target £0.60bn)
+
+Being caseload times a constant, they are **not independent of the caseload
+targets** — matching both does not separately validate expenditure. They are
+an upper bound on what the entitlement can cost at the published headcounts,
+and an improvement on figures that could not be traced at all, rather than a
+substitute for an allocation outturn.
+
 """
 
 # Spending in £bn, caseload in thousands of children, both for 2024.
 TARGETS = {
     "spending": {
         "tfc": 0.6322,  # HMRC £632.2m, 2024-25
-        # No extended entry: the only derivable figure is a full-usage ceiling
-        # that the model pays 75% of. See the module docstring.
-        "targeted": 0.6,
-        "universal": 1.7,
+        "targeted": 0.547,
+        "universal": 1.396,
     },
     "caseload": {
         "tfc": 1_085.02,  # HMRC 1,085,020 children, 2024-25
         "extended": 621.5,  # DfE Jan 2025: 379,000 + 242,500
-        "targeted": 130,
-        "universal": 490,
+        "targeted": 116,
+        "universal": 417,
     },
 }
 
