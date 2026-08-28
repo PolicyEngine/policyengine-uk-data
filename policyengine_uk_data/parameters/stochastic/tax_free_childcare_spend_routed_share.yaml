@@ -1,7 +1,7 @@
-description: Share of a family's annual childcare spending paid through its Tax-Free Childcare account
+description: Proxy for the share of a child's annual childcare spending paid through a Tax-Free Childcare account, from the mean share of the year an account makes provider payments
 metadata:
   unit: /1
-  label: Tax-Free Childcare spend routed share
+  label: Tax-Free Childcare routed-spend share (duration proxy)
   reference:
     - title: "HMRC, Tax-Free Childcare statistics: March 2026 — Table 2, children with open and used accounts and government top-up"
       href: https://www.gov.uk/government/statistics/tax-free-childcare-statistics-march-2026
@@ -9,20 +9,23 @@ metadata:
       href: https://assets.publishing.service.gov.uk/media/6a0dcb07faac4bc0b0e906ef/Tables_and_Statistics_March_2026.ods
     - title: "HMRC, Tax-Free Childcare statistics quality report — definition of a used account"
       href: https://www.gov.uk/government/statistics/quality-report-tax-free-childcare/tax-free-childcare-quality-report
-# Tax-Free Childcare tops up money paid through the account, not a family's
-# whole childcare bill, and childcare_expenses is an annual figure. HMRC
-# publishes both a monthly and an annual count of children with used accounts,
-# and defines a used account as one from which a payment was made to a provider
-# in the period. It states the annual count is not the sum of the monthly
-# counts, because a child appears in every month containing a payment but only
-# once in the year. The ratio is therefore the mean number of months an
-# account actually pays, as a share of the year:
+# WHAT THIS IS, AND WHAT IT IS NOT
+#
+# This is a *duration proxy*, not a measured routed-expenditure share. HMRC
+# publishes no figure for the share of childcare pounds paid through a
+# Tax-Free Childcare account. What it publishes is a monthly and an annual
+# count of children with used accounts, where a used account is one from which
+# a payment was made to a provider in the period, and it states that the annual
+# count is not the sum of the monthly counts because a child appears in every
+# month containing a payment but only once in the year. Their ratio is the mean
+# number of months an account pays, as a share of the year:
 #
 #     sum of the twelve monthly counts of children with used accounts
 #     --------------------------------------------------------------  /  12
 #            annual count of children with used accounts
 #
 # year      sum of monthly    annual unique    months    share
+# 2017-18          308,300           71,515      4.31    0.359
 # 2018-19        1,193,065          203,215      5.87    0.489
 # 2019-20        2,579,660          396,365      6.51    0.542
 # 2020-21        2,610,450          461,705      5.65    0.471
@@ -32,25 +35,31 @@ metadata:
 # 2024-25        7,715,605        1,085,020      7.11    0.593
 # 2025-26        8,042,540        1,151,515      6.98    0.582
 #
-# The 2020-21 dip is the pandemic; the series is otherwise stable at 0.58-0.59
-# from 2021-22. Each value takes effect from the start of the financial year it
-# measures.
+# Using it as a spending share assumes spend is uniform across the year, that
+# an active month routes everything and an inactive month nothing, and that
+# payment dates track care dates. HMRC explicitly warns the last is not true:
+# the date a payment is made from an account need not be the date the childcare
+# was received. It is also a count-weighted mean over a mix of full-year and
+# short-spell claimants, applied here as an expenditure scaler.
 #
-# Assigned as a constant rather than drawn per family. HMRC publishes the mean
-# but nothing about the distribution behind it, so a spread would be invented
-# rather than observed. This reproduces the aggregate and should not be read as
-# a claim about any individual family.
+# It is assigned as a constant because HMRC publishes nothing about the
+# distribution behind the mean, so any spread would be invented rather than
+# observed. It should not be read as a claim about any individual family.
 #
-# Two caveats from HMRC. The date a payment is made from an account need not be
-# the date the childcare was received, so this measures payment activity rather
-# than care received. And it is a mean over a mix of full-year and short-spell
-# claimants.
+# Two further caveats on the series. The 2020-21 dip is the pandemic. And HMRC
+# revised the account definition from 2024-25: monthly totals before April 2025
+# include payments from closed accounts, while annual figures from 2024-25 use
+# a revised open-and-used basis, so the early and late years are not built on
+# an identical construction.
+#
+# Dates are 1 April, the start of the HMRC financial year each value measures.
 values:
-  2017-04-01: 0.489
-  2019-04-06: 0.542
-  2020-04-06: 0.471
-  2021-04-06: 0.575
-  2022-04-06: 0.584
-  2023-04-06: 0.589
-  2024-04-06: 0.593
-  2025-04-06: 0.582
+  2017-04-01: 0.359
+  2018-04-01: 0.489
+  2019-04-01: 0.542
+  2020-04-01: 0.471
+  2021-04-01: 0.575
+  2022-04-01: 0.584
+  2023-04-01: 0.589
+  2024-04-01: 0.593
+  2025-04-01: 0.582
