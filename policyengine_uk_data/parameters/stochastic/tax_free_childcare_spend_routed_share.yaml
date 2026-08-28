@@ -1,7 +1,7 @@
-description: Proxy for the share of a child's annual childcare spending paid through a Tax-Free Childcare account, from the mean share of the year an account makes provider payments
+description: Calibration adjustment scaling the childcare spending that attracts a Tax-Free Childcare top-up, set to the mean share of the year an account makes provider payments
 metadata:
   unit: /1
-  label: Tax-Free Childcare routed-spend share (duration proxy)
+  label: Tax-Free Childcare spend adjustment (calibration, duration-derived)
   reference:
     - title: "HMRC, Tax-Free Childcare statistics: March 2026 — Table 2, children with open and used accounts and government top-up"
       href: https://www.gov.uk/government/statistics/tax-free-childcare-statistics-march-2026
@@ -24,7 +24,28 @@ metadata:
 #
 # WHAT THIS IS, AND WHAT IT IS NOT
 #
-# This is a *duration proxy*, not a measured routed-expenditure share. HMRC
+# This is a **calibration adjustment**, not a measurement. It exists because
+# the model overstates Tax-Free Childcare spending, and its value is borrowed
+# from a published duration statistic because that is the closest observable
+# quantity — not because HMRC measures what the model needs.
+#
+# The gap it addresses, on enhanced_frs_2024_25 at 2024 against this repo's
+# own targets:
+#
+#                    before      after      target
+#   spending      £1.178bn    £0.790bn    £0.632bn
+#                   (1.87x)     (1.25x)
+#   caseload        1,108k      1,108k      1,085k
+#                   (1.02x)     (1.02x)
+#
+# Caseload was already right, so the residual was the size of each award, and
+# take-up cannot fix it: the rate that lands spending drops caseload to 0.55x.
+# This adjustment reduces award size while leaving caseload untouched, which
+# is the correction the evidence points to. It does not close the gap — 1.25x
+# is still outside any tight tolerance, and the remainder is tracked in #471
+# (the childcare fee base) and PolicyEngine/policyengine-uk#1832.
+#
+# Do not read the value as an estimate of routed expenditure. HMRC
 # publishes no figure for the share of childcare pounds paid through a
 # Tax-Free Childcare account. What it publishes is a monthly and an annual
 # count of children with used accounts, where a used account is one from which
@@ -48,7 +69,7 @@ metadata:
 # 2024-25        7,715,605        1,085,020      7.11    0.593
 # 2025-26        8,042,540        1,151,515      6.98    0.582
 #
-# Using it as a spending share assumes spend is uniform across the year, that
+# Treating it as a spending scaler assumes spend is uniform across the year, that
 # an active month routes everything and an inactive month nothing, and that
 # payment dates track care dates. HMRC explicitly warns the last is not true:
 # the date a payment is made from an account need not be the date the childcare
@@ -58,6 +79,11 @@ metadata:
 # It is assigned as a constant because HMRC publishes nothing about the
 # distribution behind the mean, so any spread would be invented rather than
 # observed. It should not be read as a claim about any individual family.
+#
+# Because it is a calibration adjustment rather than an observation, it is
+# legitimate to revise it against the spending target if a better-founded
+# correction lands first. A spend-weighted source, were HMRC to publish one,
+# would replace it outright rather than refine it.
 #
 # Two further caveats on the series. The 2020-21 dip is the pandemic. And HMRC
 # revised the account definition from 2024-25: monthly totals before April 2025
