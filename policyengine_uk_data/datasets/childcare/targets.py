@@ -19,21 +19,36 @@ anywhere in it. Corrected here to match the cited source.
 
 The prior 0.6 / 660 targets were calibrated against the September 2024 release
 (2023-24 outturn) and have since been overtaken by the TFC account expansion
-and the September 2025 "30 free hours for under-5s" boost in uptake.
+and the April and September 2024 expansions of the working-parent
+entitlement, which are the changes falling inside the target year. (An
+earlier version of this note cited the September 2025 expansion, which
+cannot affect a 2024-25 outturn.)
 
-Other programme targets are at their prior DfE values.
+**Period mapping.** HMRC and DfE report financial years; the calibration
+checks evaluate the model at annual period 2024. Targets here are the
+2024-25 financial year figures. For spending the difference is small — the
+HMRC monthly series sums to £638.2m for calendar 2024 against the £632.2m
+fiscal-year figure, under 1% — but an annual-unique caseload cannot be
+converted by summing months, so the fiscal-year count is used as-is.
+
+**Sources for the other programmes.** The extended (working parent) targets
+are inherited unsourced from before this module existed and are flagged for
+tracing. The universal and early-learning-for-2-year-olds targets are
+corrected against DfE's published figures in a follow-up change; see
+"Funded early education and childcare", reporting year 2026
+(https://explore-education-statistics.service.gov.uk/find-statistics/funded-early-education-and-childcare/2026).
 """
 
 # Spending in £bn, caseload in thousands of children, both for 2024.
 TARGETS = {
     "spending": {
-        "tfc": 0.63,
+        "tfc": 0.6322,  # HMRC £632.2m, 2024-25
         "extended": 2.5,
         "targeted": 0.6,
         "universal": 1.7,
     },
     "caseload": {
-        "tfc": 1_085,
+        "tfc": 1_085.02,  # HMRC 1,085,020 children, 2024-25
         "extended": 740,
         "targeted": 130,
         "universal": 490,
@@ -45,13 +60,25 @@ TARGETS = {
 # detect even a doubling.
 #
 # 0.4 is a first step, not a resting place: it is wide enough that a 39% error
-# still passes. Tightening it needs the current build's actual deviations, and
-# those are not presently visible — the test reported only pass or fail, and
-# the published enhanced FRS artefact differs materially from a fresh build
-# (Tax-Free Childcare spending is 1.87x target in v1.56.16 against 1.12x when
-# built from main), so local figures are not a safe guide. `report_ratios`
-# below records them on every run so a follow-up can set per-programme bounds
-# from the built dataset rather than from an artefact.
+# still passes. Tightening it needs deviations measured on the artefact users
+# actually receive, and CI cannot supply those — see the warning below.
+# `report_ratios` records what the CI build sees on every run, which is a
+# starting point but not the same thing.
+#
+# IMPORTANT — WHAT THIS CHECK CAN AND CANNOT SEE
+#
+# CI builds with TESTING=1, which cuts calibration from 512 epochs to 32
+# (datasets/create_datasets.py). The resulting weights are under-converged by
+# construction, and other tests in this repo say so explicitly: see
+# test_vehicle_ownership.py ("under the reduced-epoch CI build the
+# vehicle-ownership target under-converges ... the full-calibration release
+# dataset matches NTS") and test_scotland_babies.py.
+#
+# So this check validates a smoke build, not the release artefact. The two can
+# diverge a long way: Tax-Free Childcare spending is 1.87x target on the
+# published enhanced_frs_2024_25 (v1.56.16) against about 1.12x on a CI build.
+# A green run here is not evidence that the released dataset meets its targets.
+# Closing that gap needs a release-calibration gate, which does not exist yet.
 DEFAULT_TOLERANCE = 0.4
 TOLERANCES: dict[tuple[str, str], float] = {}
 
