@@ -31,11 +31,51 @@ HMRC monthly series sums to £638.2m for calendar 2024 against the £632.2m
 fiscal-year figure, under 1% — but an annual-unique caseload cannot be
 converted by summing months, so the fiscal-year count is used as-is.
 
-**Sources for the other programmes.** The extended (working parent) targets
-are inherited unsourced from before this module existed and are flagged for
-tracing. The universal and early-learning-for-2-year-olds targets are
-corrected against DfE's published figures in a follow-up change; see
-"Funded early education and childcare", reporting year 2026
+**Extended (working parent).** From DfE, "Funded early education and
+childcare", reporting year 2025 — the January 2025 census:
+
+  3 and 4-year-olds registered for the working parent entitlement   379,000
+  2-year-olds registered for the working parent entitlement         242,500
+  => matching the ages the model places on this scheme              621,500
+
+  spending at the statutory 570 additional hours and the 2024-25 DfE
+  funding rate for each age band:
+    379,000 x 570 x 5.88 = £1.270bn
+    242,500 x 570 x 8.28 = £1.145bn
+                           £2.415bn
+
+https://explore-education-statistics.service.gov.uk/find-statistics/funded-early-education-and-childcare/2025
+
+The prior 740 thousand and £2.5bn were inherited from before this module
+existed and could not be traced to any release.
+
+Two caveats, both deliberate.
+
+*The basis is January 2025, not January 2024.* Every other target here is for
+2024. January 2024 cannot serve this programme: the 2-year-old working parent
+entitlement began in April 2024, so that census counts only 3 and 4-year-olds
+(361,800) and misses half the scheme the model implements. A mixed basis is
+the lesser problem, but it is a real one — the model evaluates at annual
+period 2024 while this comparator is a January 2025 headcount.
+
+*The spending figure is a full-entitlement upper bound.* It assumes every
+registered child took all 570 additional hours. Unlike the universal and
+targeted schemes it is not simply the caseload times a constant *in the
+model* — ``extended_childcare_entitlement`` varies with
+``maximum_extended_childcare_hours_usage`` — so it is not redundant with the
+caseload target and is kept. But calibrating an hours distribution against an
+upper bound biases those hours upward, and no published outturn exists to
+replace it.
+
+**Not covered at all: under-2s.** DfE reports 195,100 one-year-olds and
+29,200 children aged 9 to 11 months registered in January 2025. The model
+places nobody under 2 on this scheme, so those 224,300 children are outside
+both the target and the model. That is a coverage gap in the model rather
+than a calibration error, and no change to these targets addresses it.
+
+**Universal and early learning for 2-year-olds.** Corrected against DfE's
+published figures in a follow-up change; see "Funded early education and
+childcare", reporting year 2026
 (https://explore-education-statistics.service.gov.uk/find-statistics/funded-early-education-and-childcare/2026).
 """
 
@@ -43,13 +83,13 @@ corrected against DfE's published figures in a follow-up change; see
 TARGETS = {
     "spending": {
         "tfc": 0.6322,  # HMRC £632.2m, 2024-25
-        "extended": 2.5,
+        "extended": 2.415,  # DfE Jan 2025, full-entitlement upper bound
         "targeted": 0.6,
         "universal": 1.7,
     },
     "caseload": {
         "tfc": 1_085.02,  # HMRC 1,085,020 children, 2024-25
-        "extended": 740,
+        "extended": 621.5,  # DfE Jan 2025: 379,000 + 242,500
         "targeted": 130,
         "universal": 490,
     },

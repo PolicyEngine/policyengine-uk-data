@@ -60,3 +60,20 @@ def test_known_misses_name_real_programmes_and_carry_a_reason():
         # A bare exemption is worse than none: it has to say why and where.
         assert len(reason) > 40, (metric, programme)
         assert "#" in reason, f"{metric}/{programme} should cite an issue"
+
+
+def test_extended_targets_match_the_dfe_january_2025_census():
+    """Extended is 3-4 plus 2-year-olds on the working parent entitlement.
+
+    January 2024 cannot serve this programme: the 2-year-old entitlement began
+    in April 2024, so that census counts only 3 and 4-year-olds and misses half
+    the scheme the model implements.
+    """
+    three_and_four, two_year_olds = 379_000, 242_500
+    assert TARGETS["caseload"]["extended"] == pytest.approx(
+        (three_and_four + two_year_olds) / 1e3
+    )
+
+    # Full 570 additional hours at the 2024-25 DfE rate for each age band.
+    expected = (three_and_four * 570 * 5.88 + two_year_olds * 570 * 8.28) / 1e9
+    assert TARGETS["spending"]["extended"] == pytest.approx(expected, abs=0.001)
