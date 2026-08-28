@@ -89,6 +89,23 @@ def load_legacy_jobseeker_max_annual_hours(year: int) -> int:
     return max_weekly_hours * HOURS_WORKED_WEEKS_PER_YEAR
 
 
+def require_variable(name: str, description: str) -> None:
+    """Fail the build if the installed policyengine-uk lacks ``name``.
+
+    ``UKSingleYearDataset`` drops columns absent from the tax-benefit system
+    rather than raising, so writing an input the model does not define is a
+    silent no-op. Anything this build depends on the model actually reading
+    should be asserted here.
+    """
+    if name not in CountryTaxBenefitSystem().variables:
+        raise RuntimeError(
+            f"The installed policyengine-uk does not define {name!r}, so the "
+            f"{description} would be written and then silently discarded when "
+            "the dataset is loaded. Upgrade policyengine-uk to a release that "
+            "defines it."
+        )
+
+
 def derive_legacy_jobseeker_proxy(
     age,
     employment_status,
@@ -1378,6 +1395,9 @@ def create_frs(
     marriage_allowance_rate = load_take_up_rate("marriage_allowance", year)
     child_benefit_opts_out_rate = load_take_up_rate("child_benefit_opts_out_rate", year)
     tfc_rate = load_take_up_rate("tax_free_childcare", year)
+    tfc_spend_routed_share = load_parameter(
+        "stochastic", "tax_free_childcare_spend_routed_share", year
+    )
     extended_childcare_rate = load_take_up_rate("extended_childcare", year)
     universal_childcare_rate = load_take_up_rate("universal_childcare", year)
     targeted_childcare_rate = load_take_up_rate("targeted_childcare", year)
@@ -1425,6 +1445,7 @@ def create_frs(
         reported_mask=_reported_benunit_mask("universal_credit_reported"),
     )
     pe_benunit["would_claim_tfc"] = generator.random(len(pe_benunit)) < tfc_rate
+
     pe_benunit["would_claim_extended_childcare"] = (
         generator.random(len(pe_benunit)) < extended_childcare_rate
     )
@@ -1467,6 +1488,25 @@ def create_frs(
     )
 
     # Person-level: Tie-breaking for higher earner (uniform random)
+    # Tax-Free Childcare tops up money paid through the account, not a family's
+    # whole childcare bill, and childcare_expenses is annual. Person-level
+    # because a Tax-Free Childcare account is held for one child (Childcare
+    # Payments Act 2014 section 15(2)) and the variable it feeds is per child.
+    # See parameters/stochastic/tax_free_childcare_spend_routed_share.yaml.
+    #
+    # Checked rather than assumed: policyengine-uk's dataset loader skips
+    # columns it does not recognise, so a model predating the variable would
+    # silently drop this correction and fall back to the model default of 1 —
+    # a build that looks clean and ships uncorrected Tax-Free Childcare
+    # spending. The pyproject floor cannot express this yet because the
+    # release carrying the variable does not exist at the time of writing, so
+    # fail loudly here instead.
+    require_variable(
+        "tax_free_childcare_spend_routed_share",
+        "Tax-Free Childcare routed-spend adjustment",
+    )
+    pe_person["tax_free_childcare_spend_routed_share"] = tfc_spend_routed_share
+
     pe_person["higher_earner_tie_break"] = generator.random(len(pe_person))
 
     # Person-level: Private school attendance random draw
