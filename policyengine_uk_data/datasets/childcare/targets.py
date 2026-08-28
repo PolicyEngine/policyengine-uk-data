@@ -41,17 +41,30 @@ TARGETS = {
 }
 
 # Fraction by which the built dataset may differ from a target before the
-# check fails. The check previously allowed any ratio in (0, 2), which cannot
-# detect even a doubling — Tax-Free Childcare spending was passing at 1.96x.
-TOLERANCE = 0.4
+# check fails. The previous check allowed any ratio in (0, 2), which cannot
+# detect even a doubling.
+#
+# 0.4 is a first step, not a resting place: it is wide enough that a 39% error
+# still passes. Tightening it needs the current build's actual deviations, and
+# those are not presently visible — the test reported only pass or fail, and
+# the published enhanced FRS artefact differs materially from a fresh build
+# (Tax-Free Childcare spending is 1.87x target in v1.56.16 against 1.12x when
+# built from main), so local figures are not a safe guide. `report_ratios`
+# below records them on every run so a follow-up can set per-programme bounds
+# from the built dataset rather than from an artefact.
+DEFAULT_TOLERANCE = 0.4
+TOLERANCES: dict[tuple[str, str], float] = {}
+
+
+def tolerance(metric: str, programme: str) -> float:
+    """Allowed fractional deviation from target for one programme and metric."""
+    return TOLERANCES.get((metric, programme), DEFAULT_TOLERANCE)
+
 
 # Targets the built dataset is known not to meet, with the issue tracking each.
 # Listed rather than silently tolerated so that CI reports the gap without
-# failing, and so that closing the gap is a visible change.
-KNOWN_MISSES = {
-    ("spending", "tfc"): (
-        "TFC spending is ~1.9x its target while caseload is within 2% of its "
-        "own, so the gap is the average award rather than take-up. No uniform "
-        "take-up rate hits both. See PolicyEngine/policyengine-uk-data#470."
-    ),
-}
+# failing. A companion test fails if an entry here starts passing, so the list
+# cannot outlive the problems it records — which is how the initial entry for
+# Tax-Free Childcare spending was removed: it was recorded from the published
+# artefact at 1.87x, and the built dataset meets the target at 1.12x.
+KNOWN_MISSES: dict[tuple[str, str], str] = {}
