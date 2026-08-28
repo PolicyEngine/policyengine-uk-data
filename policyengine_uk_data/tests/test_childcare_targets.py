@@ -62,7 +62,7 @@ def test_known_misses_name_real_programmes_and_carry_a_reason():
         assert "#" in reason, f"{metric}/{programme} should cite an issue"
 
 
-def test_extended_targets_match_the_dfe_january_2025_census():
+def test_extended_caseload_matches_the_dfe_january_2025_census():
     """Extended is 3-4 plus 2-year-olds on the working parent entitlement.
 
     January 2024 cannot serve this programme: the 2-year-old entitlement began
@@ -74,6 +74,12 @@ def test_extended_targets_match_the_dfe_january_2025_census():
         (three_and_four + two_year_olds) / 1e3
     )
 
-    # Full 570 additional hours at the 2024-25 DfE rate for each age band.
-    expected = (three_and_four * 570 * 5.88 + two_year_olds * 570 * 8.28) / 1e9
-    assert TARGETS["spending"]["extended"] == pytest.approx(expected, abs=0.001)
+
+def test_extended_has_no_spending_target():
+    """The only derivable figure is a full-usage ceiling the model pays 75% of.
+
+    3 and 4-year-olds get 1,140 funded hours in the model, not 570, so the
+    naive 570-hour construction is 65% of the comparable model quantity, and
+    even the correct one calibrates an hours distribution to a ceiling.
+    """
+    assert "extended" not in TARGETS["spending"]
