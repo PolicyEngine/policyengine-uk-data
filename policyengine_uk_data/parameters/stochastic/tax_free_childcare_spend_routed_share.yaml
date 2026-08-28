@@ -9,6 +9,19 @@ metadata:
       href: https://assets.publishing.service.gov.uk/media/6a0dcb07faac4bc0b0e906ef/Tables_and_Statistics_March_2026.ods
     - title: "HMRC, Tax-Free Childcare statistics quality report — definition of a used account"
       href: https://www.gov.uk/government/statistics/quality-report-tax-free-childcare/tax-free-childcare-quality-report
+# DENOMINATOR
+#
+# The model variable defines this share over the *eligible period*, because
+# tax_free_childcare already multiplies annual spending by the eligible-period
+# fraction; a whole-year share would discount the same months twice. The value
+# below is measured over the whole year (months paying / 12). The two coincide
+# for every claimant in the built data, because
+# tax_free_childcare_eligible_declaration_periods returns
+# eligible * declaration_periods_per_year and so is 0 or 4, never 1-3 — the
+# eligible fraction is 1 for everyone who receives anything. If fractional
+# declaration periods are ever populated, this value must be re-derived over
+# the eligible period rather than the year, or the two will double-discount.
+#
 # WHAT THIS IS, AND WHAT IT IS NOT
 #
 # This is a *duration proxy*, not a measured routed-expenditure share. HMRC
