@@ -4,7 +4,11 @@ The targets live in ``datasets/childcare/targets.py`` and are shared with the
 take-up optimisation, so the two cannot drift apart again.
 """
 
+import os
+from pathlib import Path
+
 import pytest
+import yaml
 
 from policyengine_uk_data.datasets.childcare.targets import (
     KNOWN_MISSES,
@@ -28,11 +32,24 @@ PROGRAMMES = {
     ),
 }
 
+# Iterate over the targets that exist, not every programme: only Tax-Free
+# Childcare has a spending target, because it is the only programme with a
+# published expenditure outturn. See targets.py for why the rest were dropped.
 CASES = [
     (metric, programme)
     for metric in ("spending", "caseload")
-    for programme in PROGRAMMES
+    for programme in TARGETS[metric]
 ]
+
+# Which build produced the dataset under test. pull_request.yaml sets
+# TESTING=1 for a 32-epoch smoke build; push.yaml builds the release at 512
+# epochs with no flag and gates the upload on this suite.
+BUILD = (
+    "smoke (TESTING=1, 32 epochs)"
+    if os.environ.get("TESTING") == "1"
+    else ("release (512 epochs)")
+)
+PUSH_WORKFLOW = Path(__file__).resolve().parents[2] / ".github/workflows/push.yaml"
 
 
 def measure(baseline, metric: str, programme: str) -> float:
@@ -86,6 +103,7 @@ def test_report_ratios(baseline, capsys):
     """
     lines = [
         "",
+        f"childcare calibration check — build: {BUILD}",
         f"{'metric':10s} {'programme':11s} {'built':>10s} {'target':>10s} {'ratio':>7s}",
     ]
     for metric, programme in CASES:
@@ -96,3 +114,30 @@ def test_report_ratios(baseline, capsys):
         )
     with capsys.disabled():
         print("\n".join(lines))
+
+
+def test_release_gate_is_wired():
+    """The release build must run this suite, at full fidelity, before uploading.
+
+    push.yaml is the only place the calibration targets are checked against
+    the artefact users receive. This pins the three properties that make it a
+    gate, so a workflow edit that broke one fails CI rather than shipping an
+    unvalidated dataset: the release build is not a TESTING smoke build, the
+    tests run before the upload, and a failing test stops the job.
+    """
+    workflow = yaml.safe_load(PUSH_WORKFLOW.read_text())
+    steps = workflow["jobs"]["test"]["steps"]
+    by_name = {step.get("name"): step for step in steps}
+    order = [step.get("name") for step in steps]
+
+    build = by_name["Build datasets"]
+    assert build.get("env", {}).get("TESTING") != "1", (
+        "the release build must not be a TESTING smoke build"
+    )
+    assert order.index("Run tests") < order.index("Upload data"), (
+        "tests must run before the upload, or a failing target cannot block it"
+    )
+    assert not by_name["Run tests"].get("continue-on-error", False), (
+        "a failing test must stop the job, or the gate is decorative"
+    )
+    assert "make test" in by_name["Run tests"]["run"]

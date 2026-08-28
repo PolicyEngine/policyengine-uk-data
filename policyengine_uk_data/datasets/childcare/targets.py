@@ -104,30 +104,59 @@ TARGETS = {
 
 # Fraction by which the built dataset may differ from a target before the
 # check fails. The previous check allowed any ratio in (0, 2), which cannot
-# detect even a doubling.
+# detect even a doubling — and did not: Tax-Free Childcare spending shipped
+# at 1.87x target in enhanced_frs_2024_25 v1.56.16 with 0.13 to spare.
 #
-# 0.4 is a first step, not a resting place: it is wide enough that a 39% error
-# still passes. Tightening it needs deviations measured on the artefact users
-# actually receive, and CI cannot supply those — see the warning below.
-# `report_ratios` records what the CI build sees on every run, which is a
-# starting point but not the same thing.
+# WHICH BUILD THIS CHECK VALIDATES
 #
-# IMPORTANT — WHAT THIS CHECK CAN AND CANNOT SEE
+# Two builds run the test, and they are not the same artefact.
 #
-# CI builds with TESTING=1, which cuts calibration from 512 epochs to 32
-# (datasets/create_datasets.py). The resulting weights are under-converged by
-# construction, and other tests in this repo say so explicitly: see
-# test_vehicle_ownership.py ("under the reduced-epoch CI build the
-# vehicle-ownership target under-converges ... the full-calibration release
-# dataset matches NTS") and test_scotland_babies.py.
+#   pull_request.yaml sets TESTING=1, which cuts calibration from 512 epochs
+#   to 32 (datasets/create_datasets.py). Those weights are under-converged by
+#   construction — test_vehicle_ownership.py and test_scotland_babies.py say
+#   so explicitly — and the ratios they produce can sit a long way from the
+#   release: about 1.12x for Tax-Free Childcare spending where the release
+#   was 1.87x. A green pull request is a smoke check, not validation.
 #
-# So this check validates a smoke build, not the release artefact. The two can
-# diverge a long way: Tax-Free Childcare spending is 1.87x target on the
-# published enhanced_frs_2024_25 (v1.56.16) against about 1.12x on a CI build.
-# A green run here is not evidence that the released dataset meets its targets.
-# Closing that gap needs a release-calibration gate, which does not exist yet.
+#   push.yaml runs on every release (it triggers on the pyproject.toml bump
+#   that versioning.yaml pushes to main), builds at the full 512 epochs with
+#   no TESTING flag, runs `make test`, and only then runs `make upload`. A
+#   failing test there stops the upload. That is the release gate, and it has
+#   been wired that way since July 2025; the 1.87x artefact passed through it
+#   because the tolerance let it, not because the gate was missing.
+#
+# test_release_gate_is_wired in tests/test_childcare.py asserts that
+# ordering, so a change to push.yaml that ran tests after the upload, set
+# TESTING on the release build, or let the test step fail without stopping
+# the job would itself fail CI.
+#
+# Consequences for anyone editing this file:
+#
+#   - Measure KNOWN_MISSES and tolerance overrides on the release build (the
+#     push.yaml log, or the published artefact), never on a pull-request run.
+#   - Tightening a tolerance can block the next release. That is the point,
+#     but it means the fix that lets the target pass must merge first. As of
+#     this change, main misses Tax-Free Childcare spending at 1.87x, and the
+#     correction is policyengine-uk-data #473: merge that before this, or the
+#     first release after this lands is blocked until it does.
+#
+# 0.4 is a first step, not a resting place: a 39% error still passes. It is
+# tightened per target below only where a release-representative measurement
+# exists.
 DEFAULT_TOLERANCE = 0.4
-TOLERANCES: dict[tuple[str, str], float] = {}
+TOLERANCES: dict[tuple[str, str], float] = {
+    # Both HMRC figures are exact outturns, and the published artefact with
+    # the corrected inputs applied (policyengine-uk 2.93.0, which takes the
+    # 20% rate on gross spend, plus #473's routed-spend adjustment) measures
+    # 1.02x on both. 0.25 leaves room for a fresh 512-epoch calibration to
+    # move the weights; tighten to 0.15 once a push.yaml log confirms it.
+    ("spending", "tfc"): 0.25,
+    ("caseload", "tfc"): 0.25,
+    # No override for extended, targeted or universal: their caseload targets
+    # are January census headcounts against an annual model period, and the
+    # only release-build measurements to hand were taken before the take-up
+    # corrections in #474. Set from the first push.yaml log after that lands.
+}
 
 
 def tolerance(metric: str, programme: str) -> float:
@@ -135,10 +164,16 @@ def tolerance(metric: str, programme: str) -> float:
     return TOLERANCES.get((metric, programme), DEFAULT_TOLERANCE)
 
 
-# Targets the built dataset is known not to meet, with the issue tracking each.
-# Listed rather than silently tolerated so that CI reports the gap without
-# failing. A companion test fails if an entry here starts passing, so the list
-# cannot outlive the problems it records — which is how the initial entry for
-# Tax-Free Childcare spending was removed: it was recorded from the published
-# artefact at 1.87x, and the built dataset meets the target at 1.12x.
+# Targets the release build is known not to meet, with the issue tracking
+# each. Listed rather than silently tolerated so that CI reports the gap
+# without blocking the release. A companion test fails if an entry here
+# starts passing, so the list cannot outlive the problems it records.
+#
+# Measure entries on the release build, not a pull-request run: an earlier
+# entry for Tax-Free Childcare spending was removed on the strength of a
+# 1.12x pull-request build while the release still sat at 1.87x.
+#
+# Deliberately empty for Tax-Free Childcare despite the 1.87x on main: an
+# entry would wave the miss through the gate, and the correction (#473) is
+# ready to merge. Blocking the release until it does is the intended outcome.
 KNOWN_MISSES: dict[tuple[str, str], str] = {}
