@@ -1428,10 +1428,7 @@ def create_frs(
         reported_mask=_reported_benunit_mask("universal_credit_reported"),
     )
     pe_benunit["would_claim_tfc"] = generator.random(len(pe_benunit)) < tfc_rate
-    # Tax-Free Childcare tops up money paid through the account, not a family's
-    # whole childcare bill, and childcare_expenses is annual. See
-    # parameters/stochastic/tax_free_childcare_spend_routed_share.yaml.
-    pe_benunit["tax_free_childcare_spend_routed_share"] = tfc_spend_routed_share
+
     pe_benunit["would_claim_extended_childcare"] = (
         generator.random(len(pe_benunit)) < extended_childcare_rate
     )
@@ -1474,6 +1471,13 @@ def create_frs(
     )
 
     # Person-level: Tie-breaking for higher earner (uniform random)
+    # Tax-Free Childcare tops up money paid through the account, not a family's
+    # whole childcare bill, and childcare_expenses is annual. Person-level
+    # because a Tax-Free Childcare account is held for one child (Childcare
+    # Payments Act 2014 section 15(2)) and the variable it feeds is per child.
+    # See parameters/stochastic/tax_free_childcare_spend_routed_share.yaml.
+    pe_person["tax_free_childcare_spend_routed_share"] = tfc_spend_routed_share
+
     pe_person["higher_earner_tie_break"] = generator.random(len(pe_person))
 
     # Person-level: Private school attendance random draw
