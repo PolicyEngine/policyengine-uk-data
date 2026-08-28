@@ -1378,6 +1378,9 @@ def create_frs(
     marriage_allowance_rate = load_take_up_rate("marriage_allowance", year)
     child_benefit_opts_out_rate = load_take_up_rate("child_benefit_opts_out_rate", year)
     tfc_rate = load_take_up_rate("tax_free_childcare", year)
+    tfc_spend_routed_share = load_parameter(
+        "stochastic", "tax_free_childcare_spend_routed_share", year
+    )
     extended_childcare_rate = load_take_up_rate("extended_childcare", year)
     universal_childcare_rate = load_take_up_rate("universal_childcare", year)
     targeted_childcare_rate = load_take_up_rate("targeted_childcare", year)
@@ -1425,6 +1428,10 @@ def create_frs(
         reported_mask=_reported_benunit_mask("universal_credit_reported"),
     )
     pe_benunit["would_claim_tfc"] = generator.random(len(pe_benunit)) < tfc_rate
+    # Tax-Free Childcare tops up money paid through the account, not a family's
+    # whole childcare bill, and childcare_expenses is annual. See
+    # parameters/stochastic/tax_free_childcare_spend_routed_share.yaml.
+    pe_benunit["tax_free_childcare_spend_routed_share"] = tfc_spend_routed_share
     pe_benunit["would_claim_extended_childcare"] = (
         generator.random(len(pe_benunit)) < extended_childcare_rate
     )
