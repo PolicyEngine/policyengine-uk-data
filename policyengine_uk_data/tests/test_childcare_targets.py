@@ -21,16 +21,23 @@ from policyengine_uk_data.datasets.childcare.targets import (
 
 PROGRAMMES = {"tfc", "extended", "targeted", "universal"}
 
-# Spending is deliberately sparse: extended has no target, because the only
-# figure derivable from DfE is a full-usage ceiling the model pays 75% of.
-# See the targets module docstring and test_extended_has_no_spending_target.
-SPENDING_PROGRAMMES = PROGRAMMES - {"extended"}
+# Only Tax-Free Childcare has a spending target. Universal and targeted are
+# the caseload times a constant, which duplicates the caseload term in
+# `takeup_rate.objective` instead of adding evidence; extended's only
+# derivable figure is a full-usage ceiling the model pays 75% of.
+SPENDING_PROGRAMMES = {"tfc"}
 
 
-def test_the_registry_covers_the_programmes_it_claims():
+def test_every_programme_has_a_caseload_target():
     assert set(TARGETS) == {"spending", "caseload"}
     assert set(TARGETS["caseload"]) == PROGRAMMES
-    assert set(TARGETS["spending"]) == SPENDING_PROGRAMMES
+
+
+def test_spending_targets_exclude_the_caseload_derived_programmes():
+    assert set(TARGETS["spending"]) == SPENDING_PROGRAMMES, (
+        "only TFC spending is an observed outturn; the others are caseload x a "
+        "constant or a full-usage ceiling, and re-adding them biases the loss"
+    )
 
 
 def test_targets_are_positive_and_in_their_stated_units():

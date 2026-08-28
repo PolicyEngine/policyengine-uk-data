@@ -109,22 +109,36 @@ not the 1.13 million headline. The prior 490 thousand target was 1.18x that
 figure and the prior 130 thousand target was 1.12x the EL2 count, both
 unsourced.
 
-The universal and targeted **spending** figures are a modelled
-full-entitlement value, not an observed outturn. DfE publishes January
-headcounts of children registered for at least some provision; it does not
-say each child took all 570 hours, and publishes no per-programme spending.
-These are the caseloads at the statutory 570 hours and the DfE funding rate
-for the age band in 2024-25 (£5.88 an hour for 3 and 4-year-olds, £8.28 for
-2-year-olds):
+**No universal or targeted spending target.** DfE publishes January
+headcounts of children registered for at least some provision, and publishes
+no per-programme spending. The only spending figure derivable from it is the
+caseload at the statutory 570 hours and the DfE funding rate for the age band
+(£5.88 an hour for 3 and 4-year-olds in 2024-25, £8.28 for 2-year-olds):
 
-  universal  416,537 x 570 x 5.88 = £1.396bn   (prior target £1.70bn)
-  targeted   115,852 x 570 x 8.28 = £0.547bn   (prior target £0.60bn)
+  universal  416,537 x 570 x 5.88 = £1.396bn
+  targeted   115,852 x 570 x 8.28 = £0.547bn
 
-Being caseload times a constant, they are **not independent of the caseload
-targets** — matching both does not separately validate expenditure. They are
-an upper bound on what the entitlement can cost at the published headcounts,
-and an improvement on figures that could not be traced at all, rather than a
-substitute for an allocation outturn.
+Those are not observations. Being caseload times a constant, each is the
+caseload target restated in pounds, and `takeup_rate.objective` sums an
+equally weighted squared relative error over every entry in both dictionaries:
+
+    for key in targets["spending"]:
+        loss += (spending[key] / targets["spending"][key] - 1) ** 2
+    for key in targets["caseload"]:
+        loss += (caseload[key] / targets["caseload"][key] - 1) ** 2
+
+Since the model pays every recipient of these two schemes the same per-child
+amount, the spending ratio equals the caseload ratio and the loop adds the
+same term twice — doubling the pull of universal and targeted against
+Tax-Free Childcare and extended hours, on no extra evidence. Both also assume
+every registered child took the full 570 hours, so they are upper bounds and
+the duplicated term pulls weights up.
+
+Tax-Free Childcare and extended spending stay, because they are not
+redundant: TFC spending varies with childcare expenditure and extended
+spending with `maximum_extended_childcare_hours_usage`, so neither is its
+caseload times a constant. Restoring universal and targeted spending needs an
+allocation or outturn source, not a headcount.
 
 """
 
@@ -132,8 +146,10 @@ substitute for an allocation outturn.
 TARGETS = {
     "spending": {
         "tfc": 0.6322,  # HMRC £632.2m, 2024-25
-        "targeted": 0.547,
-        "universal": 1.396,
+        # No extended, universal or targeted entry. Universal and targeted are
+        # the caseload times a constant, which duplicates the caseload term in
+        # the loss rather than adding evidence; extended's derivable figure is
+        # a full-usage ceiling the model pays 75% of. See the module docstring.
     },
     "caseload": {
         "tfc": 1_085.02,  # HMRC 1,085,020 children, 2024-25
