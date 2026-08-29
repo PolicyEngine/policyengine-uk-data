@@ -55,6 +55,35 @@ def test_tfc_targets_keep_the_published_precision():
     assert TARGETS["caseload"]["tfc"] == pytest.approx(1_085.02)
 
 
+def test_entitlement_caseloads_match_the_dfe_january_2024_census():
+    """Universal nets off the working parent entitlement; the schemes are
+    modelled as mutually exclusive, so the comparator is the children on the
+    universal entitlement only, not DfE's 1.13 million headline."""
+    universal_including_working_parent = 778_327
+    working_parent_three_and_four = 361_790
+    assert TARGETS["caseload"]["universal"] == pytest.approx(
+        (universal_including_working_parent - working_parent_three_and_four) / 1e3
+    )
+    assert TARGETS["caseload"]["targeted"] == pytest.approx(115_852 / 1e3)
+
+
+def test_universal_eligibility_still_excludes_the_working_parent_scheme():
+    """The universal target subtracts the working parent registrations.
+
+    That is only the right comparator while policyengine-uk models the two
+    schemes as mutually exclusive. If this fails, the 416,537 figure needs
+    rederiving, not the test relaxing.
+    """
+    import inspect
+
+    from policyengine_uk.system import system
+
+    source = inspect.getsource(
+        type(system.variables["universal_childcare_entitlement_eligible"])
+    )
+    assert "~has_extended_childcare" in source
+
+
 def test_tolerance_falls_back_to_the_default():
     # No override is set for these, so they take the default.
     assert ("caseload", "universal") not in TOLERANCES

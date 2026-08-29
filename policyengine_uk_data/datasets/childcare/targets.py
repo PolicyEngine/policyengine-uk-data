@@ -85,14 +85,12 @@ places nobody under 2 on this scheme, so those 224,300 children are outside
 both the target and the model. That is a coverage gap in the model rather
 than a calibration error, and no change to these targets addresses it.
 
-**Universal and early learning for 2-year-olds.** Corrected against DfE's
-published figures in a follow-up change; see "Funded early education and
-childcare", reporting year 2026
-(https://explore-education-statistics.service.gov.uk/find-statistics/funded-early-education-and-childcare/2026).
 **Universal and early learning for 2-year-olds.** From DfE, "Funded early
 education and childcare", reporting year 2026, national figures for January
 2024 (``data/headline_figures_feeac_2011_2026.csv`` in the release bundle):
-https://explore-education-statistics.service.gov.uk/find-statistics/funded-early-education-and-childcare/2026
+
+  release       https://explore-education-statistics.service.gov.uk/find-statistics/funded-early-education-and-childcare/2026
+  the data      https://explore-education-statistics.service.gov.uk/data-catalogue/funded-early-education-and-childcare/2026
 
   registered for the universal entitlement, excluding reception   778,327
   registered for the working parent entitlement, aged 3 to 4      361,790
@@ -105,7 +103,13 @@ The universal figure nets off the working parent entitlement because
 ``universal_childcare_entitlement_eligible`` in policyengine-uk ends with
 ``& ~has_extended_childcare`` — the schemes are modelled as mutually
 exclusive, so the comparator is children on the universal entitlement *only*,
-not the 1.13 million headline. The prior 490 thousand target was 1.18x that
+not the 1.13 million headline. The subtraction is only correct while that
+exclusion holds: an eligibility refactor that dropped it would make 416,537
+the wrong comparator without any target here looking wrong.
+test_universal_eligibility_still_excludes_the_working_parent_scheme in
+tests/test_childcare_targets.py asserts it against the installed
+policyengine-uk, so the cross-repo dependency fails loudly instead of
+silently. The prior 490 thousand target was 1.18x that
 figure and the prior 130 thousand target was 1.12x the EL2 count, both
 unsourced.
 
@@ -134,11 +138,10 @@ Tax-Free Childcare and extended hours, on no extra evidence. Both also assume
 every registered child took the full 570 hours, so they are upper bounds and
 the duplicated term pulls weights up.
 
-Tax-Free Childcare and extended spending stay, because they are not
-redundant: TFC spending varies with childcare expenditure and extended
-spending with `maximum_extended_childcare_hours_usage`, so neither is its
-caseload times a constant. Restoring universal and targeted spending needs an
-allocation or outturn source, not a headcount.
+Tax-Free Childcare spending stays, because it is not redundant: it varies
+with childcare expenditure rather than being its caseload times a constant,
+and it is a published outturn. Restoring universal and targeted spending
+needs an allocation or outturn source, not a headcount.
 
 """
 
@@ -154,8 +157,8 @@ TARGETS = {
     "caseload": {
         "tfc": 1_085.02,  # HMRC 1,085,020 children, 2024-25
         "extended": 621.5,  # DfE Jan 2025: 379,000 + 242,500
-        "targeted": 116,
-        "universal": 417,
+        "targeted": 115.852,  # DfE Jan 2024: 115,852 registered
+        "universal": 416.537,  # DfE Jan 2024: 778,327 - 361,790
     },
 }
 
