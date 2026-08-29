@@ -3,6 +3,10 @@ from scipy.optimize import minimize
 from policyengine_uk import Microsimulation
 from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
 from policyengine_uk_data.datasets.childcare.targets import TARGETS
+from policyengine_uk_data.datasets.childcare.assumptions import (
+    EXTENDED_HOURS_MEAN,
+    EXTENDED_HOURS_SD,
+)
 from policyengine_uk_data.utils.hf_destinations import PRIVATE_REPO
 
 ENHANCED_FRS_DATASET = (
@@ -12,20 +16,8 @@ ENHANCED_FRS_DATASET = (
 # 🎯 Calibration targets — see childcare/targets.py for sourcing.
 targets = TARGETS
 
-# Distribution of maximum_extended_childcare_hours_usage: a modelling
-# assumption, not an optimised result.
-#
-# These were fitted when the extended programme still carried a spending
-# target. Without it, the objective sees the hours distribution only through
-# whether a benefit unit's clipped draw is positive, and clip(mu + sigma*z,
-# 0, 30) > 0 depends on mu/sigma alone: (15, 5) and (30, 10) produce the same
-# mask and therefore the same loss. Fitting them was underidentified, so they
-# are held fixed here and in datasets/frs.py, which must use the same values.
-#
-# Replacing them needs published usage evidence — a distribution of funded
-# hours actually taken — not a re-run of this optimisation.
-EXTENDED_HOURS_MEAN = 15.019
-EXTENDED_HOURS_SD = 4.972
+# Fixed hours assumptions, shared with frs.py. See assumptions.py for why
+# they are not fitted.
 
 
 def simulate_childcare_programs(
@@ -43,7 +35,7 @@ def simulate_childcare_programs(
         tuple: (spending, caseload) dictionaries with results for each childcare program
     """
     # Unpack the four take-up rates. The extended hours distribution is a
-    # fixed assumption, not a fitted parameter — see EXTENDED_HOURS_MEAN.
+    # fixed assumption, not a fitted parameter — see assumptions.py.
     tfc, extended, targeted, universal = params
 
     # Initialize sim

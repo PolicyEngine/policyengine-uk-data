@@ -46,10 +46,12 @@ CASES = [
 # epochs with no flag and gates the upload on this suite.
 # A non-testing run only tells us the dataset is not a smoke build: locally it
 # may be a previously downloaded artefact rather than one built here.
+SMOKE = os.environ.get("TESTING") == "1"
 BUILD = (
     "smoke (TESTING=1, 32 epochs)"
-    if os.environ.get("TESTING") == "1"
-    else "release or previously built (512 epochs)"
+    if SMOKE
+    else "non-smoke, provenance unknown (a release build, or an artefact "
+    "built or downloaded earlier)"
 )
 PUSH_WORKFLOW = Path(__file__).resolve().parents[2] / ".github/workflows/push.yaml"
 
@@ -67,7 +69,7 @@ def test_childcare_hits_its_calibration_target(baseline, metric, programme):
     target = TARGETS[metric][programme]
     actual = measure(baseline, metric, programme)
     ratio = actual / target
-    allowed = tolerance(metric, programme)
+    allowed = tolerance(metric, programme, smoke=SMOKE)
 
     known_miss = KNOWN_MISSES.get((metric, programme))
     if known_miss is not None:
@@ -77,7 +79,8 @@ def test_childcare_hits_its_calibration_target(baseline, metric, programme):
 
     assert abs(ratio - 1) < allowed, (
         f"{programme} {metric} is {actual:.3f} against a target of {target:.3f} "
-        f"({ratio:.2f}x), outside the ±{allowed:.0%} tolerance"
+        f"({ratio:.2f}x), outside the ±{allowed:.0%} tolerance "
+        f"for the {BUILD} build"
     )
 
 
@@ -119,22 +122,28 @@ def test_report_ratios(baseline, capsys):
 
 
 def test_release_gate_is_wired():
-    """The release build must run this suite, at full fidelity, before uploading.
+    """The release build must run this suite before uploading.
 
     push.yaml is the only place the calibration targets are checked against
-    the artefact users receive. This pins the three properties that make it a
-    gate, so a workflow edit that broke one fails CI rather than shipping an
-    unvalidated dataset: the release build is not a TESTING smoke build, the
-    tests run before the upload, and a failing test stops the job.
+    the artefact users receive. This pins the properties that make it a gate,
+    so a workflow edit that broke one fails CI rather than shipping an
+    unvalidated dataset: the release build is a 512-epoch, one-OA-clone build
+    rather than a TESTING smoke build, the tests run before the upload, and a
+    failing test stops the job.
+
+    "Not a smoke build" is not the same as full fidelity — the release runs
+    one OA clone where the non-testing default is ten — so the contract is
+    stated as what it is and the clone count is pinned with the rest.
     """
     workflow = yaml.safe_load(PUSH_WORKFLOW.read_text())
-    steps = workflow["jobs"]["test"]["steps"]
+    job = workflow["jobs"]["test"]
+    steps = job["steps"]
     by_name = {step.get("name"): step for step in steps}
     order = [step.get("name") for step in steps]
 
     # TESTING set at workflow or job scope would reach the build step just as
     # a step-level setting does, so all three scopes are checked.
-    for scope in (workflow, workflow["jobs"]["test"], by_name["Build datasets"]):
+    for scope in (workflow, job, by_name["Build datasets"]):
         assert scope.get("env", {}).get("TESTING") != "1", (
             "the release build must not be a TESTING smoke build"
         )
@@ -144,9 +153,24 @@ def test_release_gate_is_wired():
     assert not by_name["Run tests"].get("continue-on-error", False), (
         "a failing test must stop the job, or the gate is decorative"
     )
-    assert "make test" in by_name["Run tests"]["run"]
     # `if: always()` or `if: failure()` on the upload would run it whatever the
     # tests did, which is the same as having no gate.
     assert "if" not in by_name["Upload data"], (
         "the upload must be unconditional on success, not run despite a failure"
     )
+    # The release contract, pinned: one OA clone, stated rather than assumed.
+    assert job["env"]["PE_UK_DATA_OA_CLONES"] == "1"
+
+    # Pin the commands themselves. Without this the gate survives `echo make
+    # test`, `make test || true`, or an inline `TESTING=1 make data` — each of
+    # which leaves every assertion above true while the gate does nothing.
+    expected = {
+        "Build datasets": "uv run --frozen make data",
+        "Run tests": "uv run --frozen make test",
+        "Upload data": "uv run --frozen make upload",
+    }
+    for name, command in expected.items():
+        assert by_name[name]["run"].strip() == command, (
+            f"{name} must run exactly `{command}`: a wrapped, echoed or "
+            "failure-swallowing variant is not a gate"
+        )

@@ -5,11 +5,14 @@ these cover the parts that do not need a dataset: the shape of the targets, the
 tolerance lookup, and the known-miss guard.
 """
 
+import importlib
+
 import pytest
 
 from policyengine_uk_data.datasets.childcare.targets import (
     DEFAULT_TOLERANCE,
     KNOWN_MISSES,
+    SMOKE_TOLERANCE,
     TARGETS,
     TOLERANCES,
     tolerance,
@@ -52,9 +55,9 @@ def test_tolerance_falls_back_to_the_default():
 
 
 def test_the_committed_tolerance_overrides_are_the_ones_that_apply():
-    # Both Tax-Free Childcare figures are exact HMRC outturns and the
-    # published artefact measures 1.02x on each, so they are held tighter
-    # than the default.
+    # Both Tax-Free Childcare figures are official published outturns, so
+    # they are held tighter than the default. 0.25 is a provisional QA
+    # threshold pending a captured 512-epoch result, not a measured bound.
     assert tolerance("spending", "tfc") == 0.25
     assert tolerance("caseload", "tfc") == 0.25
 
@@ -94,3 +97,65 @@ def test_extended_has_no_spending_target():
     even the correct one calibrates an hours distribution to a ceiling.
     """
     assert "extended" not in TARGETS["spending"]
+
+
+def test_the_smoke_build_has_its_own_weaker_contract():
+    """A 32-epoch build cannot be held to a release threshold.
+
+    The same code measured 1.12x and then 0.60x for Tax-Free Childcare
+    spending on consecutive pull-request builds, so the smoke contract only
+    catches order-of-magnitude breakage. The release thresholds are what
+    validate the numbers.
+    """
+    assert SMOKE_TOLERANCE > DEFAULT_TOLERANCE
+    # Both observed smoke ratios clear it, with room for the next swing.
+    for ratio in (0.60, 1.12):
+        assert abs(ratio - 1) < SMOKE_TOLERANCE
+    # A target that lost or doubled its population still fails.
+    for ratio in (0.2, 2.0):
+        assert abs(ratio - 1) > SMOKE_TOLERANCE
+
+
+def test_the_smoke_contract_never_loosens_a_release_threshold():
+    # TFC is held at 0.25 for the release and 0.6 for the smoke build, which
+    # is the point; nothing may come back tighter under smoke than it is for
+    # the release, and nothing may exceed the smoke bound.
+    for metric in TARGETS:
+        for programme in TARGETS[metric]:
+            release = tolerance(metric, programme)
+            smoke = tolerance(metric, programme, smoke=True)
+            assert smoke >= release
+            assert smoke >= SMOKE_TOLERANCE
+
+
+def test_the_optimiser_fits_take_up_rates_only():
+    """Pins the C5 fix: the hours distribution is not a fitted parameter.
+
+    Without an extended spending target the objective cannot identify the
+    hours mean and sd — (15, 5) and (30, 10) give the same clipped mask and
+    so the same loss — so they are fixed assumptions shared by both draw
+    sites. Re-adding them to the optimiser must fail here.
+    """
+    import inspect
+
+    from policyengine_uk_data.datasets.childcare import takeup_rate
+    from policyengine_uk_data.datasets.childcare.assumptions import (
+        EXTENDED_HOURS_MEAN,
+        EXTENDED_HOURS_SD,
+    )
+
+    source = inspect.getsource(takeup_rate)
+    assert "tfc, extended, targeted, universal = params" in source, (
+        "the optimiser takes four take-up rates; the hours distribution is an "
+        "assumption, not a fitted parameter"
+    )
+    assert "x0 = [0.5, 0.5, 0.5, 0.5]" in source
+
+    # Both draw sites consume the shared assumptions rather than literals.
+    frs_source = inspect.getsource(
+        importlib.import_module("policyengine_uk_data.datasets.frs")
+    )
+    for module_source in (source, frs_source):
+        assert "EXTENDED_HOURS_MEAN" in module_source
+        assert "EXTENDED_HOURS_SD" in module_source
+    assert (EXTENDED_HOURS_MEAN, EXTENDED_HOURS_SD) == (15.019, 4.972)

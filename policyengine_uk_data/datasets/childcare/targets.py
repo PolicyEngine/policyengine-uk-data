@@ -127,9 +127,12 @@ TARGETS = {
 #   push.yaml runs on every release (it triggers on the pyproject.toml bump
 #   that versioning.yaml pushes to main), builds at the full 512 epochs with
 #   no TESTING flag, runs `make test`, and only then runs `make upload`. A
-#   failing test there stops the upload. That is the release gate, and it has
-#   been wired that way since July 2025; the 1.87x artefact passed through it
-#   because the tolerance let it, not because the gate was missing.
+#   failing test there stops the upload. That is the release gate as the
+#   workflow stands for release 1.56.16 — 512 epochs and one OA clone. It has
+#   not always been so: release testing briefly ran with TESTING=1 in
+#   December 2025, so read the workflow rather than assuming continuity. The
+#   1.87x artefact passed through the gate because the tolerance let it, not
+#   because the gate was missing.
 #
 # test_release_gate_is_wired in tests/test_childcare.py asserts that
 # ordering, so a change to push.yaml that ran tests after the upload, set
@@ -168,9 +171,36 @@ TOLERANCES: dict[tuple[str, str], float] = {
 }
 
 
-def tolerance(metric: str, programme: str) -> float:
-    """Allowed fractional deviation from target for one programme and metric."""
-    return TOLERANCES.get((metric, programme), DEFAULT_TOLERANCE)
+# The tolerances above are release thresholds. They cannot be applied to a
+# pull-request build, which calibrates for 32 epochs rather than 512 and is
+# under-converged by construction: the same code measured 1.12x for Tax-Free
+# Childcare spending on one smoke run and 0.60x on the next, a swing no
+# release-representative threshold can absorb.
+#
+# So the smoke build gets its own contract, and it is a weak one on purpose.
+# What a 32-epoch run can show is that the pipeline runs, the variables
+# resolve, and no target is out by an order of magnitude. It cannot show that
+# the numbers are right — only push.yaml's 512-epoch build can, and that is
+# the build the tolerances above gate.
+#
+# 0.6 admits ratios in (0.4, 1.6). Both observed smoke ratios clear it with
+# room, while a target that lost or doubled its population still fails. Widen
+# it only for a miss that a release build does not share; a smoke failure
+# that reproduces at 512 epochs is a real one.
+SMOKE_TOLERANCE = 0.6
+
+
+def tolerance(metric: str, programme: str, smoke: bool = False) -> float:
+    """Allowed fractional deviation from target for one programme and metric.
+
+    ``smoke`` selects the reduced-epoch pull-request contract. The release
+    thresholds are never loosened by it: a target held tighter than
+    SMOKE_TOLERANCE keeps its own bound in both builds.
+    """
+    allowed = TOLERANCES.get((metric, programme), DEFAULT_TOLERANCE)
+    if smoke:
+        return max(allowed, SMOKE_TOLERANCE)
+    return allowed
 
 
 # Targets the release build is known not to meet, with the issue tracking
@@ -182,7 +212,7 @@ def tolerance(metric: str, programme: str) -> float:
 # entry for Tax-Free Childcare spending was removed on the strength of a
 # 1.12x pull-request build while the release still sat at 1.87x.
 #
-# Deliberately empty for Tax-Free Childcare despite the 1.87x on main: an
-# entry would wave the miss through the gate, and the correction (#473) is
-# ready to merge. Blocking the release until it does is the intended outcome.
+# Deliberately empty for Tax-Free Childcare: the 1.87x on the v1.56.16
+# artefact was corrected by #473, merged 28 August 2026, so there is nothing
+# left to wave through. An entry here would only hide the next regression.
 KNOWN_MISSES: dict[tuple[str, str], str] = {}
