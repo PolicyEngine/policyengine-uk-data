@@ -141,10 +141,10 @@ TARGETS = {
 #   - Measure KNOWN_MISSES and tolerance overrides on the release build (the
 #     push.yaml log, or the published artefact), never on a pull-request run.
 #   - Tightening a tolerance can block the next release. That is the point,
-#     but it means the fix that lets the target pass must merge first. As of
-#     this change, main misses Tax-Free Childcare spending at 1.87x, and the
-#     correction is policyengine-uk-data #473: merge that before this, or the
-#     first release after this lands is blocked until it does.
+#     but it means the fix that lets the target pass must merge first. The
+#     1.87x Tax-Free Childcare spending miss on the v1.56.16 artefact was
+#     corrected by #473, merged 28 August 2026, before these tolerances
+#     landed.
 #
 # 0.4 is a first step, not a resting place: a 39% error still passes. It is
 # tightened per target below only where a release-representative measurement
