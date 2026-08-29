@@ -17,11 +17,16 @@ from policyengine_uk_data.datasets.childcare.targets import (
 
 PROGRAMMES = {"tfc", "extended", "targeted", "universal"}
 
+# Spending is deliberately sparse: extended has no target, because the only
+# figure derivable from DfE is a full-usage ceiling the model pays 75% of.
+# See the targets module docstring and test_extended_has_no_spending_target.
+SPENDING_PROGRAMMES = PROGRAMMES - {"extended"}
 
-def test_every_programme_has_both_metrics():
+
+def test_the_registry_covers_the_programmes_it_claims():
     assert set(TARGETS) == {"spending", "caseload"}
-    for metric in TARGETS:
-        assert set(TARGETS[metric]) == PROGRAMMES, metric
+    assert set(TARGETS["caseload"]) == PROGRAMMES
+    assert set(TARGETS["spending"]) == SPENDING_PROGRAMMES
 
 
 def test_targets_are_positive_and_in_their_stated_units():
@@ -40,17 +45,23 @@ def test_tfc_targets_keep_the_published_precision():
 
 
 def test_tolerance_falls_back_to_the_default():
-    assert tolerance("spending", "extended") == DEFAULT_TOLERANCE
+    # No override is set for these, so they take the default.
+    assert ("caseload", "universal") not in TOLERANCES
     assert tolerance("caseload", "universal") == DEFAULT_TOLERANCE
+    assert tolerance("caseload", "extended") == DEFAULT_TOLERANCE
 
 
-def test_tolerance_overrides_are_used_when_present():
-    TOLERANCES[("spending", "tfc")] = 0.05
-    try:
-        assert tolerance("spending", "tfc") == 0.05
-        assert tolerance("caseload", "tfc") == DEFAULT_TOLERANCE
-    finally:
-        del TOLERANCES[("spending", "tfc")]
+def test_the_committed_tolerance_overrides_are_the_ones_that_apply():
+    # Both Tax-Free Childcare figures are exact HMRC outturns and the
+    # published artefact measures 1.02x on each, so they are held tighter
+    # than the default.
+    assert tolerance("spending", "tfc") == 0.25
+    assert tolerance("caseload", "tfc") == 0.25
+
+
+def test_an_override_is_preferred_to_the_default(monkeypatch):
+    monkeypatch.setitem(TOLERANCES, ("caseload", "universal"), 0.05)
+    assert tolerance("caseload", "universal") == 0.05
 
 
 def test_known_misses_name_real_programmes_and_carry_a_reason():

@@ -9,6 +9,10 @@ release after ``takeup_rate.py`` had moved to the June 2025 figures.
 TFC targets are from HMRC "Tax-Free Childcare statistics: June 2025"
 (published 27 August 2025, covering the 2024-25 outturn):
 
+https://www.gov.uk/government/statistics/tax-free-childcare-statistics-june-2025
+https://assets.publishing.service.gov.uk/media/689f2a02b4b6acd341133a76/Tables_and_Statistics_June_2025.ods
+
+
   - spending: £632.2m (Table 1, annual government top-up)
   - caseload: 1,085 thousand children with used accounts in 2024-25 (Table 2)
 
@@ -54,7 +58,9 @@ children are excluded from the separate universal variable; 2-year-olds get
     242,500 x   570 x 8.28 = £1.145bn
                              £3.685bn
 
-against £2.778bn actually paid on enhanced_frs_2024_25 — 75% of full usage.
+against £2.778bn modelled on enhanced_frs_2024_25 — the weighted sum of
+``extended_childcare_entitlement``, a model output rather than a DfE outturn,
+and 75% of the full-usage ceiling above.
 An earlier draft of this module set £2.415bn by giving both age groups 570
 hours, which is 65% of the comparable model quantity and would have pulled
 the calibrated hours distribution against a number the model cannot reach.
@@ -145,11 +151,14 @@ TARGETS = {
 # exists.
 DEFAULT_TOLERANCE = 0.4
 TOLERANCES: dict[tuple[str, str], float] = {
-    # Both HMRC figures are exact outturns, and the published artefact with
-    # the corrected inputs applied (policyengine-uk 2.93.0, which takes the
-    # 20% rate on gross spend, plus #473's routed-spend adjustment) measures
-    # 1.02x on both. 0.25 leaves room for a fresh 512-epoch calibration to
-    # move the weights; tighten to 0.15 once a push.yaml log confirms it.
+    # Both HMRC figures are exact outturns, which is why they are held
+    # tighter than the rest. 0.25 is a QA judgement, not a measured bound:
+    # the 1.02x seen on a local build with the corrected inputs applied
+    # (policyengine-uk 2.93.0, which takes the 20% rate on gross spend, plus
+    # #473's routed-spend adjustment) is not reproducible from a cited
+    # release log. It leaves room for a fresh 512-epoch calibration to move
+    # the weights; replace it with a measured bound, tightening to about
+    # 0.15, once a push.yaml log records the release ratios.
     ("spending", "tfc"): 0.25,
     ("caseload", "tfc"): 0.25,
     # No override for extended, targeted or universal: their caseload targets

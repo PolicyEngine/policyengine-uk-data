@@ -12,23 +12,39 @@ ENHANCED_FRS_DATASET = (
 # 🎯 Calibration targets — see childcare/targets.py for sourcing.
 targets = TARGETS
 
+# Distribution of maximum_extended_childcare_hours_usage: a modelling
+# assumption, not an optimised result.
+#
+# These were fitted when the extended programme still carried a spending
+# target. Without it, the objective sees the hours distribution only through
+# whether a benefit unit's clipped draw is positive, and clip(mu + sigma*z,
+# 0, 30) > 0 depends on mu/sigma alone: (15, 5) and (30, 10) produce the same
+# mask and therefore the same loss. Fitting them was underidentified, so they
+# are held fixed here and in datasets/frs.py, which must use the same values.
+#
+# Replacing them needs published usage evidence — a distribution of funded
+# hours actually taken — not a re-run of this optimisation.
+EXTENDED_HOURS_MEAN = 15.019
+EXTENDED_HOURS_SD = 4.972
+
 
 def simulate_childcare_programs(
     params: list[float], seed: int = 42
 ) -> tuple[dict[str, float], dict[str, float]]:
     """
-    Run a simulation with given takeup rates and maximum extended hours for childcare programs.
+    Run a simulation with given takeup rates for childcare programs.
 
     Args:
         params: List of parameter values
-               [tfc_rate, extended_rate, targeted_rate, universal_rate, ext_hours_mean, ext_hours_sd]
+               [tfc_rate, extended_rate, targeted_rate, universal_rate]
         seed: Random seed for reproducibility
 
     Returns:
         tuple: (spending, caseload) dictionaries with results for each childcare program
     """
-    # Unpack parameters - now with 6 parameters
-    tfc, extended, targeted, universal, ext_hours_mean, ext_hours_sd = params
+    # Unpack the four take-up rates. The extended hours distribution is a
+    # fixed assumption, not a fitted parameter — see EXTENDED_HOURS_MEAN.
+    tfc, extended, targeted, universal = params
 
     # Initialize sim
     sim = Microsimulation(dataset=ENHANCED_FRS_DATASET)
@@ -58,9 +74,9 @@ def simulate_childcare_programs(
     )
 
     # Generate extended childcare hours usage values
-    # Using truncated normal distribution with mean and sd
+    # Using truncated normal distribution with the assumed mean and sd
     extended_hours_values = np.random.normal(
-        ext_hours_mean, ext_hours_sd, benunit_count
+        EXTENDED_HOURS_MEAN, EXTENDED_HOURS_SD, benunit_count
     )
     # Clip values to be between 0 and 30 hours
     extended_hours_values = np.clip(extended_hours_values, 0, 30)
@@ -112,8 +128,8 @@ def objective(params: list[float]) -> float:
     Calculate the loss between simulated and target values for childcare programs.
 
     Args:
-        params: List of parameter values [tfc_rate, extended_rate, targeted_rate, universal_rate,
-                ext_hours_mean, ext_hours_sd]
+        params: List of parameter values [tfc_rate, extended_rate, targeted_rate,
+                universal_rate]
 
     Returns:
         float: Combined loss value measuring distance from targets
@@ -146,16 +162,9 @@ def objective(params: list[float]) -> float:
 
 
 if __name__ == "__main__":
-    # 🧠 Initial values and bounds - now with 6 parameters
-    x0 = [0.5, 0.5, 0.5, 0.5, 15.0, 5.0]  # take-up rates + hours mean & sd
-    bounds = [
-        (0, 1),
-        (0, 1),
-        (0, 1),
-        (0, 1),
-        (5.0, 30.0),
-        (1.0, 10.0),
-    ]  # bounds for all parameters
+    # 🧠 Initial values and bounds - one take-up rate per programme
+    x0 = [0.5, 0.5, 0.5, 0.5]
+    bounds = [(0, 1), (0, 1), (0, 1), (0, 1)]
 
     # 🚀 Run optimization
     result = minimize(
@@ -172,8 +181,10 @@ if __name__ == "__main__":
     print(f"Extended Childcare: {result.x[1]:.3f}")
     print(f"Targeted Childcare: {result.x[2]:.3f}")
     print(f"Universal Childcare: {result.x[3]:.3f}")
-    print(f"Extended Hours Mean: {result.x[4]:.1f} hours")
-    print(f"Extended Hours SD: {result.x[5]:.1f} hours")
+    print(
+        f"Extended hours held fixed at mean {EXTENDED_HOURS_MEAN}, "
+        f"sd {EXTENDED_HOURS_SD} (assumption, not fitted)"
+    )
     print(f"Final Loss: {result.fun:.4f}")
 
     # Simulate with final parameters and show detailed results

@@ -32,9 +32,9 @@ PROGRAMMES = {
     ),
 }
 
-# Iterate over the targets that exist, not every programme: only Tax-Free
-# Childcare has a spending target, because it is the only programme with a
-# published expenditure outturn. See targets.py for why the rest were dropped.
+# Iterate over the targets that exist, not every programme: extended has no
+# spending target, because the only figure derivable from DfE is a full-usage
+# ceiling the model pays 75% of. See targets.py.
 CASES = [
     (metric, programme)
     for metric in ("spending", "caseload")
@@ -44,10 +44,12 @@ CASES = [
 # Which build produced the dataset under test. pull_request.yaml sets
 # TESTING=1 for a 32-epoch smoke build; push.yaml builds the release at 512
 # epochs with no flag and gates the upload on this suite.
+# A non-testing run only tells us the dataset is not a smoke build: locally it
+# may be a previously downloaded artefact rather than one built here.
 BUILD = (
     "smoke (TESTING=1, 32 epochs)"
     if os.environ.get("TESTING") == "1"
-    else ("release (512 epochs)")
+    else "release or previously built (512 epochs)"
 )
 PUSH_WORKFLOW = Path(__file__).resolve().parents[2] / ".github/workflows/push.yaml"
 
@@ -130,10 +132,12 @@ def test_release_gate_is_wired():
     by_name = {step.get("name"): step for step in steps}
     order = [step.get("name") for step in steps]
 
-    build = by_name["Build datasets"]
-    assert build.get("env", {}).get("TESTING") != "1", (
-        "the release build must not be a TESTING smoke build"
-    )
+    # TESTING set at workflow or job scope would reach the build step just as
+    # a step-level setting does, so all three scopes are checked.
+    for scope in (workflow, workflow["jobs"]["test"], by_name["Build datasets"]):
+        assert scope.get("env", {}).get("TESTING") != "1", (
+            "the release build must not be a TESTING smoke build"
+        )
     assert order.index("Run tests") < order.index("Upload data"), (
         "tests must run before the upload, or a failing target cannot block it"
     )
@@ -141,3 +145,8 @@ def test_release_gate_is_wired():
         "a failing test must stop the job, or the gate is decorative"
     )
     assert "make test" in by_name["Run tests"]["run"]
+    # `if: always()` or `if: failure()` on the upload would run it whatever the
+    # tests did, which is the same as having no gate.
+    assert "if" not in by_name["Upload data"], (
+        "the upload must be unconditional on success, not run despite a failure"
+    )

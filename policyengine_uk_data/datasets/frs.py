@@ -31,6 +31,10 @@ from policyengine_uk_data.utils.datasets import (
     STORAGE_FOLDER,
 )
 from policyengine_uk_data.parameters import load_take_up_rate, load_parameter
+from policyengine_uk_data.datasets.childcare.takeup_rate import (
+    EXTENDED_HOURS_MEAN,
+    EXTENDED_HOURS_SD,
+)
 
 
 # Canonical weeks-per-year conversion factor for annualising weekly survey
@@ -1472,9 +1476,13 @@ def create_frs(
     # Person-level: Private school attendance random draw
     pe_person["attends_private_school_random_draw"] = generator.random(len(pe_person))
 
-    # Generate extended childcare hours usage values with mean 15.019 and sd
-    # 4.972
-    extended_hours_values = generator.normal(15.019, 4.972, len(pe_benunit))
+    # Generate extended childcare hours usage values. The mean and sd are a
+    # modelling assumption held in childcare/takeup_rate.py, not a fitted
+    # result: without an extended spending target the calibration objective
+    # cannot identify them. See EXTENDED_HOURS_MEAN for why.
+    extended_hours_values = generator.normal(
+        EXTENDED_HOURS_MEAN, EXTENDED_HOURS_SD, len(pe_benunit)
+    )
     # Clip values to be between 0 and 30 hours
     extended_hours_values = np.clip(extended_hours_values, 0, 30)
 
