@@ -154,8 +154,9 @@ TARGETS = {
 # exists.
 DEFAULT_TOLERANCE = 0.4
 TOLERANCES: dict[tuple[str, str], float] = {
-    # Both HMRC figures are exact outturns, which is why they are held
-    # tighter than the rest. 0.25 is a QA judgement, not a measured bound:
+    # Both HMRC figures are official published outturns — the top-up rounded
+    # to £0.1m — which is why they are held tighter than the rest. 0.25 is a
+    # QA judgement, not a measured bound:
     # the 1.02x seen on a local build with the corrected inputs applied
     # (policyengine-uk 2.93.0, which takes the 20% rate on gross spend, plus
     # #473's routed-spend adjustment) is not reproducible from a cited
@@ -171,36 +172,49 @@ TOLERANCES: dict[tuple[str, str], float] = {
 }
 
 
-# The tolerances above are release thresholds. They cannot be applied to a
-# pull-request build, which calibrates for 32 epochs rather than 512 and is
-# under-converged by construction: the same code measured 1.12x for Tax-Free
-# Childcare spending on one smoke run and 0.60x on the next, a swing no
-# release-representative threshold can absorb.
+# The tolerances above are release thresholds, and a pull-request build
+# cannot be held to them. It calibrates for 32 epochs rather than 512 and is
+# under-converged by construction: Tax-Free Childcare spending measured 1.11x
+# on the smoke build at 2505d334 and 0.60x at 39ec2161, a range no
+# release-representative threshold absorbs.
 #
-# So the smoke build gets its own contract, and it is a weak one on purpose.
-# What a 32-epoch run can show is that the pipeline runs, the variables
-# resolve, and no target is out by an order of magnitude. It cannot show that
-# the numbers are right — only push.yaml's 512-epoch build can, and that is
-# the build the tolerances above gate.
+#   1.11x  https://github.com/PolicyEngine/policyengine-uk-data/actions/runs/33193249421
+#   0.60x  https://github.com/PolicyEngine/policyengine-uk-data/actions/runs/33246122109
 #
-# 0.6 admits ratios in (0.4, 1.6). Both observed smoke ratios clear it with
-# room, while a target that lost or doubled its population still fails. Widen
-# it only for a miss that a release build does not share; a smoke failure
-# that reproduces at 512 epochs is a real one.
+# Those are different commits, so this is a range across branch builds rather
+# than a demonstrated same-SHA flake. Neither commit changed how the extended
+# hours are drawn or what TFC pays, which is why the spread looks like
+# under-convergence — but no same-SHA rerun has been captured, so it is not
+# claimed as one. Either way a 32-epoch build cannot support a 25% threshold.
+#
+# So the smoke build gets its own override, and a weak one on purpose. What a
+# 32-epoch run can show is that the pipeline runs, the variables resolve, and
+# nothing has collapsed or run away. It cannot show that the numbers are
+# right — only push.yaml's 512-epoch build can, and that is what the
+# tolerances above gate.
+#
+# Scoped to Tax-Free Childcare spending, the one check that needs it. The
+# other six ran at 0.79 to 1.12 on the same build and keep their release
+# thresholds, so a regression in any of them still fails the pull request.
+# Add an entry only for a miss a release build does not share: a smoke
+# failure that reproduces at 512 epochs is a real one.
 SMOKE_TOLERANCE = 0.6
+SMOKE_TOLERANCES: dict[tuple[str, str], float] = {
+    ("spending", "tfc"): SMOKE_TOLERANCE,
+}
 
 
 def tolerance(metric: str, programme: str, smoke: bool = False) -> float:
     """Allowed fractional deviation from target for one programme and metric.
 
-    ``smoke`` selects the reduced-epoch pull-request contract. The release
-    thresholds are never loosened by it: a target held tighter than
-    SMOKE_TOLERANCE keeps its own bound in both builds.
+    ``smoke`` selects the reduced-epoch pull-request contract, which exists
+    only for the targets in SMOKE_TOLERANCES. Everything else keeps its
+    release threshold in both builds, so this loosens exactly what it
+    documents and nothing else.
     """
-    allowed = TOLERANCES.get((metric, programme), DEFAULT_TOLERANCE)
-    if smoke:
-        return max(allowed, SMOKE_TOLERANCE)
-    return allowed
+    if smoke and (metric, programme) in SMOKE_TOLERANCES:
+        return SMOKE_TOLERANCES[(metric, programme)]
+    return TOLERANCES.get((metric, programme), DEFAULT_TOLERANCE)
 
 
 # Targets the release build is known not to meet, with the issue tracking

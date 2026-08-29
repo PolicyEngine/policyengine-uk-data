@@ -13,6 +13,7 @@ from policyengine_uk_data.datasets.childcare.targets import (
     DEFAULT_TOLERANCE,
     KNOWN_MISSES,
     SMOKE_TOLERANCE,
+    SMOKE_TOLERANCES,
     TARGETS,
     TOLERANCES,
     tolerance,
@@ -102,30 +103,51 @@ def test_extended_has_no_spending_target():
 def test_the_smoke_build_has_its_own_weaker_contract():
     """A 32-epoch build cannot be held to a release threshold.
 
-    The same code measured 1.12x and then 0.60x for Tax-Free Childcare
-    spending on consecutive pull-request builds, so the smoke contract only
-    catches order-of-magnitude breakage. The release thresholds are what
-    validate the numbers.
+    Tax-Free Childcare spending measured 1.11x on one branch's smoke build
+    and 0.60x on another's, so the smoke contract catches collapse and
+    runaway and nothing finer. The release thresholds validate the numbers.
     """
     assert SMOKE_TOLERANCE > DEFAULT_TOLERANCE
-    # Both observed smoke ratios clear it, with room for the next swing.
-    for ratio in (0.60, 1.12):
+    # Both observed smoke ratios clear it, with room for the next one.
+    for ratio in (0.60, 1.11):
         assert abs(ratio - 1) < SMOKE_TOLERANCE
     # A target that lost or doubled its population still fails.
     for ratio in (0.2, 2.0):
         assert abs(ratio - 1) > SMOKE_TOLERANCE
 
 
-def test_the_smoke_contract_never_loosens_a_release_threshold():
-    # TFC is held at 0.25 for the release and 0.6 for the smoke build, which
-    # is the point; nothing may come back tighter under smoke than it is for
-    # the release, and nothing may exceed the smoke bound.
+def test_the_smoke_contract_is_scoped_to_the_target_that_needs_it():
+    """Only TFC spending is loosened; the other six keep release thresholds.
+
+    A global smoke override would widen every check to ±60% and let a real
+    regression in any of them through the pull request.
+    """
+    assert set(SMOKE_TOLERANCES) == {("spending", "tfc")}
     for metric in TARGETS:
         for programme in TARGETS[metric]:
             release = tolerance(metric, programme)
             smoke = tolerance(metric, programme, smoke=True)
-            assert smoke >= release
-            assert smoke >= SMOKE_TOLERANCE
+            if (metric, programme) in SMOKE_TOLERANCES:
+                assert smoke == SMOKE_TOLERANCES[(metric, programme)]
+            else:
+                assert smoke == release, (
+                    f"{metric}/{programme} has no smoke override, so the "
+                    "smoke build must hold it to its release threshold"
+                )
+
+
+def test_no_tolerance_admits_a_lost_or_doubled_population():
+    """An unpinned 1.1 or 99 would pass everything, in either build."""
+    for metric in TARGETS:
+        for programme in TARGETS[metric]:
+            for allowed in (
+                tolerance(metric, programme),
+                tolerance(metric, programme, smoke=True),
+            ):
+                assert 0 < allowed <= SMOKE_TOLERANCE, (
+                    f"{metric}/{programme}: a tolerance above the smoke "
+                    "contract cannot reject a zeroed or doubled target"
+                )
 
 
 def test_the_optimiser_fits_take_up_rates_only():
