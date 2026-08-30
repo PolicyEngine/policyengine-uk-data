@@ -2,65 +2,41 @@ import numpy as np
 from scipy.optimize import minimize
 from policyengine_uk import Microsimulation
 from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
+from policyengine_uk_data.datasets.childcare.targets import TARGETS
+from policyengine_uk_data.datasets.childcare.assumptions import (
+    EXTENDED_HOURS_MEAN,
+    EXTENDED_HOURS_SD,
+)
 from policyengine_uk_data.utils.hf_destinations import PRIVATE_REPO
 
 ENHANCED_FRS_DATASET = (
     f"hf://{PRIVATE_REPO}/{CURRENT_FRS_RELEASE.enhanced_dataset_file}"
 )
 
-# 🎯 Calibration targets
-#
-# TFC targets refreshed from HMRC "Tax-Free Childcare statistics: June 2025"
-# (published 27 Aug 2025, covering 2024-25 outturn):
-#   - spending: £632.2 m (Table 1, annual government top-up)
-#   - caseload: 985 thousand children received TFC in 2024-25 (annual unique)
-# The prior 0.6 / 660 targets were calibrated against the Sep 2024 release
-# (2023-24 outturn) and have since been overtaken by the TFC account
-# expansion and the Sep 2025 "30 free hours for under-5s" boost in uptake.
-#
-# Other programme targets kept at their prior DfE values.
-targets = {
-    "spending": {
-        "tfc": 0.63,
-        "extended": 2.5,
-        "targeted": 0.6,
-        "universal": 1.7,
-    },
-    "caseload": {
-        "tfc": 985,
-        "extended": 740,
-        "targeted": 130,
-        "universal": 490,
-    },
-}
+# 🎯 Calibration targets — see childcare/targets.py for sourcing.
+targets = TARGETS
 
-# UK government aggregate Tax-Free Childcare statistics:
-# https://www.gov.uk/government/statistics/tax-free-childcare-statistics-june-2025
-
-# This is the Department for Education (DfE) data for the other childcare programmes:
-# https://skillsfunding.service.gov.uk/view-latest-funding/national-funding-allocations/DSG/2024-to-2025
-
-# For our calculations, please refer to this file:
-# https://docs.google.com/spreadsheets/d/1HLwxCJAJQNHa64peQFfV47MuNqoOHBJ9lnFENXMTguE/edit?gid=2100110594#gid=2100110594
+# Fixed hours assumptions, shared with frs.py. See assumptions.py for why
+# they are not fitted.
 
 
-# 📦 Simulation runner
 def simulate_childcare_programs(
     params: list[float], seed: int = 42
 ) -> tuple[dict[str, float], dict[str, float]]:
     """
-    Run a simulation with given takeup rates and maximum extended hours for childcare programs.
+    Run a simulation with given takeup rates for childcare programs.
 
     Args:
         params: List of parameter values
-               [tfc_rate, extended_rate, targeted_rate, universal_rate, ext_hours_mean, ext_hours_sd]
+               [tfc_rate, extended_rate, targeted_rate, universal_rate]
         seed: Random seed for reproducibility
 
     Returns:
         tuple: (spending, caseload) dictionaries with results for each childcare program
     """
-    # Unpack parameters - now with 6 parameters
-    tfc, extended, targeted, universal, ext_hours_mean, ext_hours_sd = params
+    # Unpack the four take-up rates. The extended hours distribution is a
+    # fixed assumption, not a fitted parameter — see assumptions.py.
+    tfc, extended, targeted, universal = params
 
     # Initialize sim
     sim = Microsimulation(dataset=ENHANCED_FRS_DATASET)
@@ -90,9 +66,9 @@ def simulate_childcare_programs(
     )
 
     # Generate extended childcare hours usage values
-    # Using truncated normal distribution with mean and sd
+    # Using truncated normal distribution with the assumed mean and sd
     extended_hours_values = np.random.normal(
-        ext_hours_mean, ext_hours_sd, benunit_count
+        EXTENDED_HOURS_MEAN, EXTENDED_HOURS_SD, benunit_count
     )
     # Clip values to be between 0 and 30 hours
     extended_hours_values = np.clip(extended_hours_values, 0, 30)
@@ -144,8 +120,8 @@ def objective(params: list[float]) -> float:
     Calculate the loss between simulated and target values for childcare programs.
 
     Args:
-        params: List of parameter values [tfc_rate, extended_rate, targeted_rate, universal_rate,
-                ext_hours_mean, ext_hours_sd]
+        params: List of parameter values [tfc_rate, extended_rate, targeted_rate,
+                universal_rate]
 
     Returns:
         float: Combined loss value measuring distance from targets
@@ -178,16 +154,9 @@ def objective(params: list[float]) -> float:
 
 
 if __name__ == "__main__":
-    # 🧠 Initial values and bounds - now with 6 parameters
-    x0 = [0.5, 0.5, 0.5, 0.5, 15.0, 5.0]  # take-up rates + hours mean & sd
-    bounds = [
-        (0, 1),
-        (0, 1),
-        (0, 1),
-        (0, 1),
-        (5.0, 30.0),
-        (1.0, 10.0),
-    ]  # bounds for all parameters
+    # 🧠 Initial values and bounds - one take-up rate per programme
+    x0 = [0.5, 0.5, 0.5, 0.5]
+    bounds = [(0, 1), (0, 1), (0, 1), (0, 1)]
 
     # 🚀 Run optimization
     result = minimize(
@@ -204,8 +173,10 @@ if __name__ == "__main__":
     print(f"Extended Childcare: {result.x[1]:.3f}")
     print(f"Targeted Childcare: {result.x[2]:.3f}")
     print(f"Universal Childcare: {result.x[3]:.3f}")
-    print(f"Extended Hours Mean: {result.x[4]:.1f} hours")
-    print(f"Extended Hours SD: {result.x[5]:.1f} hours")
+    print(
+        f"Extended hours held fixed at mean {EXTENDED_HOURS_MEAN}, "
+        f"sd {EXTENDED_HOURS_SD} (assumption, not fitted)"
+    )
     print(f"Final Loss: {result.fun:.4f}")
 
     # Simulate with final parameters and show detailed results
