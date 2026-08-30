@@ -21,16 +21,23 @@ from policyengine_uk_data.datasets.childcare.targets import (
 
 PROGRAMMES = {"tfc", "extended", "targeted", "universal"}
 
-# Spending is deliberately sparse: extended has no target, because the only
-# figure derivable from DfE is a full-usage ceiling the model pays 75% of.
-# See the targets module docstring and test_extended_has_no_spending_target.
-SPENDING_PROGRAMMES = PROGRAMMES - {"extended"}
+# Only Tax-Free Childcare has a spending target. Universal and targeted are
+# the caseload times a constant, which duplicates the caseload term in
+# `takeup_rate.objective` instead of adding evidence; extended's only
+# derivable figure is a full-usage ceiling the model pays 75% of.
+SPENDING_PROGRAMMES = {"tfc"}
 
 
-def test_the_registry_covers_the_programmes_it_claims():
+def test_every_programme_has_a_caseload_target():
     assert set(TARGETS) == {"spending", "caseload"}
     assert set(TARGETS["caseload"]) == PROGRAMMES
-    assert set(TARGETS["spending"]) == SPENDING_PROGRAMMES
+
+
+def test_spending_targets_exclude_the_caseload_derived_programmes():
+    assert set(TARGETS["spending"]) == SPENDING_PROGRAMMES, (
+        "only TFC spending is an observed outturn; the others are caseload x a "
+        "constant or a full-usage ceiling, and re-adding them biases the loss"
+    )
 
 
 def test_targets_are_positive_and_in_their_stated_units():
@@ -46,6 +53,35 @@ def test_tfc_targets_keep_the_published_precision():
     # 1,085,020 children with used accounts.
     assert TARGETS["spending"]["tfc"] == pytest.approx(0.6322)
     assert TARGETS["caseload"]["tfc"] == pytest.approx(1_085.02)
+
+
+def test_entitlement_caseloads_match_the_dfe_january_2024_census():
+    """Universal nets off the working parent entitlement; the schemes are
+    modelled as mutually exclusive, so the comparator is the children on the
+    universal entitlement only, not DfE's 1.13 million headline."""
+    universal_including_working_parent = 778_327
+    working_parent_three_and_four = 361_790
+    assert TARGETS["caseload"]["universal"] == pytest.approx(
+        (universal_including_working_parent - working_parent_three_and_four) / 1e3
+    )
+    assert TARGETS["caseload"]["targeted"] == pytest.approx(115_852 / 1e3)
+
+
+def test_universal_eligibility_still_excludes_the_working_parent_scheme():
+    """The universal target subtracts the working parent registrations.
+
+    That is only the right comparator while policyengine-uk models the two
+    schemes as mutually exclusive. If this fails, the 416,537 figure needs
+    rederiving, not the test relaxing.
+    """
+    import inspect
+
+    from policyengine_uk.system import system
+
+    source = inspect.getsource(
+        type(system.variables["universal_childcare_entitlement_eligible"])
+    )
+    assert "~has_extended_childcare" in source
 
 
 def test_tolerance_falls_back_to_the_default():

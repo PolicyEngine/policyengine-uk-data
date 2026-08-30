@@ -85,26 +85,80 @@ places nobody under 2 on this scheme, so those 224,300 children are outside
 both the target and the model. That is a coverage gap in the model rather
 than a calibration error, and no change to these targets addresses it.
 
-**Universal and early learning for 2-year-olds.** Corrected against DfE's
-published figures in a follow-up change; see "Funded early education and
-childcare", reporting year 2026
-(https://explore-education-statistics.service.gov.uk/find-statistics/funded-early-education-and-childcare/2026).
+**Universal and early learning for 2-year-olds.** From DfE, "Funded early
+education and childcare", reporting year 2026, national figures for January
+2024 (``data/headline_figures_feeac_2011_2026.csv`` in the release bundle):
+
+  release       https://explore-education-statistics.service.gov.uk/find-statistics/funded-early-education-and-childcare/2026
+  the data      https://explore-education-statistics.service.gov.uk/data-catalogue/funded-early-education-and-childcare/2026
+
+  registered for the universal entitlement, excluding reception   778,327
+  registered for the working parent entitlement, aged 3 to 4      361,790
+  => registered for the universal entitlement only                416,537
+
+  early learning for 2-year-olds, registered                      115,852
+  early learning for 2-year-olds, eligible                        154,957
+
+The universal figure nets off the working parent entitlement because
+``universal_childcare_entitlement_eligible`` in policyengine-uk ends with
+``& ~has_extended_childcare`` — the schemes are modelled as mutually
+exclusive, so the comparator is children on the universal entitlement *only*,
+not the 1.13 million headline. The subtraction is only correct while that
+exclusion holds: an eligibility refactor that dropped it would make 416,537
+the wrong comparator without any target here looking wrong.
+test_universal_eligibility_still_excludes_the_working_parent_scheme in
+tests/test_childcare_targets.py asserts it against the installed
+policyengine-uk, so the cross-repo dependency fails loudly instead of
+silently. The prior 490 thousand target was 1.18x that
+figure and the prior 130 thousand target was 1.12x the EL2 count, both
+unsourced.
+
+**No universal or targeted spending target.** DfE publishes January
+headcounts of children registered for at least some provision, and publishes
+no per-programme spending. The only spending figure derivable from it is the
+caseload at the statutory 570 hours and the DfE funding rate for the age band
+(£5.88 an hour for 3 and 4-year-olds in 2024-25, £8.28 for 2-year-olds):
+
+  universal  416,537 x 570 x 5.88 = £1.396bn
+  targeted   115,852 x 570 x 8.28 = £0.547bn
+
+Those are not observations. Being caseload times a constant, each is the
+caseload target restated in pounds, and `takeup_rate.objective` sums an
+equally weighted squared relative error over every entry in both dictionaries:
+
+    for key in targets["spending"]:
+        loss += (spending[key] / targets["spending"][key] - 1) ** 2
+    for key in targets["caseload"]:
+        loss += (caseload[key] / targets["caseload"][key] - 1) ** 2
+
+Since the model pays every recipient of these two schemes the same per-child
+amount, the spending ratio equals the caseload ratio and the loop adds the
+same term twice — doubling the pull of universal and targeted against
+Tax-Free Childcare and extended hours, on no extra evidence. Both also assume
+every registered child took the full 570 hours, so they are upper bounds and
+the duplicated term pulls weights up.
+
+Tax-Free Childcare spending stays, because it is not redundant: it varies
+with childcare expenditure rather than being its caseload times a constant,
+and it is a published outturn. Restoring universal and targeted spending
+needs an allocation or outturn source, not a headcount.
+
 """
 
 # Spending in £bn, caseload in thousands of children, both for 2024.
 TARGETS = {
     "spending": {
         "tfc": 0.6322,  # HMRC £632.2m, 2024-25
-        # No extended entry: the only derivable figure is a full-usage ceiling
-        # that the model pays 75% of. See the module docstring.
-        "targeted": 0.6,
-        "universal": 1.7,
+        # No extended, universal or targeted entry. Universal and targeted are
+        # the caseload times a constant, which duplicates the caseload term in
+        # the loss rather than adding evidence; extended's derivable figure is
+        # a full-usage ceiling the model pays 75% of. See the module docstring.
     },
     "caseload": {
         "tfc": 1_085.02,  # HMRC 1,085,020 children, 2024-25
         "extended": 621.5,  # DfE Jan 2025: 379,000 + 242,500
-        "targeted": 130,
-        "universal": 490,
+        "targeted": 115.852,  # DfE Jan 2024: 115,852 registered
+        "universal": 416.537,  # DfE Jan 2024: 778,327 - 361,790
     },
 }
 
