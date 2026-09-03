@@ -134,6 +134,7 @@ def main():
             frs = create_frs(
                 raw_frs_folder=STORAGE_FOLDER / frs_release.name,
                 year=frs_release.survey_year,
+                policy_year=frs_release.calibration_year,
                 include_internal_disability_reported_amounts=True,
             )
             strip_internal_disability_reported_amounts(frs).save(
@@ -310,6 +311,19 @@ def main():
                 )
                 update_dataset(materialize_step, "completed")
 
+            # The four aggregate scalers below run after the base-year
+            # materialisation on purpose: each is fitted on the configuration
+            # consumers actually run (a base-year file that policyengine-uk
+            # uprates to the calibration year at load), so the calibration-year
+            # rail, bus and road-fuel aggregates hit their targets at runtime.
+            # rail_usage, rail_subsidy_spending, bus_subsidy_spending and
+            # bus_fare_spending are not in uprating_factors.csv, so
+            # `uprate_dataset` leaves them untouched in either direction:
+            # uprating the saved base-year file back to the calibration year
+            # reproduces the calibrated weights and monetary levels but keeps
+            # these post-calibration scalings, which the weight solve never
+            # saw. The saved file is therefore not uprate-invertible on those
+            # columns (uk-data#479).
             update_dataset("Calibrate public service aggregates", "processing")
             from policyengine_uk_data.datasets.imputations.services.services import (
                 calibrate_rail_subsidy_spending,

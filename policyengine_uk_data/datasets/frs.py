@@ -7,6 +7,7 @@ The FRS is the primary source of UK household survey data used for tax-benefit
 modelling and policy analysis.
 """
 
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -440,13 +441,21 @@ def allocate_reported_education_grants(
 
 
 def calculate_disabled_students_allowance_reported_grant_capacity(
-    sim, year: int, maximum: float
+    sim, policy_year: int, maximum: float
 ) -> np.ndarray:
-    if year < DISABLED_STUDENTS_ALLOWANCE_FIRST_MODELED_YEAR:
+    """DSA capacity for the first policy year the dataset will be simulated at.
+
+    ``DISABLED_STUDENTS_ALLOWANCE_FIRST_MODELED_YEAR`` is the first policy
+    year policyengine-uk models DSA, so the gate compares against the policy
+    year rather than the survey year: an FRS 2024-25 build simulated from
+    2025 must seed DSA expenses even though its survey year is 2024
+    (uk-data#478).
+    """
+    if policy_year < DISABLED_STUDENTS_ALLOWANCE_FIRST_MODELED_YEAR:
         return np.zeros_like(
             np.asarray(
                 sim.calculate(
-                    DISABLED_STUDENTS_ALLOWANCE_ELIGIBILITY_VARIABLES[0], year
+                    DISABLED_STUDENTS_ALLOWANCE_ELIGIBILITY_VARIABLES[0], policy_year
                 )
             ),
             dtype=float,
@@ -454,19 +463,25 @@ def calculate_disabled_students_allowance_reported_grant_capacity(
 
     eligible = None
     for variable in DISABLED_STUDENTS_ALLOWANCE_ELIGIBILITY_VARIABLES:
-        variable_eligible = np.asarray(sim.calculate(variable, year), dtype=bool)
+        variable_eligible = np.asarray(sim.calculate(variable, policy_year), dtype=bool)
         eligible = (
             variable_eligible if eligible is None else eligible & variable_eligible
         )
     equivalent_support = np.asarray(
-        sim.calculate("disabled_students_allowance_receives_equivalent_support", year),
+        sim.calculate(
+            "disabled_students_allowance_receives_equivalent_support", policy_year
+        ),
         dtype=bool,
     )
     return np.where(eligible & ~equivalent_support, float(maximum), 0.0)
 
 
 def split_reported_education_grants(
-    pe_person: pd.DataFrame, sim, year: int, dsa_maximum: float
+    pe_person: pd.DataFrame,
+    sim,
+    year: int,
+    dsa_maximum: float,
+    policy_year: int | None = None,
 ) -> pd.DataFrame:
     """Move specific modelled grants out of the generic education-grant residual.
 
@@ -475,7 +490,15 @@ def split_reported_education_grants(
     counting the same reported FRS grant amount in the generic residual.
     DSA lacks a modelled amount signal, so its allocation seeds eligible
     expenses directly where the DSA parameter is available.
+
+    ``year`` is the survey year the grant capacities are evaluated at.
+    ``policy_year`` (default ``year``) is the first policy year the dataset
+    will be simulated at; it gates the DSA seed, which policyengine-uk only
+    models from ``DISABLED_STUDENTS_ALLOWANCE_FIRST_MODELED_YEAR``.
     """
+
+    if policy_year is None:
+        policy_year = year
 
     grant_capacities = {
         variable: sim.calculate(variable, year)
@@ -483,7 +506,7 @@ def split_reported_education_grants(
     }
     grant_capacities[DISABLED_STUDENTS_ALLOWANCE_EXPENSE_INPUT] = (
         calculate_disabled_students_allowance_reported_grant_capacity(
-            sim, year, dsa_maximum
+            sim, policy_year, dsa_maximum
         )
     )
     allocations = allocate_reported_education_grants(
@@ -498,10 +521,49 @@ def split_reported_education_grants(
     return pe_person
 
 
+FRS_RELEASE_FOLDER_PATTERN = re.compile(r"^frs_(\d{4})_(\d{2})$")
+
+
+def survey_year_from_frs_folder_name(raw_frs_folder) -> int | None:
+    """Survey year encoded in an FRS release folder name (``frs_2024_25`` -> 2024).
+
+    Returns ``None`` for folders outside the release naming convention, such
+    as synthetic fixtures in tests.
+    """
+    match = FRS_RELEASE_FOLDER_PATTERN.match(Path(raw_frs_folder).name)
+    if match is None:
+        return None
+    return int(match.group(1))
+
+
+def validate_frs_survey_year(raw_frs_folder, year: int) -> None:
+    """Refuse a ``year`` that does not match the FRS release being read.
+
+    ``year`` stamps the dataset's ``time_period``, selects vintage-dependent
+    columns, and thresholds reported benefit amounts against that fiscal
+    year's rates. Nothing in ``create_frs`` uprates, so passing the survey
+    year plus one asserts the survey's amounts as the next year's and
+    mis-thresholds every disability category and flag (uk-data#477). The
+    folder name is the release identity available here: ``frs_2024_25`` is
+    survey year 2024.
+    """
+    folder_survey_year = survey_year_from_frs_folder_name(raw_frs_folder)
+    if folder_survey_year is not None and int(year) != folder_survey_year:
+        raise ValueError(
+            f"FRS folder {Path(raw_frs_folder).name!r} is survey year "
+            f"{folder_survey_year} (fiscal year {folder_survey_year}/"
+            f"{(folder_survey_year + 1) % 100:02d}) but year={year} was passed. "
+            "`year` is the survey year and stamps time_period; it does not "
+            "uprate. Build with the survey year and uprate the saved dataset "
+            "with `uprate_dataset` instead."
+        )
+
+
 def create_frs(
     raw_frs_folder: str,
     year: int,
     include_internal_disability_reported_amounts: bool = False,
+    policy_year: int | None = None,
 ) -> UKSingleYearDataset:
     """
     Process raw FRS data into PolicyEngine UK dataset format.
@@ -513,10 +575,19 @@ def create_frs(
 
     Args:
         raw_frs_folder: Path to folder containing raw FRS .tab files.
-        year: Survey year for the dataset.
+        year: Survey year for the dataset: the fiscal year the fieldwork
+            covers (2024 for FRS 2024-25). It stamps ``time_period``, selects
+            vintage-dependent survey columns, and thresholds reported benefit
+            amounts against that fiscal year's rates. It must match the
+            release folder being read; nothing here uprates.
         include_internal_disability_reported_amounts: Keep raw disability
             benefit amount intermediates for downstream imputation. Public
             saved datasets should leave this as ``False``.
+        policy_year: First policy year the dataset will be simulated at (the
+            release's calibration year in the build). Gates seeds for
+            programmes policyengine-uk models from a later year than the
+            survey, currently Disabled Students' Allowance. Defaults to
+            ``year``.
 
     Returns:
         UKSingleYearDataset with processed FRS data ready for policy simulation.
@@ -524,6 +595,14 @@ def create_frs(
     raw_folder = Path(raw_frs_folder)
     if not raw_folder.exists():
         raise FileNotFoundError(f"Raw folder {raw_folder} does not exist.")
+    validate_frs_survey_year(raw_folder, year)
+    if policy_year is None:
+        policy_year = year
+    if int(policy_year) < int(year):
+        raise ValueError(
+            f"policy_year={policy_year} precedes survey year={year}; the dataset "
+            "cannot be simulated at a policy year before its survey year."
+        )
 
     frs = {}
     # Store SALSAC values before numeric conversion (for salary sacrifice
@@ -1379,10 +1458,14 @@ def create_frs(
         )
         student_support_sim = Microsimulation(dataset=student_support_dataset)
         dsa_maximum = student_support_sim.tax_benefit_system.parameters(
-            year
+            policy_year
         ).gov.dfe.disabled_students_allowance.maximum
         pe_person = split_reported_education_grants(
-            pe_person, student_support_sim, year, dsa_maximum
+            pe_person,
+            student_support_sim,
+            year,
+            dsa_maximum,
+            policy_year=policy_year,
         )
 
     # Generate stochastic take-up decisions
@@ -1580,5 +1663,6 @@ if __name__ == "__main__":
     frs = create_frs(
         raw_frs_folder=STORAGE_FOLDER / CURRENT_FRS_RELEASE.name,
         year=CURRENT_FRS_RELEASE.survey_year,
+        policy_year=CURRENT_FRS_RELEASE.calibration_year,
     )
     frs.save(STORAGE_FOLDER / CURRENT_FRS_RELEASE.base_dataset_file)
