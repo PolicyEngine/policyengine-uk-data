@@ -1,0 +1,3 @@
+- Threshold FRS disability categories against the survey fiscal year's DWP rates, the same fiscal-converted parameter tree the disability flags read, and convert reported amounts back to weekly with the survey's 365.25/7 factor in both paths (uk-data#475, uk-data#476).
+- Validate `create_frs`'s `year` against the FRS release folder being read, and add a `policy_year` argument (the release's calibration year in the build) so Disabled Students' Allowance expenses are seeded for the FRS 2024-25 dataset (uk-data#477, uk-data#478).
+- Document that the saved base-year dataset is not uprate-invertible on the post-calibration rail, bus and road-fuel scalings (uk-data#479).

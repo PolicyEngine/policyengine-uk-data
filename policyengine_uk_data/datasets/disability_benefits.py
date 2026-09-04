@@ -4,6 +4,15 @@ PolicyEngine UK models PIP, DLA, and Attendance Allowance from category
 inputs. The FRS observes reported amounts, so the data pipeline keeps those
 amounts as internal build intermediates and converts them to model inputs
 before datasets are published.
+
+Conventions shared by the category and flag derivations:
+
+- ``year`` is the survey year (fiscal year ``year``/``year + 1``, the
+  dataset's ``time_period``). Reported amounts are thresholded against the
+  DWP rates in force during that fiscal year, read from the fiscal-converted
+  ``gov`` parameter tree.
+- Reported amounts are weekly survey responses annualised in ``frs.py`` with
+  ``365.25 / 7``; both derivations convert back with the same factor.
 """
 
 from __future__ import annotations
@@ -14,7 +23,6 @@ import numpy as np
 import pandas as pd
 from policyengine_uk import CountryTaxBenefitSystem
 from policyengine_uk.data import UKSingleYearDataset
-from policyengine_uk.model_api import WEEKS_IN_YEAR as MODEL_WEEKS_IN_YEAR
 
 
 DISABILITY_REPORTED_AMOUNT_COLUMNS = (
@@ -48,19 +56,22 @@ BASE_DISABILITY_FLAG_REPORTED_AMOUNT_COLUMNS = (
 )
 
 CATEGORY_THRESHOLD_WEEKLY_TOLERANCE = 1.0
+# The factor `frs.py` annualises weekly FRS amounts with. Converting back
+# with the model's 52-week constant would inflate weekly amounts by 0.34% and
+# make the GBP 1/week tolerance below mean GBP 1.37 (uk-data#476).
 SURVEY_REPORTED_AMOUNT_WEEKS_IN_YEAR = 365.25 / 7
 
 
 @lru_cache(maxsize=None)
-def _dwp_category_threshold_parameters(year: int):
-    # Match the category formulas removed from policyengine-uk. Those formulas
-    # thresholded reported amounts against the baseline DWP rates.
-    return CountryTaxBenefitSystem().parameters(year).baseline.gov.dwp
+def _dwp_rate_parameters(year: int):
+    """DWP weekly rates in force during the survey's fiscal year.
 
-
-@lru_cache(maxsize=None)
-def _dwp_flag_parameters(year: int):
-    # Match the FRS disability flag derivation that already lived in uk-data.
+    policyengine-uk rewrites ``parameters.gov`` onto fiscal years at load, so
+    ``gov`` at ``year`` carries the rates paid from April of that year. The
+    ``baseline`` clone is taken before that rewrite and stays on calendar
+    instants, so ``baseline`` at ``year`` is the previous fiscal year's
+    table; categories and flags must read the same tree (uk-data#475).
+    """
     return CountryTaxBenefitSystem().parameters(year).gov.dwp
 
 
@@ -85,7 +96,9 @@ def _category_from_reported_amount(
     thresholds: tuple[tuple[str, float], ...],
 ) -> np.ndarray:
     weekly_amount = pd.to_numeric(reported_amount, errors="coerce").fillna(0)
-    weekly_amount = weekly_amount.to_numpy(dtype=float) / MODEL_WEEKS_IN_YEAR
+    weekly_amount = (
+        weekly_amount.to_numpy(dtype=float) / SURVEY_REPORTED_AMOUNT_WEEKS_IN_YEAR
+    )
     category = np.full(len(weekly_amount), "NONE", dtype=object)
     for category_name, weekly_rate in thresholds:
         # FRS benefit amounts are weekly survey responses annualised upstream;
@@ -110,7 +123,7 @@ def add_disability_benefit_categories_from_reported_amounts(
     if not inplace:
         person = person.copy()
 
-    dwp = _dwp_category_threshold_parameters(int(year))
+    dwp = _dwp_rate_parameters(int(year))
     mappings = (
         (
             "attendance_allowance_reported",
@@ -176,7 +189,7 @@ def add_disability_benefit_flags_from_reported_amounts(
     if not inplace:
         person = person.copy()
 
-    dwp = _dwp_flag_parameters(int(year))
+    dwp = _dwp_rate_parameters(int(year))
     attendance_allowance = _reported_amount(person, "attendance_allowance_reported")
     dla_sc = _reported_amount(person, "dla_sc_reported")
     pip_dl = _reported_amount(person, "pip_dl_reported")
