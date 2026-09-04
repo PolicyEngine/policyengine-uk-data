@@ -1,3 +1,5 @@
+import warnings
+
 import pytest
 
 from policyengine_uk_data.datasets.frs import (
@@ -22,8 +24,16 @@ def test_current_release_folder_matches_its_survey_year():
 
 
 def test_validate_frs_survey_year_accepts_the_release_survey_year(tmp_path):
-    validate_frs_survey_year(tmp_path / "frs_2024_25", 2024)
-    validate_frs_survey_year(tmp_path / "synthetic_fixture", 2025)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        validate_frs_survey_year(tmp_path / "frs_2024_25", 2024)
+
+
+def test_validate_frs_survey_year_warns_when_the_folder_cannot_be_checked(
+    tmp_path,
+):
+    with pytest.warns(UserWarning, match="cannot be checked"):
+        validate_frs_survey_year(tmp_path / "synthetic_fixture", 2025)
 
 
 def test_validate_frs_survey_year_rejects_a_mismatched_year(tmp_path):

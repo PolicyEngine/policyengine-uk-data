@@ -8,6 +8,7 @@ modelling and policy analysis.
 """
 
 import re
+import warnings
 from functools import lru_cache
 from pathlib import Path
 
@@ -545,10 +546,20 @@ def validate_frs_survey_year(raw_frs_folder, year: int) -> None:
     year plus one asserts the survey's amounts as the next year's and
     mis-thresholds every disability category and flag (uk-data#477). The
     folder name is the release identity available here: ``frs_2024_25`` is
-    survey year 2024.
+    survey year 2024. A folder outside that convention (a synthetic fixture,
+    an ad hoc extraction) cannot be checked, so the function warns and
+    returns rather than guessing.
     """
     folder_survey_year = survey_year_from_frs_folder_name(raw_frs_folder)
-    if folder_survey_year is not None and int(year) != folder_survey_year:
+    if folder_survey_year is None:
+        warnings.warn(
+            f"FRS folder {Path(raw_frs_folder).name!r} does not follow the "
+            f"frs_YYYY_YY release naming, so year={year} cannot be checked "
+            "against the release being read.",
+            stacklevel=2,
+        )
+        return
+    if int(year) != folder_survey_year:
         raise ValueError(
             f"FRS folder {Path(raw_frs_folder).name!r} is survey year "
             f"{folder_survey_year} (fiscal year {folder_survey_year}/"

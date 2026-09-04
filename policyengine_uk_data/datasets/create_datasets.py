@@ -312,18 +312,28 @@ def main():
                 update_dataset(materialize_step, "completed")
 
             # The four aggregate scalers below run after the base-year
-            # materialisation on purpose: each is fitted on the configuration
-            # consumers actually run (a base-year file that policyengine-uk
-            # uprates to the calibration year at load), so the calibration-year
-            # rail, bus and road-fuel aggregates hit their targets at runtime.
-            # rail_usage, rail_subsidy_spending, bus_subsidy_spending and
-            # bus_fare_spending are not in uprating_factors.csv, so
-            # `uprate_dataset` leaves them untouched in either direction:
-            # uprating the saved base-year file back to the calibration year
-            # reproduces the calibrated weights and monetary levels but keeps
-            # these post-calibration scalings, which the weight solve never
-            # saw. The saved file is therefore not uprate-invertible on those
-            # columns (uk-data#479).
+            # materialisation on purpose. Rail and bus (subsidy and fares) are
+            # fitted by simulating the saved base-year file at the calibration
+            # year, the configuration consumers actually run: policyengine-uk
+            # re-uprates rail_usage (gov.dft.rail.ridership_index) and
+            # bus_fare_spending (CPI) at load, so a factor fitted on a
+            # calibration-year file and then down-rated would be uprated a
+            # second time. rail_usage, rail_subsidy_spending,
+            # bus_subsidy_spending and bus_fare_spending are not in
+            # uprating_factors.csv, so `uprate_dataset` leaves them untouched
+            # in either direction: uprating the saved file back to the
+            # calibration year reproduces the calibrated weights and monetary
+            # levels but keeps these post-calibration scalings, which the
+            # weight solve never saw. The saved file is therefore not
+            # uprate-invertible on those columns (uk-data#479).
+            #
+            # Road fuel is fitted differently: the litre-proxy scaler reads the
+            # saved file's own time_period (the base year), so it reconciles
+            # base-year litres at base-year pump prices to the base-year HMRC
+            # clearances. petrol_spending and diesel_spending are in
+            # uprating_factors.csv and carry their own load-time litre-proxy
+            # indices, so whether calibration-year litres hit the
+            # calibration-year target depends on those indices, not on this fit.
             update_dataset("Calibrate public service aggregates", "processing")
             from policyengine_uk_data.datasets.imputations.services.services import (
                 calibrate_rail_subsidy_spending,
