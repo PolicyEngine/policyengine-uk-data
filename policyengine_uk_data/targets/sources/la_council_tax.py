@@ -166,9 +166,10 @@ def get_targets() -> list[Target]:
     # "until a rate-aware non-linear objective exists".
     #
     # ``band_d_amount`` deliberately REMAINS in ``storage/la_council_tax.csv``
-    # and is loadable: it is needed as data for liability computation and
-    # for the England net council-tax derivation below. Only the target
-    # emission is dropped. See PolicyEngine/policyengine-uk-data#483.
+    # and is loadable: it is needed as data for household liability
+    # computation, and upstream when building the CSV's
+    # ``total_council_tax_net`` column (England = MHCLG taxbase x Band D).
+    # Only the target emission is dropped. See PolicyEngine/policyengine-uk-data#483.
 
     # Band count targets — one per (LA, band) where VOA has a value.
     for _, row in df.iterrows():
