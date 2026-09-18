@@ -239,11 +239,29 @@ def test_get_targets_runs_without_network():
     assert targets, "Expected get_targets() to return a non-empty list"
 
 
-def test_band_d_target_count_matches_csv(la_ct_df):
-    targets = get_targets()
-    band_d_targets = [t for t in targets if "council_tax_band_d/" in t.name]
-    expected = int(la_ct_df["band_d_amount"].notna().sum())
-    assert len(band_d_targets) == expected
+def test_no_band_d_amount_target_is_emitted():
+    """Band D amounts are rates, not additive household controls.
+
+    Microcosm's ``local_council_tax_band_d_rate`` concern is a
+    ``reviewed_exclusion``; see issue #483. The CSV column stays, the
+    target must not come back.
+    """
+    offenders = [
+        t.name
+        for t in get_targets()
+        if t.name.startswith("ons/council_tax_band_d/")
+        or "council_tax_band_d" in t.name
+    ]
+    assert not offenders, (
+        "Band D amount targets must not be emitted (rate vs additive "
+        f"objective, #483); found {offenders[:5]}"
+    )
+
+
+def test_band_d_amount_column_still_loadable(la_ct_df):
+    """The data column must survive; only the target emission is gone."""
+    assert "band_d_amount" in la_ct_df.columns
+    assert int(la_ct_df["band_d_amount"].notna().sum()) == 350
 
 
 def test_band_count_target_count_matches_csv(la_ct_df):
@@ -251,18 +269,15 @@ def test_band_count_target_count_matches_csv(la_ct_df):
     bc_targets = [t for t in targets if t.name.startswith("voa/council_tax/")]
     expected = int(la_ct_df[list(_BAND_COUNT_COLUMNS.values())].notna().sum().sum())
     assert len(bc_targets) == expected
+    # Pinned: dropping the Band D emission (#483) must not disturb the
+    # band-count family, which Microcosm binds as ported_local_declared.
+    assert len(bc_targets) == 2563
 
 
 def test_every_target_carries_local_authority_geo_level():
     for target in get_targets():
         assert target.geographic_level == GeographicLevel.LOCAL_AUTHORITY
         assert target.geo_code is not None
-
-
-def test_band_d_targets_use_gbp_unit():
-    for target in get_targets():
-        if "council_tax_band_d/" in target.name:
-            assert target.unit == Unit.GBP
 
 
 def test_band_count_targets_use_count_unit_and_is_count_flag():
