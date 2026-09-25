@@ -30,7 +30,7 @@ This repo builds the `.h5` files that feed `policyengine-uk`:
 
 The enhanced FRS dataset is licensed under strict UK Data Service terms. Violating them risks losing access, which would end PolicyEngine UK.
 
-- **Never upload data to any public location.** The HuggingFace repo `policyengine/policyengine-uk-data-private` is private and authenticated.
+- **Never expose data contents publicly.** The HuggingFace repo `policyengine/policyengine-uk-data-private` is public + **gated** (manual approval): file contents are restricted to the org and to UKDS-licensed users approved through the gate. Never disable or weaken the gate, never grant access without UKDS proof, and never upload UKDS-derived data to any ungated public location. Do not flip the repo back to private — that voids all approved external grants (see PolicyEngine/policyengine-uk#1816).
 - **Never modify `upload_completed_datasets.py` or `utils/data_upload.py`** to change upload destinations without explicit confirmation from the data controller (currently Nikhil Woodruff).
 - **Never print, log, or output individual-level records.** Aggregates (sums, means, counts, weighted totals) are fine; individual rows are not.
 - **If you see a private/public repo split, assume it is intentional** — ask why before changing it.
