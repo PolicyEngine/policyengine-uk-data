@@ -15,7 +15,17 @@ Produces three kinds of LA-level calibration target from public data:
   Wales sourced directly from WG Council Tax Income (Table 3).
 
 Data for all 360 LAs in ``local_authorities_2021.csv`` is joined from
-the committed canonical file ``storage/la_council_tax.csv``. Rows where
+the committed canonical file ``storage/la_council_tax.csv``.
+
+The CSV also carries ``band_A_amount``..``band_H_amount``: the full
+band A-H area council tax for a dwelling occupied by two adults, from
+MHCLG *Council tax levels set by local authorities in England 2026-27*,
+Table 9. Those columns are **England only** — Table 9 does not cover
+Wales or Scotland, so Welsh and Scottish rows leave them blank, and NI
+has no council tax. ``band_D_amount`` is the same 2026-27 figure as
+``band_d_amount`` for English rows. Rebuild them with
+``storage/build_la_council_tax.py``. No target is emitted from these
+columns yet; they exist for downstream band-level work. Rows where
 a source did not provide a value are omitted so calibrators cleanly
 skip them.
 

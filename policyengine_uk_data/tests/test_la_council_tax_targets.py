@@ -290,3 +290,82 @@ def test_every_band_count_target_value_within_sensible_range():
                 f"{target.name} has band count {value} in {year} — "
                 "out of plausible [0, 500k] range"
             )
+
+
+# -- Per-band amounts (MHCLG Table 9, 2026-27, England only) ---------------
+
+_BAND_AMOUNT_COLUMNS = [f"band_{band}_amount" for band in "ABCDEFGH"]
+_BAND_RATIOS = {
+    "A": 6 / 9,
+    "B": 7 / 9,
+    "C": 8 / 9,
+    "D": 1.0,
+    "E": 11 / 9,
+    "F": 13 / 9,
+    "G": 15 / 9,
+    "H": 18 / 9,
+}
+# MHCLG rounds each band independently to the penny, so a band can sit up
+# to half a penny either side of the exact statutory ratio. The observed
+# worst case across all 296 authorities is £0.0044.
+_RATIO_TOLERANCE = 0.01
+
+
+def test_csv_row_count_is_360(la_ct_df):
+    """Adding the per-band amount columns must not add or drop rows."""
+    assert len(la_ct_df) == 360
+
+
+def test_csv_codes_are_unique(la_ct_df):
+    duplicated = la_ct_df.loc[la_ct_df["code"].duplicated(), "code"].tolist()
+    assert not duplicated, f"Duplicate LA codes: {duplicated}"
+
+
+def test_band_amount_columns_present(la_ct_df):
+    missing = set(_BAND_AMOUNT_COLUMNS) - set(la_ct_df.columns)
+    assert not missing, f"Missing per-band amount columns: {sorted(missing)}"
+
+
+def test_every_english_la_has_all_eight_band_amounts(la_ct_df):
+    eng = la_ct_df[la_ct_df["country"] == "ENGLAND"]
+    assert len(eng) == 296
+    incomplete = eng[eng[_BAND_AMOUNT_COLUMNS].isna().any(axis=1)]
+    assert incomplete.empty, (
+        "English LAs missing a band amount: "
+        f"{incomplete[['code', 'name']].to_dict('records')}"
+    )
+
+
+def test_non_english_las_have_no_band_amounts(la_ct_df):
+    """MHCLG Table 9 is England-only. Wales, Scotland and NI must stay
+    blank rather than inherit an English figure.
+    """
+    other = la_ct_df[la_ct_df["country"] != "ENGLAND"]
+    populated = other[other[_BAND_AMOUNT_COLUMNS].notna().any(axis=1)]
+    assert populated.empty, (
+        "Non-English LAs must not carry Table 9 band amounts: "
+        f"{populated[['code', 'name', 'country']].to_dict('records')}"
+    )
+
+
+def test_band_amounts_obey_statutory_ratios(la_ct_df):
+    """Bands A-H are fixed fractions of Band D (6/9 to 18/9) in law."""
+    eng = la_ct_df[la_ct_df["country"] == "ENGLAND"]
+    for band, ratio in _BAND_RATIOS.items():
+        deviation = (eng[f"band_{band}_amount"] - eng["band_D_amount"] * ratio).abs()
+        worst = deviation.max()
+        assert worst <= _RATIO_TOLERANCE, (
+            f"Band {band} deviates from {ratio:.4f} x Band D by up to "
+            f"£{worst:.4f}; worst rows: "
+            f"{eng.loc[deviation == worst, ['code', 'name']].head(3).to_dict('records')}"
+        )
+
+
+def test_band_d_amount_matches_band_d_column(la_ct_df):
+    """``band_d_amount`` and ``band_D_amount`` are the same MHCLG figure."""
+    eng = la_ct_df[la_ct_df["country"] == "ENGLAND"]
+    diff = (eng["band_D_amount"] - eng["band_d_amount"]).abs()
+    assert diff.max() == 0, (
+        "band_d_amount disagrees with band_D_amount for "
+        f"{eng.loc[diff > 0, ['code', 'name']].to_dict('records')}"
+    )
