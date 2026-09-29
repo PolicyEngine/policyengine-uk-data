@@ -16,6 +16,8 @@ def upload_datasets():
         STORAGE_FOLDER / frs_release.tiny_enhanced_dataset_file,
         STORAGE_FOLDER / "parliamentary_constituency_weights.h5",
         STORAGE_FOLDER / "local_authority_weights.h5",
+        STORAGE_FOLDER / "local_authorities_lad22.csv",
+        STORAGE_FOLDER / "local_authorities_lad23.csv",
         STORAGE_FOLDER / LONG_GEOGRAPHY_WEIGHTS_FILE,
     ]
 
