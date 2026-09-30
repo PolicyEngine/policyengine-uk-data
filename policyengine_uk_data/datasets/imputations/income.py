@@ -266,7 +266,7 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
 
     model = create_income_model()
 
-    # Impute just dividends on the original, full variable set on the copy
+    # Impute the full income set on the SPI-donor copy only.
 
     zero_weight_copy = impute_over_incomes(
         zero_weight_copy,
@@ -292,11 +292,14 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         target_dataset=zero_weight_copy,
     )
 
-    dataset = impute_over_incomes(
-        dataset,
-        model,
-        ["dividend_income"],
-    )
+    # The FRS half keeps its reported dividends. Replacing them with a draw
+    # from the SPI model, whose only predictors are age, gender and region,
+    # gave dividends to FRS respondents without regard to their investments,
+    # earnings or benefits: in 2026 the FRS half carried £47bn of dividends
+    # against £17bn reported, and Universal Credit claimants received as
+    # many as anyone else (policyengine-uk#1948). The SPI-donor half carries
+    # the SPI dividend distribution, and calibration to the HMRC dividend
+    # targets reweights between the two, as in the microcosm UK build.
 
     zero_weight_copy.validate()
     dataset.validate()

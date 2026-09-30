@@ -1,0 +1,1 @@
+- The enhanced FRS keeps FRS respondents' reported dividends instead of replacing them with draws from the SPI income model, which predicts from age, gender and region alone and gave Universal Credit claimants six-figure dividends (policyengine-uk#1948). The SPI-donor half still carries the SPI income distribution.

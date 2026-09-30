@@ -131,3 +131,59 @@ def test_impute_capital_gains_marks_capital_gains_clone_households(monkeypatch):
         True,
     ]
     assert result.household.loc[2:, "household_weight"].eq(1).all()
+
+
+def test_impute_income_keeps_reported_dividends_on_the_frs_half(monkeypatch):
+    """SPI draws replace incomes only on the SPI-donor copy (policyengine-uk#1948).
+
+    The SPI income model predicts from age, gender and region alone, so using
+    it to overwrite the FRS half's dividends gave Universal Credit claimants
+    dividends unrelated to anything they reported.
+    """
+    from policyengine_uk_data.datasets.imputations import income as income_module
+    from policyengine_uk_data.datasets import disability_benefits
+    from policyengine_uk_data.datasets.imputations import frs_only
+
+    imputed_halves = []
+
+    def fake_impute_over_incomes(dataset, _model, output_variables):
+        imputed_halves.append(
+            (
+                bool(dataset.household["household_is_spi_synthetic"].all()),
+                tuple(output_variables),
+            )
+        )
+        dataset = dataset.copy()
+        for column in output_variables:
+            dataset.person[column] = 123_456.0
+        return dataset
+
+    monkeypatch.setattr(income_module, "create_income_model", lambda: object())
+    monkeypatch.setattr(
+        income_module,
+        "subsample_dataset",
+        lambda dataset, _sample_size: dataset.copy(),
+    )
+    monkeypatch.setattr(income_module, "impute_over_incomes", fake_impute_over_incomes)
+    monkeypatch.setattr(
+        frs_only,
+        "impute_frs_only_variables",
+        lambda train_dataset, target_dataset: target_dataset,
+    )
+    monkeypatch.setattr(
+        disability_benefits,
+        "strip_internal_disability_reported_amounts",
+        lambda dataset: dataset,
+    )
+    monkeypatch.setattr(income_module, "stack_datasets", _stack_without_remapping)
+
+    dataset = _fake_dataset()
+    dataset.person["dividend_income"] = [150.0, 0.0]
+    result = income_module.impute_income(dataset)
+
+    # Only the SPI-donor copy is imputed, with the full income set.
+    assert imputed_halves == [(True, tuple(income_module.IMPUTATIONS))]
+    frs_half = result.person.iloc[:2]
+    assert frs_half["dividend_income"].tolist() == [150.0, 0.0]
+    assert frs_half["employment_income"].tolist() == [20_000.0, 80_000.0]
+    assert result.person.iloc[2:]["dividend_income"].eq(123_456.0).all()
