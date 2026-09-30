@@ -392,6 +392,39 @@ def derive_is_parent_from_frs_microdata(
     return is_adult_record & has_dependent_children
 
 
+def derive_every_adult_over_state_pension_age(
+    person_benunit_ids,
+    is_adult,
+    is_over_state_pension_age,
+    benunit_ids,
+) -> np.ndarray:
+    """Identify benefit units with an adult, all of whose adults have reached
+    State Pension age.
+
+    Such a unit cannot claim Universal Credit (Welfare Reform Act 2012
+    s.4(1)(b)). The inputs are policyengine-uk's ``is_adult`` and
+    ``is_SP_age``, as in the pension-age route of its
+    ``housing_benefit_eligible``, so an 18 or 19 year old dependant makes the
+    unit working-age here as it does there.
+    """
+
+    is_adult = np.asarray(is_adult, dtype=bool)
+    over = is_adult & np.asarray(is_over_state_pension_age, dtype=bool)
+    counts = (
+        pd.DataFrame(
+            {
+                "benunit": np.asarray(person_benunit_ids),
+                "adults": is_adult.astype(int),
+                "over": over.astype(int),
+            }
+        )
+        .groupby("benunit")[["adults", "over"]]
+        .sum()
+        .reindex(np.asarray(benunit_ids), fill_value=0)
+    )
+    return ((counts.adults > 0) & (counts.over == counts.adults)).to_numpy()
+
+
 def _as_non_negative_array(values) -> np.ndarray:
     values = np.asarray(values, dtype=float)
     return np.maximum(np.nan_to_num(values, nan=0.0), 0.0)
@@ -1537,10 +1570,19 @@ def create_frs(
         pension_credit_rate,
         reported_mask=_reported_benunit_mask("pension_credit_reported"),
     )
+    # A benefit unit whose adults have all reached State Pension age cannot
+    # claim Universal Credit, so it never gets would_claim_uc, even if it
+    # reports UC. The draw still covers every unit, so the random stream and
+    # every other unit's value are unchanged.
     pe_benunit["would_claim_uc"] = assign_takeup_with_reported_anchors(
         generator.random(len(pe_benunit)),
         universal_credit_rate,
         reported_mask=_reported_benunit_mask("universal_credit_reported"),
+    ) & ~derive_every_adult_over_state_pension_age(
+        person_benunit_ids=sim.calculate("person_benunit_id", year).values,
+        is_adult=sim.calculate("is_adult", year).values,
+        is_over_state_pension_age=sim.calculate("is_SP_age", year).values,
+        benunit_ids=pe_benunit.benunit_id,
     )
     pe_benunit["would_claim_tfc"] = generator.random(len(pe_benunit)) < tfc_rate
 
