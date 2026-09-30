@@ -19,3 +19,6 @@
 **/_build
 !policyengine_uk_data/storage/*.csv
 **/version.json
+
+# Hypothesis example database (property-based tests)
+.hypothesis/

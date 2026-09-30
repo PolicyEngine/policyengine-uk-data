@@ -85,6 +85,16 @@ NON_ADVANCED_EDUCATION_LEVELS = (
 FRS_APPROVED_TRAINING_CODES = tuple(range(1, 10))
 UNKNOWN_QUALIFYING_EDUCATION_OR_TRAINING_ENTRY_AGE = 1000
 
+SCOTLAND_GVTREGNO = 12
+# From FRS 2024-25, CWATAMT1 and CSEWAMT1 are DWP derived variables, the
+# "Weeklyised gross annual dom. water/sew. charge on bill" (DV summary
+# 2024-25). Earlier releases carry interview answers under the same names,
+# populated for only about half of Scottish households.
+FIRST_SURVEY_YEAR_WITH_GROSS_SCOTTISH_WATER_CHARGES = 2024
+# Scottish Water Charges Reduction Scheme: at most a 35% reduction in water
+# and sewerage charges for households receiving council tax reduction.
+SCOTTISH_WATER_CHARGES_MAXIMUM_REDUCTION = 0.35
+
 
 @lru_cache(maxsize=None)
 def load_legacy_jobseeker_max_annual_hours(year: int) -> int:
@@ -525,6 +535,121 @@ def split_reported_education_grants(
 FRS_RELEASE_FOLDER_PATTERN = re.compile(r"^frs_(\d{4})_(\d{2})$")
 
 
+def derive_council_tax(household: pd.DataFrame, year: int) -> np.ndarray:
+    """Annual council tax bill after discounts and before council tax reduction.
+
+    policyengine-uk's ``council_tax`` is the gross liability that its council
+    tax reduction (CTR) formulas reduce, so it must not already be net of CTR.
+    The FRS CTANNUAL is net of it: the 2024-25 DV summary labels it "Annual
+    CT amount after discounts/reduction", derived from inputs including CTREB
+    and CTREBAMT, and the interview question it replaced asked for the amount
+    payable "after deducting any discounts or reduction". In England and
+    Wales in 2022-23 to 2024-25, recipients' CTANNUAL plus CTREBAMT (weekly)
+    x 365.25/7 matches the mean bill of non-recipients in the same region,
+    band and single-adult cell. So:
+
+    - A household reporting a reduction (CTREB = 1) gets CTANNUAL plus its
+      annualised CTREBAMT, including when CTANNUAL is 0 (a full reduction).
+      If CTREBAMT is missing or not positive, the reduction is unknown and
+      the bill is the larger of CTANNUAL and the imputed cell mean.
+    - A missing or negative CTANNUAL is imputed as the mean bill of
+      non-recipients with a positive bill in the same (region, band,
+      single-adult) cell, or 0 if the cell has none (Northern Ireland, which
+      has no council tax, always has none).
+    - Other households keep CTANNUAL.
+
+    In Scotland CTANNUAL also includes water and sewerage charges, which are
+    not council tax and which CTR does not cover, so they are netted off
+    first. (They belong in ``water_and_sewerage_charges``, which is still
+    zero for Scotland in 2024-25: uk-data#467.) From 2024-25 the netting uses
+    the gross charges CWATAMT1 and CSEWAMT1, as CSEWAMT is blank that year.
+    Measured on the 2024-25 release:
+
+    - Non-recipients: netting the full gross charges leaves a status-discount
+      (25%) bill at 0.75 of the undiscounted bill in every band, so DWP's
+      derivation applies the status discount to council tax only. The
+      discount is therefore not applied to the charges here.
+    - Recipients: the recipient identity above holds (1.00 overall, 0.98-1.02
+      across bands and discount groups) when 65% of the gross charges are
+      netted, and falls to 0.83 when all of them are. This matches a flat reduction at the Water
+      Charges Reduction Scheme's 35% maximum, so recipients' charges are
+      netted at 65% of gross.
+
+    Earlier releases keep the previous netting of CSEWAMT plus CWATAMTD, the
+    discounted charges. A table without a CTREB column has no recipients, so
+    it gets the previous CTANNUAL-based bill.
+
+    Args:
+        household: Raw FRS household table with lower-case column names, one
+            row per household.
+        year: FRS survey year (2024 for FRS 2024-25).
+
+    Returns:
+        Annual council tax per household, in the order of ``household``.
+    """
+
+    def column(name: str) -> pd.Series:
+        if name in household.columns:
+            return pd.to_numeric(household[name], errors="coerce")
+        return pd.Series(np.nan, index=household.index)
+
+    ctannual = column("ctannual")
+    region = column("gvtregno")
+    band = column("ctband")
+    single_adult = column("adulth") == 1
+    reports_reduction = column("ctreb") == 1
+    weekly_reduction = column("ctrebamt")
+    reduction_known = reports_reduction & (weekly_reduction > 0)
+
+    in_scotland = region == SCOTLAND_GVTREGNO
+    if year >= FIRST_SURVEY_YEAR_WITH_GROSS_SCOTTISH_WATER_CHARGES and {
+        "cwatamt1",
+        "csewamt1",
+    }.issubset(household.columns):
+        gross_weekly_charges = column("cwatamt1").clip(lower=0).fillna(0) + column(
+            "csewamt1"
+        ).clip(lower=0).fillna(0)
+        share_in_bill = np.where(
+            reports_reduction, 1 - SCOTTISH_WATER_CHARGES_MAXIMUM_REDUCTION, 1
+        )
+        weekly_charges = gross_weekly_charges * share_in_bill
+    else:
+        weekly_charges = column("csewamt").clip(lower=0).fillna(0) + column(
+            "cwatamtd"
+        ).clip(lower=0).fillna(0)
+    scottish_charges = np.where(in_scotland, weekly_charges * WEEKS_IN_YEAR, 0)
+    council_tax_only = (ctannual - scottish_charges).clip(lower=0)
+
+    # Cell means from non-recipients only: a recipient's CTANNUAL is net of
+    # its reduction and would pull the imputed gross bill down.
+    in_pool = (ctannual > 0) & ~reports_reduction
+    cell_keys = [region, band, single_adult]
+    cell_mean = (
+        council_tax_only[in_pool]
+        .groupby([key[in_pool] for key in cell_keys], dropna=False)
+        .mean()
+    )
+    imputed = (
+        cell_mean.reindex(pd.MultiIndex.from_arrays(cell_keys)).fillna(0).to_numpy()
+    )
+
+    missing_bill = ctannual.isna() | (ctannual < 0)
+    council_tax = np.select(
+        [
+            missing_bill,
+            reports_reduction & ~reduction_known,
+            reduction_known,
+        ],
+        [
+            imputed,
+            np.maximum(council_tax_only, imputed),
+            council_tax_only + weekly_reduction * WEEKS_IN_YEAR,
+        ],
+        default=council_tax_only,
+    )
+    return np.nan_to_num(council_tax, nan=0.0)
+
+
 def survey_year_from_frs_folder_name(raw_frs_folder) -> int | None:
     """Survey year encoded in an FRS release folder name (``frs_2024_25`` -> 2024).
 
@@ -931,68 +1056,9 @@ def create_frs(
         household.typeacc, 1, range(1, 8), ACCOMMODATIONS
     ).values
 
-    # Impute Council Tax
-
-    # In Scotland, council tax bills are collected together with Scottish
-    # Water and sewerage charges, and the FRS CTANNUAL variable includes
-    # them. Net them off (they are weekly variables; CTANNUAL is annual) so
-    # council_tax is tax only: the water charges are already captured
-    # separately in water_and_sewerage_charges, so leaving them in both
-    # double-counts them and overstates Scottish council tax by roughly
-    # £500 per household (~25% of the Scottish total).
-    SCOTLAND_GVTREGNO = 12
-    scottish_water_annual = pd.Series(
-        np.where(
-            household.gvtregno == SCOTLAND_GVTREGNO,
-            (
-                np.maximum(household.csewamt.fillna(0), 0)
-                + np.maximum(household.cwatamtd.fillna(0), 0)
-            )
-            * (365.25 / 7),
-            0,
-        ),
-        index=household.index,
-    )
-    ctannual_tax_only = np.maximum(household.ctannual - scottish_water_annual, 0)
-
-    # Only ~25% of household report Council Tax bills - use
-    # these to build a model to impute missing values
-    CT_valid = household.ctannual > 0
-
-    # Find the mean reported Council Tax bill for a given
-    # (region, CT band, is-single-person-household) triplet
-    region = household.gvtregno[CT_valid]
-    band = household.ctband[CT_valid]
-    single_person = (household.adulth == 1)[CT_valid]
-    ctannual = ctannual_tax_only[CT_valid]
-
-    # Build the table
-    ct_mean = ctannual.groupby([region, band, single_person], dropna=False).mean()
-    ct_mean = ct_mean.replace(-1, ct_mean.mean())
-
-    # For every household consult the table to find the imputed
-    # Council Tax bill
-    pairs = household.set_index(
-        [household.gvtregno, household.ctband, (household.adulth == 1)]
-    )
-    hh_CT_mean = pd.Series(index=pairs.index)
-    has_mean = pairs.index.isin(ct_mean.index)
-    hh_CT_mean[has_mean] = ct_mean[pairs.index[has_mean]].values
-    hh_CT_mean[~has_mean] = 0
-    ct_imputed = hh_CT_mean
-
-    # For households which originally reported Council Tax,
-    # use the reported value. Otherwise, use the imputed value
-    council_tax = pd.Series(
-        np.where(
-            # 2018 FRS uses blanks for missing values, 2019 FRS
-            # uses -1 for missing values
-            (household.ctannual < 0) | household.ctannual.isna(),
-            np.maximum(ct_imputed, 0).values,
-            ctannual_tax_only,
-        )
-    )
-    pe_household["council_tax"] = council_tax.fillna(0)
+    # Council tax: the bill after discounts and before council tax
+    # reduction, with Scottish water and sewerage charges netted off.
+    pe_household["council_tax"] = derive_council_tax(household, year)
     BANDS = ["A", "B", "C", "D", "E", "F", "G", "H", "I"]
     # Band 1 is the most common
     pe_household["council_tax_band"] = (
