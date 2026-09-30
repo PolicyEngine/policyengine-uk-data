@@ -543,10 +543,10 @@ def derive_council_tax(household: pd.DataFrame, year: int) -> np.ndarray:
     The FRS CTANNUAL is net of it: the 2024-25 DV summary labels it "Annual
     CT amount after discounts/reduction", derived from inputs including CTREB
     and CTREBAMT, and the interview question it replaced asked for the amount
-    payable "after deducting any discounts or reduction". In 2022-23 to
-    2024-25, recipients' CTANNUAL plus CTREBAMT (weekly) x 365.25/7 matches
-    the mean bill of non-recipients in the same region, band and single-adult
-    cell. So:
+    payable "after deducting any discounts or reduction". In England and
+    Wales in 2022-23 to 2024-25, recipients' CTANNUAL plus CTREBAMT (weekly)
+    x 365.25/7 matches the mean bill of non-recipients in the same region,
+    band and single-adult cell. So:
 
     - A household reporting a reduction (CTREB = 1) gets CTANNUAL plus its
       annualised CTREBAMT, including when CTANNUAL is 0 (a full reduction).
@@ -560,8 +560,10 @@ def derive_council_tax(household: pd.DataFrame, year: int) -> np.ndarray:
 
     In Scotland CTANNUAL also includes water and sewerage charges, which are
     not council tax and which CTR does not cover, so they are netted off
-    first. From 2024-25 the netting uses the gross charges CWATAMT1 and
-    CSEWAMT1 (CSEWAMT is blank that year). Measured on the 2024-25 release:
+    first. (They belong in ``water_and_sewerage_charges``, which is still
+    zero for Scotland in 2024-25: uk-data#467.) From 2024-25 the netting uses
+    the gross charges CWATAMT1 and CSEWAMT1, as CSEWAMT is blank that year.
+    Measured on the 2024-25 release:
 
     - Non-recipients: netting the full gross charges leaves a status-discount
       (25%) bill at 0.75 of the undiscounted bill in every band, so DWP's
@@ -569,12 +571,13 @@ def derive_council_tax(household: pd.DataFrame, year: int) -> np.ndarray:
       discount is therefore not applied to the charges here.
     - Recipients: the recipient identity above holds (1.00 overall, 0.98-1.02
       by band) when 65% of the gross charges are netted, and falls to 0.83
-      when all of them are. This matches the Water Charges Reduction Scheme
-      maximum of 35%, so recipients' charges are netted at 65% of gross.
+      when all of them are. This matches a flat reduction at the Water
+      Charges Reduction Scheme's 35% maximum, so recipients' charges are
+      netted at 65% of gross.
 
     Earlier releases keep the previous netting of CSEWAMT plus CWATAMTD, the
-    discounted charges. Without CTREB or CTREBAMT (neither is used here if
-    absent), the result is the previous CTANNUAL-based bill.
+    discounted charges. A table without a CTREB column has no recipients, so
+    it gets the previous CTANNUAL-based bill.
 
     Args:
         household: Raw FRS household table with lower-case column names, one
