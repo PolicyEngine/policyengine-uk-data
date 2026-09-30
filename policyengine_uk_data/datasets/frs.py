@@ -570,8 +570,8 @@ def derive_council_tax(household: pd.DataFrame, year: int) -> np.ndarray:
       derivation applies the status discount to council tax only. The
       discount is therefore not applied to the charges here.
     - Recipients: the recipient identity above holds (1.00 overall, 0.98-1.02
-      by band) when 65% of the gross charges are netted, and falls to 0.83
-      when all of them are. This matches a flat reduction at the Water
+      across bands and discount groups) when 65% of the gross charges are
+      netted, and falls to 0.83 when all of them are. This matches a flat reduction at the Water
       Charges Reduction Scheme's 35% maximum, so recipients' charges are
       netted at 65% of gross.
 
