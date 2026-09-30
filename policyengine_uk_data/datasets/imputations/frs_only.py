@@ -95,11 +95,28 @@ FRS_ONLY_PERSON_VARIABLES = [
     "incapacity_benefit_reported",
     "maternity_allowance_reported",
     "winter_fuel_allowance_reported",
-    "council_tax_benefit_reported",
     "jsa_contrib_reported",
     "jsa_income_reported",
     "esa_contrib_reported",
     "esa_income_reported",
+]
+
+# FRS-only person variables set to zero on SPI-donor rows instead of being
+# imputed.
+#
+# ``council_tax_benefit_reported`` is the household's reported council tax
+# reduction (FRS CTREBAMT), which the FRS build puts on the household
+# reference person only. A person-level QRF on personal incomes cannot
+# reproduce that. It put amounts on two or three people in some households.
+# On the 2024-25 build, imputed receipt also rose with household income on
+# these rows, while reported receipt in the FRS falls steeply with it.
+# policyengine-uk does not treat the amount as noise: any positive value
+# makes the benefit unit claim CTR (``would_claim_council_tax_reduction``),
+# and where it has no CTR scheme for the household,
+# ``council_tax_benefit`` is the reported amount itself. At zero, CTR on
+# these rows comes only from the model's own eligibility and take-up.
+SPI_DONOR_ZEROED_PERSON_VARIABLES = [
+    "council_tax_benefit_reported",
 ]
 
 
@@ -177,11 +194,16 @@ def impute_frs_only_variables(
     to predict values for every row of ``target_dataset``; predictions
     replace the existing (donor-leaked) values in
     ``FRS_ONLY_PERSON_VARIABLES`` only. Variables absent from either
-    frame are skipped silently.
+    frame are skipped silently. ``SPI_DONOR_ZEROED_PERSON_VARIABLES``
+    are set to zero on ``target_dataset`` rather than imputed.
     """
     from policyengine_uk_data.utils.qrf import QRF
 
     target_dataset = target_dataset.copy()
+
+    for column in SPI_DONOR_ZEROED_PERSON_VARIABLES:
+        if column in target_dataset.person.columns:
+            target_dataset.person[column] = 0.0
 
     train_person = train_dataset.person
     target_person = target_dataset.person
@@ -203,7 +225,7 @@ def impute_frs_only_variables(
     if not outputs:
         logger.warning(
             "Stage-2 FRS-only imputation: no output variables available; "
-            "returning target_dataset unchanged."
+            "returning target_dataset without imputed values."
         )
         return target_dataset
 

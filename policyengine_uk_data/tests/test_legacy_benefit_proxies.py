@@ -479,7 +479,8 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
                 "csewamt": 0,
                 "ctannual": 0,
                 "ctband": 1,
-                "ctrebamt": 0,
+                "ctreb": 1,
+                "ctrebamt": 10,
                 "cwatamtd": 0,
                 "gross4": 0,
                 "gvtregno": 1,
@@ -561,3 +562,11 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
     ].iloc[0]
     assert dataset.person["education_grants"].iloc[0] == 100
     assert dataset.person["disabled_students_allowance_eligible_expenses"].iloc[0] == 0
+    # A full council tax reduction (CTANNUAL 0, CTREBAMT £10 a week) leaves
+    # the bill before the reduction in council_tax (uk-data#496).
+    weekly_reduction_annualised = 10 * frs_module.WEEKS_IN_YEAR
+    assert dataset.household["council_tax"].iloc[0] == weekly_reduction_annualised
+    assert (
+        dataset.person["council_tax_benefit_reported"].iloc[0]
+        == weekly_reduction_annualised
+    )

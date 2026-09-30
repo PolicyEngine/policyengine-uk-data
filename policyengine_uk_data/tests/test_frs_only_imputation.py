@@ -258,3 +258,31 @@ def test_frs_only_recomputes_disability_flags_after_amount_imputation(monkeypatc
     assert not result.person["is_severely_disabled_for_benefits"].any()
     assert (result.person["pip_dl_category"] == "NONE").all()
     assert (result.person["pip_m_category"] == "NONE").all()
+
+
+def test_spi_donor_rows_get_zero_reported_council_tax_reduction():
+    """Reported CTR is zeroed on SPI-donor rows, not imputed (uk-data#497).
+
+    Even when every training person reports CTR, the target rows must end
+    with none: the stage-2 QRF would otherwise spread a household-level
+    amount over individual people.
+    """
+    from policyengine_uk_data.datasets.imputations.frs_only import (
+        FRS_ONLY_PERSON_VARIABLES,
+        SPI_DONOR_ZEROED_PERSON_VARIABLES,
+        impute_frs_only_variables,
+    )
+
+    assert "council_tax_benefit_reported" in SPI_DONOR_ZEROED_PERSON_VARIABLES
+    assert not set(SPI_DONOR_ZEROED_PERSON_VARIABLES) & set(FRS_ONLY_PERSON_VARIABLES)
+
+    train = _fake_dataset(person_rows=400, seed=0)
+    train.person["council_tax_benefit_reported"] = 1_000.0
+    target = _fake_dataset(person_rows=60, seed=1)
+    target.person["council_tax_benefit_reported"] = 750.0
+
+    result = impute_frs_only_variables(train_dataset=train, target_dataset=target)
+
+    assert (result.person["council_tax_benefit_reported"] == 0).all()
+    # The training (FRS) rows keep their reported amounts.
+    assert (train.person["council_tax_benefit_reported"] == 1_000.0).all()
