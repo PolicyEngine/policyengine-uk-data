@@ -3,7 +3,6 @@ from __future__ import annotations
 from itertools import product
 
 import pandas as pd
-import pytest
 from policyengine_uk import CountryTaxBenefitSystem
 from policyengine_uk.data import UKSingleYearDataset
 
@@ -261,9 +260,10 @@ def test_severe_flag_is_the_tax_credit_condition_on_the_categories():
 def test_severe_flag_matches_the_policyengine_uk_formula():
     # Differential: the stored flag and policyengine-uk's formula for
     # is_severely_disabled_for_benefits, given the same categories, must agree.
-    # policyengine-uk releases before PolicyEngine/policyengine-uk#1946 still
-    # count any AFCS payment and omit higher-rate Attendance Allowance, so the
-    # check applies once the pinned policyengine-uk has that definition.
+    # policyengine-uk releases before PolicyEngine/policyengine-uk#1946 count
+    # any AFCS payment and omit higher-rate Attendance Allowance, so this test
+    # fails until the lock includes that release; that failure is what keeps
+    # the new flag from shipping with an older model.
     from policyengine_uk import Simulation
 
     year = 2025
@@ -279,12 +279,6 @@ def test_severe_flag_matches_the_policyengine_uk_formula():
         }
         simulation = Simulation(situation={"people": people})
         return simulation.calculate("is_severely_disabled_for_benefits", year)
-
-    if not model_flags([("HIGHER", "NONE", "NONE")])[0]:
-        pytest.skip(
-            "The installed policyengine-uk predates the tax credit severe "
-            "disability definition (PolicyEngine/policyengine-uk#1946)."
-        )
 
     person = _severe_grid(year)
     categories = add_disability_benefit_categories_from_reported_amounts(person, year)

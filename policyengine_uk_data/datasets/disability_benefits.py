@@ -229,22 +229,22 @@ def add_disability_benefit_flags_from_reported_amounts(
         | (dla_sc > dla_sc_higher)
         | (pip_dl >= pip_dl_enhanced)
     )
-    # The severe disability conditions of the Child Tax Credit disability
-    # element (CTC Regs 2002 reg 8), the Working Tax Credit severe disability
-    # element (WTC Regs 2002 reg 17) and the Universal Credit higher disabled
-    # child addition (UC Regs 2013 reg 24(2)(b)), which is what
-    # policyengine-uk uses this flag for: DLA care at the highest rate, PIP
-    # daily living at the enhanced rate, higher-rate Attendance Allowance (a
-    # WTC condition; children cannot receive it), or armed forces independence
-    # payment. FRS code 8 (`afcs_reported`) covers every Armed Forces
-    # Compensation Scheme and war disablement pension payment, including the
-    # guaranteed income payment every AFIP recipient also receives; AFIP has
-    # no code of its own and cannot be separated out, so AFIP recipients are
-    # not flagged (a known under-count). The legacy severe disability
-    # premium's wider list (any Attendance Allowance, DLA care at the middle
-    # rate, PIP daily living at the standard rate) is read by policyengine-uk
-    # from the benefit categories, not from this flag. The flag uses the
-    # category rule, so it agrees with the stored categories by construction.
+    # The tax credit severe disability condition (CTC Regs 2002 reg 8(3)-(5);
+    # WTC Regs 2002 reg 17(2)-(4)): DLA care at the highest rate, PIP daily
+    # living at the enhanced rate, higher-rate Attendance Allowance (a WTC
+    # condition; children cannot receive it), or armed forces independence
+    # payment. policyengine-uk also keys the Universal Credit higher disabled
+    # child addition on this flag, although UC Regs 2013 reg 24(2)(b) differs
+    # (it adds blindness and has no AFIP limb). FRS code 8 (`afcs_reported`)
+    # covers every Armed Forces Compensation Scheme and war disablement pension
+    # payment, including the guaranteed income payment every AFIP recipient
+    # also receives; AFIP has no code of its own and cannot be separated out,
+    # so AFIP recipients are not flagged (a known under-count). The legacy
+    # severe disability premium's wider list (any Attendance Allowance, DLA
+    # care at the middle rate, PIP daily living at the standard rate) is read
+    # by policyengine-uk from the benefit categories, not from this flag. The
+    # flag uses the category rule, so it agrees with the stored categories by
+    # construction.
     person["is_severely_disabled_for_benefits"] = (
         _reaches_weekly_rate(attendance_allowance, dwp.attendance_allowance.higher)
         | _reaches_weekly_rate(dla_sc, dwp.dla.self_care.higher)
