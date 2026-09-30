@@ -193,7 +193,6 @@ def add_disability_benefit_flags_from_reported_amounts(
     attendance_allowance = _reported_amount(person, "attendance_allowance_reported")
     dla_sc = _reported_amount(person, "dla_sc_reported")
     pip_dl = _reported_amount(person, "pip_dl_reported")
-    afcs = _reported_amount(person, "afcs_reported")
 
     person["is_disabled_for_benefits"] = (
         _reported_amount_sum(person, BASE_DISABILITY_FLAG_REPORTED_AMOUNT_COLUMNS) > 0
@@ -218,11 +217,21 @@ def add_disability_benefit_flags_from_reported_amounts(
         | (dla_sc > dla_sc_higher)
         | (pip_dl >= pip_dl_enhanced)
     )
+    # The Child Tax Credit and Working Tax Credit severe disability conditions
+    # (CTC Regs 2002 reg 8; WTC Regs 2002 reg 17), which is what
+    # policyengine-uk uses this flag for: DLA care at the highest rate, PIP
+    # daily living at the enhanced rate, higher-rate Attendance Allowance, or
+    # armed forces independence payment. The FRS has no code for armed forces
+    # independence payment. Code 8 (`afcs_reported`) covers every Armed Forces
+    # Compensation Scheme payment, including war disablement pensions and
+    # guaranteed income payments, so it cannot stand in for it. The legacy
+    # severe disability premium's wider list (any Attendance Allowance, DLA
+    # care at the middle rate, PIP daily living at the standard rate) is read
+    # by policyengine-uk from the benefit categories, not from this flag.
     person["is_severely_disabled_for_benefits"] = (
-        (attendance_allowance > 0)
+        (attendance_allowance >= aa_higher)
         | (dla_sc >= dla_sc_higher)
         | (pip_dl >= pip_dl_enhanced)
-        | (afcs > 0)
     )
 
     return person
