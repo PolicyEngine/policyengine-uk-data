@@ -570,6 +570,29 @@ def validate_frs_survey_year(raw_frs_folder, year: int) -> None:
         )
 
 
+def frs_dividend_income(account: pd.DataFrame, person_ids) -> np.ndarray:
+    """Annual dividends each person reports on FRS investment accounts.
+
+    Gilt-edged stock taxed at source (account type 6), unit and investment
+    trusts (7) and stocks and shares (8). Amounts taxed at source are grossed
+    up at the basic rate. Summed to ``person_ids``, which must be the same
+    ``household_id * 1e3 + person`` keys as ``account.person_id``: keying on
+    the positional index instead matched almost no accounts, leaving the FRS
+    with about £40m of dividends rather than about £8bn in 2024-25.
+    """
+    INVERTED_BASIC_RATE = 1.25
+    dividends = (
+        account.accint * np.where(account.invtax == 1, INVERTED_BASIC_RATE, 1)
+    ) * (
+        ((account.account == 6) & (account.invtax == 1))  # GGES
+        | account.account.isin((7, 8))  # Stocks/shares/UITs
+    )
+    return np.maximum(
+        0,
+        sum_to_entity(dividends, account.person_id, person_ids) * WEEKS_IN_YEAR,
+    )
+
+
 def create_frs(
     raw_frs_folder: str,
     year: int,
@@ -1070,19 +1093,7 @@ def create_frs(
         0,
         taxable_savings_interest + pe_person["tax_free_savings_income"].values,
     )
-    pe_person["dividend_income"] = np.maximum(
-        0,
-        sum_to_entity(
-            (account.accint * np.where(account.invtax == 1, INVERTED_BASIC_RATE, 1))
-            * (
-                ((account.account == 6) & (account.invtax == 1))  # GGES
-                | account.account.isin((7, 8))  # Stocks/shares/UITs
-            ),
-            account.person_id,
-            person.index,
-        )
-        * 52,
-    )
+    pe_person["dividend_income"] = frs_dividend_income(account, person.person_id)
     is_head = person.hrpid == 1
     household_property_income = (
         household.tentyp2.isin((5, 6)) * household.subrent
