@@ -1573,7 +1573,9 @@ def create_frs(
     # A benefit unit whose adults have all reached State Pension age cannot
     # claim Universal Credit, so it never gets would_claim_uc, even if it
     # reports UC. The draw still covers every unit, so the random stream and
-    # every other unit's value are unchanged.
+    # every other unit's value are unchanged. Ages are not rolled forward, so
+    # if State Pension age rises above an adult's survey age in a later year,
+    # that unit stays without would_claim_uc there.
     pe_benunit["would_claim_uc"] = assign_takeup_with_reported_anchors(
         generator.random(len(pe_benunit)),
         universal_credit_rate,

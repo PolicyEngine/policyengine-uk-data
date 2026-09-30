@@ -275,3 +275,21 @@ def test_country_restriction_partitions_the_uk(rows):
     np.testing.assert_array_equal(gb[country == "NORTHERN_IRELAND"], 0)
     np.testing.assert_array_equal(restrict_to_countries(gb, country, GREAT_BRITAIN), gb)
     assert restrict_to_countries(column, country, None) is column
+
+
+def test_calibrated_columns_build_on_the_dataset(baseline, enhanced_frs):
+    """The loss matrix skips a target whose column raises, so check that the
+    calibrated columns build on a real simulation and land near DWP."""
+    from policyengine_uk_data.targets.build_loss_matrix import _SimContext
+
+    year = 2025
+    baseline.default_calculation_period = str(year)
+    ctx = _SimContext(baseline, str(year), enhanced_frs, None)
+    weight = baseline.calculate("household_weight", year).values
+    for target in dwp_housing_benefit.get_targets():
+        column = restrict_to_countries(
+            target.custom_compute(ctx, target, year), ctx.country, target.countries
+        )
+        assert np.isfinite(column).all(), target.name
+        ratio = (column * weight).sum() / target.values[year]
+        assert 0.5 < ratio < 2, (target.name, ratio)

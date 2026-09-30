@@ -17,8 +17,8 @@ in 2025-26). The age split sums to that full amount, so targeting both
 would ask for two different GB totals.
 
 DWP splits claims by benefit rules rather than by age alone (Notes, note
-5): the two lines equal its Pension Credit plus State Pension benefit
-groups and its ESA plus other working-age groups. Under regulation 5 of
+5): from 2024-25 the two lines equal its Pension Credit plus State Pension
+benefit groups and its ESA plus other working-age groups. Under regulation 5 of
 both Housing Benefit Regulations 2006 (SI 2006/213 and 2006/214), the
 pension-age rules apply when the claimant or partner has reached the
 qualifying age for Pension Credit, unless either is on Universal Credit,
@@ -26,12 +26,13 @@ Income Support, income-based JSA or income-related ESA. A benefit unit is
 therefore over Pension Credit qualifying age here when one of its adults
 has reached State Pension age and it gets none of those benefits. Mixed-age
 couples who kept pension-age Housing Benefit after May 2019 fall in the
-older group, as they do in DWP's benefit groups.
+older group; DWP does not publish its rule for them, and this assumes they
+sit in its Pension Credit and State Pension groups.
 
 Only the older group is calibrated. policyengine-uk pays working-age
 Housing Benefit only as a continuing award to families that report it and
 do not claim Universal Credit: 267 of the 770 working-age records that
-report it, about 24,000 weighted claims in 2025-26 against DWP's 460,000.
+report it, about 17,000 weighted claims in 2025-26 against DWP's 460,000.
 DWP's working-age figure also includes temporary and supported
 accommodation (together £5.2bn of Housing Benefit in 2025-26, not split by
 age), which the FRS barely samples. A test build on 2026-09-30 that also
