@@ -112,6 +112,18 @@ def _category_from_reported_amount(
     return category
 
 
+def _reaches_weekly_rate(reported_amount: pd.Series, weekly_rate: float) -> pd.Series:
+    """Whether reported amounts reach a weekly rate under the category rule.
+
+    Uses the category derivation itself, so a flag built from this agrees with
+    the categories by construction, including at the tolerance boundary.
+    """
+    category = _category_from_reported_amount(
+        reported_amount, (("REACHED", weekly_rate),)
+    )
+    return pd.Series(category == "REACHED", index=reported_amount.index)
+
+
 def add_disability_benefit_categories_from_reported_amounts(
     person: pd.DataFrame,
     year: int,
@@ -217,21 +229,26 @@ def add_disability_benefit_flags_from_reported_amounts(
         | (dla_sc > dla_sc_higher)
         | (pip_dl >= pip_dl_enhanced)
     )
-    # The Child Tax Credit and Working Tax Credit severe disability conditions
-    # (CTC Regs 2002 reg 8; WTC Regs 2002 reg 17), which is what
+    # The severe disability conditions of the Child Tax Credit disability
+    # element (CTC Regs 2002 reg 8), the Working Tax Credit severe disability
+    # element (WTC Regs 2002 reg 17) and the Universal Credit higher disabled
+    # child addition (UC Regs 2013 reg 24(2)(b)), which is what
     # policyengine-uk uses this flag for: DLA care at the highest rate, PIP
-    # daily living at the enhanced rate, higher-rate Attendance Allowance, or
-    # armed forces independence payment. The FRS has no code for armed forces
-    # independence payment. Code 8 (`afcs_reported`) covers every Armed Forces
-    # Compensation Scheme payment, including war disablement pensions and
-    # guaranteed income payments, so it cannot stand in for it. The legacy
-    # severe disability premium's wider list (any Attendance Allowance, DLA
-    # care at the middle rate, PIP daily living at the standard rate) is read
-    # by policyengine-uk from the benefit categories, not from this flag.
+    # daily living at the enhanced rate, higher-rate Attendance Allowance (a
+    # WTC condition; children cannot receive it), or armed forces independence
+    # payment. FRS code 8 (`afcs_reported`) covers every Armed Forces
+    # Compensation Scheme and war disablement pension payment, including the
+    # guaranteed income payment every AFIP recipient also receives; AFIP has
+    # no code of its own and cannot be separated out, so AFIP recipients are
+    # not flagged (a known under-count). The legacy severe disability
+    # premium's wider list (any Attendance Allowance, DLA care at the middle
+    # rate, PIP daily living at the standard rate) is read by policyengine-uk
+    # from the benefit categories, not from this flag. The flag uses the
+    # category rule, so it agrees with the stored categories by construction.
     person["is_severely_disabled_for_benefits"] = (
-        (attendance_allowance >= aa_higher)
-        | (dla_sc >= dla_sc_higher)
-        | (pip_dl >= pip_dl_enhanced)
+        _reaches_weekly_rate(attendance_allowance, dwp.attendance_allowance.higher)
+        | _reaches_weekly_rate(dla_sc, dwp.dla.self_care.higher)
+        | _reaches_weekly_rate(pip_dl, dwp.pip.daily_living.enhanced)
     )
 
     return person
