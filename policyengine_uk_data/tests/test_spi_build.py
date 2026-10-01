@@ -246,7 +246,14 @@ def test_spi_marriage_allowance_matches_statute_in_policyengine_uk(tmp_path):
     transferor's allowance falls by £1,260 (s. 55B(6)).
     """
     from policyengine_uk import Microsimulation
+    from policyengine_uk.system import system
     from policyengine_uk_data.datasets.spi import create_spi
+
+    if "marriage_allowance_relinquished" not in system.variables:
+        pytest.skip(
+            "needs a policyengine-uk release with the statutory Marriage "
+            "Allowance (PolicyEngine/policyengine-uk#1963)"
+        )
 
     tab = tmp_path / "spi.tab"
     _write_fake_spi(
