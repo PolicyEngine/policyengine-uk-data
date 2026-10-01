@@ -24,6 +24,7 @@ from policyengine_uk_data.datasets.disability_benefits import (
     add_disability_benefit_flags_from_reported_amounts,
     drop_internal_disability_reported_amounts,
 )
+from policyengine_uk_data.utils.benefit_units import claimant_or_partner_variable
 from policyengine_uk_data.utils.datasets import (
     sum_to_entity,
     categorical,
@@ -392,37 +393,36 @@ def derive_is_parent_from_frs_microdata(
     return is_adult_record & has_dependent_children
 
 
-def derive_every_adult_over_state_pension_age(
+def derive_all_claimants_over_state_pension_age(
     person_benunit_ids,
-    is_adult,
+    is_claimant_or_partner,
     is_over_state_pension_age,
     benunit_ids,
 ) -> np.ndarray:
-    """Identify benefit units with an adult, all of whose adults have reached
+    """Identify benefit units whose claimant and any partner have all reached
     State Pension age.
 
     Such a unit cannot claim Universal Credit (Welfare Reform Act 2012
-    s.4(1)(b)). The inputs are policyengine-uk's ``is_adult`` and
-    ``is_SP_age``, as in the pension-age route of its
-    ``housing_benefit_eligible``, so an 18 or 19 year old dependant makes the
-    unit working-age here as it does there.
+    s.4(1)(b)). ``is_claimant_or_partner`` should be the variable that
+    ``claimant_or_partner_variable`` names, so the rule matches the
+    pension-age route of policyengine-uk's ``housing_benefit_eligible``.
     """
 
-    is_adult = np.asarray(is_adult, dtype=bool)
-    over = is_adult & np.asarray(is_over_state_pension_age, dtype=bool)
+    claimant = np.asarray(is_claimant_or_partner, dtype=bool)
+    over = claimant & np.asarray(is_over_state_pension_age, dtype=bool)
     counts = (
         pd.DataFrame(
             {
                 "benunit": np.asarray(person_benunit_ids),
-                "adults": is_adult.astype(int),
+                "claimants": claimant.astype(int),
                 "over": over.astype(int),
             }
         )
-        .groupby("benunit")[["adults", "over"]]
+        .groupby("benunit")[["claimants", "over"]]
         .sum()
         .reindex(np.asarray(benunit_ids), fill_value=0)
     )
-    return ((counts.adults > 0) & (counts.over == counts.adults)).to_numpy()
+    return ((counts.claimants > 0) & (counts.over == counts.claimants)).to_numpy()
 
 
 def _as_non_negative_array(values) -> np.ndarray:
@@ -1570,19 +1570,21 @@ def create_frs(
         pension_credit_rate,
         reported_mask=_reported_benunit_mask("pension_credit_reported"),
     )
-    # A benefit unit whose adults have all reached State Pension age cannot
-    # claim Universal Credit, so it never gets would_claim_uc, even if it
-    # reports UC. The draw still covers every unit, so the random stream and
-    # every other unit's value are unchanged. Ages are not rolled forward, so
-    # if State Pension age rises above an adult's survey age in a later year,
-    # that unit stays without would_claim_uc there.
+    # A benefit unit whose claimant and any partner have all reached State
+    # Pension age cannot claim Universal Credit, so it never gets
+    # would_claim_uc, even if it reports UC. The draw still covers every unit,
+    # so the random stream and every other unit's value are unchanged. Ages
+    # are not rolled forward, so if State Pension age rises above a claimant's
+    # survey age in a later year, that unit stays without would_claim_uc there.
     pe_benunit["would_claim_uc"] = assign_takeup_with_reported_anchors(
         generator.random(len(pe_benunit)),
         universal_credit_rate,
         reported_mask=_reported_benunit_mask("universal_credit_reported"),
-    ) & ~derive_every_adult_over_state_pension_age(
+    ) & ~derive_all_claimants_over_state_pension_age(
         person_benunit_ids=sim.calculate("person_benunit_id", year).values,
-        is_adult=sim.calculate("is_adult", year).values,
+        is_claimant_or_partner=sim.calculate(
+            claimant_or_partner_variable(sim.tax_benefit_system.variables), year
+        ).values,
         is_over_state_pension_age=sim.calculate("is_SP_age", year).values,
         benunit_ids=pe_benunit.benunit_id,
     )

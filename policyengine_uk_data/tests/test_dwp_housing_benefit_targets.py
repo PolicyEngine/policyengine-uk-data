@@ -132,6 +132,7 @@ def _ctx(
     person = {"is_adult": np.asarray(is_adult), "is_SP_age": np.asarray(is_sp_age)}
     benunit_values = {"housing_benefit": benunit_hb, **(benunit_benefits or {})}
     sim = SimpleNamespace(
+        tax_benefit_system=SimpleNamespace(variables={"is_adult": None}),
         map_result=map_result,
         calculate=lambda variable: SimpleNamespace(
             values=np.asarray(

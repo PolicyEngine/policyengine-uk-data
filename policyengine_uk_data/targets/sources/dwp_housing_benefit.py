@@ -23,8 +23,8 @@ both Housing Benefit Regulations 2006 (SI 2006/213 and 2006/214), the
 pension-age rules apply when the claimant or partner has reached the
 qualifying age for Pension Credit, unless either is on Universal Credit,
 Income Support, income-based JSA or income-related ESA. A benefit unit is
-therefore over Pension Credit qualifying age here when one of its adults
-has reached State Pension age and it gets none of those benefits. Mixed-age
+therefore over Pension Credit qualifying age here when its claimant or
+partner has reached State Pension age and it gets none of those benefits. Mixed-age
 couples who kept pension-age Housing Benefit after May 2019 fall in the
 older group; DWP does not publish its rule for them, and this assumes they
 sit in its Pension Credit and State Pension groups.
@@ -46,6 +46,7 @@ Source: https://www.gov.uk/government/publications/benefit-expenditure-and-casel
 import numpy as np
 
 from policyengine_uk_data.targets.schema import GREAT_BRITAIN, Target, Unit
+from policyengine_uk_data.utils.benefit_units import claimant_or_partner_variable
 
 _REFERENCE_URL = (
     "https://www.gov.uk/government/publications/"
@@ -117,8 +118,13 @@ _CASELOAD_THOUSANDS = {
 
 def _over_pension_credit_age(ctx) -> np.ndarray:
     """Benefit units assessed under the pension-age Housing Benefit rules."""
-    adult = np.asarray(ctx.pe_person("is_adult"), dtype=bool)
-    over = adult & np.asarray(ctx.pe_person("is_SP_age"), dtype=bool)
+    claimant = np.asarray(
+        ctx.pe_person(
+            claimant_or_partner_variable(ctx.sim.tax_benefit_system.variables)
+        ),
+        dtype=bool,
+    )
+    over = claimant & np.asarray(ctx.pe_person("is_SP_age"), dtype=bool)
     any_over = (
         np.asarray(ctx.sim.map_result(over.astype(float), "person", "benunit")) > 0
     )
