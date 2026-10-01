@@ -229,12 +229,12 @@ def test_obr_housing_benefit_row_is_not_parsed():
     ws = wb.active
     ws.title = "4.9"
     ws["B2"] = "Housing benefit (not on JSA)1"
-    ws["B3"] = "Pension credit"
+    ws["B3"] = "Attendance allowance"
     for row in (2, 3):
         for col in "CDEFGHI":
             ws[f"{col}{row}"] = 6.0
     names = {t.name for t in obr._parse_welfare(wb)}
-    assert "obr/pension_credit" in names
+    assert "obr/attendance_allowance" in names
     assert not any("housing_benefit" in name for name in names)
 
 

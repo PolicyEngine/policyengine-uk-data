@@ -1565,6 +1565,8 @@ def create_frs(
     pe_benunit["child_benefit_opts_out"] = (
         generator.random(len(pe_benunit)) < child_benefit_opts_out_rate
     )
+    # The enhanced dataset redraws this once entitlement can be computed
+    # (datasets/pension_credit_takeup.py).
     pe_benunit["would_claim_pc"] = assign_takeup_with_reported_anchors(
         generator.random(len(pe_benunit)),
         pension_credit_rate,
