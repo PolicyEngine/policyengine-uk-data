@@ -19,3 +19,5 @@
 **/_build
 !policyengine_uk_data/storage/*.csv
 **/version.json
+# Build output: household weights by local area, derived from FRS microdata
+policyengine_uk_data/storage/local_geography_weights.csv.gz

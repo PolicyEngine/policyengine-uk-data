@@ -19,6 +19,11 @@ class Unit(str, Enum):
     RATE = "rate"
 
 
+# DWP statistics cover Great Britain: benefits for Northern Ireland residents
+# are the Northern Ireland Executive's responsibility.
+GREAT_BRITAIN = ("ENGLAND", "SCOTLAND", "WALES")
+
+
 class Target(BaseModel):
     """A single calibration target from an official statistical source.
 
@@ -41,6 +46,10 @@ class Target(BaseModel):
     is_count: bool = False
     reference_url: str | None = None
     forecast_vintage: str | None = None
+    # Countries a national source covers when that is less than the UK, as
+    # values of the model's `country` variable. The loss matrix column only
+    # counts households in these countries. None means the whole UK.
+    countries: tuple[str, ...] | None = None
 
     # For targets needing custom simulation logic (UC splits,
     # counterfactuals). Excluded from serialisation.
