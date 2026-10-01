@@ -243,6 +243,9 @@ def frs_property_income(person: pd.DataFrame, household: pd.DataFrame) -> np.nda
     or after (2) allowable expenses, but the FRS collects no expense amount
     to take off the before-expenses answers.
 
+    Negative values are FRS missing-value codes (-1 to -9), not amounts, so
+    each amount is floored at zero before the two are added.
+
     CVPAY is not included. It is the rent that a boarder or lodger pays the
     householder, and it sits on the boarder's or lodger's own adult record.
     The FRS question (CvPay) asks how much rent [name] paid for board and
@@ -250,14 +253,13 @@ def frs_property_income(person: pd.DataFrame, household: pd.DataFrame) -> np.nda
     """
     is_head = person.hrpid == 1
     persons_household_subrent = (
-        household.subrent.reindex(person.household_id).fillna(0).values
+        household.subrent.clip(lower=0).reindex(person.household_id).fillna(0).values
     )
-    rent_from_other_property = person.royyr1.where(
+    rent_from_other_property = person.royyr1.clip(lower=0).where(
         person.rentprof != FRS_RENTPROF_LOSS, 0
     )
     return (
-        np.maximum(0, is_head * persons_household_subrent + rent_from_other_property)
-        * WEEKS_IN_YEAR
+        (is_head * persons_household_subrent + rent_from_other_property) * WEEKS_IN_YEAR
     ).values
 
 
