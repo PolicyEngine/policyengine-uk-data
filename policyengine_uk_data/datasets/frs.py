@@ -220,6 +220,34 @@ def derive_receives_benefits_in_own_right(pe_person: pd.DataFrame) -> pd.Series:
     )
 
 
+def frs_property_income(person: pd.DataFrame, household: pd.DataFrame) -> np.ndarray:
+    """Annual property income each person reports in the FRS.
+
+    Two FRS amounts, both weekly in the released data:
+
+    - SUBRENT, rent the household received for letting part of its home to
+      someone outside the household. It goes to the household reference
+      person, and only in owner-occupied households (TENTYP2 5 or 6).
+      ``household`` must be indexed by ``household_id``.
+    - ROYYR1, the person's rent from other property, before tax and after
+      allowable expenses.
+
+    CVPAY is not included. It is the rent that a boarder or lodger pays the
+    householder, and it sits on the boarder's or lodger's own adult record.
+    The FRS question (CvPay) asks how much rent [name] paid for board and
+    lodging, after deducting any state benefits to help with rent.
+    """
+    is_head = person.hrpid == 1
+    household_property_income = household.tentyp2.isin((5, 6)) * household.subrent
+    persons_household_property_income = (
+        household_property_income.reindex(person.household_id).fillna(0).values
+    )
+    return (
+        np.maximum(0, is_head * persons_household_property_income + person.royyr1)
+        * WEEKS_IN_YEAR
+    ).values
+
+
 def derive_is_in_non_advanced_education(
     current_education,
     is_apprentice=None,
@@ -1083,25 +1111,7 @@ def create_frs(
         )
         * 52,
     )
-    is_head = person.hrpid == 1
-    household_property_income = (
-        household.tentyp2.isin((5, 6)) * household.subrent
-    )  # Owned and subletting
-    persons_household_property_income = (
-        pd.Series(
-            household_property_income[person.household_id].values,
-            index=person.person_id,
-        )
-        .fillna(0)
-        .values
-    )
-    pe_person["property_income"] = (
-        np.maximum(
-            0,
-            is_head * persons_household_property_income + person.cvpay + person.royyr1,
-        )
-        * WEEKS_IN_YEAR
-    )
+    pe_person["property_income"] = frs_property_income(person, household)
     maintenance_to_self = np.maximum(
         pd.Series(np.where(person.mntus1 == 2, person.mntusam1, person.mntamt1)).fillna(
             0
