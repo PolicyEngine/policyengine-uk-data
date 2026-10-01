@@ -231,9 +231,12 @@ def test_create_spi_marriage_allowance_invariants(tmp_path):
     assert set(relinquished) <= {0, transferable}
     assert not ((received > 0) & (relinquished > 0)).any()
     assert ((received > 0) == (np.array(maind) == 1)).all()
-    assert (np.array(maind)[relinquished > 0] == 0).all()
-    assert (np.array(pas)[relinquished > 0] == pa - transferable).all()
-    assert (np.array(ti)[relinquished > 0] < 100_000).all()
+    qualifies = (
+        (np.array(maind) == 0)
+        & (np.array(pas) == pa - transferable)
+        & (np.array(ti) < 100_000)
+    )
+    assert ((relinquished > 0) == qualifies).all()
     assert "personal_allowance" not in person
 
 
