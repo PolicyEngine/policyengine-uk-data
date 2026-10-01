@@ -38,6 +38,8 @@ def test_spi_overrides_allowance_deductions_not_policy_parameters(tmp_path):
         "MCAS": 0,
         "BPADUE": 0,
         "MAIND": 0,
+        "PAS": 12_500,
+        "TI": 2_000,
     }
     spi_path = tmp_path / "spi.tab"
     pd.DataFrame([row]).to_csv(spi_path, sep="\t", index=False)

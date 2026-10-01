@@ -43,42 +43,34 @@ REGION_MAP = {
 }
 
 
-def _get_marriage_allowance(fiscal_year: int) -> float:
-    """Return the maximum Marriage Allowance transfer for the given UK fiscal
-    year in £. This equals ``max`` × ``personal_allowance`` at the start of
-    the fiscal year (6 April), which is how HMRC publishes it. Falls back to
-    the pre-2021-22 hard value of £1,250 if `policyengine_uk` cannot be
-    imported (e.g., during unit tests that avoid the heavy import).
+def _get_allowances(fiscal_year: int) -> tuple[float, float, float]:
+    """Return the personal allowance (ITA 2007 s. 35(1)), the income above
+    which it tapers, and the Marriage Allowance transferable amount for the
+    given UK fiscal year in £.
+
+    The transferable amount is 10% of the personal allowance, rounded up to
+    a multiple of £10 (s. 55B(4)-(5)), as in policyengine-uk's
+    ``marriage_allowance_transferable_amount``. Falls back to the 2020-21
+    values if `policyengine_uk` cannot be imported (e.g., during unit tests
+    that avoid the heavy import).
     """
     try:
         from policyengine_uk.system import system
     except Exception:
-        return 1_250.0
+        return 12_500.0, 100_000.0, 1_250.0
 
     instant = f"{fiscal_year}-04-06"
-    pa = system.parameters.gov.hmrc.income_tax.allowances.personal_allowance.amount(
-        instant
-    )
-    ma_cap_rate = (
-        system.parameters.gov.hmrc.income_tax.allowances.marriage_allowance.max(instant)
-    )
-    # HMRC rounds to the nearest £10 downward; use the explicit rounding param
-    # if it exists, otherwise leave the computed value as-is.
+    allowances = system.parameters.gov.hmrc.income_tax.allowances
+    pa = allowances.personal_allowance.amount(instant)
+    taper_threshold = allowances.personal_allowance.maximum_ANI(instant)
+    transferable = pa * allowances.marriage_allowance.max(instant)
     try:
-        rounding_increment = system.parameters.gov.hmrc.income_tax.allowances.marriage_allowance.rounding_increment(
-            instant
-        )
+        increment = float(allowances.marriage_allowance.rounding_increment(instant))
     except Exception:
-        rounding_increment = None
-
-    value = pa * ma_cap_rate
-    if rounding_increment:
-        # HMRC rounds the cap UP to the nearest rounding increment
-        # (Income Tax Act 2007 s. 55B(5)); matches the formula in
-        # policyengine_uk.variables.gov.hmrc.income_tax.allowances.marriage_allowance.
-        increment = float(rounding_increment)
-        value = np.ceil(value / increment) * increment
-    return float(value)
+        increment = None
+    if increment:
+        transferable = np.ceil(transferable / increment) * increment
+    return float(pa), float(taper_threshold), float(transferable)
 
 
 def create_spi(
@@ -165,10 +157,26 @@ def create_spi(
     person["other_deductions"] = df.MOTHDED + df.DEFICIEN
     person["married_couples_allowance"] = df.MCAS
     person["blind_persons_allowance"] = df.BPADUE
-    # Pull the Marriage Allowance cap from policyengine-uk parameters keyed
-    # on the fiscal year, rather than hardcoding 2020-21's £1,250 figure.
-    ma_cap = _get_marriage_allowance(fiscal_year)
-    person["marriage_allowance"] = np.where(df.MAIND == 1, ma_cap, 0)
+    # HMRC documents MAIND as "Marriage allowance claimant indicator" (1 =
+    # "Claimant") and PAS as "Personal allowance (includes 10% marriage
+    # allowance transfer if applicable)". The label does not say which spouse
+    # claims, but in the 2022-23 tape every MAIND == 1 record has PAS equal to
+    # the personal allowance plus the transferable amount, so it marks the
+    # spouse who receives the transfer. policyengine-uk's `marriage_allowance`
+    # is that received amount, and gives a tax reduction
+    # (`marriage_allowance_tax_reduction`), not extra allowance.
+    pa, taper_threshold, transferable = _get_allowances(fiscal_year)
+    person["marriage_allowance"] = np.where(df.MAIND == 1, transferable, 0)
+    # The tape does not flag the spouse who transfers, but their PAS is the
+    # personal allowance less the transferable amount (s. 55B(6)). Below the
+    # taper threshold nothing else gives that value. Each record is one
+    # person, so policyengine-uk cannot find the electing spouse itself; give
+    # the allowance up directly. PAS is not an input, so neither side of a
+    # transfer is counted twice.
+    transferor = (
+        (df.MAIND == 0) & (df.PAS == pa - transferable) & (df.TI < taper_threshold)
+    )
+    person["marriage_allowance_relinquished"] = np.where(transferor, transferable, 0)
 
     dataset = UKSingleYearDataset(
         person=person,
