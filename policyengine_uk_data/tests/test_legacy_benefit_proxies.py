@@ -442,6 +442,7 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
                 "mntus1": 0,
                 "mntusam1": 0,
                 "redamt": 0,
+                "rentprof": 0,
                 "royyr1": 0,
                 "seincam2": 0,
                 "sex": 1,

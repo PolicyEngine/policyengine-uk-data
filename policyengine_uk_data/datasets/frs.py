@@ -84,6 +84,8 @@ NON_ADVANCED_EDUCATION_LEVELS = (
 # FRS government-training question variants use 10 or 13 for "None of these".
 FRS_APPROVED_TRAINING_CODES = tuple(range(1, 10))
 UNKNOWN_QUALIFYING_EDUCATION_OR_TRAINING_ENTRY_AGE = 1000
+# FRS RENTPROF: whether ROYYR1 is a profit (1) or a loss (2).
+FRS_RENTPROF_LOSS = 2
 
 
 @lru_cache(maxsize=None)
@@ -218,6 +220,47 @@ def derive_receives_benefits_in_own_right(pe_person: pd.DataFrame) -> pd.Series:
         pe_person[list(BENEFITS_IN_OWN_RIGHT_REPORTED_COLUMNS)].fillna(0).sum(axis=1)
         > 0
     )
+
+
+def frs_property_income(person: pd.DataFrame, household: pd.DataFrame) -> np.ndarray:
+    """Annual property income each person reports in the FRS.
+
+    Two FRS amounts, both weekly in the released data:
+
+    - SUBRENT, rent the household received for letting part of its home to
+      someone outside the household. The FRS asks every household (SubLet),
+      whatever its tenure, so renting and rent-free households count too. It
+      goes to the household reference person. ``household`` must be indexed
+      by ``household_id``.
+    - ROYYR1, the person's rent from other property, before tax and after
+      allowable expenses. The questionnaire cannot take a negative amount,
+      so a loss is entered as a positive amount with RENTPROF = 2 (question
+      RentProf, "Is that a profit or a loss from the property?"). A loss
+      counts as zero: it is not income, policyengine-uk has no property loss
+      input, and it is not set against the household's SUBRENT.
+
+    SUBRENT is used as reported. SUBALLOW records whether it is before (1)
+    or after (2) allowable expenses, but the FRS collects no expense amount
+    to take off the before-expenses answers.
+
+    Negative values are FRS missing-value codes (-1 to -9), not amounts, so
+    each amount is floored at zero before the two are added.
+
+    CVPAY is not included. It is the rent that a boarder or lodger pays the
+    householder, and it sits on the boarder's or lodger's own adult record.
+    The FRS question (CvPay) asks how much rent [name] paid for board and
+    lodging, after deducting any state benefits to help with rent.
+    """
+    is_head = person.hrpid == 1
+    persons_household_subrent = (
+        household.subrent.clip(lower=0).reindex(person.household_id).fillna(0).values
+    )
+    rent_from_other_property = person.royyr1.clip(lower=0).where(
+        person.rentprof != FRS_RENTPROF_LOSS, 0
+    )
+    return (
+        (is_head * persons_household_subrent + rent_from_other_property) * WEEKS_IN_YEAR
+    ).values
 
 
 def derive_is_in_non_advanced_education(
@@ -1083,25 +1126,7 @@ def create_frs(
         )
         * 52,
     )
-    is_head = person.hrpid == 1
-    household_property_income = (
-        household.tentyp2.isin((5, 6)) * household.subrent
-    )  # Owned and subletting
-    persons_household_property_income = (
-        pd.Series(
-            household_property_income[person.household_id].values,
-            index=person.person_id,
-        )
-        .fillna(0)
-        .values
-    )
-    pe_person["property_income"] = (
-        np.maximum(
-            0,
-            is_head * persons_household_property_income + person.cvpay + person.royyr1,
-        )
-        * WEEKS_IN_YEAR
-    )
+    pe_person["property_income"] = frs_property_income(person, household)
     maintenance_to_self = np.maximum(
         pd.Series(np.where(person.mntus1 == 2, person.mntusam1, person.mntamt1)).fillna(
             0
