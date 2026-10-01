@@ -66,14 +66,17 @@ SPI_COLUMNS = [
     "MCAS",
     "BPADUE",
     "MAIND",
+    "PAS",
+    "TI",
 ]
 
 
-def _write_fake_spi(path, gor_values=(1, 2, 3), maind_values=(1, 0, 1)):
+def _write_fake_spi(path, gor_values=(1, 2, 3), maind_values=(1, 0, 1), **columns):
     """Write a minimal SPI-shaped tab file for tests.
 
     The real SPI file has dozens of columns; the test only needs them to
     exist with sensible types so ``create_spi`` can build dataframes.
+    ``columns`` overrides any column with per-row values.
     """
     n = len(gor_values)
     data = {col: np.zeros(n, dtype=float) for col in SPI_COLUMNS}
@@ -82,6 +85,7 @@ def _write_fake_spi(path, gor_values=(1, 2, 3), maind_values=(1, 0, 1)):
     data["GORCODE"] = list(gor_values)
     data["MAIND"] = list(maind_values)
     data["AGERANGE"] = [1] * n  # bucket (16, 25)
+    data.update({col: list(values) for col, values in columns.items()})
     df = pd.DataFrame(data)
     df.to_csv(path, sep="\t", index=False)
 
@@ -144,12 +148,10 @@ def test_create_spi_unknown_gorcode_does_not_silently_become_south_east(
 
 
 def test_create_spi_marriage_allowance_uses_fiscal_year_parameters(tmp_path):
-    """MA cap should follow the fiscal year's 10% × Personal Allowance rule.
-
-    2020-21 PA = £12,500 so MA cap = £1,250 (the historical hardcoded value).
-    2021-22 onwards PA = £12,570 so MA cap = £1,257, rounded down to
-    increments per the rounding_increment parameter (HMRC publishes £1,260
-    for 2025-26).
+    """The transferable amount follows the fiscal year: 10% of the personal
+    allowance, rounded up to a multiple of £10 (ITA 2007 s. 55B(4)-(5)).
+    That is £1,250 in 2020-21 (allowance £12,500) and £1,260 from 2021-22
+    (allowance £12,570).
     """
     from policyengine_uk_data.datasets.spi import create_spi
 
@@ -158,17 +160,124 @@ def test_create_spi_marriage_allowance_uses_fiscal_year_parameters(tmp_path):
 
     ds_2020 = create_spi(tab, 2020, seed=0)
     marriage_2020 = ds_2020.person["marriage_allowance"].to_numpy()
-    # Expect eligible rows (MAIND == 1) to receive £1,250 and ineligible 0.
+    # MAIND == 1 rows receive the transferable amount; others receive nothing.
     assert (marriage_2020[[0, 2]] == 1_250).all()
     assert marriage_2020[1] == 0
 
     ds_2025 = create_spi(tab, 2025, seed=0)
     marriage_2025 = ds_2025.person["marriage_allowance"].to_numpy()
-    # Post-2020, PA is £12,570 so the cap is £1,257 before rounding; the
-    # published HMRC value is £1,260 (rounding to nearest £10). Accept
-    # either, but require it's NOT the stale 2020-21 £1,250 figure.
-    assert marriage_2025[0] != 1_250
-    assert marriage_2025[0] >= 1_250  # PA has only risen since 2020
+    assert (marriage_2025[[0, 2]] == 1_260).all()
+    assert marriage_2025[1] == 0
+
+
+def test_create_spi_marriage_allowance_sides(tmp_path):
+    """MAIND == 1 marks the recipient, who gets the transferable amount as
+    `marriage_allowance`. The tape has no transferor flag, but a transferor's
+    PAS is the personal allowance less the transferable amount, so that
+    record gives the amount up through `marriage_allowance_relinquished`.
+    A tapered allowance that happens to equal that value is not a transfer,
+    and composite records (MAIND == -1) are neither side.
+    """
+    from policyengine_uk_data.datasets.spi import create_spi
+
+    tab = tmp_path / "spi.tab"
+    _write_fake_spi(
+        tab,
+        gor_values=(7, 7, 7, 7, 7),
+        maind_values=(1, 0, 0, 0, -1),
+        # recipient, transferor, no transfer, tapered, composite
+        PAS=(13_830, 11_310, 12_570, 11_310, 0),
+        TI=(30_000, 12_000, 30_000, 102_520, 600_000),
+    )
+
+    person = create_spi(tab, 2022, seed=0).person
+
+    assert person["marriage_allowance"].tolist() == [1_260, 0, 0, 0, 0]
+    assert person["marriage_allowance_relinquished"].tolist() == [0, 1_260, 0, 0, 0]
+    # PAS already includes the transfer on both sides; it must stay out of
+    # the dataset so the model does not count the transfer twice.
+    assert "personal_allowance" not in person
+
+
+def test_create_spi_marriage_allowance_invariants(tmp_path):
+    """Over every combination of MAIND, PAS and income: each side is 0 or
+    the transferable amount, no record is both sides, only MAIND == 1
+    receives, and only an unflagged record with the cut allowance and income
+    under the taper threshold relinquishes.
+    """
+    from itertools import product
+
+    from policyengine_uk_data.datasets.spi import create_spi
+
+    pa, transferable = 12_570, 1_260
+    cases = list(
+        product(
+            (-1, 0, 1),
+            (0, pa - transferable, pa, pa + transferable, 5_000),
+            (8_000, 99_999, 100_000, 150_000),
+        )
+    )
+    maind, pas, ti = zip(*cases)
+    tab = tmp_path / "spi.tab"
+    _write_fake_spi(
+        tab, gor_values=[7] * len(cases), maind_values=maind, PAS=pas, TI=ti
+    )
+
+    person = create_spi(tab, 2022, seed=0).person
+    received = person["marriage_allowance"].to_numpy()
+    relinquished = person["marriage_allowance_relinquished"].to_numpy()
+
+    assert set(received) <= {0, transferable}
+    assert set(relinquished) <= {0, transferable}
+    assert not ((received > 0) & (relinquished > 0)).any()
+    assert ((received > 0) == (np.array(maind) == 1)).all()
+    qualifies = (
+        (np.array(maind) == 0)
+        & (np.array(pas) == pa - transferable)
+        & (np.array(ti) < 100_000)
+    )
+    assert ((relinquished > 0) == qualifies).all()
+    assert "personal_allowance" not in person
+
+
+def test_spi_marriage_allowance_matches_statute_in_policyengine_uk(tmp_path):
+    """Run SPI-shaped records through policyengine-uk for 2022-23.
+
+    The recipient's tax falls by the basic rate, or for a Scottish taxpayer
+    the Scottish basic rate, times the transferable amount (ITA 2007 s.
+    55B(1), (3)): 20% x £1,260 = £252 in both cases, including a Scottish
+    intermediate-rate payer. The recipient's own allowance is unchanged. The
+    transferor's allowance falls by £1,260 (s. 55B(6)).
+    """
+    from policyengine_uk import Microsimulation
+    from policyengine_uk.system import system
+    from policyengine_uk_data.datasets.spi import create_spi
+
+    if "marriage_allowance_relinquished" not in system.variables:
+        pytest.skip(
+            "needs a policyengine-uk release with the statutory Marriage "
+            "Allowance (PolicyEngine/policyengine-uk#1963)"
+        )
+
+    tab = tmp_path / "spi.tab"
+    _write_fake_spi(
+        tab,
+        # London recipient, London no transfer, Scottish recipient,
+        # Scottish no transfer, London transferor
+        gor_values=(7, 7, 11, 11, 7),
+        maind_values=(1, 0, 1, 0, 0),
+        PAY=(30_000, 30_000, 30_000, 30_000, 12_000),
+        PAS=(13_830, 12_570, 13_830, 12_570, 11_310),
+        TI=(30_000, 30_000, 30_000, 30_000, 12_000),
+    )
+    sim = Microsimulation(dataset=create_spi(tab, 2022, seed=0))
+    tax = sim.calculate("income_tax", 2022).values
+    allowance = sim.calculate("personal_allowance", 2022).values
+
+    assert tax[1] - tax[0] == pytest.approx(252)
+    assert tax[3] - tax[2] == pytest.approx(252)
+    assert allowance.tolist() == [12_570, 12_570, 12_570, 12_570, 11_310]
+    assert tax[4] == pytest.approx(0.2 * (12_000 - 11_310))
 
 
 def test_current_spi_release_metadata_points_to_2022_23():

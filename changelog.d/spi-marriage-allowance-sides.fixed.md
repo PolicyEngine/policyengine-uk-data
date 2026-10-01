@@ -1,0 +1,1 @@
+SPI dataset: document that `MAIND` marks the Marriage Allowance recipient, whose `marriage_allowance` is the amount received under policyengine-uk's statutory treatment, and give transferors (SPI personal allowance cut by the transferable amount) `marriage_allowance_relinquished`.
