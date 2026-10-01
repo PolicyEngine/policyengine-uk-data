@@ -210,7 +210,9 @@ def main():
                 assign_pension_credit_takeup,
             )
 
-            frs = assign_pension_credit_takeup(frs, year=frs_release.calibration_year)
+            frs, pension_credit_takeup = assign_pension_credit_takeup(
+                frs, year=frs_release.calibration_year
+            )
             update_dataset("Assign Pension Credit take-up", "completed")
 
             # Clone households and assign OA geography
@@ -408,6 +410,7 @@ def main():
                 "long_geography_weights": "local_geography_weights.csv.gz",
                 "imputations_applied": "consumption, wealth, VAT, services, income, capital_gains, cgt_band_donors, salary_sacrifice, student_loan_plan",
                 "calibration": "national, LA and  constituency targets",
+                "pension_credit_take_up": pension_credit_takeup,
             },
         )
 
