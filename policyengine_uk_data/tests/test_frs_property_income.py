@@ -48,6 +48,29 @@ def test_subletting_rent_goes_to_the_owner_household_reference_person():
     )
 
 
+def test_negative_amounts_do_not_become_negative_income():
+    person, household = make_tables(
+        [(1, 1_001, HRP, -30, 0), (1, 1_002, NOT_HRP, -5, 0)],
+        [(1, OWNED_OUTRIGHT, 10)],
+    )
+    assert frs_property_income(person, household).tolist() == [0, 0]
+
+
+def test_adult_and_child_rows_sharing_index_labels():
+    # create_frs stacks the adult and child tables, so index labels repeat.
+    adults, household = make_tables(
+        [(1, 1_001, HRP, 20, 0), (2, 2_001, HRP, 0, 60)],
+        [(1, OWNED_OUTRIGHT, 80), (2, PRIVATE_RENTED_FURNISHED, 0)],
+    )
+    children, _ = make_tables([(1, 1_002, 0, 0, 0)], [])
+    person = pd.concat([adults, children]).sort_index(kind="stable")
+    assert person.index.tolist() == [0, 0, 1]
+    np.testing.assert_allclose(
+        frs_property_income(person, household),
+        [100 * WEEKS_IN_YEAR, 0, 0],
+    )
+
+
 def random_tables(seed: int):
     """Random households of one to four adults; the first is the HRP."""
     rng = np.random.default_rng(seed)
