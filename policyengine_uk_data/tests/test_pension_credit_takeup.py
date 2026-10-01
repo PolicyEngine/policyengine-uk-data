@@ -162,3 +162,41 @@ def test_spi_synthetic_benefit_units_are_found_through_their_household():
     )
     dataset.household = dataset.household.drop(columns="household_is_spi_synthetic")
     assert not spi_synthetic_benunits(dataset).any()
+
+
+@settings(max_examples=200, deadline=None)
+@given(_units, _units, st.floats(0, 1), st.integers(0, 2**32 - 1))
+def test_northern_ireland_cannot_change_the_gb_solution(gb_units, ni_units, rate, seed):
+    """DWP's take-up rate covers Great Britain, so Northern Ireland's
+    entitlement, reporting and weights leave the probability and every GB
+    flag unchanged."""
+    from policyengine_uk_data.datasets.pension_credit_takeup import (
+        pension_credit_takeup_flags,
+    )
+
+    def arrays(units):
+        return (
+            np.array([u[0] for u in units]),
+            np.array([u[1] for u in units]),
+            np.array([u[2] for u in units]),
+        )
+
+    gw, ge, gr = arrays(gb_units)
+    nw, ne, nr = arrays(ni_units)
+    draws = np.random.default_rng(seed).random(len(gw) + len(nw))
+    gb_only, p_gb = pension_credit_takeup_flags(
+        draws[: len(gw)], rate, gw, ge, gr, np.ones(len(gw), dtype=bool)
+    )
+    combined, p_uk = pension_credit_takeup_flags(
+        draws,
+        rate,
+        np.concatenate([gw, nw]),
+        np.concatenate([ge, ne]),
+        np.concatenate([gr, nr]),
+        np.concatenate([np.ones(len(gw), bool), np.zeros(len(nw), bool)]),
+    )
+    assert p_uk == p_gb
+    np.testing.assert_array_equal(combined[: len(gw)], gb_only)
+    # Northern Ireland non-reporters are drawn at the GB probability.
+    ni_draws = draws[len(gw) :]
+    np.testing.assert_array_equal(combined[len(gw) :][~nr], (ni_draws < p_gb)[~nr])

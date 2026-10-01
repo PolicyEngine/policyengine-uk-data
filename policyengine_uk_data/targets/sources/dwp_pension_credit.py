@@ -8,8 +8,9 @@ stored as 2025.
 DWP's figures cover Great Britain; Pension Credit in Northern Ireland is
 paid by the Department for Communities, so the model columns count GB
 households only. These targets replace OBR EFO table 4.9 "Pension credit",
-the same DWP spending line, which the model compared with UK-wide Pension
-Credit and which carries no caseload.
+the same GB spending series (2025-26: £6,146.4m against DWP's £6,144.5m),
+which the model compared with UK-wide Pension Credit and which carries no
+caseload.
 
 Source: https://www.gov.uk/government/publications/benefit-expenditure-and-caseload-tables-2026
 """
