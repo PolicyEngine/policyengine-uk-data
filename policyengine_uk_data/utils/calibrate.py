@@ -14,6 +14,7 @@ from policyengine_uk_data.utils.progress import ProcessingProgress
 
 
 DEFAULT_ZERO_WEIGHT_PRIOR_TOTAL_SHARE = 0.5
+DEFAULT_CALIBRATION_SEED = 0
 
 
 def default_weight_dataset_key() -> str:
@@ -291,6 +292,7 @@ def calibrate_local_areas(
     time_period: int | str | None = None,
     zero_weight_prior_total_share: float = DEFAULT_ZERO_WEIGHT_PRIOR_TOTAL_SHARE,
     prior_rake_targets=(),
+    seed: int = DEFAULT_CALIBRATION_SEED,
 ):
     """
     Generic calibration function for local areas (constituencies, local authorities, etc.)
@@ -312,6 +314,8 @@ def calibrate_local_areas(
         prior_rake_targets: Names of national targets, counting disjoint sets of
             households, that the starting weights are scaled to meet (see
             rake_priors_to_targets).
+        seed: Seed for the dropout masks. The same inputs and seed give the same
+            weights in every process.
     """
     if dataset_key is None:
         dataset_key = default_weight_dataset_key()
@@ -464,11 +468,19 @@ def calibrate_local_areas(
 
         return numerator / denominator
 
+    # Dropout masks come from their own seeded generator. torch seeds its
+    # global generator differently in every process, so masks drawn from it
+    # (the earlier `torch.rand_like`) gave every build different weights.
+    dropout_generator = torch.Generator().manual_seed(seed)
+
     def dropout_weights(weights, p):
         if p == 0:
             return weights
         # Replace p% of the weights with the mean value of the rest of them
-        mask = torch.rand_like(weights) < p
+        mask = (
+            torch.rand(weights.shape, generator=dropout_generator, dtype=weights.dtype)
+            < p
+        )
         mean = weights[~mask].mean()
         masked_weights = weights.clone()
         masked_weights[mask] = mean
