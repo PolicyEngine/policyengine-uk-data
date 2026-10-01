@@ -1,0 +1,1 @@
+- Seed the weight dropout in `calibrate_local_areas` with its own generator (`seed`, default 0). The dropout masks were drawn from torch's global generator, which torch seeds differently in every process, so two builds of the same commit with the same inputs gave different household weights and aggregates.
