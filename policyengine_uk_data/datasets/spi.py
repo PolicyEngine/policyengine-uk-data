@@ -50,26 +50,17 @@ def _get_allowances(fiscal_year: int) -> tuple[float, float, float]:
 
     The transferable amount is 10% of the personal allowance, rounded up to
     a multiple of £10 (s. 55B(4)-(5)), as in policyengine-uk's
-    ``marriage_allowance_transferable_amount``. Falls back to the 2020-21
-    values if `policyengine_uk` cannot be imported (e.g., during unit tests
-    that avoid the heavy import).
+    ``marriage_allowance_transferable_amount``.
     """
-    try:
-        from policyengine_uk.system import system
-    except Exception:
-        return 12_500.0, 100_000.0, 1_250.0
+    from policyengine_uk.system import system
 
     instant = f"{fiscal_year}-04-06"
     allowances = system.parameters.gov.hmrc.income_tax.allowances
     pa = allowances.personal_allowance.amount(instant)
     taper_threshold = allowances.personal_allowance.maximum_ANI(instant)
+    increment = allowances.marriage_allowance.rounding_increment(instant)
     transferable = pa * allowances.marriage_allowance.max(instant)
-    try:
-        increment = float(allowances.marriage_allowance.rounding_increment(instant))
-    except Exception:
-        increment = None
-    if increment:
-        transferable = np.ceil(transferable / increment) * increment
+    transferable = np.ceil(transferable / increment) * increment
     return float(pa), float(taper_threshold), float(transferable)
 
 

@@ -202,8 +202,8 @@ def test_create_spi_marriage_allowance_sides(tmp_path):
 def test_create_spi_marriage_allowance_invariants(tmp_path):
     """Over every combination of MAIND, PAS and income: each side is 0 or
     the transferable amount, no record is both sides, only MAIND == 1
-    receives, and no one receiving or relinquishing lacks the matching
-    tape evidence.
+    receives, and only an unflagged record with the cut allowance and income
+    under the taper threshold relinquishes.
     """
     from itertools import product
 
@@ -231,6 +231,7 @@ def test_create_spi_marriage_allowance_invariants(tmp_path):
     assert set(relinquished) <= {0, transferable}
     assert not ((received > 0) & (relinquished > 0)).any()
     assert ((received > 0) == (np.array(maind) == 1)).all()
+    assert (np.array(maind)[relinquished > 0] == 0).all()
     assert (np.array(pas)[relinquished > 0] == pa - transferable).all()
     assert (np.array(ti)[relinquished > 0] < 100_000).all()
     assert "personal_allowance" not in person
