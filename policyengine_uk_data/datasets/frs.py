@@ -248,6 +248,33 @@ def frs_property_income(person: pd.DataFrame, household: pd.DataFrame) -> np.nda
     ).values
 
 
+def frs_boarder_and_lodger_rent(person: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    """Annual rent each person pays the householder as a boarder and as a lodger.
+
+    CVPAY is the weekly rent a boarder or lodger pays the householder, held
+    on the payer's own adult record. The FRS asks it about each person not
+    related to the household reference person in the second and later
+    benefit units of a conventional household (question CvPay), and CONVBL
+    says which the person is:
+
+    - 1, a boarder, "someone who pays you a rent for board and lodging";
+    - 2, a lodger, "someone who pays you a rent for lodging, but not food".
+
+    A positive CVPAY with any other CONVBL is classed as a lodger's.
+
+    CVPAY is the amount after deducting any state benefits to help with rent.
+    The FRS derived variables BOARDER and LODGER add housing benefit paid for
+    the benefit unit (HBOTHAMT); they equal the unit's summed CVPAY in every
+    paying unit of the raw 2023-24 and 2024-25 data.
+
+    The FRS asks the householder nothing about this rent. policyengine-uk
+    works out what the householder receives from these two inputs.
+    """
+    rent_paid = np.maximum(0, person.cvpay.fillna(0).values) * WEEKS_IN_YEAR
+    is_boarder = person.convbl.values == 1
+    return rent_paid * is_boarder, rent_paid * ~is_boarder
+
+
 def derive_is_in_non_advanced_education(
     current_education,
     is_apprentice=None,
@@ -1112,6 +1139,10 @@ def create_frs(
         * 52,
     )
     pe_person["property_income"] = frs_property_income(person, household)
+    (
+        pe_person["rent_paid_as_boarder"],
+        pe_person["rent_paid_as_lodger"],
+    ) = frs_boarder_and_lodger_rent(person)
     maintenance_to_self = np.maximum(
         pd.Series(np.where(person.mntus1 == 2, person.mntusam1, person.mntamt1)).fillna(
             0

@@ -421,6 +421,7 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
                 "ademaamt": 0,
                 "age": 30,
                 "age80": 30,
+                "convbl": 0,
                 "cvpay": 0,
                 "educft": 0,
                 "educqual": 0,
@@ -561,3 +562,6 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
     ].iloc[0]
     assert dataset.person["education_grants"].iloc[0] == 100
     assert dataset.person["disabled_students_allowance_eligible_expenses"].iloc[0] == 0
+    # create_frs also carries rent paid to the householder (none here).
+    assert dataset.person["rent_paid_as_boarder"].iloc[0] == 0
+    assert dataset.person["rent_paid_as_lodger"].iloc[0] == 0
