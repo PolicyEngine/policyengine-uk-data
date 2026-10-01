@@ -570,6 +570,30 @@ def validate_frs_survey_year(raw_frs_folder, year: int) -> None:
         )
 
 
+def derive_pension_credit_reported_capital(benunit: pd.DataFrame) -> np.ndarray:
+    """Each benefit unit's capital as the FRS records it, for Pension Credit.
+
+    ``TOTCAPB3`` is DWP's derived benefit-unit total of the adults' savings and
+    investments (current, savings and NS&I accounts, gilts, unit and investment
+    trusts, shares and bonds, ISAs, credit unions), the measure its FRS-based
+    National Statistics use. Pension Credit counts the claimant's capital and,
+    under the State Pension Credit Act 2002 s. 5, the partner's, which is what
+    this records. The household wealth imputation instead draws a household's
+    wealth from Wealth and Assets Survey households with similar income,
+    composition, tenure and region, with no information on means-tested
+    receipt, and policyengine-uk spreads it over the household's pension-age
+    adults.
+
+    ``TOTCAPB3`` covers financial assets only: second homes and land, which
+    Pension Credit also counts, are not in it. A missing or negative value gives
+    -1, so policyengine-uk falls back to the household proxy.
+    """
+    if "totcapb3" not in benunit.columns:
+        return np.full(len(benunit), -1.0)
+    capital = pd.to_numeric(benunit["totcapb3"], errors="coerce").to_numpy(dtype=float)
+    return np.where(np.isfinite(capital) & (capital >= 0), capital, -1.0)
+
+
 def create_frs(
     raw_frs_folder: str,
     year: int,
@@ -1626,6 +1650,13 @@ def create_frs(
     # Add marital status at the benefit unit level
 
     pe_benunit["is_married"] = benunit.famtypb2.isin([5, 7])
+
+    # Pension Credit capital as the FRS records it for the benefit unit, in
+    # place of the household wealth proxy (policyengine-uk
+    # `pension_credit_reported_capital`).
+    pe_benunit["pension_credit_reported_capital"] = (
+        derive_pension_credit_reported_capital(benunit)
+    )
 
     # Assign property_purchased to a share of households matching the UK
     # housing transaction rate, so only genuine purchasers are charged SDLT.
