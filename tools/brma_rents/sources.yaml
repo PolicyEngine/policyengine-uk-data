@@ -1,0 +1,45 @@
+- id: voa_list_of_rents_2025
+  publisher: Valuation Office Agency
+  title: 'Shadow List of Rents April 2025: collated 1st October 2023 - 30th September 2024'
+  url: https://assets.publishing.service.gov.uk/media/67ea8a4dea9f8afd81056265/Shadow_List_of_Rents_April_2025.csv
+  landing_page: https://www.gov.uk/government/publications/shadow-list-of-rents-april-2025-collated-1st-october-2023-30th-september-2024
+  licence: Open Government Licence v3.0
+  notes: One row per rent on England's lists (weekly net rent, BRMA, LHA category).
+  filename: voa_list_of_rents_2025.csv
+  sha256: f9257d4685da972fb0b0bdcf38c574502e1a521981031fbd87a373f57082201e
+- id: voa_list_of_rents_2026
+  publisher: HM Revenue & Customs
+  title: 'Shadow List of Rents April 2026: collated 1st October 2024 - 30th September 2025'
+  url: https://assets.publishing.service.gov.uk/media/69c136e27e02b81c0d1c7652/Shadow_List_of_Rents_April_2026.csv
+  landing_page: https://www.gov.uk/government/publications/shadow-list-of-rents-april-2026-collated-1st-october-2024-30th-september-2025
+  licence: Open Government Licence v3.0
+  notes: One row per rent on England's lists (weekly net rent, BRMA, LHA category).
+  filename: voa_list_of_rents_2026.csv
+  sha256: 4ed4e12b2307a339545271dea3f4d5805cf25cdcb6f757d2f9dfa3c3fe22edbc
+- id: scottish_list_of_rents_foi
+  publisher: Scottish Government
+  title: 'FOI 202200303624: information released, BRMA 2016-2021'
+  url: https://www.gov.scot/binaries/content/documents/govscot/publications/foi-eir-release/2023/08/foi-202200303624/documents/foi-202200303624---information-released---brma-2016-2021/foi-202200303624---information-released---brma-2016-2021/govscot%3Adocument/FOI%2B202200303624%2B-%2BInformation%2BReleased%2B-%2BBRMA%2B2016-2021.xlsx?download=true
+  landing_page: https://www.gov.scot/publications/foi-202200303624/
+  licence: Open Government Licence v3.0
+  notes: Rent Service Scotland's list-of-rents records, one sheet per year to September (2016-2021). Used for the spread of rents only.
+  filename: scottish_list_of_rents_foi_2016_2021.xlsx
+  sha256: dba86fa1cce920c8f646460bb13e1d99e16927d57fdf290e874f9631e804ed06
+- id: lha_published_rates
+  publisher: PolicyEngine
+  title: Published LHA rates and 30th percentiles by BRMA, category and April determination (policyengine-uk#2022)
+  url: https://raw.githubusercontent.com/PolicyEngine/policyengine-uk/23a31d5ec35af08ae0900093a08e81e4f0c0fc28/policyengine_uk/parameters/gov/dwp/LHA/lha_published_rates.csv.gz
+  landing_page: https://github.com/PolicyEngine/policyengine-uk/pull/2022
+  licence: Open Government Licence v3.0 (compiled from Scottish Government, Rent Officers Wales, NIHE, VOA and DWP tables)
+  notes: Built by policyengine-uk's scripts/build_lha_published_rates.py from the publishers' tables, each pinned by sha256 in lha_published_rates_sources.csv. Supplies the published 30th percentiles for Scotland, Wales and Northern Ireland.
+  filename: lha_published_rates.csv.gzip
+  sha256: 221ff310567970043d329c9cbaf837d7160a8bde560bfe6896195a76263d51d0
+- id: ons_price_index_of_private_rents
+  publisher: Office for National Statistics
+  title: 'Price Index of Private Rents, UK: monthly price statistics, 16 September 2026'
+  url: https://www.ons.gov.uk/file?uri=/economy/inflationandpriceindices/datasets/priceindexofprivaterentsukmonthlypricestatistics/16september2026/priceindexofprivaterentsukmonthlypricestatistics.xlsx
+  landing_page: https://www.ons.gov.uk/economy/inflationandpriceindices/datasets/priceindexofprivaterentsukmonthlypricestatistics
+  licence: Open Government Licence v3.0
+  notes: Table 1, monthly index (January 2023 = 100) by country and English region, January 2015 to August 2026. Northern Ireland's latest two months are ONS estimates.
+  filename: ons_price_index_of_private_rents_2026_09.xlsx
+  sha256: ab1fdfbb27738b20cd1762521a19489c9274dedae1e39926e734ac1cf867f2de

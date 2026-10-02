@@ -19,7 +19,11 @@ from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk.variables.household.income.employment_status import (
     EmploymentStatus,
 )
-from policyengine_uk_data.datasets.brma import assign_brmas, pick_household_brmas
+from policyengine_uk_data.datasets.brma import (
+    assign_brmas,
+    assign_private_renter_brmas,
+    pick_household_brmas,
+)
 from policyengine_uk_data.datasets.disability_benefits import (
     add_disability_benefit_categories_from_reported_amounts,
     add_disability_benefit_flags_from_reported_amounts,
@@ -918,7 +922,7 @@ def create_frs(
     pe_household["tenure_type"] = categorical(
         household.ptentyp2, 3, range(1, 7), TENURES
     ).values
-    frs["num_bedrooms"] = household.bedroom6
+    pe_household["num_bedrooms"] = household.bedroom6.values.astype(int)
     ACCOMMODATIONS = [
         "HOUSE_DETACHED",
         "HOUSE_SEMI_DETACHED",
@@ -1424,6 +1428,20 @@ def create_frs(
         brma_rng,
     )
     pe_household["brma"] = household_brma[sim.calculate("household_id")].values
+
+    # Private renters who report a rent are redrawn given that rent and their
+    # home's bedrooms, so that dearer rents fall in dearer BRMAs. Everyone
+    # else keeps the draw above.
+    reports_rent = (pe_household.tenure_type.values == "RENT_PRIVATELY") & (
+        household.hhrent.values > 0
+    )
+    pe_household.loc[reports_rent, "brma"] = assign_private_renter_brmas(
+        pe_household.region.values[reports_rent].astype(str),
+        household.bedroom6.values[reports_rent],
+        household.hhrent.values[reports_rent],
+        pe_household.household_weight.values[reports_rent],
+        brma_rng,
+    )
 
     pe_person = add_disability_benefit_flags_from_reported_amounts(
         pe_person,
