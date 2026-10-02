@@ -47,3 +47,46 @@ Against the genuine list-of-rents category counts, the census bedroom bands corr
 ## Rebuilding
 
 `tools/brma_households/` (run from the repository root) downloads every source, checks each one against a pinned sha256 and rebuilds this file byte for byte; see its `README.md`.
+
+# BRMA private rents
+
+File: `brma_private_rents.csv`, with columns `brma, lha_category, median_weekly_rent, log_sd, rents, basis`. For each BRMA and LHA category it holds the median weekly rent on the rent officers' list of rents, in 2024-25 prices, and the standard deviation of log rents on the list. `rents` is the number of list entries behind the spread, and `basis` says how the row was made.
+
+`datasets/brma.py` uses it to draw a private renter's BRMA given its rent: the probability of each BRMA in the household's region is proportional to the census private-rented households with the home's number of bedrooms (the file above) times the density of the household's rent on the BRMA's list for homes of that size (log-normal, with this file's median and spread).
+
+## Sources
+
+| Nation | Median | Spread | `basis` |
+|---|---|---|---|
+| England | VOA lists of rents for April 2025 and April 2026 (rents collected October 2023 to September 2025), pooled. | The same lists: interquartile range of log rents ÷ 1.349. | `list` |
+| Scotland | Published 30th percentiles for April 2025 and April 2026, raised to a median assuming log-normal rents. | Rent Service Scotland's lists for the years to September 2019-2021 (Scottish Government FOI 202200303624), the latest released. | `30th percentile and list spread` |
+| Wales | As Scotland, from Rent Officers Wales's published 30th percentiles. | The median spread of the English and Scottish cells of the same category; no Welsh list is used. | `30th percentile and typical spread` |
+| Northern Ireland | As Scotland, from the Housing Executive's 30th percentiles for April 2024, the latest in policyengine-uk's table. | As Wales. | `30th percentile and typical spread` |
+
+The published 30th percentiles are those compiled in policyengine-uk's `lha_published_rates.csv.gz`. Every list and percentile is moved to 2024-25 with the ONS Price Index of Private Rents for its region or nation.
+
+## Why reported rents need a model
+
+The lists are the rent officers' lists of rents that set LHA rates. Private renters in the FRS report lower and more varied rents. Against FRS 2024-25, a model fitted by maximum likelihood (`fit_reported_rent_model`) finds:
+- reported rents are 4% to 19% below the list median for the same region and bedrooms (a separate shift per region);
+- about 84% of households follow the list's distribution plus a little noise (0.13 log points);
+- about 16% pay far less (0.64 log points lower on average, with wide noise). Their rent says little about where they live, so they keep roughly the census shares.
+
+Because every region has its own shift, a region-wide error in the level of the lists (for example, in uprating) changes nothing: only a BRMA's rents relative to others in its region matter.
+
+## Validation
+
+- **The rent kernel is calibrated out of sample.** Taking the April 2026 list entries as households whose BRMA is known, and lists built from the April 2025 edition only, the mean probability given to the true BRMA rises from 0.085 (census shares) to 0.129 with rent, and the most likely BRMA is the true one for 21.8% of entries against 16.1%. Stated probabilities match observed frequencies: BRMAs given 20-30% are right 23.8% of the time (mean stated 24.2%), those given 50-60% are right 53.4% (54.2%), and those given 90%+ are right 91.3% (93.3%).
+- **Published percentiles stand in for lists.** Treating England and Scotland as Wales and Northern Ireland are treated (30th percentile and typical spread) changes an FRS private renter's BRMA probabilities by 4.5 points of total variation on average in England and 6.6 in Scotland. Conditioning on rent at all moves them by 20.4 and 32.7 points. Mean weekly rent within the April 2024 LHA rate is £197.21 with England's lists and £197.43 with the percentile treatment (£190.59 with census shares only); in Scotland £146.87 and £148.19 (£133.63).
+- **Scotland's medians agree with its own lists.** The 2021 list medians, uprated with each Scottish BRMA's own ONS index, correlate at 0.98 with the medians used here (mean gap 1.8%, standard deviation 8.4%). The ONS indices grew by between 10% and 36% across Scottish BRMAs, which is why the current 30th percentiles are used rather than one national uprating.
+- **The census shares survive.** Within every region, FRS private renters' weighted mean BRMA probabilities stay within 3 points of total variation of the census shares for their homes' bedrooms. A test on the built dataset enforces 5 points.
+
+## Limits
+
+- The census band and the list category are chosen by the home's bedrooms. Shared accommodation (category A) is never used to place a household, because the FRS does not identify rooms in shared houses.
+- A household's BRMA is still not tied to the output area or local authority given to it later in the build.
+- Wales and Northern Ireland borrow the spread of rents, and Northern Ireland's 30th percentiles are for April 2024, uprated.
+
+## Rebuilding
+
+`tools/brma_rents/` downloads every source, checks each against a pinned sha256 and rebuilds this file; see its `README.md`.

@@ -227,7 +227,7 @@ Private renters who report a rent are then redrawn so that their rent and their 
 P(BRMA | region, bedrooms, rent) ∝ census private-rented households(BRMA, bedrooms) × density of the rent on the BRMA's list of rents for homes with that many bedrooms.
 
 - The lists of rents are summarised in `storage/brma_private_rents.csv` as a median and a spread of log rents per BRMA and LHA category, in the prices of the survey year.
-- The home's bedrooms (FRS `bedroom6`, saved as `num_bedrooms`) select both the census band and the list category, because both describe the home. The household's LHA category describes its entitlement, which can be smaller than its home.
+- The home's bedrooms (FRS `bedroom6`) select both the census band and the list category, because both describe the home. The household's LHA category describes its entitlement, which can be smaller than its home.
 - Reported rents are not list rents. A model fitted to the survey's own private renters allows for a shift in each region, extra noise, and a share of households paying well below the market. A household with such a rent keeps roughly the census shares.
 - Other households keep the draw above, unchanged.
 

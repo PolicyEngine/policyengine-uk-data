@@ -198,8 +198,8 @@ def build(cache: Path, year: int) -> pd.DataFrame:
 
     english = english_cells(cache, factor, region, year)
     scottish = scottish_spreads(cache)
-    # Wales and Northern Ireland publish no lists: use the typical spread of
-    # the English and Scottish lists for the category.
+    # No Welsh or Northern Ireland list is used: take the typical spread of the
+    # English and Scottish lists for the category.
     typical = (
         pd.concat([english, scottish])
         .groupby("lha_category")

@@ -922,7 +922,7 @@ def create_frs(
     pe_household["tenure_type"] = categorical(
         household.ptentyp2, 3, range(1, 7), TENURES
     ).values
-    pe_household["num_bedrooms"] = household.bedroom6.values.astype(int)
+    frs["num_bedrooms"] = household.bedroom6
     ACCOMMODATIONS = [
         "HOUSE_DETACHED",
         "HOUSE_SEMI_DETACHED",
@@ -1435,13 +1435,14 @@ def create_frs(
     reports_rent = (pe_household.tenure_type.values == "RENT_PRIVATELY") & (
         household.hhrent.values > 0
     )
-    pe_household.loc[reports_rent, "brma"] = assign_private_renter_brmas(
-        pe_household.region.values[reports_rent].astype(str),
-        household.bedroom6.values[reports_rent],
-        household.hhrent.values[reports_rent],
-        pe_household.household_weight.values[reports_rent],
-        brma_rng,
-    )
+    if reports_rent.any():
+        pe_household.loc[reports_rent, "brma"] = assign_private_renter_brmas(
+            pe_household.region.values[reports_rent].astype(str),
+            household.bedroom6.values[reports_rent],
+            household.hhrent.values[reports_rent],
+            pe_household.household_weight.values[reports_rent],
+            brma_rng,
+        )
 
     pe_person = add_disability_benefit_flags_from_reported_amounts(
         pe_person,

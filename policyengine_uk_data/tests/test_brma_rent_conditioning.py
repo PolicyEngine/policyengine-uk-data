@@ -30,6 +30,8 @@ from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 from policyengine_uk.variables.household.demographic.locations import BRMAName
 
+from policyengine_uk.data import UKSingleYearDataset
+
 from policyengine_uk_data.datasets.brma import (
     BEDROOM_BAND_CATEGORY,
     BRMA_HOUSEHOLDS_PATH,
@@ -41,6 +43,8 @@ from policyengine_uk_data.datasets.brma import (
     draw_brmas,
     fit_reported_rent_model,
 )
+from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
+from policyengine_uk_data.storage import STORAGE_FOLDER
 
 REGIONS = ["LONDON", "WALES", "SCOTLAND", "NORTHERN_IRELAND"]
 BANDS = list(BEDROOM_BAND_CATEGORY)
@@ -398,74 +402,91 @@ def test_assignment_is_deterministic_and_fit_needs_valid_inputs(households, rent
         fit_reported_rent_model(region, bedrooms, np.zeros(len(rent)), weight)
 
 
-def private_renters(dataset):
-    household = dataset.household
-    rows = (
-        (household.tenure_type.astype(str) == "RENT_PRIVATELY")
-        & (household.rent > 0)
-        & (household.household_weight > 0)
-    )
-    return household[rows]
+@pytest.fixture(scope="module")
+def built_renters():
+    """Private renters who report a rent, from the raw survey and the built FRS.
 
-
-def test_built_private_renters_match_the_census_within_each_region(
-    enhanced_frs, households
-):
-    """Calibration check on the built dataset.
-
-    The rent model is refitted to the built private renters; their weighted
-    mean probability of each BRMA must stay within 5 percentage points (total
-    variation) of the census shares of their region and bedroom bands, and the
-    BRMAs actually drawn must lie in those cells.
+    The dataset does not keep bedrooms, so they are read from the raw household
+    table, as the build reads them.
     """
-    renters = private_renters(enhanced_frs)
-    region = renters.region.astype(str).to_numpy()
-    bedrooms = renters.num_bedrooms.to_numpy()
-    weekly_rent = renters.rent.to_numpy() / 52
-    weight = renters.household_weight.to_numpy()
-    model = fit_reported_rent_model(region, bedrooms, weekly_rent, weight)
-    brmas, p = brma_probabilities(region, bedrooms, weekly_rent, model)
-    flat = ReportedRentModel(model.region_shift, 50.0, 0.0, 0.0, 51.0)
-    _, census = brma_probabilities(region, bedrooms, weekly_rent, flat)
-    position = {brma: j for j, brma in enumerate(brmas)}
-    drawn = renters.brma.astype(str).map(position).to_numpy()
-    assert (census[np.arange(len(renters)), drawn] > 0).all()
-    for r in np.unique(region):
-        rows = region == r
-        w = weight[rows, None] / weight[rows].sum()
-        gap = (
-            0.5
-            * np.abs((w * p[rows]).sum(axis=0) - (w * census[rows]).sum(axis=0)).sum()
-        )
-        assert gap < 0.05, (r, gap)
-
-
-def test_built_private_renters_rents_track_their_brmas_rent_levels(enhanced_frs, rents):
-    """Dearer rents sit in dearer BRMAs, within region and bedroom band."""
-    renters = private_renters(enhanced_frs)
-    category = pd.Series(bedroom_band(renters.num_bedrooms.to_numpy())).map(
-        BEDROOM_BAND_CATEGORY
-    )
-    listed = rents.set_index(["brma", "lha_category"]).median_weekly_rent
-    brma_level = np.log(
-        listed.loc[list(zip(renters.brma.astype(str), category))].to_numpy()
-    )
-    frame = pd.DataFrame(
+    raw_path = STORAGE_FOLDER / CURRENT_FRS_RELEASE.name / "househol.tab"
+    built_path = STORAGE_FOLDER / CURRENT_FRS_RELEASE.base_dataset_file
+    if not (raw_path.exists() and built_path.exists()):
+        pytest.skip("Raw FRS household table or built FRS dataset not available")
+    raw = pd.read_csv(raw_path, sep="\t", low_memory=False)
+    raw.columns = raw.columns.str.lower()
+    raw = raw[["sernum", "ptentyp2", "hhrent", "bedroom6", "gross4"]]
+    raw = raw.apply(pd.to_numeric, errors="coerce")
+    raw = raw[raw.ptentyp2.isin([3, 4]) & (raw.hhrent > 0)]
+    built = UKSingleYearDataset(built_path).household.set_index("household_id")
+    built = built.loc[raw.sernum]
+    assert (built.tenure_type.astype(str) == "RENT_PRIVATELY").all()
+    renters = pd.DataFrame(
         {
-            "region": renters.region.astype(str).to_numpy(),
-            "category": category.to_numpy(),
-            "rent": np.log(renters.rent.to_numpy()),
-            "level": brma_level,
-            "w": renters.household_weight.to_numpy(),
+            "region": built.region.astype(str).to_numpy(),
+            "bedrooms": raw.bedroom6.to_numpy(),
+            "weekly_rent": raw.hhrent.to_numpy(),
+            "weight": raw.gross4.to_numpy(),
+            "brma": built.brma.astype(str).to_numpy(),
         }
     )
-    cell = frame.groupby(["region", "category"])
+    args = (renters.region, renters.bedrooms, renters.weekly_rent)
+    model = fit_reported_rent_model(*args, renters.weight)
+    brmas, p = brma_probabilities(*args, model)
+    flat = ReportedRentModel(model.region_shift, 50.0, 0.0, 0.0, 51.0)
+    _, census = brma_probabilities(*args, flat)
+    return renters, brmas, p, census
+
+
+def test_built_private_renters_match_the_census_within_each_region(built_renters):
+    """Calibration check on the built dataset.
+
+    Within each region, private renters' weighted mean probability of each
+    BRMA stays within 5 percentage points (total variation) of the census
+    shares for their homes' bedroom bands, and the BRMAs actually drawn are
+    consistent with those probabilities.
+    """
+    from scipy.stats import chi2
+
+    renters, brmas, p, census = built_renters
+    drawn = pd.Index(brmas).get_indexer(renters.brma)
+    assert (p[np.arange(len(renters)), drawn] > 0).all()
+    for region in renters.region.unique():
+        rows = (renters.region == region).to_numpy()
+        w = renters.weight[rows].to_numpy()
+        w = w / w.sum()
+        expected = w @ p[rows]
+        gap = 0.5 * np.abs(expected - w @ census[rows]).sum()
+        assert gap < 0.05, (region, gap)
+        actual = np.bincount(drawn[rows], weights=w, minlength=len(brmas))
+        used = expected > 0
+        pearson = ((actual - expected)[used] ** 2 / expected[used]).sum() / (w**2).sum()
+        assert pearson < chi2.ppf(0.9999, used.sum() - 1), (region, pearson)
+
+
+def test_built_private_renters_rents_track_their_brmas_rent_levels(
+    built_renters, rents
+):
+    """Dearer rents sit in dearer BRMAs, within region and bedroom band."""
+    renters, *_ = built_renters
+    category = pd.Series(bedroom_band(renters.bedrooms)).map(BEDROOM_BAND_CATEGORY)
+    listed = rents.set_index(["brma", "lha_category"]).median_weekly_rent
+    frame = pd.DataFrame(
+        {
+            "cell": renters.region + category.to_numpy(),
+            "rent": np.log(renters.weekly_rent),
+            "level": np.log(listed.loc[list(zip(renters.brma, category))].to_numpy()),
+            "w": renters.weight,
+        }
+    )
     for column in ("rent", "level"):
-        mean = cell.apply(lambda g: np.average(g[column], weights=g.w))
-        frame[column] -= mean.loc[list(zip(frame.region, frame.category))].to_numpy()
+        mean = frame.groupby("cell").apply(
+            lambda g: np.average(g[column], weights=g.w), include_groups=False
+        )
+        frame[column] -= frame.cell.map(mean)
     covariance = np.average(frame.rent * frame.level, weights=frame.w)
     correlation = covariance / np.sqrt(
         np.average(frame.rent**2, weights=frame.w)
         * np.average(frame.level**2, weights=frame.w)
     )
-    assert correlation > 0.1, correlation
+    assert correlation > 0.15, correlation

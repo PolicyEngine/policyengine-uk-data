@@ -19,9 +19,9 @@ Private renters who report a rent are then redrawn given that rent
 (``assign_private_renter_brmas``). The probability of each BRMA is the census
 share of private-rented homes with the household's number of bedrooms, times
 the density of its rent on the BRMA's list of rents for homes of that size
-(``storage/brma_private_rents.csv``). Reported rents differ from list rents,
-which are market evidence gathered by rent officers: ``ReportedRentModel``
-measures that difference from the survey itself. Without this step a
+(``storage/brma_private_rents.csv``). Reported rents differ from the rents on
+the rent officers' lists: ``ReportedRentModel`` measures that difference from
+the survey itself. Without this step a
 household's rent says nothing about its Local Housing Allowance rate.
 """
 
