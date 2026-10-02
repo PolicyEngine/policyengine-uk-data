@@ -306,6 +306,104 @@ def frs_liable_for_share_of_household_rent(
     return (unit_number > 1) & shared & ((srent > 0) | (hb > 0))
 
 
+# The FRS household grid: R01-R14 on each adult and child record give how the
+# person is related to persons 1-14 of the household ("this person is <code>
+# of person k"; a child's code for the household reference person is 3,
+# son/daughter). Every code but 18, "other non-relative", ties the two as
+# family: partners (1 spouse, 2 cohabitee, 20 civil partner), relatives by
+# blood, adoption or marriage (3-4, 6-8, 10-12, 14-17) and foster relations
+# (5, 9, 13).
+HOUSEHOLD_GRID_COLUMNS = [f"r{k:02d}" for k in range(1, 15)]
+FAMILY_RELATIONSHIP_CODES = (*range(1, 18), 20)
+
+
+def frs_non_dependant_normally_resides_with(
+    benunit: pd.DataFrame, person: pd.DataFrame, liable: np.ndarray
+) -> np.ndarray:
+    """Which joint occupiers each family of non-dependants normally resides with.
+
+    In a household whose rent is shared (``liable``, from
+    frs_liable_for_share_of_household_rent), the joint occupiers are the
+    household reference person's family and the sharers, and every other
+    family is a family of non-dependants. For Housing Benefit and Council Tax
+    Reduction a non-dependant belongs to each joint occupier they normally
+    reside with. The DWP's LHA Guidance Manual (April 2014) counts a friend
+    of two joint tenants in each one's size criteria (para 2.110) and a
+    joint tenant's sister as that tenant's non-dependant only (para 2.093,
+    example 2). Whether people reside with each other turns on the
+    relationship between them and whether they share the accommodation as one
+    household (JP v Bournemouth BC [2018] AACR 30, para 34).
+
+    A family of non-dependants with a member related (FAMILY_RELATIONSHIP_CODES)
+    to members of exactly one joint occupier's family normally resides with
+    that family only: HOUSEHOLD_HEAD_FAMILY when it is the reference person's,
+    OTHER_JOINT_OCCUPIERS when it is the household's only sharer. Every other
+    family keeps EVERY_JOINT_OCCUPIER, policyengine-uk's default. That covers
+    friends of the household, a family related to more than one joint
+    occupier, the relative of one sharer among several (a case the input
+    cannot single out), and every family of a household with no sharer. A tie
+    on either person's record counts, because the two records disagree for a
+    few pairs (0.25% of related ordered pairs in the 2023-24 FRS). The grid
+    covers the first 14 people of a household.
+    """
+    benunit_ids = benunit.benunit_id.values
+    household_ids = benunit.household_id.values
+    head_family = (
+        pd.Series(person.hrpid.values == 1)
+        .groupby(person.benunit_id.values)
+        .any()
+        .reindex(benunit_ids, fill_value=False)
+        .values
+    )
+    sharer = np.asarray(liable, dtype=bool) & ~head_family
+    sharers_in_household = (
+        pd.Series(sharer).groupby(household_ids).transform("sum").values
+    )
+    non_dependant = ~head_family & ~sharer & (sharers_in_household > 0)
+
+    # Benefit unit pairs tied by a family relationship on either record.
+    grid = person.reindex(columns=HOUSEHOLD_GRID_COLUMNS).fillna(0).values
+    rows, columns = np.nonzero(np.isin(grid, FAMILY_RELATIONSHIP_CODES))
+    benunit_of_person = pd.Series(
+        person.benunit_id.values,
+        index=pd.MultiIndex.from_arrays(
+            [person.household_id.values, person.person_id.values % 1000]
+        ),
+    )
+    ties = pd.DataFrame(
+        {
+            "benunit_id": person.benunit_id.values[rows],
+            "other": benunit_of_person.reindex(
+                pd.MultiIndex.from_arrays(
+                    [person.household_id.values[rows], columns + 1]
+                )
+            ).values,
+        }
+    ).dropna()
+    ties = pd.concat(
+        [ties, ties.rename(columns={"benunit_id": "other", "other": "benunit_id"})]
+    ).astype(int)
+    ties = ties[ties.benunit_id != ties.other].drop_duplicates()
+
+    role = pd.Series(
+        np.select([head_family, sharer], ["head", "sharer"], "other"),
+        index=benunit_ids,
+    )
+    ties = ties[
+        role.reindex(ties.benunit_id).isin(["other"]).values
+        & role.reindex(ties.other).isin(["head", "sharer"]).values
+    ]
+    tied = ties.groupby("benunit_id").other.agg(["nunique", "first"])
+    only_tie = tied.loc[tied["nunique"] == 1, "first"].reindex(benunit_ids)
+    only_tie_role = role.reindex(only_tie.values).values
+    resides_with = np.full(len(benunit_ids), "EVERY_JOINT_OCCUPIER", dtype=object)
+    resides_with[non_dependant & (only_tie_role == "head")] = "HOUSEHOLD_HEAD_FAMILY"
+    resides_with[
+        non_dependant & (only_tie_role == "sharer") & (sharers_in_household == 1)
+    ] = "OTHER_JOINT_OCCUPIERS"
+    return resides_with
+
+
 def derive_is_in_non_advanced_education(
     current_education,
     is_apprentice=None,
@@ -1353,6 +1451,11 @@ def create_frs(
     pe_household["rent"] = household.hhrent.fillna(0).values * WEEKS_IN_YEAR
     pe_benunit["liable_for_share_of_household_rent"] = (
         frs_liable_for_share_of_household_rent(benunit, person, household)
+    )
+    pe_benunit["non_dependant_normally_resides_with"] = (
+        frs_non_dependant_normally_resides_with(
+            benunit, person, pe_benunit.liable_for_share_of_household_rent.values
+        )
     )
     pe_household["mortgage_interest_repayment"] = (
         household.mortint.fillna(0).values * WEEKS_IN_YEAR
