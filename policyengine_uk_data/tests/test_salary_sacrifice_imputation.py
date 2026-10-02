@@ -8,8 +8,10 @@ Invariants of ``limit_salary_sacrifice_to_pay``, for every input:
 - it is non-decreasing in the sacrifice and in the pay.
 
 ``impute_salary_sacrifice`` applies it to every record, reported or
-imputed, and stage 2 moves employee pension contributions to salary
-sacrifice without changing anyone's total of the two.
+imputed. Stage 2 moves employee pension contributions to salary sacrifice
+and takes the amount moved out of pay, so for every donor the pension total
+and pay plus salary sacrifice are both unchanged, and the sacrifice never
+exceeds the pay that remains.
 """
 
 from __future__ import annotations
@@ -128,18 +130,22 @@ def _impute(monkeypatch, predictions, **columns):
 
 
 def _assert_invariants(before, after):
-    pay = before.employment_income.values
+    pay_before = before.employment_income.values
+    pay = after.employment_income.values
     ss = after.pension_contributions_via_salary_sacrifice.values
     assert np.all(ss >= 0)
     assert np.all(ss <= np.maximum(pay, 0))
     assert np.all(ss[pay <= 0] == 0)
-    # Stage 2 moves employee pension to salary sacrifice: whoever lost
-    # employee pension gained exactly that much salary sacrifice.
+    # Stage 2 moves employee pension to salary sacrifice out of pay: whoever
+    # lost employee pension gained exactly that much salary sacrifice and
+    # lost exactly that much pay. Nobody else's pay changes.
     pension_before = before.employee_pension_contributions.values
     pension_after = after.employee_pension_contributions.values
     moved = pension_after != pension_before
     assert np.all(pension_after <= pension_before)
     assert np.allclose(pension_after[moved] + ss[moved], pension_before[moved])
+    assert np.allclose(pay[moved] + ss[moved], pay_before[moved])
+    assert np.array_equal(pay[~moved], pay_before[~moved])
 
 
 def test_nobody_without_pay_keeps_a_sacrifice(monkeypatch):
@@ -164,10 +170,30 @@ def test_nobody_without_pay_keeps_a_sacrifice(monkeypatch):
     _assert_invariants(before, after)
 
 
-def test_stage_two_moves_employee_pension_up_to_pay(monkeypatch):
+def test_stage_two_takes_the_sacrifice_out_of_pay(monkeypatch):
     n = 40
-    # Every donor's employee pension exceeds their pay, so each one moved
-    # keeps the part above their pay as employee pension.
+    before, after = _impute(
+        monkeypatch,
+        predictions=[0] * n,
+        pay=[30_000] * n,
+        asked=[0] * n,
+        reported=[0] * n,
+        employee_pension=[1_500] * n,
+    )
+    ss = after.pension_contributions_via_salary_sacrifice.values
+    moved = ss > 0
+    assert moved.any() and not moved.all()
+    assert np.all(ss[moved] == 1_500)
+    assert np.all(after.employee_pension_contributions.values[moved] == 0)
+    assert np.all(after.employment_income.values[moved] == 28_500)
+    assert np.all(after.employment_income.values[~moved] == 30_000)
+    _assert_invariants(before, after)
+
+
+def test_stage_two_moves_at_most_half_the_pay(monkeypatch):
+    n = 40
+    # Every donor's employee pension exceeds half their pay, so each one
+    # moved sacrifices half and keeps the rest as employee pension.
     before, after = _impute(
         monkeypatch,
         predictions=[0] * n,
@@ -179,8 +205,9 @@ def test_stage_two_moves_employee_pension_up_to_pay(monkeypatch):
     ss = after.pension_contributions_via_salary_sacrifice.values
     moved = ss > 0
     assert moved.any()
-    assert np.all(ss[moved] == 1_000)
-    assert np.all(after.employee_pension_contributions.values[moved] == 500)
+    assert np.all(ss[moved] == 500)
+    assert np.all(after.employee_pension_contributions.values[moved] == 1_000)
+    assert np.all(after.employment_income.values[moved] == 500)
     _assert_invariants(before, after)
 
 

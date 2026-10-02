@@ -9,8 +9,9 @@ Two-stage imputation:
 
 2. Headcount-targeted imputation: converts a fraction of pension
    contributors without SS into below-cap (≤£2,000) SS users, moving
-   employee pension contributions to salary sacrifice. Targets the
-   OBR/ASHE estimate of ~4.3mn below-cap SS users.
+   employee pension contributions to salary sacrifice and taking the
+   amount moved out of their pay. Targets the OBR/ASHE estimate of
+   ~4.3mn below-cap SS users.
 
 A salary sacrifice is pay given up for an employer pension contribution,
 so every amount, reported or imputed, is limited to the person's pay:
@@ -152,8 +153,8 @@ def impute_salary_sacrifice(
     pay (see ``limit_salary_sacrifice_to_pay``).
     Stage 2: Converts a fraction of pension contributors to below-cap
     SS users, targeting ~4.3mn (OBR/ASHE). Moves employee pension
-    contributions (up to the person's pay) to salary sacrifice to keep
-    total pension consistent.
+    contributions to salary sacrifice to keep total pension consistent,
+    and takes the amount moved out of pay (at most half the pay).
 
     Args:
         dataset: PolicyEngine UK dataset with salary_sacrifice_asked
@@ -234,16 +235,28 @@ def impute_salary_sacrifice(
             rng = np.random.default_rng(seed=2024)
             newly_imputed = is_donor & (rng.random(len(final_ss)) < imputation_rate)
 
-            # Move full employee pension (up to pay) to SS so the
-            # above/below 2k split reflects the natural pension distribution
-            ss_new = limit_salary_sacrifice_to_pay(employee_pension, employment_income)
+            # Move full employee pension to SS so the above/below 2k
+            # split reflects the natural pension distribution. The FRS
+            # pay these contributions were deducted from is before the
+            # sacrifice, so the sacrifice comes out of it: pay falls by
+            # the amount moved, which keeps taxable pay unchanged. At most
+            # half the pay moves, so the sacrifice never exceeds the pay
+            # that remains.
+            ss_new = limit_salary_sacrifice_to_pay(
+                employee_pension, employment_income / 2
+            )
             final_ss = np.where(newly_imputed, ss_new, final_ss)
 
-            # Reduce employee pension correspondingly
+            # Reduce employee pension and pay correspondingly
             dataset.person["employee_pension_contributions"] = np.where(
                 newly_imputed,
                 employee_pension - ss_new,
                 employee_pension,
+            )
+            dataset.person["employment_income"] = np.where(
+                newly_imputed,
+                dataset.person["employment_income"].values - ss_new,
+                dataset.person["employment_income"].values,
             )
 
     dataset.person["pension_contributions_via_salary_sacrifice"] = final_ss
