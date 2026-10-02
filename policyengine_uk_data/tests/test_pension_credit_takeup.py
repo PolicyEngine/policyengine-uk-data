@@ -112,7 +112,14 @@ def test_obr_pension_credit_row_is_not_parsed():
     assert not obr._parse_welfare(wb)
 
 
-def test_built_dataset_reporters_claim_and_caseload_is_near_dwp(baseline):
+def test_built_dataset_survey_reporters_claim_and_caseload_is_near_dwp(
+    baseline, enhanced_frs
+):
+    """Every survey reporter claims. SPI-synthetic reports are imputed, so
+    those units are drawn like non-reporters."""
+    from policyengine_uk_data.datasets.pension_credit_takeup import (
+        spi_synthetic_benunits,
+    )
     from policyengine_uk_data.targets.build_loss_matrix import (
         _SimContext,
         restrict_to_countries,
@@ -121,7 +128,7 @@ def test_built_dataset_reporters_claim_and_caseload_is_near_dwp(baseline):
     year = 2025
     reported = (
         baseline.calculate("pension_credit_reported", year, map_to="benunit").values > 0
-    )
+    ) & ~spi_synthetic_benunits(enhanced_frs)
     would_claim = baseline.calculate("would_claim_pc", year).values.astype(bool)
     assert would_claim[reported].all()
 
