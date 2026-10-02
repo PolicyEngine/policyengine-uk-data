@@ -146,10 +146,13 @@ def derive_employment_status_from_frs(empstati, is_adult_record) -> np.ndarray:
         # suppress a total under 10 adults.
         n = int(unknown.sum())
         adults = f"{n} FRS adults" if n >= 10 else "Fewer than 10 FRS adults"
+        bad = codes[unknown]
+        listed = [f"{code:g}" for code in sorted(bad.dropna().unique())]
+        listed += ["blank"] if bad.isna().any() else []
         raise ValueError(
             f"{adults} have EMPSTATI codes missing from "
-            f"FRS_EMPSTATI_EMPLOYMENT_STATUS: {sorted(set(codes[unknown].astype(str)))}. "
-            "Map them from the release's data dictionary."
+            f"FRS_EMPSTATI_EMPLOYMENT_STATUS: {', '.join(listed)}. Map them "
+            "from the release's data dictionary."
         )
     return np.where(is_adult_record, adult_status, EmploymentStatus.CHILD.name)
 

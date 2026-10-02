@@ -97,6 +97,13 @@ def test_unknown_adult_code_fails_the_build(code):
         derive_employment_status_from_frs([1, code], [True, True])
 
 
+def test_failure_message_lists_blank_and_numeric_codes():
+    # Formatted from the float codes, not Series.astype(str), whose NaN
+    # handling differs between pandas 2 and 3.
+    with pytest.raises(ValueError, match=": 0, 12, blank. "):
+        derive_employment_status_from_frs([np.nan, 0, 12, 1], [True] * 4)
+
+
 @given(st.integers(1, 30), st.integers(1, 30))
 def test_failure_message_suppresses_small_counts(n_twelve, n_thirteen):
     codes = [12] * n_twelve + [13] * n_thirteen
@@ -106,9 +113,9 @@ def test_failure_message_suppresses_small_counts(n_twelve, n_thirteen):
     prefix = f"{total} FRS adults" if total >= 10 else "Fewer than 10 FRS adults"
     message = str(error.value)
     assert message.startswith(prefix)
-    assert "['12.0', '13.0']" in message
+    assert ": 12, 13. " in message
     # No other number (such as a per-code count) is disclosed.
-    rest = message.removeprefix(prefix).replace("['12.0', '13.0']", "")
+    rest = message.removeprefix(prefix).replace(": 12, 13. ", "")
     assert not any(character.isdigit() for character in rest)
 
 
