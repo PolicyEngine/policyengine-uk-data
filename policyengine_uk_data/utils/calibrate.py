@@ -110,6 +110,7 @@ def load_weights(
 def initialize_weight_priors(
     original_weights: np.ndarray,
     zero_weight_total_share: float = DEFAULT_ZERO_WEIGHT_PRIOR_TOTAL_SHARE,
+    groups: np.ndarray | None = None,
 ) -> np.ndarray:
     """Build deterministic positive household priors for calibration.
 
@@ -119,6 +120,10 @@ def initialize_weight_priors(
     zero-weight rows are present, preserve the relative distribution of
     positive survey weights while reserving a fixed share of total prior mass
     for the zero-weight rows.
+
+    ``groups`` (one label per row) marks rows that split one household, such
+    as a private renter's BRMA records: zero-weight rows of a group then share
+    one household's prior between them.
     """
     weights = np.asarray(original_weights, dtype=np.float64)
     if weights.ndim != 1:
@@ -141,8 +146,32 @@ def initialize_weight_priors(
 
     priors = np.empty_like(weights, dtype=np.float64)
     priors[positive_mask] = weights[positive_mask] * (1 - zero_weight_total_share)
-    priors[zero_mask] = positive_total * zero_weight_total_share / zero_mask.sum()
+    if groups is None:
+        priors[zero_mask] = positive_total * zero_weight_total_share / zero_mask.sum()
+    else:
+        zero_groups = pd.factorize(np.asarray(groups)[zero_mask])[0]
+        size = np.bincount(zero_groups)
+        priors[zero_mask] = (
+            positive_total * zero_weight_total_share / len(size) / size[zero_groups]
+        )
     return priors
+
+
+def tie_rows(values, groups: np.ndarray):
+    """Replace each row (a household) by the mean of its group's rows."""
+    codes = pd.factorize(np.asarray(groups))[0]
+    array = np.asarray(values, dtype=float)
+    sums = np.zeros((codes.max() + 1,) + array.shape[1:])
+    np.add.at(sums, codes, array)
+    tied = sums[codes] / np.bincount(codes).reshape((-1,) + (1,) * (array.ndim - 1))[codes]
+    if isinstance(values, pd.DataFrame):
+        return pd.DataFrame(tied, index=values.index, columns=values.columns)
+    return tied
+
+
+def tie_weights(weights: np.ndarray, groups: np.ndarray) -> np.ndarray:
+    """Average area × household weights over each group's households."""
+    return tie_rows(np.asarray(weights).T, groups).T
 
 
 def _as_bool_mask(series: pd.Series) -> np.ndarray:
@@ -205,6 +234,11 @@ def _household_weight_diagnostics(
     return diagnostics
 
 
+def _saved_weights(weights, r, groups):
+    final_weights = (torch.exp(weights) * r).detach().numpy()
+    return final_weights if groups is None else tie_weights(final_weights, groups)
+
+
 def calibrate_local_areas(
     dataset: UKSingleYearDataset,
     matrix_fn,
@@ -221,6 +255,7 @@ def calibrate_local_areas(
     nested_progress=None,
     time_period: int | str | None = None,
     zero_weight_prior_total_share: float = DEFAULT_ZERO_WEIGHT_PRIOR_TOTAL_SHARE,
+    groups: np.ndarray | None = None,
 ):
     """
     Generic calibration function for local areas (constituencies, local authorities, etc.)
@@ -239,6 +274,11 @@ def calibrate_local_areas(
         area_name: Name of the area type for logging
         zero_weight_prior_total_share: Share of prior household mass to reserve for
             rows whose incoming household_weight is zero.
+        groups: Optional label per household marking records that split one
+            household (a private renter's BRMA records). The records of a group
+            are calibrated as one: each takes the group's mean target rows, they
+            share one prior, and their saved weights are averaged, so they keep
+            equal weights.
     """
     if dataset_key is None:
         dataset_key = default_weight_dataset_key()
@@ -257,12 +297,16 @@ def calibrate_local_areas(
 
     with track_stage(f"{area_name}: build local target matrix"):
         matrix, y, r = _call_matrix_fn(matrix_fn, dataset, time_period)
+        if groups is not None:
+            matrix = tie_rows(matrix, groups)
     m_c, y_c = matrix.copy(), y.copy()
 
     with track_stage(f"{area_name}: build national target matrix"):
         m_national, y_national = _call_matrix_fn(
             national_matrix_fn, dataset, time_period
         )
+        if groups is not None:
+            m_national = tie_rows(m_national, groups)
     m_n, y_n = m_national.copy(), y_national.copy()
 
     with track_stage(f"{area_name}: prepare tensors and optimizer"):
@@ -280,6 +324,7 @@ def calibrate_local_areas(
         household_prior_weights = initialize_weight_priors(
             dataset.household.household_weight.values,
             zero_weight_total_share=zero_weight_prior_total_share,
+            groups=groups,
         )
         area_prior_weights = household_prior_weights / areas_per_household
         original_weights = np.log(np.clip(area_prior_weights, 1e-12, None))
@@ -392,7 +437,7 @@ def calibrate_local_areas(
         return masked_weights
 
     optimizer = torch.optim.Adam([weights], lr=1e-1)
-    final_weights = (torch.exp(weights) * r).detach().numpy()
+    final_weights = _saved_weights(weights, r, groups)
     performance = pd.DataFrame()
 
     def log_performance(
@@ -474,7 +519,7 @@ def calibrate_local_areas(
                     )
 
                 if epoch % 10 == 0:
-                    final_weights = (torch.exp(weights) * r).detach().numpy()
+                    final_weights = _saved_weights(weights, r, groups)
 
                     log_performance(
                         epoch=epoch,
@@ -514,7 +559,7 @@ def calibrate_local_areas(
                     )
 
             if epoch % 10 == 0:
-                final_weights = (torch.exp(weights) * r).detach().numpy()
+                final_weights = _saved_weights(weights, r, groups)
 
                 log_performance(
                     epoch=epoch,
