@@ -40,6 +40,13 @@ from policyengine_uk_data.datasets.disability_benefits import (
     add_disability_benefit_categories_from_reported_amounts,
     add_disability_benefit_flags_from_reported_amounts,
 )
+from policyengine_uk_data.datasets.frs import (
+    BENEFITS_IN_OWN_RIGHT_REPORTED_COLUMNS,
+    REPORTED_TAKEUP_ANCHORS,
+    reported_benunit_mask,
+)
+from policyengine_uk_data.parameters import load_take_up_rate
+from policyengine_uk_data.utils.takeup import assign_takeup_with_reported_anchors
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +108,91 @@ FRS_ONLY_PERSON_VARIABLES = [
     "esa_contrib_reported",
     "esa_income_reported",
 ]
+
+# Benefit reports set to zero on SPI-donor rows once the QRF has drawn them.
+# The QRF draws each person's reports from their age, gender, region and
+# incomes; it sees nothing of their benefit unit (partner, children, rent,
+# capital) or of their health. A report says the person is an existing
+# claimant, and policyengine-uk acts on that, so these are zeroed:
+#
+# - Income-related awards. Entitlement turns on the benefit unit's joint
+#   means and make-up, which on these rows come from the imputed incomes, so
+#   the model's own means test is the only coherent source. A report would
+#   instead be a continuing-award gate (housing benefit, income support, tax
+#   credits, income-related ESA and JSA), the paid amount (income-related
+#   ESA and JSA; council tax reduction where the model has no scheme) or a
+#   certain-claim anchor (UC, Pension Credit). Sure Start Maternity Grant
+#   needs one of these awards and is copied from the donor, not drawn.
+# - Benefits paid only to people out of work or incapable of it: ESA and
+#   JSA (contributory), incapacity benefit and severe disablement allowance.
+#   On the 2024-25 build, 76% of SPI-row ESA (contributory) reporters earned
+#   more than ESA's permitted-work limit, against 2% of FRS reporters.
+# - Child Benefit, whose only use is the take-up anchor. The draw ignores
+#   the children: on the 2024-25 build, 44% of SPI-row reports were in
+#   benefit units without a child under 16 (FRS rows: 8%).
+#
+# State pension (driven by age), winter fuel payment (not read by the
+# model), the disability benefits, carer's allowance (the draws respect its
+# earnings limit) and IIDB, AFCS and bereavement support (payable at any
+# income) keep their drawn values. The zeroed columns stay in the QRF chain
+# above so that the values kept do not change.
+SPI_DONOR_ZEROED_PERSON_VARIABLES = [
+    "universal_credit_reported",
+    "pension_credit_reported",
+    "housing_benefit_reported",
+    "council_tax_benefit_reported",
+    "income_support_reported",
+    "working_tax_credit_reported",
+    "child_tax_credit_reported",
+    "jsa_income_reported",
+    "esa_income_reported",
+    "ssmg_reported",
+    "jsa_contrib_reported",
+    "esa_contrib_reported",
+    "incapacity_benefit_reported",
+    "sda_reported",
+    "child_benefit_reported",
+]
+
+# Seed for the take-up draws on SPI-donor rows; create_frs uses 100.
+SPI_DONOR_TAKEUP_SEED = 101
+
+
+def apply_spi_donor_benefit_rules(
+    dataset: UKSingleYearDataset,
+) -> UKSingleYearDataset:
+    """Zero SPI-donor benefit reports and re-derive the flags built from them.
+
+    ``create_frs`` sets ``receives_benefits_in_own_right`` and the
+    report-anchored take-up flags from the donor's own reports, before the
+    SPI rows exist. Here they are rebuilt from the rows' own reports: a unit
+    reporting receipt claims, and the rest draw at the take-up rate. With the
+    anchoring reports zeroed, every SPI-donor unit draws at the rate, since
+    whether a synthetic family claims is unobserved.
+    """
+    dataset = dataset.copy()
+    person, benunit = dataset.person, dataset.benunit
+    for column in SPI_DONOR_ZEROED_PERSON_VARIABLES:
+        if column in person.columns:
+            person[column] = 0.0
+
+    own_right = [c for c in BENEFITS_IN_OWN_RIGHT_REPORTED_COLUMNS if c in person]
+    if "receives_benefits_in_own_right" in person.columns:
+        person["receives_benefits_in_own_right"] = (
+            person[own_right].fillna(0).sum(axis=1) > 0
+        )
+
+    year = int(str(dataset.time_period)[:4])
+    generator = np.random.default_rng(seed=SPI_DONOR_TAKEUP_SEED)
+    for flag, (rate_name, column) in REPORTED_TAKEUP_ANCHORS.items():
+        if flag not in benunit.columns or column not in person.columns:
+            continue
+        benunit[flag] = assign_takeup_with_reported_anchors(
+            generator.random(len(benunit)),
+            load_take_up_rate(rate_name, year),
+            reported_mask=reported_benunit_mask(person, benunit, column),
+        )
+    return dataset
 
 
 def _one_hot_encode(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
@@ -177,7 +269,10 @@ def impute_frs_only_variables(
     to predict values for every row of ``target_dataset``; predictions
     replace the existing (donor-leaked) values in
     ``FRS_ONLY_PERSON_VARIABLES`` only. Variables absent from either
-    frame are skipped silently.
+    frame are skipped silently. ``apply_spi_donor_benefit_rules`` then
+    zeroes ``SPI_DONOR_ZEROED_PERSON_VARIABLES`` and rebuilds the flags
+    derived from reports, before the disability categories and flags are
+    derived from the remaining reports.
     """
     from policyengine_uk_data.utils.qrf import QRF
 
@@ -203,9 +298,9 @@ def impute_frs_only_variables(
     if not outputs:
         logger.warning(
             "Stage-2 FRS-only imputation: no output variables available; "
-            "returning target_dataset unchanged."
+            "applying only the SPI-donor benefit rules."
         )
-        return target_dataset
+        return apply_spi_donor_benefit_rules(target_dataset)
 
     train_inputs_raw = _build_predictor_frame(train_dataset)
     target_inputs_raw = _build_predictor_frame(target_dataset)
@@ -241,6 +336,7 @@ def impute_frs_only_variables(
         values = np.maximum(predictions[column].values, 0.0)
         target_dataset.person[column] = values
 
+    target_dataset = apply_spi_donor_benefit_rules(target_dataset)
     target_dataset.person = add_disability_benefit_categories_from_reported_amounts(
         target_dataset.person,
         int(str(target_dataset.time_period)[:4]),

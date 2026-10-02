@@ -74,6 +74,14 @@ BENEFITS_IN_OWN_RIGHT_REPORTED_COLUMNS = (
     "esa_contrib_reported",
     "esa_income_reported",
 )
+# Take-up flags anchored on reported receipt: flag -> (take-up rate
+# parameter, person-level report column). A benefit unit with any member
+# reporting receipt claims with certainty; the rest are filled at random.
+REPORTED_TAKEUP_ANCHORS = {
+    "would_claim_child_benefit": ("child_benefit", "child_benefit_reported"),
+    "would_claim_pc": ("pension_credit", "pension_credit_reported"),
+    "would_claim_uc": ("universal_credit", "universal_credit_reported"),
+}
 NON_ADVANCED_EDUCATION_LEVELS = (
     "PRE_PRIMARY",
     "PRIMARY",
@@ -209,6 +217,16 @@ def derive_esa_support_group_proxy(
         & esa_health_condition_proxy
         & severe_health_evidence
     )
+
+
+def reported_benunit_mask(
+    person: pd.DataFrame, benunit: pd.DataFrame, person_column: str
+) -> np.ndarray:
+    """Benefit units with any member reporting a positive ``person_column``."""
+    reporter_benunits = set(
+        person.loc[person[person_column] > 0, "person_benunit_id"].values
+    )
+    return benunit["benunit_id"].isin(reporter_benunits).values
 
 
 def derive_receives_benefits_in_own_right(pe_person: pd.DataFrame) -> pd.Series:
@@ -1511,11 +1529,14 @@ def create_frs(
         assign_takeup_with_reported_anchors,
     )
 
-    def _reported_benunit_mask(person_column: str) -> np.ndarray:
-        reporter_benunits = set(
-            pe_person.loc[pe_person[person_column] > 0, "person_benunit_id"].values
+    def _anchored_takeup(flag: str, rate: float) -> np.ndarray:
+        return assign_takeup_with_reported_anchors(
+            generator.random(len(pe_benunit)),
+            rate,
+            reported_mask=reported_benunit_mask(
+                pe_person, pe_benunit, REPORTED_TAKEUP_ANCHORS[flag][1]
+            ),
         )
-        return pe_benunit["benunit_id"].isin(reporter_benunits).values
 
     # Person-level
     pe_person["would_claim_marriage_allowance"] = (
@@ -1524,23 +1545,17 @@ def create_frs(
 
     # Benefit unit-level — anchor on any adult in the benefit unit having
     # reported positive receipt in the FRS benefits table.
-    pe_benunit["would_claim_child_benefit"] = assign_takeup_with_reported_anchors(
-        generator.random(len(pe_benunit)),
-        child_benefit_rate,
-        reported_mask=_reported_benunit_mask("child_benefit_reported"),
+    pe_benunit["would_claim_child_benefit"] = _anchored_takeup(
+        "would_claim_child_benefit", child_benefit_rate
     )
     pe_benunit["child_benefit_opts_out"] = (
         generator.random(len(pe_benunit)) < child_benefit_opts_out_rate
     )
-    pe_benunit["would_claim_pc"] = assign_takeup_with_reported_anchors(
-        generator.random(len(pe_benunit)),
-        pension_credit_rate,
-        reported_mask=_reported_benunit_mask("pension_credit_reported"),
+    pe_benunit["would_claim_pc"] = _anchored_takeup(
+        "would_claim_pc", pension_credit_rate
     )
-    pe_benunit["would_claim_uc"] = assign_takeup_with_reported_anchors(
-        generator.random(len(pe_benunit)),
-        universal_credit_rate,
-        reported_mask=_reported_benunit_mask("universal_credit_reported"),
+    pe_benunit["would_claim_uc"] = _anchored_takeup(
+        "would_claim_uc", universal_credit_rate
     )
     pe_benunit["would_claim_tfc"] = generator.random(len(pe_benunit)) < tfc_rate
 
