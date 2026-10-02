@@ -222,6 +222,13 @@ The FRS identifies only the region, but Local Housing Allowance rates vary by Br
 
 A household takes one of its benefit units' BRMAs, chosen at random. Sources, method and validation are in `storage/BRMA_DATA_SOURCES.md`.
 
+One draw per household is noisy: a few heavily weighted private renters carry most of the variation, and calibration passes it on. So the enhanced dataset splits each private-renting household into `PE_UK_DATA_BRMA_SPLIT` records (default 4) just before the output-area clone step:
+- each record has an equal share of the household's weight;
+- each record takes the BRMA at one of evenly spaced quantiles of the household's BRMA distribution, so each record has exactly the distribution of a single draw;
+- the quantiles walk the region's BRMAs from the lowest LHA rate to the highest, so the records' average outcome stays within a fraction of the household's range of outcomes of its expectation.
+
+The records share `brma_split_group` (the original household id). Calibration treats each group as one household: its records take the group's mean target rows, share one prior, and keep equal weights.
+
 ---
 
 ## Calibration Targets

@@ -1,0 +1,1 @@
+- Split each private-renting household in the enhanced FRS into 4 records (`PE_UK_DATA_BRMA_SPLIT`) at evenly spaced, LHA-rate-ordered quantiles of its BRMA distribution, with calibration tying the records' weights (`brma_split_group`). This cuts the noise one BRMA draw puts into Universal Credit, Housing Benefit and AHC poverty.

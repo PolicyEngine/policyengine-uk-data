@@ -1,6 +1,8 @@
 import logging
 import os
 
+import pandas as pd
+
 from policyengine_uk_data.utils.build_environment import (
     assert_local_build_environment,
 )
@@ -15,6 +17,10 @@ logging.basicConfig(level=logging.INFO)
 # employee count (targets/sources/ons_labour_market.py). The area amounts of
 # employment income, and the national counts by income band, still train.
 VALIDATION_ONLY_LOCAL_TARGETS = ["hmrc/employment_income/count"]
+
+
+# Records per private-renting household across its BRMAs (datasets/brma.py).
+BRMA_SPLIT = 4
 
 
 def _get_positive_int_env(name: str, default: int) -> int:
@@ -82,6 +88,8 @@ def main():
             "PE_UK_DATA_OA_CLONES",
             2 if is_testing else 10,
         )
+        # Records per private-renting household across its BRMAs (1 = one draw).
+        brma_split = _get_positive_int_env("PE_UK_DATA_BRMA_SPLIT", BRMA_SPLIT)
         frs_release = CURRENT_FRS_RELEASE
         align_to_base_year = frs_release.base_year != frs_release.survey_year
         align_step = f"Align to {frs_release.base_year} base year"
@@ -110,6 +118,7 @@ def main():
             "Impute salary sacrifice",
             "Impute student loan plan",
             "Assign Pension Credit take-up",
+            "Split private renters across BRMAs",
             "Clone and assign OA geography",
             "Calibrate constituency weights",
             "Calibrate local authority weights",
@@ -224,6 +233,15 @@ def main():
             )
             update_dataset("Assign Pension Credit take-up", "completed")
 
+            update_dataset("Split private renters across BRMAs", "processing")
+            from policyengine_uk_data.datasets.brma import (
+                BRMA_SPLIT_GROUP_COLUMN,
+                split_private_renters_across_brmas,
+            )
+
+            frs = split_private_renters_across_brmas(frs, k=brma_split)
+            update_dataset("Split private renters across BRMAs", "completed")
+
             # Clone households and assign OA geography
             update_dataset("Clone and assign OA geography", "processing")
             from policyengine_uk_data.calibration.clone_and_assign import (
@@ -265,6 +283,16 @@ def main():
                 get_performance,
             )
 
+            # A split household's records (within one OA clone) calibrate as one.
+            brma_groups = pd.factorize(
+                pd.MultiIndex.from_arrays(
+                    [
+                        frs.household[BRMA_SPLIT_GROUP_COLUMN].to_numpy(),
+                        frs.household["clone_index"].to_numpy(),
+                    ]
+                )
+            )[0]
+
             # Run calibration with verbose progress
             frs_calibrated_constituencies = calibrate_local_areas(
                 dataset=frs,
@@ -281,6 +309,7 @@ def main():
                 get_performance=get_performance,
                 nested_progress=nested_progress,  # Pass the nested progress manager
                 time_period=frs_release.calibration_year,
+                groups=brma_groups,
             )
             update_dataset("Calibrate constituency weights", "completed")
 
@@ -308,6 +337,7 @@ def main():
                 get_performance=get_la_performance,
                 nested_progress=nested_progress,  # Pass the nested progress manager
                 time_period=frs_release.calibration_year,
+                groups=brma_groups,
             )
             update_dataset("Calibrate local authority weights", "completed")
 
