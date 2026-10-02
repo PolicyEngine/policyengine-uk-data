@@ -224,6 +224,25 @@ def test_unreported_units_claim_at_the_take_up_rate():
     assert after.would_claim_child_benefit.all()
 
 
+def test_take_up_rates_are_read_for_the_dataset_year(monkeypatch):
+    years = []
+
+    def rate(name, year):
+        years.append(year)
+        return 0.5
+
+    monkeypatch.setattr("policyengine_uk_data.datasets.frs.load_take_up_rate", rate)
+    dataset = _dataset([1, 2], [[1.0] * 3 for _ in REPORT_COLUMNS], [True] * 3)
+    dataset = UKSingleYearDataset(
+        person=dataset.person,
+        benunit=dataset.benunit,
+        household=dataset.household,
+        fiscal_year=2031,
+    )
+    apply_spi_donor_benefit_rules(dataset)
+    assert years == [2031] * len(SPI_DONOR_REDRAWN_TAKEUP_FLAGS)
+
+
 def test_stage_two_applies_the_rules_and_keeps_drawn_values(monkeypatch):
     """Through ``impute_frs_only_variables``: zeroed, restored, kept and flags."""
     from policyengine_uk_data.tests.test_frs_only_imputation import _fake_dataset
@@ -254,6 +273,9 @@ def test_stage_two_applies_the_rules_and_keeps_drawn_values(monkeypatch):
     pd.testing.assert_frame_equal(ruled.person[kept], unruled.person[kept])
     assert not ruled.person.receives_benefits_in_own_right.any()
     assert not ruled.benunit.would_claim_child_benefit.any()
+    # Every unit entered claiming UC as the donor; with the reports zeroed,
+    # the redraw at the 55% rate leaves some 80 units out.
+    assert not ruled.benunit.would_claim_uc.all()
 
     # Disability flags come from the final reports: ESA (contributory) was
     # drawn for some people but no longer marks them disabled.

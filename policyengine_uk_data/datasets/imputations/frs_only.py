@@ -124,7 +124,7 @@ FRS_ONLY_PERSON_VARIABLES = [
 # - Benefits paid only to people out of work or incapable of it: ESA and JSA
 #   (contributory), incapacity benefit and severe disablement allowance. On
 #   the 2024-25 build, 41% of SPI-row ESA (contributory) reporters by weight
-#   earned more than ESA's permitted-work limit, against 0.4% on FRS rows.
+#   earned more than ESA's permitted-work limit.
 # - Child Benefit, which the model reads only through the take-up flag. The
 #   draw ignores the children: 34% of SPI-row reports by weight were in
 #   benefit units with no child or qualifying young person (FRS rows: 0%).
