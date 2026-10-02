@@ -134,3 +134,31 @@ def test_built_dataset_reporters_claim_and_caseload_is_near_dwp(baseline):
         )
         ratio = (column * weight).sum() / target.values[year]
         assert 0.5 < ratio < 2, (target.name, ratio)
+
+
+def test_spi_synthetic_benefit_units_are_found_through_their_household():
+    from types import SimpleNamespace
+
+    import pandas as pd
+
+    from policyengine_uk_data.datasets.pension_credit_takeup import (
+        spi_synthetic_benunits,
+    )
+
+    dataset = SimpleNamespace(
+        household=pd.DataFrame(
+            {"household_id": [1, 2, 3], "household_is_spi_synthetic": [0, 1, 0]}
+        ),
+        person=pd.DataFrame(
+            {
+                "person_household_id": [1, 2, 2, 3],
+                "person_benunit_id": [10, 20, 21, 30],
+            }
+        ),
+        benunit=pd.DataFrame({"benunit_id": [30, 21, 20, 10]}),
+    )
+    np.testing.assert_array_equal(
+        spi_synthetic_benunits(dataset), [False, True, True, False]
+    )
+    dataset.household = dataset.household.drop(columns="household_is_spi_synthetic")
+    assert not spi_synthetic_benunits(dataset).any()
