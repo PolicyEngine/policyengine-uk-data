@@ -5,7 +5,7 @@ One row per BRMA and LHA category: the median weekly rent on the BRMA's list
 of rents, in the prices of the dataset year, and the standard deviation of
 log rents on the list. See ``README.md`` for the method.
 
-Usage (from the repository root, with openpyxl installed):
+Usage (from the repository root, with openpyxl and xlrd installed):
   python tools/brma_rents/build.py <cache dir> [--year 2024] [--check]
 """
 
@@ -28,6 +28,7 @@ CATEGORIES = list("ABCDE")
 Z30 = NormalDist().inv_cdf(0.3)
 IQR_SDS = NormalDist().inv_cdf(0.75) - NormalDist().inv_cdf(0.25)
 SCOTTISH_SHEETS = (2019, 2020, 2021)  # years to September; the latest three released
+WELSH_SHEETS = {"Table 1": 2024, "Table 2": 2025}  # sheet: April determination
 PIPR_AREA = {
     "North East": "NORTH_EAST",
     "North West": "NORTH_WEST",
@@ -90,40 +91,67 @@ def uprating(cache: Path, year: int) -> pd.DataFrame:
     return pd.DataFrame(windows)
 
 
-def english_cells(cache: Path, factor: pd.DataFrame, region: pd.Series, year: int):
-    """Median and spread of England's lists that overlap the dataset year."""
-    rents = []
-    for determination in (year + 1, year + 2):
+def english_lists(cache: Path, determinations) -> pd.DataFrame:
+    """England's VOA lists: one row per rent, with its April determination."""
+    lists = []
+    for determination in determinations:
         rows = pd.read_csv(
             cache / f"voa_list_of_rents_{determination}.csv",
             encoding="cp1252",
             dtype=str,
         ).dropna(how="all")
         assert (rows.PERIOD == "Week").all(), determination
-        weekly = rows.NET_RENT.str.replace("[£,]", "", regex=True).astype(float)
-        assert (weekly > 0).all(), determination
-        brma = brma_name(rows.BRMA)
-        rents.append(
+        lists.append(
             pd.DataFrame(
                 {
-                    "brma": brma,
+                    "brma": brma_name(rows.BRMA),
                     "lha_category": rows.LHA_TYPE.str.removeprefix("Cat "),
-                    "log_rent": np.log(weekly)
-                    + brma.map(region).map(factor[determination]).to_numpy(),
+                    "weekly_rent": rows.NET_RENT.str.replace("[£,]", "", regex=True)
+                    .astype(float)
+                    .to_numpy(),
+                    "determination": determination,
                 }
             )
         )
-    rents = pd.concat(rents)
-    assert rents.log_rent.notna().all()
-    cell = rents.groupby(["brma", "lha_category"]).log_rent
-    return pd.DataFrame(
+    return pd.concat(lists)
+
+
+def welsh_lists(cache: Path) -> pd.DataFrame:
+    """Rent Officers Wales's lists for April 2024 and April 2025 (FOI ATISN 25142)."""
+    lists = []
+    for sheet, determination in WELSH_SHEETS.items():
+        rows = pd.read_excel(
+            cache / "welsh_lists_of_rents_atisn25142.xls", sheet_name=sheet, header=2
+        ).dropna(how="all")
+        lists.append(
+            pd.DataFrame(
+                {
+                    "brma": brma_name(rows["BRMA"].astype(str).str.strip()),
+                    "lha_category": rows["Category"].astype(str).str.strip(),
+                    "weekly_rent": rows["Weekly Rent"].astype(float).to_numpy(),
+                    "determination": determination,
+                }
+            )
+        )
+    return pd.concat(lists)
+
+
+def list_cells(rents: pd.DataFrame, factor: pd.DataFrame, region: pd.Series):
+    """Median and spread of uprated log rents, pooled over determinations."""
+    assert (rents.weekly_rent > 0).all()
+    uprate = [factor.loc[region[b], y] for b, y in zip(rents.brma, rents.determination)]
+    log_rent = pd.Series(np.log(rents.weekly_rent.to_numpy()) + uprate)
+    cell = log_rent.groupby([rents.brma.to_numpy(), rents.lha_category.to_numpy()])
+    cells = pd.DataFrame(
         {
             "median_weekly_rent": np.exp(cell.median()),
             "log_sd": cell.apply(spread),
             "rents": cell.size(),
             "basis": "list",
         }
-    ).reset_index()
+    )
+    cells.index.names = ["brma", "lha_category"]
+    return cells.reset_index()
 
 
 def scottish_spreads(cache: Path) -> pd.DataFrame:
@@ -196,12 +224,13 @@ def build(cache: Path, year: int) -> pd.DataFrame:
     def in_nation(nation):
         return set(region.index[region == nation])
 
-    english = english_cells(cache, factor, region, year)
+    english = list_cells(english_lists(cache, [year + 1, year + 2]), factor, region)
+    welsh = list_cells(welsh_lists(cache), factor, region)
     scottish = scottish_spreads(cache)
-    # No Welsh or Northern Ireland list is used: take the typical spread of the
-    # English and Scottish lists for the category.
+    # No Northern Ireland list is used: take the typical spread of the other
+    # nations' lists for the category.
     typical = (
-        pd.concat([english, scottish])
+        pd.concat([english, welsh, scottish])
         .groupby("lha_category")
         .log_sd.median()
         .reset_index()
@@ -215,6 +244,7 @@ def build(cache: Path, year: int) -> pd.DataFrame:
     table = pd.concat(
         [
             english,
+            welsh,
             percentile_cells(
                 published,
                 factor,
@@ -223,15 +253,6 @@ def build(cache: Path, year: int) -> pd.DataFrame:
                 recent,
                 scottish,
                 "30th percentile and list spread",
-            ),
-            percentile_cells(
-                published,
-                factor,
-                region,
-                in_nation("WALES"),
-                recent,
-                typical.assign(rents=0),
-                "30th percentile and typical spread",
             ),
             percentile_cells(
                 published,

@@ -25,6 +25,15 @@
   notes: Rent Service Scotland's list-of-rents records, one sheet per year to September (2016-2021). Used for the spread of rents only.
   filename: scottish_list_of_rents_foi_2016_2021.xlsx
   sha256: dba86fa1cce920c8f646460bb13e1d99e16927d57fdf290e874f9631e804ed06
+- id: welsh_lists_of_rents
+  publisher: Welsh Government (Rent Officers Wales)
+  title: 'ATISN 25142: lists of rents collected October 2022 - September 2023 (Table 1) and shadow list October 2023 - September 2024 (Table 2)'
+  url: https://www.gov.wales/sites/default/files/publications/2025-10/atisn25142doc1.xls
+  landing_page: https://www.gov.wales/atisn25142
+  licence: Open Government Licence v3.0
+  notes: One row per rent (category, BRMA, weekly rent), released 6 October 2025. Table 1 is the list for April 2024 and Table 2 the shadow list for April 2025.
+  filename: welsh_lists_of_rents_atisn25142.xls
+  sha256: 8ab047dba4b8a6808cadbeb33f81e076a527930d68cb9cb4830be9d25c61c9c2
 - id: lha_published_rates
   publisher: PolicyEngine
   title: Published LHA rates and 30th percentiles by BRMA, category and April determination (policyengine-uk#2022)

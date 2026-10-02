@@ -75,6 +75,25 @@ def test_rents_table_covers_every_brma_and_category(rents):
     assert rents.log_sd.between(0.03, 0.6).all()
 
 
+def test_each_nation_uses_its_best_source(households, rents):
+    by_region = households.groupby(["brma", "region"]).households.sum().reset_index()
+    region = by_region.sort_values("households").groupby("brma").region.last()
+    nation = region.where(
+        region.isin(["WALES", "SCOTLAND", "NORTHERN_IRELAND"]), "ENGLAND"
+    )
+    basis = rents.groupby("brma").basis.agg(set).map(lambda b: b.pop())
+    assert basis.groupby(nation).agg(set).to_dict() == {
+        "ENGLAND": {"list"},
+        "WALES": {"list"},
+        "SCOTLAND": {"30th percentile and list spread"},
+        "NORTHERN_IRELAND": {"30th percentile and typical spread"},
+    }
+    # Every cell with its own spread has enough rents to estimate it.
+    assert (
+        rents[rents.basis != "30th percentile and typical spread"].rents >= 25
+    ).all()
+
+
 def test_larger_homes_cost_more_in_nearly_every_brma(rents):
     median = rents.pivot(
         index="brma", columns="lha_category", values="median_weekly_rent"

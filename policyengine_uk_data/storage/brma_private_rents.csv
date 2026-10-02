@@ -50,10 +50,10 @@ BEDFORD,C,222.14,0.1817,2081,list
 BEDFORD,D,287.32,0.2048,1664,list
 BEDFORD,E,366.53,0.2004,393,list
 BELFAST,A,94.77,0.1816,0,30th percentile and typical spread
-BELFAST,B,173.33,0.1707,0,30th percentile and typical spread
-BELFAST,C,195.31,0.1858,0,30th percentile and typical spread
-BELFAST,D,220.49,0.2161,0,30th percentile and typical spread
-BELFAST,E,284.15,0.2444,0,30th percentile and typical spread
+BELFAST,B,173.78,0.1757,0,30th percentile and typical spread
+BELFAST,C,195.72,0.1898,0,30th percentile and typical spread
+BELFAST,D,220.87,0.2194,0,30th percentile and typical spread
+BELFAST,E,284.82,0.249,0,30th percentile and typical spread
 BIRMINGHAM,A,112.55,0.2186,170,list
 BIRMINGHAM,B,197.29,0.1605,5043,list
 BIRMINGHAM,C,218.04,0.2241,7933,list
@@ -69,11 +69,11 @@ BLACK_COUNTRY,B,143.48,0.1864,3223,list
 BLACK_COUNTRY,C,174.57,0.1821,6722,list
 BLACK_COUNTRY,D,212.45,0.231,6116,list
 BLACK_COUNTRY,E,279.54,0.2605,762,list
-BLAENAU_GWENT,A,78.42,0.1816,0,30th percentile and typical spread
-BLAENAU_GWENT,B,98.21,0.1707,0,30th percentile and typical spread
-BLAENAU_GWENT,C,126.8,0.1858,0,30th percentile and typical spread
-BLAENAU_GWENT,D,151.26,0.2161,0,30th percentile and typical spread
-BLAENAU_GWENT,E,195.73,0.2444,0,30th percentile and typical spread
+BLAENAU_GWENT,A,85.05,0.2619,158,list
+BLAENAU_GWENT,B,101.84,0.2435,93,list
+BLAENAU_GWENT,C,127.8,0.1949,439,list
+BLAENAU_GWENT,D,149.97,0.2325,378,list
+BLAENAU_GWENT,E,197.68,0.315,126,list
 BOLTON_AND_BURY,A,118.66,0.1951,179,list
 BOLTON_AND_BURY,B,150.59,0.2019,449,list
 BOLTON_AND_BURY,C,177.44,0.1821,2914,list
@@ -89,16 +89,16 @@ BRADFORD_SOUTH_DALES,B,123.93,0.2132,1768,list
 BRADFORD_SOUTH_DALES,C,152.57,0.2363,4128,list
 BRADFORD_SOUTH_DALES,D,179.7,0.207,2920,list
 BRADFORD_SOUTH_DALES,E,214.73,0.3328,535,list
-BRECON_AND_RADNOR,A,85.32,0.1816,0,30th percentile and typical spread
-BRECON_AND_RADNOR,B,87.14,0.1707,0,30th percentile and typical spread
-BRECON_AND_RADNOR,C,118.39,0.1858,0,30th percentile and typical spread
-BRECON_AND_RADNOR,D,148.2,0.2161,0,30th percentile and typical spread
-BRECON_AND_RADNOR,E,185.25,0.2444,0,30th percentile and typical spread
-BRIDGEND,A,77.22,0.1816,0,30th percentile and typical spread
-BRIDGEND,B,122.12,0.1707,0,30th percentile and typical spread
-BRIDGEND,C,145.26,0.1858,0,30th percentile and typical spread
-BRIDGEND,D,165.7,0.2161,0,30th percentile and typical spread
-BRIDGEND,E,228.75,0.2444,0,30th percentile and typical spread
+BRECON_AND_RADNOR,A,80.69,0.0628,53,list
+BRECON_AND_RADNOR,B,95.84,0.2279,226,list
+BRECON_AND_RADNOR,C,123.89,0.2681,285,list
+BRECON_AND_RADNOR,D,156.12,0.2927,292,list
+BRECON_AND_RADNOR,E,210.86,0.3233,47,list
+BRIDGEND,A,83.87,0.2619,148,list
+BRIDGEND,B,130.15,0.2378,291,list
+BRIDGEND,C,149.77,0.2126,1237,list
+BRIDGEND,D,167.74,0.2582,1369,list
+BRIDGEND,E,221.69,0.2435,165,list
 BRIGHTON_AND_HOVE,A,151.5,0.1889,264,list
 BRIGHTON_AND_HOVE,B,256.57,0.1945,2949,list
 BRIGHTON_AND_HOVE,C,324.24,0.1878,4066,list
@@ -114,11 +114,11 @@ BURY_ST_EDMUNDS,B,187.49,0.1554,597,list
 BURY_ST_EDMUNDS,C,239.44,0.2051,2238,list
 BURY_ST_EDMUNDS,D,287.32,0.1465,2422,list
 BURY_ST_EDMUNDS,E,355.42,0.1863,766,list
-CAERPHILLY,A,109.2,0.1816,0,30th percentile and typical spread
-CAERPHILLY,B,116.47,0.1707,0,30th percentile and typical spread
-CAERPHILLY,C,149.15,0.1858,0,30th percentile and typical spread
-CAERPHILLY,D,161.11,0.2161,0,30th percentile and typical spread
-CAERPHILLY,E,215.93,0.2444,0,30th percentile and typical spread
+CAERPHILLY,A,100.02,0.1169,123,list
+CAERPHILLY,B,117.36,0.2897,268,list
+CAERPHILLY,C,155.18,0.2603,809,list
+CAERPHILLY,D,162.94,0.2494,1067,list
+CAERPHILLY,E,221.65,0.3052,93,list
 CAMBRIDGE,A,142.42,0.1331,723,list
 CAMBRIDGE,B,266.56,0.2776,2239,list
 CAMBRIDGE,C,301.69,0.2855,4723,list
@@ -129,16 +129,16 @@ CANTERBURY,B,190.94,0.1916,890,list
 CANTERBURY,C,250.6,0.2099,2043,list
 CANTERBURY,D,298.33,0.1941,1358,list
 CANTERBURY,E,357.79,0.1962,466,list
-CARDIFF,A,118.48,0.1816,0,30th percentile and typical spread
-CARDIFF,B,192.07,0.1707,0,30th percentile and typical spread
-CARDIFF,C,234.14,0.1858,0,30th percentile and typical spread
-CARDIFF,D,270.58,0.2161,0,30th percentile and typical spread
-CARDIFF,E,359.99,0.2444,0,30th percentile and typical spread
-CARMARTHENSHIRE,A,86.98,0.1816,0,30th percentile and typical spread
-CARMARTHENSHIRE,B,110.17,0.1707,0,30th percentile and typical spread
-CARMARTHENSHIRE,C,136.45,0.1858,0,30th percentile and typical spread
-CARMARTHENSHIRE,D,151.53,0.2161,0,30th percentile and typical spread
-CARMARTHENSHIRE,E,189.73,0.2444,0,30th percentile and typical spread
+CARDIFF,A,115.38,0.1945,232,list
+CARDIFF,B,195.61,0.1863,1859,list
+CARDIFF,C,234.73,0.2234,2944,list
+CARDIFF,D,286.89,0.2663,1280,list
+CARDIFF,E,378.18,0.2361,354,list
+CARMARTHENSHIRE,A,83.24,0.0632,44,list
+CARMARTHENSHIRE,B,110.85,0.1462,415,list
+CARMARTHENSHIRE,C,143.45,0.2193,1228,list
+CARMARTHENSHIRE,D,156.48,0.2519,1770,list
+CARMARTHENSHIRE,E,195.61,0.3189,276,list
 CENTRAL_GREATER_MANCHESTER,A,115.16,0.129,511,list
 CENTRAL_GREATER_MANCHESTER,B,221.8,0.2026,4696,list
 CENTRAL_GREATER_MANCHESTER,C,266.15,0.2414,10467,list
@@ -159,11 +159,11 @@ CENTRAL_NORFOLK_NORWICH,B,166.41,0.1989,1987,list
 CENTRAL_NORFOLK_NORWICH,C,194.66,0.1806,5635,list
 CENTRAL_NORFOLK_NORWICH,D,233.24,0.2373,4765,list
 CENTRAL_NORFOLK_NORWICH,E,323.24,0.2425,1245,list
-CEREDIGION,A,85.32,0.1816,0,30th percentile and typical spread
-CEREDIGION,B,113.36,0.1707,0,30th percentile and typical spread
-CEREDIGION,C,135.82,0.1858,0,30th percentile and typical spread
-CEREDIGION,D,154.14,0.2161,0,30th percentile and typical spread
-CEREDIGION,E,186.31,0.2444,0,30th percentile and typical spread
+CEREDIGION,A,87.83,0.2006,326,list
+CEREDIGION,B,122.58,0.2378,609,list
+CEREDIGION,C,143.77,0.2293,956,list
+CEREDIGION,D,156.48,0.178,950,list
+CEREDIGION,E,182.57,0.2199,207,list
 CHELMSFORD,A,126.03,0.1966,437,list
 CHELMSFORD,B,221.48,0.2086,1612,list
 CHELMSFORD,C,277.67,0.2123,3187,list
@@ -284,11 +284,11 @@ FIFE,B,119.72,0.15,887,30th percentile and list spread
 FIFE,C,153.1,0.2028,2524,30th percentile and list spread
 FIFE,D,202.19,0.2482,1002,30th percentile and list spread
 FIFE,E,370.6,0.3997,330,30th percentile and list spread
-FLINTSHIRE,A,98.93,0.1816,0,30th percentile and typical spread
-FLINTSHIRE,B,122.78,0.1707,0,30th percentile and typical spread
-FLINTSHIRE,C,155.58,0.1858,0,30th percentile and typical spread
-FLINTSHIRE,D,183.13,0.2161,0,30th percentile and typical spread
-FLINTSHIRE,E,252.01,0.2444,0,30th percentile and typical spread
+FLINTSHIRE,A,98.91,0.1518,70,list
+FLINTSHIRE,B,123.89,0.1766,117,list
+FLINTSHIRE,C,166.54,0.1399,346,list
+FLINTSHIRE,D,191.69,0.1863,397,list
+FLINTSHIRE,E,275.3,0.2955,58,list
 FORTH_VALLEY,A,117.49,0.1376,177,30th percentile and list spread
 FORTH_VALLEY,B,133.2,0.1877,660,30th percentile and list spread
 FORTH_VALLEY,C,185.98,0.2373,1979,30th percentile and list spread
@@ -455,15 +455,15 @@ LOTHIAN,C,309.94,0.21,7772,30th percentile and list spread
 LOTHIAN,D,433.95,0.3103,2470,30th percentile and list spread
 LOTHIAN,E,609.0,0.2492,1214,30th percentile and list spread
 LOUGH_NEAGH_LOWER,A,104.45,0.1816,0,30th percentile and typical spread
-LOUGH_NEAGH_LOWER,B,121.09,0.1707,0,30th percentile and typical spread
-LOUGH_NEAGH_LOWER,C,151.9,0.1858,0,30th percentile and typical spread
-LOUGH_NEAGH_LOWER,D,174.92,0.2161,0,30th percentile and typical spread
-LOUGH_NEAGH_LOWER,E,194.27,0.2444,0,30th percentile and typical spread
+LOUGH_NEAGH_LOWER,B,121.4,0.1757,0,30th percentile and typical spread
+LOUGH_NEAGH_LOWER,C,152.22,0.1898,0,30th percentile and typical spread
+LOUGH_NEAGH_LOWER,D,175.23,0.2194,0,30th percentile and typical spread
+LOUGH_NEAGH_LOWER,E,194.73,0.249,0,30th percentile and typical spread
 LOUGH_NEAGH_UPPER,A,88.92,0.1816,0,30th percentile and typical spread
-LOUGH_NEAGH_UPPER,B,120.55,0.1707,0,30th percentile and typical spread
-LOUGH_NEAGH_UPPER,C,148.65,0.1858,0,30th percentile and typical spread
-LOUGH_NEAGH_UPPER,D,170.4,0.2161,0,30th percentile and typical spread
-LOUGH_NEAGH_UPPER,E,183.11,0.2444,0,30th percentile and typical spread
+LOUGH_NEAGH_UPPER,B,120.87,0.1757,0,30th percentile and typical spread
+LOUGH_NEAGH_UPPER,C,148.97,0.1898,0,30th percentile and typical spread
+LOUGH_NEAGH_UPPER,D,170.7,0.2194,0,30th percentile and typical spread
+LOUGH_NEAGH_UPPER,E,183.55,0.249,0,30th percentile and typical spread
 LOWESTOFT_GREAT_YARMOUTH,A,107.53,0.1616,174,list
 LOWESTOFT_GREAT_YARMOUTH,B,122.18,0.1605,851,list
 LOWESTOFT_GREAT_YARMOUTH,C,166.6,0.186,1502,list
@@ -489,11 +489,11 @@ MENDIP,B,157.24,0.1654,544,list
 MENDIP,C,202.15,0.145,1244,list
 MENDIP,D,269.54,0.2325,854,list
 MENDIP,E,359.39,0.1928,279,list
-MERTHYR_CYNON,A,78.42,0.1816,0,30th percentile and typical spread
-MERTHYR_CYNON,B,131.45,0.1707,0,30th percentile and typical spread
-MERTHYR_CYNON,C,145.87,0.1858,0,30th percentile and typical spread
-MERTHYR_CYNON,D,166.6,0.2161,0,30th percentile and typical spread
-MERTHYR_CYNON,E,214.38,0.2444,0,30th percentile and typical spread
+MERTHYR_CYNON,A,83.87,0.2619,149,list
+MERTHYR_CYNON,B,129.1,0.1416,133,list
+MERTHYR_CYNON,C,143.77,0.2034,368,list
+MERTHYR_CYNON,D,163.57,0.2416,542,list
+MERTHYR_CYNON,E,221.69,0.2649,68,list
 MID_EAST_DEVON,A,121.62,0.1747,494,list
 MID_EAST_DEVON,B,140.39,0.1676,531,list
 MID_EAST_DEVON,C,177.89,0.1666,1364,list
@@ -514,26 +514,26 @@ MILTON_KEYNES,B,218.02,0.2327,1957,list
 MILTON_KEYNES,C,262.54,0.1983,3891,list
 MILTON_KEYNES,D,321.27,0.1801,2488,list
 MILTON_KEYNES,E,405.73,0.158,847,list
-MONMOUTHSHIRE,A,109.2,0.1816,0,30th percentile and typical spread
-MONMOUTHSHIRE,B,157.33,0.1707,0,30th percentile and typical spread
-MONMOUTHSHIRE,C,196.07,0.1858,0,30th percentile and typical spread
-MONMOUTHSHIRE,D,232.1,0.2161,0,30th percentile and typical spread
-MONMOUTHSHIRE,E,337.12,0.2444,0,30th percentile and typical spread
-NEATH_PORT_TALBOT,A,94.04,0.1816,0,30th percentile and typical spread
-NEATH_PORT_TALBOT,B,110.78,0.1707,0,30th percentile and typical spread
-NEATH_PORT_TALBOT,C,129.44,0.1858,0,30th percentile and typical spread
-NEATH_PORT_TALBOT,D,148.2,0.2161,0,30th percentile and typical spread
-NEATH_PORT_TALBOT,E,165.94,0.2444,0,30th percentile and typical spread
+MONMOUTHSHIRE,A,100.02,0.1495,121,list
+MONMOUTHSHIRE,B,161.74,0.2393,113,list
+MONMOUTHSHIRE,C,195.61,0.1352,368,list
+MONMOUTHSHIRE,D,234.77,0.2297,480,list
+MONMOUTHSHIRE,E,335.46,0.2299,133,list
+NEATH_PORT_TALBOT,A,104.22,0.2495,194,list
+NEATH_PORT_TALBOT,B,114.76,0.1921,263,list
+NEATH_PORT_TALBOT,C,130.41,0.1998,969,list
+NEATH_PORT_TALBOT,D,143.77,0.2016,1414,list
+NEATH_PORT_TALBOT,E,176.05,0.3016,112,list
 NEWBURY,A,136.36,0.2345,687,list
 NEWBURY,B,202.87,0.1485,562,list
 NEWBURY,C,250.6,0.201,1010,list
 NEWBURY,D,324.24,0.1654,415,list
 NEWBURY,E,429.61,0.2386,159,list
-NEWPORT,A,109.2,0.1816,0,30th percentile and typical spread
-NEWPORT,B,157.33,0.1707,0,30th percentile and typical spread
-NEWPORT,C,190.44,0.1858,0,30th percentile and typical spread
-NEWPORT,D,222.97,0.2161,0,30th percentile and typical spread
-NEWPORT,E,305.03,0.2444,0,30th percentile and typical spread
+NEWPORT,A,100.02,0.1492,116,list
+NEWPORT,B,143.77,0.2246,395,list
+NEWPORT,C,185.71,0.1954,839,list
+NEWPORT,D,203.68,0.2616,731,list
+NEWPORT,E,287.21,0.2705,124,list
 NORTHAMPTON,A,116.18,0.1451,982,list
 NORTHAMPTON,B,173.73,0.1091,1443,list
 NORTHAMPTON,C,206.08,0.1373,3820,list
@@ -554,11 +554,11 @@ NORTH_CHESHIRE,B,138.63,0.2057,879,list
 NORTH_CHESHIRE,C,168.66,0.2086,3579,list
 NORTH_CHESHIRE,D,210.71,0.2982,1997,list
 NORTH_CHESHIRE,E,312.61,0.3116,328,list
-NORTH_CLWYD,A,93.08,0.1816,0,30th percentile and typical spread
-NORTH_CLWYD,B,113.36,0.1707,0,30th percentile and typical spread
-NORTH_CLWYD,C,152.82,0.1858,0,30th percentile and typical spread
-NORTH_CLWYD,D,181.23,0.2161,0,30th percentile and typical spread
-NORTH_CLWYD,E,240.81,0.2444,0,30th percentile and typical spread
+NORTH_CLWYD,A,93.21,0.1574,112,list
+NORTH_CLWYD,B,119.81,0.2229,543,list
+NORTH_CLWYD,C,161.74,0.2133,1242,list
+NORTH_CLWYD,D,185.71,0.2393,755,list
+NORTH_CLWYD,E,260.79,0.3408,158,list
 NORTH_CORNWALL_DEVON_BORDERS,A,113.86,0.3206,167,list
 NORTH_CORNWALL_DEVON_BORDERS,B,141.13,0.1921,233,list
 NORTH_CORNWALL_DEVON_BORDERS,C,183.83,0.1709,587,list
@@ -580,20 +580,20 @@ NORTH_LANARKSHIRE,C,155.46,0.1397,1626,30th percentile and list spread
 NORTH_LANARKSHIRE,D,186.56,0.2109,805,30th percentile and list spread
 NORTH_LANARKSHIRE,E,254.16,0.2282,172,30th percentile and list spread
 NORTH_NI,A,92.85,0.1816,0,30th percentile and typical spread
-NORTH_NI,B,149.01,0.1707,0,30th percentile and typical spread
-NORTH_NI,C,154.62,0.1858,0,30th percentile and typical spread
-NORTH_NI,D,170.04,0.2161,0,30th percentile and typical spread
-NORTH_NI,E,190.87,0.2444,0,30th percentile and typical spread
+NORTH_NI,B,149.4,0.1757,0,30th percentile and typical spread
+NORTH_NI,C,154.95,0.1898,0,30th percentile and typical spread
+NORTH_NI,D,170.34,0.2194,0,30th percentile and typical spread
+NORTH_NI,E,191.32,0.249,0,30th percentile and typical spread
 NORTH_NOTTINGHAM,A,93.05,0.192,355,list
 NORTH_NOTTINGHAM,B,125.8,0.2133,829,list
 NORTH_NOTTINGHAM,C,155.76,0.167,3484,list
 NORTH_NOTTINGHAM,D,173.73,0.2202,4445,list
 NORTH_NOTTINGHAM,E,239.22,0.3022,525,list
-NORTH_POWYS,A,85.32,0.1816,0,30th percentile and typical spread
-NORTH_POWYS,B,90.38,0.1707,0,30th percentile and typical spread
-NORTH_POWYS,C,119.32,0.1858,0,30th percentile and typical spread
-NORTH_POWYS,D,151.6,0.2161,0,30th percentile and typical spread
-NORTH_POWYS,E,183.3,0.2444,0,30th percentile and typical spread
+NORTH_POWYS,A,87.83,0.2018,330,list
+NORTH_POWYS,B,98.25,0.2863,87,list
+NORTH_POWYS,C,125.8,0.237,139,list
+NORTH_POWYS,D,155.75,0.2416,125,list
+NORTH_POWYS,E,182.57,0.2064,47,list
 NORTH_WEST_KENT,A,132.23,0.1554,153,list
 NORTH_WEST_KENT,B,223.62,0.2012,917,list
 NORTH_WEST_KENT,C,298.33,0.2133,1829,list
@@ -605,15 +605,15 @@ NORTH_WEST_LONDON,C,399.18,0.1998,3120,list
 NORTH_WEST_LONDON,D,501.27,0.1658,1376,list
 NORTH_WEST_LONDON,E,629.0,0.1712,431,list
 NORTH_WEST_NI,A,110.35,0.1816,0,30th percentile and typical spread
-NORTH_WEST_NI,B,123.44,0.1707,0,30th percentile and typical spread
-NORTH_WEST_NI,C,148.2,0.1858,0,30th percentile and typical spread
-NORTH_WEST_NI,D,169.86,0.2161,0,30th percentile and typical spread
-NORTH_WEST_NI,E,198.73,0.2444,0,30th percentile and typical spread
-NORTH_WEST_WALES,A,91.27,0.1816,0,30th percentile and typical spread
-NORTH_WEST_WALES,B,114.25,0.1707,0,30th percentile and typical spread
-NORTH_WEST_WALES,C,144.65,0.1858,0,30th percentile and typical spread
-NORTH_WEST_WALES,D,170.89,0.2161,0,30th percentile and typical spread
-NORTH_WEST_WALES,E,208.17,0.2444,0,30th percentile and typical spread
+NORTH_WEST_NI,B,123.76,0.1757,0,30th percentile and typical spread
+NORTH_WEST_NI,C,148.51,0.1898,0,30th percentile and typical spread
+NORTH_WEST_NI,D,170.16,0.2194,0,30th percentile and typical spread
+NORTH_WEST_NI,E,199.2,0.249,0,30th percentile and typical spread
+NORTH_WEST_WALES,A,89.02,0.096,160,list
+NORTH_WEST_WALES,B,131.79,0.2858,285,list
+NORTH_WEST_WALES,C,160.54,0.2295,729,list
+NORTH_WEST_WALES,D,188.81,0.2377,631,list
+NORTH_WEST_WALES,E,221.69,0.3032,112,list
 NOTTINGHAM,A,100.44,0.1749,1204,list
 NOTTINGHAM,B,166.89,0.2095,3116,list
 NOTTINGHAM,C,194.1,0.2058,9128,list
@@ -669,11 +669,11 @@ PEAKS_DALES,B,131.8,0.1934,369,list
 PEAKS_DALES,C,161.75,0.2265,950,list
 PEAKS_DALES,D,190.51,0.232,747,list
 PEAKS_DALES,E,287.55,0.334,165,list
-PEMBROKESHIRE,A,84.13,0.1816,0,30th percentile and typical spread
-PEMBROKESHIRE,B,112.15,0.1707,0,30th percentile and typical spread
-PEMBROKESHIRE,C,133.16,0.1858,0,30th percentile and typical spread
-PEMBROKESHIRE,D,161.11,0.2161,0,30th percentile and typical spread
-PEMBROKESHIRE,E,210.39,0.2444,0,30th percentile and typical spread
+PEMBROKESHIRE,A,85.9,0.1605,43,list
+PEMBROKESHIRE,B,107.83,0.2231,466,list
+PEMBROKESHIRE,C,143.45,0.2647,929,list
+PEMBROKESHIRE,D,168.23,0.2299,815,list
+PEMBROKESHIRE,E,215.17,0.2514,188,list
 PERTH_AND_KINROSS,A,101.19,0.1826,180,30th percentile and list spread
 PERTH_AND_KINROSS,B,108.09,0.099,734,30th percentile and list spread
 PERTH_AND_KINROSS,C,148.42,0.1762,1248,30th percentile and list spread
@@ -790,25 +790,25 @@ SOUTH_EAST_HERTS,C,299.88,0.1629,2712,list
 SOUTH_EAST_HERTS,D,371.13,0.1674,1437,list
 SOUTH_EAST_HERTS,E,444.27,0.197,464,list
 SOUTH_EAST_NI,A,99.71,0.1816,0,30th percentile and typical spread
-SOUTH_EAST_NI,B,136.36,0.1707,0,30th percentile and typical spread
-SOUTH_EAST_NI,C,180.84,0.1858,0,30th percentile and typical spread
-SOUTH_EAST_NI,D,206.98,0.2161,0,30th percentile and typical spread
-SOUTH_EAST_NI,E,257.46,0.2444,0,30th percentile and typical spread
-SOUTH_GWYNEDD,A,91.9,0.1816,0,30th percentile and typical spread
-SOUTH_GWYNEDD,B,97.92,0.1707,0,30th percentile and typical spread
-SOUTH_GWYNEDD,C,125.37,0.1858,0,30th percentile and typical spread
-SOUTH_GWYNEDD,D,156.35,0.2161,0,30th percentile and typical spread
-SOUTH_GWYNEDD,E,183.3,0.2444,0,30th percentile and typical spread
+SOUTH_EAST_NI,B,136.72,0.1757,0,30th percentile and typical spread
+SOUTH_EAST_NI,C,181.22,0.1898,0,30th percentile and typical spread
+SOUTH_EAST_NI,D,207.35,0.2194,0,30th percentile and typical spread
+SOUTH_EAST_NI,E,258.07,0.249,0,30th percentile and typical spread
+SOUTH_GWYNEDD,A,89.02,0.096,160,list
+SOUTH_GWYNEDD,B,96.33,0.216,95,list
+SOUTH_GWYNEDD,C,127.8,0.2563,181,list
+SOUTH_GWYNEDD,D,153.88,0.2349,119,list
+SOUTH_GWYNEDD,E,186.91,0.2104,61,list
 SOUTH_LANARKSHIRE,A,107.98,0.2128,170,30th percentile and list spread
 SOUTH_LANARKSHIRE,B,121.39,0.1334,912,30th percentile and list spread
 SOUTH_LANARKSHIRE,C,163.46,0.1891,1858,30th percentile and list spread
 SOUTH_LANARKSHIRE,D,208.33,0.1981,789,30th percentile and list spread
 SOUTH_LANARKSHIRE,E,338.75,0.3032,224,30th percentile and list spread
 SOUTH_NI,A,81.93,0.1816,0,30th percentile and typical spread
-SOUTH_NI,B,136.93,0.1707,0,30th percentile and typical spread
-SOUTH_NI,C,156.24,0.1858,0,30th percentile and typical spread
-SOUTH_NI,D,176.38,0.2161,0,30th percentile and typical spread
-SOUTH_NI,E,213.1,0.2444,0,30th percentile and typical spread
+SOUTH_NI,B,137.29,0.1757,0,30th percentile and typical spread
+SOUTH_NI,C,156.57,0.1898,0,30th percentile and typical spread
+SOUTH_NI,D,176.69,0.2194,0,30th percentile and typical spread
+SOUTH_NI,E,213.6,0.249,0,30th percentile and typical spread
 SOUTH_WEST_ESSEX,A,149.97,0.1336,173,list
 SOUTH_WEST_ESSEX,B,215.49,0.2062,2665,list
 SOUTH_WEST_ESSEX,C,277.67,0.2235,5107,list
@@ -820,10 +820,10 @@ SOUTH_WEST_HERTS,C,335.21,0.1673,4482,list
 SOUTH_WEST_HERTS,D,420.95,0.189,1896,list
 SOUTH_WEST_HERTS,E,555.33,0.2488,611,list
 SOUTH_WEST_NI,A,89.17,0.1816,0,30th percentile and typical spread
-SOUTH_WEST_NI,B,110.31,0.1707,0,30th percentile and typical spread
-SOUTH_WEST_NI,C,131.85,0.1858,0,30th percentile and typical spread
-SOUTH_WEST_NI,D,144.51,0.2161,0,30th percentile and typical spread
-SOUTH_WEST_NI,E,172.32,0.2444,0,30th percentile and typical spread
+SOUTH_WEST_NI,B,110.6,0.1757,0,30th percentile and typical spread
+SOUTH_WEST_NI,C,132.13,0.1898,0,30th percentile and typical spread
+SOUTH_WEST_NI,D,144.76,0.2194,0,30th percentile and typical spread
+SOUTH_WEST_NI,E,172.72,0.249,0,30th percentile and typical spread
 STAFFORDSHIRE_NORTH,A,93.77,0.1479,331,list
 STAFFORDSHIRE_NORTH,B,117.41,0.1584,876,list
 STAFFORDSHIRE_NORTH,C,143.48,0.2247,4272,list
@@ -849,21 +849,21 @@ SUSSEX_EAST,B,173.04,0.2022,1139,list
 SUSSEX_EAST,C,214.8,0.218,2149,list
 SUSSEX_EAST,D,268.33,0.2526,1134,list
 SUSSEX_EAST,E,337.76,0.2703,226,list
-SWANSEA,A,93.17,0.1816,0,30th percentile and typical spread
-SWANSEA,B,144.86,0.1707,0,30th percentile and typical spread
-SWANSEA,C,161.85,0.1858,0,30th percentile and typical spread
-SWANSEA,D,174.03,0.2161,0,30th percentile and typical spread
-SWANSEA,E,245.47,0.2444,0,30th percentile and typical spread
+SWANSEA,A,102.05,0.2443,187,list
+SWANSEA,B,155.75,0.2363,1134,list
+SWANSEA,C,179.71,0.2803,2255,list
+SWANSEA,D,185.44,0.2898,1720,list
+SWANSEA,E,263.58,0.3308,243,list
 SWINDON,A,123.58,0.1969,290,list
 SWINDON,B,179.69,0.1092,1400,list
 SWINDON,C,213.39,0.1244,3185,list
 SWINDON,D,275.16,0.1931,1723,list
 SWINDON,E,348.15,0.1892,416,list
-TAFF_RHONDDA,A,77.22,0.1816,0,30th percentile and typical spread
-TAFF_RHONDDA,B,119.66,0.1707,0,30th percentile and typical spread
-TAFF_RHONDDA,C,146.83,0.1858,0,30th percentile and typical spread
-TAFF_RHONDDA,D,160.13,0.2161,0,30th percentile and typical spread
-TAFF_RHONDDA,E,201.99,0.2444,0,30th percentile and typical spread
+TAFF_RHONDDA,A,78.24,0.2619,145,list
+TAFF_RHONDDA,B,130.41,0.315,93,list
+TAFF_RHONDDA,C,151.27,0.3276,617,list
+TAFF_RHONDDA,D,156.48,0.3155,885,list
+TAFF_RHONDDA,E,203.68,0.4097,102,list
 TAMESIDE_GLOSSOP,A,109.75,0.239,146,list
 TAMESIDE_GLOSSOP,B,156.61,0.1394,231,list
 TAMESIDE_GLOSSOP,C,188.53,0.1492,1644,list
@@ -884,21 +884,21 @@ THANET,B,167.07,0.1502,863,list
 THANET,C,214.8,0.1681,1434,list
 THANET,D,279.52,0.1958,605,list
 THANET,E,324.24,0.2108,152,list
-TORFAEN,A,81.82,0.1816,0,30th percentile and typical spread
-TORFAEN,B,129.52,0.1707,0,30th percentile and typical spread
-TORFAEN,C,161.19,0.1858,0,30th percentile and typical spread
-TORFAEN,D,193.49,0.2161,0,30th percentile and typical spread
-TORFAEN,E,222.19,0.2444,0,30th percentile and typical spread
+TORFAEN,A,78.24,0.2619,145,list
+TORFAEN,B,133.58,0.1948,98,list
+TORFAEN,C,163.01,0.2031,317,list
+TORFAEN,D,199.25,0.2068,336,list
+TORFAEN,E,221.69,0.3158,118,list
 TYNESIDE,A,99.54,0.1468,272,list
 TYNESIDE,B,154.07,0.3416,1341,list
 TYNESIDE,C,166.73,0.2898,6432,list
 TYNESIDE,D,197.91,0.3201,3007,list
 TYNESIDE,E,287.87,0.3787,546,list
-VALE_OF_GLAMORGAN,A,78.42,0.1816,0,30th percentile and typical spread
-VALE_OF_GLAMORGAN,B,150.63,0.1707,0,30th percentile and typical spread
-VALE_OF_GLAMORGAN,C,193.38,0.1858,0,30th percentile and typical spread
-VALE_OF_GLAMORGAN,D,212.74,0.2161,0,30th percentile and typical spread
-VALE_OF_GLAMORGAN,E,327.05,0.2444,0,30th percentile and typical spread
+VALE_OF_GLAMORGAN,A,78.24,0.2619,145,list
+VALE_OF_GLAMORGAN,B,160.44,0.2733,338,list
+VALE_OF_GLAMORGAN,C,203.68,0.2469,816,list
+VALE_OF_GLAMORGAN,D,215.65,0.2509,615,list
+VALE_OF_GLAMORGAN,E,347.45,0.2944,95,list
 WAKEFIELD,A,98.73,0.1616,256,list
 WAKEFIELD,B,129.97,0.1945,709,list
 WAKEFIELD,C,158.23,0.2032,3143,list
@@ -984,11 +984,11 @@ WORTHING,B,199.46,0.1462,1800,list
 WORTHING,C,267.22,0.1899,2602,list
 WORTHING,D,322.2,0.1681,1629,list
 WORTHING,E,393.81,0.178,317,list
-WREXHAM,A,110.62,0.1816,0,30th percentile and typical spread
-WREXHAM,B,131.45,0.1707,0,30th percentile and typical spread
-WREXHAM,C,149.15,0.1858,0,30th percentile and typical spread
-WREXHAM,D,174.14,0.2161,0,30th percentile and typical spread
-WREXHAM,E,227.48,0.2444,0,30th percentile and typical spread
+WREXHAM,A,108.58,0.1034,123,list
+WREXHAM,B,131.79,0.1563,323,list
+WREXHAM,C,149.97,0.1897,1043,list
+WREXHAM,D,179.71,0.2195,581,list
+WREXHAM,E,239.62,0.345,120,list
 YEOVIL,A,130.46,0.222,288,list
 YEOVIL,B,146.0,0.1592,945,list
 YEOVIL,C,190.93,0.1752,1820,list
