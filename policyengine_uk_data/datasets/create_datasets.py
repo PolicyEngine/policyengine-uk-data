@@ -262,14 +262,16 @@ def main():
             )
 
             # A split household's records (within one OA clone) calibrate as one.
-            brma_groups = pd.factorize(
-                pd.MultiIndex.from_arrays(
-                    [
-                        frs.household[BRMA_SPLIT_GROUP_COLUMN].to_numpy(),
-                        frs.household["clone_index"].to_numpy(),
-                    ]
-                )
-            )[0]
+            brma_groups = None
+            if brma_split > 1:
+                brma_groups = pd.factorize(
+                    pd.MultiIndex.from_arrays(
+                        [
+                            frs.household[BRMA_SPLIT_GROUP_COLUMN].to_numpy(),
+                            frs.household["clone_index"].to_numpy(),
+                        ]
+                    )
+                )[0]
 
             # Run calibration with verbose progress
             frs_calibrated_constituencies = calibrate_local_areas(
