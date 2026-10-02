@@ -70,6 +70,9 @@ STATUSES = (
 )
 REGIONS = ("LONDON", "WALES", "SCOTLAND", "NORTH_EAST")
 
+# Generation and QRF draws are slow on a loaded runner; that is not a failure.
+RELAXED = settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
+
 amounts = st.one_of(
     st.just(0.0), st.floats(0.01, 5e6, allow_nan=False, allow_infinity=False)
 )
@@ -110,6 +113,7 @@ def _frs_groups(people: pd.DataFrame) -> np.ndarray:
     )
 
 
+@RELAXED
 @given(frs_people())
 def test_frs_group_follows_status_and_recorded_earnings(people):
     groups = _frs_groups(people)
@@ -130,6 +134,7 @@ def test_frs_group_follows_status_and_recorded_earnings(people):
     np.testing.assert_array_equal(np.isin(adult, list(TRADE_GROUPS)), has_trade[~child])
 
 
+@RELAXED
 @given(frs_people(), st.floats(0.01, 1e6), st.sampled_from(["pay", "profit"]))
 def test_frs_group_monotone_in_income(people, extra, source):
     before = _frs_groups(people)
@@ -147,6 +152,7 @@ def test_frs_group_monotone_in_income(people, extra, source):
     )
 
 
+@RELAXED
 @given(frs_people())
 def test_frs_group_elementwise_equals_rowwise(people):
     vectorised = _frs_groups(people)
@@ -168,6 +174,7 @@ def test_frs_group_elementwise_equals_rowwise(people):
     assert list(vectorised) == rowwise == list(as_lists)
 
 
+@RELAXED
 @given(
     st.lists(
         st.tuples(amounts, amounts, st.sampled_from([-1, 0, 1])),
@@ -187,6 +194,7 @@ def test_spi_group_follows_pay_and_self_employment_pages(records):
     assert list(groups) == rowwise
 
 
+@RELAXED
 @given(
     st.dictionaries(
         st.sampled_from(EARNINGS_GROUPS),
@@ -237,7 +245,7 @@ def _raw_spi(rng: np.random.Generator, n: int) -> pd.DataFrame:
     return pd.DataFrame(raw)
 
 
-@settings(deadline=None, max_examples=25)
+@settings(deadline=None, max_examples=25, suppress_health_check=[HealthCheck.too_slow])
 @given(st.integers(0, 2**31 - 1), st.integers(50, 2_000))
 def test_generate_spi_table_resamples_within_groups(seed, sample_size):
     raw = _raw_spi(np.random.default_rng(seed), 600)
@@ -307,7 +315,7 @@ def model_inputs(draw):
 @settings(
     deadline=None,
     max_examples=40,
-    suppress_health_check=[HealthCheck.function_scoped_fixture],
+    suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow],
 )
 @given(model_inputs())
 def test_model_draws_agree_with_group(fitted_model, inputs):
@@ -366,6 +374,7 @@ def person_and_draws(draw):
     return person, draws, np.array(groups, dtype=object), outputs
 
 
+@RELAXED
 @given(person_and_draws())
 def test_apply_income_draws(case):
     person, draws, groups, outputs = case
