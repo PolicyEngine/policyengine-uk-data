@@ -178,25 +178,26 @@ def test_frs_only_skips_missing_output_columns():
 
 
 def test_frs_only_reported_values_correlate_with_training_pattern():
-    """UC ``_reported`` predictions should respect the training-data pattern.
+    """Drawn ``_reported`` values should respect the training-data pattern.
 
     The stage-1 QRF-imputed income on the SPI-donor side gets fed back
-    as a stage-2 predictor. If the training data only has non-zero UC
-    for low-income respondents, the QRF should preferentially draw
-    near-zero values when predicting for high-income target rows,
-    compared with low-income target rows.
+    as a stage-2 predictor. If the training data only has non-zero
+    carer's allowance for low earners (it has an earnings limit), the QRF
+    should preferentially draw near-zero values when predicting for
+    high-income target rows, compared with low-income target rows. (UC
+    would be the obvious case, but SPI-donor rows have it zeroed.)
     """
     from policyengine_uk_data.datasets.imputations.frs_only import (
         impute_frs_only_variables,
     )
 
-    # Train set with a clean employment-income → UC relationship:
-    # low-income respondents sometimes claim UC, high-income never do.
+    # Train set with a clean employment-income → carer's allowance relationship:
+    # low earners sometimes receive it, high earners never do.
     rng = np.random.default_rng(42)
     train = _fake_dataset(person_rows=2_000, seed=0)
     low_income_mask = train.person["employment_income"] < 20_000
-    train.person["universal_credit_reported"] = 0.0
-    train.person.loc[low_income_mask, "universal_credit_reported"] = rng.gamma(
+    train.person["carers_allowance_reported"] = 0.0
+    train.person.loc[low_income_mask, "carers_allowance_reported"] = rng.gamma(
         2, 4_000, size=int(low_income_mask.sum())
     )
 
@@ -215,10 +216,10 @@ def test_frs_only_reported_values_correlate_with_training_pattern():
         target_dataset=low_target,
     )
 
-    high_mean = high_result.person["universal_credit_reported"].mean()
-    low_mean = low_result.person["universal_credit_reported"].mean()
+    high_mean = high_result.person["carers_allowance_reported"].mean()
+    low_mean = low_result.person["carers_allowance_reported"].mean()
     assert high_mean < low_mean, (
-        "Stage-2 QRF should produce lower UC-receipt predictions for high-"
+        "Stage-2 QRF should produce lower carer's allowance predictions for high-"
         f"income target rows (got high={high_mean:.2f} vs low={low_mean:.2f})."
     )
 
