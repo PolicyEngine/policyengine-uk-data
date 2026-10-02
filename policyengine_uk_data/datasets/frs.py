@@ -1410,7 +1410,7 @@ def create_frs(
 
     sim = Microsimulation(dataset=dataset)
     region = sim.populations["benunit"].household("region", dataset.time_period)
-    lha_category = sim.calculate("LHA_category", year).values
+    lha_category = np.asarray(sim.calculate("LHA_category", year))
 
     # Draw each benefit unit's BRMA in proportion to the private-rented
     # households in each of its region's BRMAs with the matching number of
