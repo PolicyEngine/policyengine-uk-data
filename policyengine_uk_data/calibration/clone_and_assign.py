@@ -1,9 +1,9 @@
 """Clone-and-assign: duplicate FRS households and assign OA geography.
 
 Each FRS household is cloned N times. Each clone gets a different
-Output Area (population-weighted, country-constrained, with
-constituency collision avoidance). Weights are divided by N so
-population totals are preserved.
+Output Area (population-weighted, drawn from the household's FRS
+region, with constituency collision avoidance). Weights are divided
+by N so population totals are preserved.
 
 This is the UK equivalent of policyengine-us-data's clone-and-assign
 approach (PRs #457, #531).
@@ -76,9 +76,11 @@ def clone_and_assign(
 ) -> UKSingleYearDataset:
     """Clone each FRS household N times and assign OA geography.
 
-    Each clone gets a population-weighted random Output Area,
-    constrained to its country, with constituency collision
-    avoidance across clones.
+    Each clone gets a population-weighted random Output Area in
+    its household's FRS region (Wales and Scotland are one region
+    each), with constituency collision avoidance across clones.
+    The OA's region, LA and constituency therefore never
+    contradict the household's ``region``.
 
     Household weights are divided by n_clones so aggregate
     population totals are preserved.
@@ -145,6 +147,7 @@ def clone_and_assign(
             n_clones=n_clones,
             seed=seed,
             crosswalk_path=crosswalk_path,
+            household_regions=hh["region"].values[has_oa],
         )
     else:
         geography = None
