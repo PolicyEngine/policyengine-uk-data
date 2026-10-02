@@ -1031,7 +1031,7 @@
   sha256: 61a77375ccf91b6504c6b267fec13d4cac61d15c9a4db5cc3f946530ee796ee0
   licence: 'Open Government Licence v3.0; Source: NISRA, www.nisra.gov.uk. Excludes third-party LPS mapping
     data.'
-  notes: Households as at 21 March 2021, published 29 February 2024; 5,591 postcode household counts suppressed.
-    Mixed-BRMA Data Zones use the published postcode-district averages. Worksheet district keys are stripped
-    before mapping, so BT1–BT9 suppressed postcodes receive their averages.
+  notes: Households as at 21 March 2021, published 29 February 2024. Only the "Postcode district" sheet
+    is used; district totals are not suppressed. Each NIHE BRMA's households are the sum of its districts,
+    scaled by Northern Ireland's private-rented share from the Data Zone tenure table.
   filename: nisra_census2021_postcode_households.xlsx
