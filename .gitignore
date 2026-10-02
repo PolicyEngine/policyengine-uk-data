@@ -22,3 +22,4 @@
 
 # Build outputs with household-level weights (licensed FRS derivatives); never commit.
 policyengine_uk_data/storage/local_geography_weights.csv.gz
+.brma-cache/
