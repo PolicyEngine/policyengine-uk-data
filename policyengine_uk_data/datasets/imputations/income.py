@@ -25,6 +25,11 @@ from policyengine_uk_data.datasets.spi import (
 )
 from policyengine_uk_data.utils.stack import stack_datasets
 from policyengine_uk_data.utils.subsample import subsample_dataset
+from policyengine_uk_data.utils.employment_status import (
+    CHILD_STATUS,
+    EMPLOYEE_STATUSES,
+    SELF_EMPLOYED_STATUSES,
+)
 
 SPI_TAB_FOLDER = STORAGE_FOLDER / SPI_RELEASE_NAME
 SPI_RENAMES = dict(
@@ -79,10 +84,6 @@ EARNINGS_GROUPS = (
 # record of them as earners.
 NOT_IMPUTED = "NOT_IMPUTED"
 
-# policyengine-uk EmploymentStatus names.
-EMPLOYEE_STATUSES = ("FT_EMPLOYED", "PT_EMPLOYED")
-SELF_EMPLOYED_STATUSES = ("FT_SELF_EMPLOYED", "PT_SELF_EMPLOYED")
-CHILD_STATUS = "CHILD"
 
 # Every earnings group gets at least this share of the training sample, so the
 # small self-employed groups are not fitted on a few thousand records.
