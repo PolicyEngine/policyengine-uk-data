@@ -97,6 +97,21 @@ def test_unknown_adult_code_fails_the_build(code):
         derive_employment_status_from_frs([1, code], [True, True])
 
 
+@given(st.integers(1, 30), st.integers(1, 30))
+def test_failure_message_suppresses_small_counts(n_twelve, n_thirteen):
+    codes = [12] * n_twelve + [13] * n_thirteen
+    with pytest.raises(ValueError) as error:
+        derive_employment_status_from_frs(codes, [True] * len(codes))
+    total = n_twelve + n_thirteen
+    prefix = f"{total} FRS adults" if total >= 10 else "Fewer than 10 FRS adults"
+    message = str(error.value)
+    assert message.startswith(prefix)
+    assert "['12.0', '13.0']" in message
+    # No other number (such as a per-code count) is disclosed.
+    rest = message.removeprefix(prefix).replace("['12.0', '13.0']", "")
+    assert not any(character.isdigit() for character in rest)
+
+
 @given(people)
 def test_each_row_maps_on_its_own(rows):
     result = derive(rows)

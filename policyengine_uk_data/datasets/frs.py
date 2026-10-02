@@ -142,11 +142,14 @@ def derive_employment_status_from_frs(empstati, is_adult_record) -> np.ndarray:
     adult_status = codes.map(FRS_EMPSTATI_EMPLOYMENT_STATUS).to_numpy()
     unknown = is_adult_record & pd.isna(adult_status)
     if unknown.any():
-        counts = codes[unknown].value_counts(dropna=False).sort_index().to_dict()
+        # Build logs are public: name the codes, not per-code counts, and
+        # suppress a total under 10 adults.
+        n = int(unknown.sum())
+        adults = f"{n} FRS adults" if n >= 10 else "Fewer than 10 FRS adults"
         raise ValueError(
-            f"{int(unknown.sum())} FRS adults have EMPSTATI codes missing from "
-            f"FRS_EMPSTATI_EMPLOYMENT_STATUS (code: adults): {counts}. Map "
-            "them from the release's data dictionary."
+            f"{adults} have EMPSTATI codes missing from "
+            f"FRS_EMPSTATI_EMPLOYMENT_STATUS: {sorted(set(codes[unknown].astype(str)))}. "
+            "Map them from the release's data dictionary."
         )
     return np.where(is_adult_record, adult_status, EmploymentStatus.CHILD.name)
 
