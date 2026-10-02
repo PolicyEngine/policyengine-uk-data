@@ -13,8 +13,9 @@ Invariants, for any distributions, keys and generator state:
    and benefit units; other households are untouched; every id stays unique;
    ``benunit_id // 100 == household_id`` holds wherever it held.
 5. Determinism: the same seed gives the same records.
-6. Tying: a group's calibrated weights are equal, its target rows identical,
-   and its zero-weight rows share one household's prior.
+6. Tying: calibrating a split household's records with ``groups`` is
+   calibrating one household on their mean target rows: the same weights as
+   an unsplit dataset holding those mean rows, split equally across the records.
 """
 
 import importlib.util
@@ -33,11 +34,7 @@ from policyengine_uk_data.datasets.brma import (
     load_brma_weights,
     spaced_quantiles,
 )
-from policyengine_uk_data.utils.calibrate import (
-    initialize_weight_priors,
-    tie_rows,
-    tie_weights,
-)
+from policyengine_uk_data.utils.calibrate import RecordGroups
 
 
 @st.composite
@@ -117,7 +114,9 @@ def test_spaced_records_track_the_expectation(case, k, seed):
     # One quantile in each interval [i/k, (i+1)/k).
     assert (np.sort(np.floor(quantiles * k), axis=1) == np.arange(k)).all()
     columns = brmas_at_quantiles(
-        np.repeat(probabilities, k, axis=0), np.repeat(keys, k, axis=0), quantiles.ravel()
+        np.repeat(probabilities, k, axis=0),
+        np.repeat(keys, k, axis=0),
+        quantiles.ravel(),
     ).reshape(-1, k)
     # Outcome = the key itself (any outcome monotone in the walk order).
     outcome = np.where(probabilities > 0, keys, 0)
@@ -142,7 +141,9 @@ def test_household_distribution_is_the_mean_of_its_benefit_units(weights):
     region = np.array(["SCOTLAND", "SCOTLAND", "NORTHERN_IRELAND"])
     benunit_household = np.array([0, 1, 1, 2])
     category = np.array(["C", "A", "E", "B"])
-    brmas, p = household_brma_probabilities(region, benunit_household, category, weights)
+    brmas, p = household_brma_probabilities(
+        region, benunit_household, category, weights
+    )
     assert np.allclose(p.sum(axis=1), 1)
 
     def cell(r, c):
@@ -243,7 +244,9 @@ def test_split_conserves_households_and_keeps_ids_unique(k, weights):
     if k > 1:
         assert all(
             (r, b) in supported
-            for r, b in zip(renters_after.region.astype(str), renters_after.brma.astype(str))
+            for r, b in zip(
+                renters_after.region.astype(str), renters_after.brma.astype(str)
+            )
         )
     for table, column in (
         (result.household, "household_id"),
@@ -254,12 +257,19 @@ def test_split_conserves_households_and_keeps_ids_unique(k, weights):
     assert set(result.person.person_household_id) == set(after.household_id)
     assert set(result.person.person_benunit_id) == set(result.benunit.benunit_id)
     # The id scheme benunit_id // 100 == household_id survives the copies.
-    owner = result.person.drop_duplicates("person_benunit_id").set_index(
-        "person_benunit_id"
-    ).person_household_id
-    assert (result.benunit.benunit_id // 100 == owner.loc[result.benunit.benunit_id].to_numpy()).all()
+    owner = (
+        result.person.drop_duplicates("person_benunit_id")
+        .set_index("person_benunit_id")
+        .person_household_id
+    )
+    assert (
+        result.benunit.benunit_id // 100
+        == owner.loc[result.benunit.benunit_id].to_numpy()
+    ).all()
     assert len(result.person) == len(dataset.person) + (k - 1) * len(
-        dataset.person[dataset.person.person_household_id.isin(before.household_id[renter])]
+        dataset.person[
+            dataset.person.person_household_id.isin(before.household_id[renter])
+        ]
     )
 
 
@@ -282,62 +292,88 @@ def test_split_is_deterministic(weights):
     st.integers(1, 3),
     st.integers(0, 2**32 - 1),
 )
-def test_tied_rows_and_weights_are_group_means_and_keep_totals(labels, areas, seed):
+def test_groups_collapse_and_expand_without_changing_predictions(labels, areas, seed):
     rng = np.random.default_rng(seed)
-    groups = np.array(labels)
-    rows = rng.random((len(groups), 3))
-    tied = tie_rows(pd.DataFrame(rows), groups)
-    for g in set(labels):
-        m = groups == g
-        assert np.allclose(tied.to_numpy()[m], rows[m].mean(axis=0))
-    w = rng.random((areas, len(groups)))
-    tw = tie_weights(w, groups)
-    for g in set(labels):
-        m = groups == g
-        assert np.allclose(tw[:, m], tw[:, m][:, :1])
-        assert np.allclose(tw[:, m].sum(axis=1), w[:, m].sum(axis=1))
-    # Predictions w @ rows are unchanged once rows are tied.
-    assert np.allclose(tw @ tied.to_numpy(), w @ tied.to_numpy())
+    groups = RecordGroups(np.array(labels), len(labels))
+    rows = rng.random((len(labels), 3))
+    means = groups.means(pd.DataFrame(rows)).to_numpy()
+    for g, label in enumerate(pd.unique(np.array(labels))):
+        assert np.allclose(means[g], rows[np.array(labels) == label].mean(axis=0))
+    w = rng.random((areas, len(groups.sizes)))
+    records = groups.expand(w)
+    # Equal shares within a group, conserving the group's weight.
+    for g in range(len(groups.sizes)):
+        m = groups.codes == g
+        assert np.allclose(records[:, m], w[:, [g]] / m.sum())
+    assert np.allclose(records.sum(axis=1), w.sum(axis=1))
+    # Record weights on record rows predict what group weights do on mean rows.
+    assert np.allclose(records @ rows, w @ means)
+    totals = groups.totals(np.arange(len(labels), dtype=float))
+    assert np.allclose(totals.sum(), np.arange(len(labels)).sum())
 
 
-def test_split_zero_weight_rows_share_one_households_prior():
-    weights = np.array([1_500.0, 0.0, 0.0, 0.0, 625.0, 0.0])
-    groups = np.array([1, 2, 2, 2, 3, 4])  # rows 1-3 split one SPI household
-    priors = initialize_weight_priors(weights, groups=groups)
-    ungrouped = initialize_weight_priors(np.array([1_500.0, 0.0, 625.0, 0.0]))
-    assert priors[[1, 2, 3]].sum() == pytest.approx(ungrouped[1])
-    assert priors[5] == pytest.approx(ungrouped[3])
-    assert np.allclose(priors[[0, 4]], ungrouped[[0, 2]])
-    assert priors.sum() == pytest.approx(weights.sum())
+def test_identity_groups_do_nothing():
+    groups = RecordGroups(None, 4)
+    w = np.arange(8.0).reshape(2, 4)
+    first = w[0]
+    assert groups.expand(w) is w
+    assert groups.totals(first) is first
 
 
 @pytest.mark.skipif(importlib.util.find_spec("torch") is None, reason="needs torch")
-def test_calibration_keeps_a_groups_records_equal(tmp_path, monkeypatch):
+def test_grouped_records_calibrate_as_one_household(tmp_path, monkeypatch):
+    import torch
+
     from policyengine_uk_data.utils import calibrate as calibrate_module
     from policyengine_uk_data.utils.calibrate import calibrate_local_areas
 
     monkeypatch.setattr(calibrate_module, "STORAGE_FOLDER", tmp_path)
-    # Records 0-2 split one household; their rows differ before tying.
-    matrix = pd.DataFrame([[1.0, 0.0], [3.0, 0.0], [2.0, 0.0], [0.0, 1.0], [0.0, 2.0]])
-    local = pd.DataFrame([[600.0, 300.0], [500.0, 400.0]])
-    mask = np.ones((2, 5))
 
     class Data:
         def __init__(self, w):
-            self.household = pd.DataFrame({"household_weight": w})
+            self.household = pd.DataFrame({"household_weight": np.asarray(w, float)})
 
         def copy(self):
             return Data(self.household.household_weight.to_numpy().copy())
 
-    result = calibrate_local_areas(
-        dataset=Data(np.array([100.0, 100.0, 100.0, 300.0, 300.0])),
-        matrix_fn=lambda d: (matrix.copy(), local.copy(), mask.copy()),
-        national_matrix_fn=lambda d: (pd.DataFrame(np.ones((5, 1))), pd.Series([1_500.0])),
-        area_count=2,
-        weight_file="tied.h5",
-        dataset_key="2024",
-        epochs=21,
-        groups=np.array([0, 0, 0, 1, 2]),
+    local = pd.DataFrame([[600.0, 300.0], [500.0, 400.0]])
+
+    def run(matrix, weights, groups):
+        torch.manual_seed(0)
+        n = len(weights)
+        return calibrate_local_areas(
+            dataset=Data(weights),
+            matrix_fn=lambda d: (pd.DataFrame(matrix), local.copy(), np.ones((2, n))),
+            national_matrix_fn=lambda d: (
+                pd.DataFrame(np.ones((n, 1))),
+                pd.Series([1_500.0]),
+            ),
+            area_count=2,
+            weight_file="w.h5",
+            dataset_key="2024",
+            epochs=31,
+            groups=groups,
+        ).household.household_weight.to_numpy()
+
+    # Household 0 split into three records (0-2) with different rows; a
+    # zero-weight household split into two (5-6).
+    split_rows = np.array(
+        [
+            [1.0, 0.0],
+            [3.0, 0.0],
+            [2.0, 0.0],
+            [0.0, 1.0],
+            [0.0, 2.0],
+            [1.0, 1.0],
+            [0.0, 3.0],
+        ]
     )
-    w = result.household.household_weight.to_numpy()
-    assert w[0] == pytest.approx(w[1]) and w[1] == pytest.approx(w[2])
+    split_weights = np.array([100.0, 100.0, 100.0, 300.0, 300.0, 0.0, 0.0])
+    groups = np.array([0, 0, 0, 1, 2, 3, 3])
+    grouped = run(split_rows, split_weights, groups)
+    # The same households unsplit, each holding its records' mean row.
+    one_rows = np.array([[2.0, 0.0], [0.0, 1.0], [0.0, 2.0], [0.5, 2.0]])
+    unsplit = run(one_rows, np.array([300.0, 300.0, 300.0, 0.0]), None)
+    assert np.allclose(grouped[:3], unsplit[0] / 3)
+    assert np.allclose(grouped[3:5], unsplit[1:3])
+    assert np.allclose(grouped[5:], unsplit[3] / 2)
