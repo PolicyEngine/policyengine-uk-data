@@ -346,6 +346,7 @@ def scotland(cache):
             tenure = tenures.get(label)
         elif label == "Number of bedrooms":
             headers = row[1:]
+            assert {h for h in headers if h} == set(bands) | {"Total"}, headers
         elif tenure and re.fullmatch(r"S13\d{6}", label):
             for bedroom, value in zip(headers, row[1:], strict=True):
                 if bedroom in bands:
@@ -368,7 +369,17 @@ def scotland(cache):
 
 
 def northern_ireland(cache):
-    """Allocate Data Zone private tenure totals by NIHE postcode-district BRMA."""
+    """Private-rented households by NIHE BRMA, from Open Government Licence data.
+
+    NIHE defines each BRMA as a set of postcode districts, and NISRA publishes
+    Census 2021 households for every postcode district (no suppression at that
+    level). Tenure is published only for census areas, and linking those to
+    postcode districts needs ONS Postcode Directory records whose Northern
+    Ireland licence (LPS end user licence) does not clearly allow publishing
+    derived figures. So each BRMA's private-rented households are its census
+    households times Northern Ireland's private-rented share (NISRA tenure by
+    Data Zone, summed).
+    """
     names = {
         "Belfast": "BELFAST",
         "Lough Neagh Lower": "LOUGH_NEAGH_LOWER",
@@ -395,61 +406,15 @@ def northern_ireland(cache):
                 assert district not in memberships
                 memberships[district] = names[name]
     assert len(memberships) == 80
-    pages = [
-        json.loads((cache / f"ons_onspd_feb2026_ni_p{i}.json").read_text())
-        for i in range(2)
-    ]
-    onspd = pd.DataFrame([f["attributes"] for page in pages for f in page["features"]])
-    assert len(onspd) == 63179 and onspd.pcds.is_unique
-    onspd["district"] = onspd.pcds.str.split().str[0]
-    onspd["brma"] = onspd.district.map(memberships)
-    obsolete = onspd[onspd.brma.isna()]
-    assert obsolete.doterm.notna().all() and obsolete.doterm.le("202103").all()
-    onspd = onspd[onspd.brma.notna()].copy()
-    census = pd.read_excel(
+    districts = pd.read_excel(
         cache / "nisra_census2021_postcode_households.xlsx",
-        sheet_name="Postcode",
-        header=5,
-    ).rename(columns={"Postcode": "pcds"})
-    census = census.merge(onspd, on="pcds", how="left", validate="one_to_one")
-    assert census.brma.notna().all()
-    census["households"] = pd.to_numeric(census.Households, errors="coerce")
-    suppressed = census.Households.eq("*")
-    assert (census.households.notna() | suppressed).all()
-    averages = pd.read_excel(
-        cache / "nisra_census2021_postcode_households.xlsx",
-        sheet_name="Suppressed averages",
+        sheet_name="Postcode district",
         header=5,
     )
-    averages = averages.set_index(averages["Postcode district"].str.strip())[
-        "Average households per supressed Postcode"
-    ]
-    census.loc[suppressed, "households"] = census.loc[suppressed, "district"].map(
-        averages
-    )
-    assert census.households.notna().all(), (
-        "Suppressed postcode missing district average"
-    )
-    # Whole-zone assignment follows every in-scope ONSPD postcode, not just census ones.
-    singleton = onspd.groupby("oa21cd").brma.agg(
-        lambda s: s.iloc[0] if s.nunique() == 1 else None
-    )
-    singleton = singleton.dropna().rename("brma").reset_index()
-    singleton["share"] = 1.0
-    mixed = census[census.oa21cd.notna() & ~census.oa21cd.isin(singleton.oa21cd)]
-    weights = mixed.groupby(["oa21cd", "brma"]).households.sum()
-    shares = (
-        (weights / weights.groupby(level=0).transform("sum"))
-        .rename("share")
-        .reset_index()
-    )
-    # The lane excludes zero-weight shares on mixed zones without suppressed counts.
-    shares = shares[shares.share > 0]
-    crosswalk = pd.concat([singleton, shares], ignore_index=True).rename(
-        columns={"oa21cd": "area_code"}
-    )
-    assert crosswalk.area_code.nunique() == 3780
-    assert crosswalk.groupby("area_code").share.sum().sub(1).abs().max() < 1e-9
+    districts["district"] = districts["Postcode district"].astype(str).str.strip()
+    districts = districts[districts.district.str.fullmatch(r"BT\d+")]
+    assert set(districts.district) == set(memberships)
+    households = districts.groupby(districts.district.map(memberships)).Households.sum()
     tenure = pd.read_csv(cache / "tenure_7_data_zones.csv")
     tenure.columns = [
         "area_code",
@@ -459,13 +424,16 @@ def northern_ireland(cache):
         "households",
     ]
     assert len(tenure) == 3780 * 7 and tenure.area_code.nunique() == 3780
-    private = (
-        tenure[tenure.tenure_code.isin([5, 6])].groupby("area_code").households.sum()
+    private_share = (
+        tenure.loc[tenure.tenure_code.isin([5, 6]), "households"].sum()
+        / tenure.households.sum()
     )
-    assert set(private.index) == set(crosswalk.area_code)
-    out = crosswalk.merge(private.rename("households"), on="area_code")
-    out["households"] *= out.share
-    out = out.groupby("brma", as_index=False).households.sum()
+    out = (
+        (households * private_share)
+        .rename("households")
+        .rename_axis("brma")
+        .reset_index()
+    )
     out["region"], out["bedrooms"] = "NORTHERN_IRELAND", "all"
     return out[["region", "brma", "bedrooms", "households"]]
 
@@ -498,7 +466,7 @@ def main():
         .encode("utf-8")
     )
     digest = hashlib.sha256(data).hexdigest()
-    expected = "3ba714d4f5267656f19cd60785da379804420f633aa4c5745bdd0fba20473e72"
+    expected = "fd40dae019e5eefb8c976873f69c66f9b74a0747505326e8098b0ad99cc2ae1f"
     if digest != expected:
         raise ValueError(f"Rebuilt table differs: expected {expected}, got {digest}")
     args.output.write_bytes(data)

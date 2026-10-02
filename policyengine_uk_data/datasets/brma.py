@@ -71,6 +71,8 @@ def assign_brmas(
     """
     if weights is None:
         weights = load_brma_weights()
+    if hasattr(region, "decode_to_str"):  # EnumArray of region codes
+        region = region.decode_to_str()
     region = np.asarray(region).astype(str)
     lha_category = np.asarray(lha_category).astype(str)
     brma = np.empty(len(region), dtype=object)
@@ -88,3 +90,17 @@ def assign_brmas(
         cells = sorted(set(zip(region[missing], lha_category[missing])))
         raise ValueError(f"No BRMA weights for region × LHA category cells {cells}.")
     return brma
+
+
+def pick_household_brmas(
+    brma: np.ndarray, household_id: np.ndarray, rng: np.random.Generator
+) -> pd.Series:
+    """Give each household the BRMA of one of its benefit units, chosen at random.
+
+    ``brma`` and ``household_id`` are per benefit unit; returns a Series
+    indexed by household ID.
+    """
+    units = pd.DataFrame({"brma": brma, "household_id": household_id})
+    return units.groupby("household_id").brma.aggregate(
+        lambda x: x.sample(n=1, random_state=rng).iloc[0]
+    )

@@ -7,12 +7,15 @@ whose region × LHA category cell has a positive weight:
 2. Determinism: the same generator state gives the same BRMAs.
 3. Fail closed: a benefit unit in a cell with no positive weight raises.
 4. Proportionality: draws converge on the cell's weights.
+
+``pick_household_brmas`` gives each household one of its benefit units' BRMAs,
+deterministically for a given generator state.
 """
 
 import numpy as np
 import pandas as pd
 import pytest
-from hypothesis import given, settings
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 from policyengine_uk.variables.household.demographic.locations import BRMAName
 
@@ -21,6 +24,7 @@ from policyengine_uk_data.datasets.brma import (
     LHA_CATEGORY_BEDROOMS,
     assign_brmas,
     load_brma_weights,
+    pick_household_brmas,
 )
 
 REGIONS = [
@@ -105,6 +109,28 @@ def test_shared_and_one_bedroom_categories_use_the_same_weights(weights):
     pd.testing.assert_frame_equal(a.reset_index(drop=True), b.reset_index(drop=True))
 
 
+def test_each_category_uses_its_bedroom_band(households, weights):
+    banded = households[households.bedrooms != "all"]
+    for category, band in LHA_CATEGORY_BEDROOMS.items():
+        got = weights[weights.lha_category == category].set_index(["region", "brma"])
+        want = banded[banded.bedrooms == band].set_index(["region", "brma"])
+        assert (
+            got.weight.drop("NORTHERN_IRELAND")
+            .sort_index()
+            .equals(want.households.sort_index().rename("weight"))
+        ), category
+    # Spot values: Lothian's two-, three- and four-plus-bedroom private renters
+    # (Census 2022) and Belfast, the same for every category.
+    lothian = weights[(weights.region == "SCOTLAND") & (weights.brma == "LOTHIAN")]
+    assert lothian.set_index("lha_category").weight[["C", "D", "E"]].tolist() == [
+        30012,
+        10044,
+        4327,
+    ]
+    belfast = weights[weights.brma == "BELFAST"]
+    assert len(belfast) == 5 and belfast.weight.nunique() == 1
+
+
 def test_large_draw_matches_scottish_two_bedroom_weights(weights):
     cell = weights[(weights.region == "SCOTLAND") & (weights.lha_category == "C")]
     n = 400_000
@@ -124,12 +150,13 @@ def weights_and_units(draw):
     regions = draw(
         st.lists(st.sampled_from(REGIONS), min_size=1, max_size=3, unique=True)
     )
-    brmas = [f"B{i}" for i in range(draw(st.integers(1, 5)))]
+    count = draw(st.integers(1, 5))
+    # BRMA names are unique to a region, so a draw from the wrong region is caught.
     rows = [
-        (region, category, brma, draw(st.sampled_from([0, 0.5, 1, 7, 1000])))
+        (region, category, f"{region}_{i}", draw(st.sampled_from([0, 0.5, 1, 7, 1000])))
         for region in regions
         for category in CATEGORIES
-        for brma in brmas
+        for i in range(count)
     ]
     table = pd.DataFrame(rows, columns=["region", "lha_category", "brma", "weight"])
     table = table[table.weight > 0]
@@ -155,12 +182,33 @@ def test_draws_stay_on_positive_weights_and_are_deterministic(case):
 @given(weights_and_units(), st.sampled_from(REGIONS), st.sampled_from(CATEGORIES))
 def test_cells_without_positive_weight_fail_closed(case, region, category):
     table, *_ = case
-    if ((table.region == region) & (table.lha_category == category)).any():
-        return
+    # Remove the cell, so every example exercises a missing one.
+    table = table[~((table.region == region) & (table.lha_category == category))]
+    assume(len(table))
     with pytest.raises(ValueError, match="No BRMA weights"):
         assign_brmas(
             np.array([region]), np.array([category]), np.random.default_rng(0), table
         )
+
+
+@settings(max_examples=200, deadline=None, derandomize=True)
+@given(
+    st.lists(
+        st.tuples(st.integers(0, 6), st.sampled_from(["X", "Y", "Z"])),
+        min_size=1,
+        max_size=30,
+    ),
+    st.integers(0, 2**32 - 1),
+)
+def test_households_take_one_of_their_benefit_units_brmas(units, seed):
+    household_id = np.array([h for h, _ in units])
+    brma = np.array([b for _, b in units], dtype=object)
+    first = pick_household_brmas(brma, household_id, np.random.default_rng(seed))
+    second = pick_household_brmas(brma, household_id, np.random.default_rng(seed))
+    assert first.equals(second)
+    assert set(first.index) == set(household_id)
+    for household, chosen in first.items():
+        assert chosen in set(brma[household_id == household])
 
 
 def test_built_dataset_brmas_lie_in_their_regions_weights(enhanced_frs, weights):

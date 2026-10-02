@@ -8,10 +8,12 @@ File: `brma_private_rented_households.csv`, with columns `region, brma, bedrooms
 
 | Nation | Households | BRMA geography |
 |---|---|---|
-| England | Census 2021 (ONS). Private-rented households per LSOA from TS054, split by bedrooms using the LSOA's mix for "private rented or lives rent free" (custom table `hh_tenure_5a` × `number_bedrooms_5a`). Rent-free households are 0.3-1.2% of that category. | VOA BRMA boundary layer, May 2020. Each LSOA is assigned by its population-weighted centroid. Five border LSOAs fall outside the English layer and take the Welsh BRMA that VOA's LHA lookup returns at their centroids. |
-| Wales | As for England. | Rent Officers Wales BRMA layer. 11 LSOAs fall in West Cheshire. |
-| Scotland | Scotland's Census 2022 (NRS), tenure by bedrooms by 2022 electoral ward. This is the finest geography at which the table is not suppressed. | Scottish Government BRMA polygons. Each ward is split by its output areas' household-weighted centroids, corrected by Rent Service Scotland's postcode-to-BRMA lookup (FOI 202300368850). |
-| Northern Ireland | NISRA Census 2021, tenure by Data Zone 2021. | NIHE postcode-district definition of BRMAs. Data Zones that span BRMAs are split by Census 2021 postcode household counts, with suppressed postcodes given NISRA's published district averages. Postcode-to-Data Zone links come from the ONS Postcode Directory, whose Northern Ireland records are under the LPS end user licence; only these BRMA aggregates are published. |
+| England | Census 2021 (ONS). Private-rented households per LSOA from TS054, split by bedrooms using the LSOA's mix for "private rented or lives rent free" (custom table `hh_tenure_5a` × `number_bedrooms_5a`). This is the only tenure × bedrooms split ONS releases for every LSOA; rent-free households are 0.3-1.2% of the category. | VOA BRMA boundary layer, May 2020. Each LSOA is assigned by its population-weighted centroid. Five border LSOAs fall outside the English layer and take the Welsh BRMA that VOA's LHA lookup returns near their centroids. |
+| Wales | As for England. | Rent Officers Wales BRMA layer (2012 boundaries, 2014 release). 11 LSOAs fall in West Cheshire. Cardiff Bay (W01002024) lies outside the layer and is assigned to Cardiff, as VOA's lookup returns for its postcodes. |
+| Scotland | Scotland's Census 2022 (NRS), tenure by bedrooms by 2022 electoral ward. This is the finest geography at which the table is not suppressed. | Scottish Government BRMA polygons. Each ward is split across BRMAs by its output areas' household counts, placing each output area by its population-weighted centroid. Rent Service Scotland's postcode-to-BRMA lookup (FOI 202300368850) moves 61 Balloch output areas to West Dunbartonshire: 59 on unique postcode matches and 2 via the council's own lookup. |
+| Northern Ireland | NISRA Census 2021 households by postcode district, times Northern Ireland's private-rented share (NISRA tenure by Data Zone, 17.2%). | NIHE's definition of each BRMA as a set of postcode districts. |
+
+Northern Ireland's private-rented households are not split by area within the nation. Linking NISRA's tenure areas to postcode districts would need the ONS Postcode Directory's Northern Ireland records, whose licence (LPS end user licence) does not clearly allow publishing derived figures. Using every BRMA's all-tenure households instead moves BRMA shares by 1.5 percentage points on average; for example, Belfast gets 20.1% of NI's private renters where the private-rented split would give 23.5%.
 
 Totals reconcile with the published national private-rented counts to within 0.03%:
 
@@ -20,7 +22,7 @@ Totals reconcile with the published national private-rented counts to within 0.0
 | England | 4,795,158 | 4,794,889 |
 | Wales | 228,601 | 228,642 |
 | Scotland | 323,001 | 323,042 |
-| Northern Ireland | 132,466 | 132,436 |
+| Northern Ireland | 132,449 | 132,436 |
 
 Small-area census counts are perturbed for disclosure control, so their sums differ slightly from national tables.
 
@@ -28,7 +30,9 @@ Small-area census counts are perturbed for disclosure control, so their sums dif
 
 The check below correlates, within each region, the BRMA shares of each candidate weight with DWP's count of Universal Credit households whose housing costs are assessed under LHA ("LHA covers rent" plus "does not cover rent"). The DWP figures are the mean of April 2019 to November 2020 (UC statistics supplementary table 3.2, February 2021).
 
-| Nation | Census (this file) | `lha_list_of_rents.csv.gz` row counts (previous weights) |
+To make the comparison, each BRMA's households from this file are summed across bedroom bands and region parts, then placed in policyengine-uk's single region for that BRMA.
+
+| Nation | This file | `lha_list_of_rents.csv.gz` row counts (previous weights) |
 |---|---|---|
 | England | 0.94 | 0.82 |
 | Wales | 0.95 | 0.23 |
@@ -42,4 +46,4 @@ Against the genuine list-of-rents category counts, the census bedroom bands corr
 
 ## Rebuilding
 
-`tools/brma_households/` (from the repository root) downloads every source, checks each one against its pinned sha256 and rebuilds this file byte for byte; see its `README.md`.
+`tools/brma_households/` (run from the repository root) downloads every source, checks each one against a pinned sha256 and rebuilds this file byte for byte; see its `README.md`.

@@ -1,79 +1,60 @@
 # BRMA private-rented households
 
-`policyengine_uk_data/storage/brma_private_rented_households.csv` (the default `--output`) contains 936 rows: `region,brma,bedrooms,households`.
-It counts private landlord/letting agency and other private-rented households by
-Broad Rental Market Area (BRMA), retaining each area's census region. Bedrooms are
-`1`, `2`, `3`, `4+`; Northern Ireland uses `all` because its census did not ask bedrooms.
+`build.py` writes `policyengine_uk_data/storage/brma_private_rented_households.csv` (936 rows: `region,brma,bedrooms,households`). The table counts private-rented households (private landlord or letting agency, plus other private rented) by Broad Rental Market Area (BRMA), keeping each area's census region. Bedrooms are `1`, `2`, `3` or `4+`; Northern Ireland uses `all` because its census did not ask about bedrooms. Sources, method and validation are summarised in `policyengine_uk_data/storage/BRMA_DATA_SOURCES.md`.
 
-## Sources and method
+## Method
 
-- **England, Census 2021:** ONS/Nomis TS054 LSOA private-rented totals multiplied
-  by each LSOA's ONS custom-API tenure5a code 3 bedroom proportions. ONS V4
-  population-weighted centroids intersect VOA May 2020 BRMA polygons; regions
-  come from ONS OA-to-LSOA and OA-to-region lookups. GML is parsed directly to
-  preserve nine incorrectly declared MultiPolygons; `make_valid` repairs seven
-  self-intersections. Five border LSOAs use documented official VOA lookup overrides:
-  E01014018 → Brecon and Radnor; E01022272–E01022275 → Monmouthshire.
-- **Wales, Census 2021:** the same TS054 × tenure5a method and Welsh ONS V4
-  centroids, with the archived Rent Officers Wales polygons (May 2012 geometry,
-  September 2014 release). Invalid geometry is repaired. Cardiff Bay W01002024
-  uses a fixed override established by 13 official postcode replies on 2 October 2026.
-  Eleven Welsh LSOAs in West Cheshire retain region `WALES`.
-- **Scotland, Census 2022:** NRS ward tenure × bedrooms, allocated using OA
-  household-weighted centroid shares in Scottish Government BRMA polygons.
-  Official postcode candidates supply nine missing assignments and correct 61
-  Balloch OAs; two ambiguous candidates use West Dunbartonshire council membership.
-  Four and five-or-more bedrooms combine into `4+`.
-- **Northern Ireland, Census 2021:** NISRA Data Zone tenure codes 5 and 6,
-  allocated using NIHE postcode-district BRMAs and ONSPD postcode-to-zone records.
-  Single-BRMA zones receive share 1; mixed zones use census postcode household
-  counts, substituting NISRA district averages after stripping district-key whitespace.
+- **England, Census 2021.**
+  - Each LSOA's TS054 private-rented total is split by that LSOA's bedroom mix for ONS custom-API tenure category 3, "private rented or lives rent free".
+  - The LSOA's ONS population-weighted centroid places it in a VOA May 2020 BRMA polygon.
+  - Regions come from the ONS OA-to-LSOA and OA-to-region lookups.
+  - The GML is parsed directly so that nine MultiPolygons declared as Polygons keep all their parts. `make_valid` repairs seven self-intersections.
+- **Wales, Census 2021.**
+  - Same method as England, using the archived Rent Officers Wales polygons (May 2012 geometry, September 2014 release).
+  - Eleven Welsh LSOAs fall in West Cheshire and keep region `WALES`.
+- **Scotland, Census 2022.**
+  - NRS ward tenure × bedrooms tables are split across BRMAs by output-area household counts. Each output area is placed by its population-weighted centroid in the Scottish Government BRMA polygons.
+  - Official postcode candidates assign nine output areas whose centroids fall outside every polygon.
+  - Rent Service Scotland's postcode lookup moves 61 Balloch output areas to West Dunbartonshire: 59 on unique postcode matches and 2 via the council's own lookup.
+  - Four and five-or-more bedrooms are combined into `4+`.
+- **Northern Ireland, Census 2021.**
+  - NISRA households by postcode district are summed into NIHE's postcode-district BRMAs.
+  - The totals are scaled by Northern Ireland's private-rented share from NISRA tenure by Data Zone.
+  - A private-rented split by area would need ONS Postcode Directory Northern Ireland records, which are under the LPS end user licence, so it is not attempted.
+- **Overrides.** Eight area assignments come from official lookups rather than polygons: five English border LSOAs, Cardiff Bay and two Scottish output areas. Each carries a dated evidence comment in `build.py`. The build asserts the exact set of areas needing an override, so a boundary change fails loudly.
+- **Output.** Cells are rounded to whole households, and empty cells are dropped. There is no national balancing adjustment.
 
-BRMA cells are rounded to whole households with pandas; zero rows are dropped.
-No national balancing adjustment is made. Each of 89 inputs has its exact URL and cache filename in `sources.yaml`.
-The 72 ONS custom-API batches pin decoded JSON bytes with `content_sha256`;
-other inputs pin original bytes with `sha256`. Gzip and plain JSON are accepted
-without parsing or reserialising for verification. Live reply pages and postcode
-extracts used only to establish overrides are excluded, as are research checks.
-All eight overrides have dated evidence comments in `build.py`; exact unresolved
-area sets are asserted before assignment to guard against boundary changes.
+## Inputs
+
+`sources.yaml` lists the 87 inputs with their URLs, landing pages, licences and cache file names.
+- The 72 ONS custom-API batches are pinned on the sha256 of the decoded JSON (`content_sha256`), because their gzip bytes vary between downloads.
+- Every other input is pinned on the sha256 of its original bytes.
 
 ## Rebuild
 
-Run from the repository root. The sole browser/session download is Scotland's
-ward export; follow its `manual: true` manifest instructions and place it in the
-cache. Scripts never log in or accept terms. Both commands verify all input pins;
-the builder uses only cached originals and checks the expected output digest.
+Run from the repository root. Scotland's ward table is the one manual download: follow its `manual: true` instructions in `sources.yaml` and place the file in the cache. The scripts never log in or accept terms. Both scripts check every input's hash, and `build.py` reads only cached originals and checks the output's digest.
 
 ```sh
 nice -n 10 uvx --with pandas --with geopandas --with shapely --with pyogrio --with openpyxl --with pyyaml python tools/brma_households/fetch.py .brma-cache
 nice -n 10 uvx --with pandas --with geopandas --with shapely --with pyogrio --with openpyxl --with pyyaml python tools/brma_households/build.py .brma-cache
 ```
 
-`fetch.py --only SOURCE_ID ...` supports selected download checks; `build.py
---output PATH` chooses the output destination. Missing files or changed hashes fail.
+- `fetch.py --only SOURCE_ID ...` fetches or checks only the listed sources.
+- `build.py --output PATH` writes the table elsewhere.
 
 ## Licences and limits
 
-Census and most geography inputs use the Open Government Licence; retain ONS,
-NRS, Scottish/Welsh Government and Ordnance Survey attributions in the manifest.
-NIHE's archived page has no stated open reuse licence; live VOA replies are not inputs.
-**NI postcode geography comes from ONSPD records under the LPS Northern Ireland
-End User Licence; only aggregated BRMA counts are published, never raw BT records.**
-Centroids and ward/postcode shares approximate household locations. England/Wales
-bedroom proportions include rent-free households; census cells are perturbed.
-Geography vintages differ and bedrooms describe accommodation, not LHA entitlement.
-The 34 postcode records without Data Zone codes do not contribute to mixed-zone shares.
+- **Licences.** Census and geography inputs are under the Open Government Licence. NIHE's archived BRMA page has no stated reuse licence; the build uses only its postcode-district lists.
+- **Locations are approximate.** Centroids and ward shares approximate where households live.
+- **Rent-free households.** England and Wales bedroom mixes include them.
+- **Disclosure control.** Census cells are perturbed.
+- **Geography vintages differ** between nations.
+- **Bedrooms describe the home,** not the household's LHA entitlement.
+- **Northern Ireland has one private-rented share for every BRMA.**
 
 ## Verification
 
-On 2 October 2026, all 89 inputs copied from retained originals passed `fetch.py`
-verification with no downloads, including all 72 decoded-content hashes.
-Fresh `fetch.py` downloads of eight originals covered all seven publishers;
-both an English and a Welsh custom-API batch passed decoded-content verification.
-The corrected full rebuild was byte-identical to the updated reference, 936 rows:
-`3ba714d4f5267656f19cd60785da379804420f633aa4c5745bdd0fba20473e72`.
-The NI key fix changes Belfast by +1 and South East NI by −1 household.
-Changed-content, missing-manual and override-set mismatch checks were rejected.
-Scotland's manual export was verified from its retained original, not re-exported.
-`nice -n 10` was invoked; the sandbox refused priority changes and Git index writes.
+On 2 October 2026:
+- All inputs passed `fetch.py` against a cache filled from retained originals.
+- Fresh downloads of eight originals, covering all seven publishers and including an English and a Welsh ONS batch, matched their pins.
+- The rebuild has 936 rows, sha256 `fd40dae019e5eefb8c976873f69c66f9b74a0747505326e8098b0ad99cc2ae1f`.

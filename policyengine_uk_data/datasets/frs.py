@@ -19,7 +19,7 @@ from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk.variables.household.income.employment_status import (
     EmploymentStatus,
 )
-from policyengine_uk_data.datasets.brma import assign_brmas
+from policyengine_uk_data.datasets.brma import assign_brmas, pick_household_brmas
 from policyengine_uk_data.datasets.disability_benefits import (
     add_disability_benefit_categories_from_reported_amounts,
     add_disability_benefit_flags_from_reported_amounts,
@@ -1418,23 +1418,12 @@ def create_frs(
     brma_rng = np.random.default_rng(0)
     brma = assign_brmas(region, lha_category, brma_rng)
 
-    # Convert benunit-level BRMAs to household-level BRMAs (pick a random one)
-
-    df = pd.DataFrame(
-        {
-            "brma": brma,
-            "household_id": sim.populations["benunit"].household(
-                "household_id", sim.dataset.time_period
-            ),
-        }
+    household_brma = pick_household_brmas(
+        brma,
+        sim.populations["benunit"].household("household_id", dataset.time_period),
+        brma_rng,
     )
-
-    df = df.groupby("household_id").brma.aggregate(
-        lambda x: x.sample(n=1, random_state=brma_rng).iloc[0]
-    )
-    brmas = df[sim.calculate("household_id")].values
-
-    pe_household["brma"] = brmas
+    pe_household["brma"] = household_brma[sim.calculate("household_id")].values
 
     pe_person = add_disability_benefit_flags_from_reported_amounts(
         pe_person,

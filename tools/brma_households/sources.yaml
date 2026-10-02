@@ -1035,29 +1035,3 @@
     Mixed-BRMA Data Zones use the published postcode-district averages. Worksheet district keys are stripped
     before mapping, so BT1–BT9 suppressed postcodes receive their averages.
   filename: nisra_census2021_postcode_households.xlsx
-- id: ons_onspd_feb2026_ni_page_0
-  publisher: Office for National Statistics
-  title: 'ONS Postcode Directory February 2026: Northern Ireland filtered API page 1'
-  url: https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/ONS_Postcode_Directory_(February_2026)_for_the_UK_(Hosted_Table)/FeatureServer/0/query?f=json&where=ctry25cd%3D%27N92000002%27&outFields=ObjectId%2Cpcds%2Coa21cd%2Clsoa21cd%2Cdoterm&returnGeometry=false&resultRecordCount=32000&orderByFields=ObjectId&resultType=standard
-  landing_page: https://geoportal.statistics.gov.uk/datasets/7efd49be24fb4ed8b21eedeb2540ea8c/about
-  sha256: 1d247eb01fdc973ee4cc00bed3b4d35fc33e6dd28daff4de7ee27af39dfdfdc5
-  licence: LPS Northern Ireland End User Licence (LPS Crown copyright), internal business use only; BT
-    records excluded from general OGL. https://www.ons.gov.uk/methodology/geography/licences
-  notes: Original API response; page 1 of 2. Filter country N92000002, ordered ObjectId, 32000-row standard
-    pages. Together 63179 current/terminated postcode records. Census weights joined exactly by postcode
-    identifier, never by coordinates. Cache privately; do not redistribute the Northern Ireland postcode
-    extract.
-  filename: ons_onspd_feb2026_ni_p0.json
-- id: ons_onspd_feb2026_ni_page_1
-  publisher: Office for National Statistics
-  title: 'ONS Postcode Directory February 2026: Northern Ireland filtered API page 2'
-  url: https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/ONS_Postcode_Directory_(February_2026)_for_the_UK_(Hosted_Table)/FeatureServer/0/query?f=json&where=ctry25cd%3D%27N92000002%27&outFields=ObjectId%2Cpcds%2Coa21cd%2Clsoa21cd%2Cdoterm&returnGeometry=false&resultRecordCount=32000&orderByFields=ObjectId&resultType=standard&resultOffset=32000
-  landing_page: https://geoportal.statistics.gov.uk/datasets/7efd49be24fb4ed8b21eedeb2540ea8c/about
-  sha256: 665eb8bd8b4abae1962b2bca3e8b7b36fcefb9a4d5c7fed2f459e4ae918bcf3d
-  licence: LPS Northern Ireland End User Licence (LPS Crown copyright), internal business use only; BT
-    records excluded from general OGL. https://www.ons.gov.uk/methodology/geography/licences
-  notes: Original API response; page 2 of 2. Filter country N92000002, ordered ObjectId, 32000-row standard
-    pages. Together 63179 current/terminated postcode records. Census weights joined exactly by postcode
-    identifier, never by coordinates. Cache privately; do not redistribute the Northern Ireland postcode
-    extract.
-  filename: ons_onspd_feb2026_ni_p1.json
