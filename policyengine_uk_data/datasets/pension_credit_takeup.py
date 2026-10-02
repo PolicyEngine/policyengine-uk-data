@@ -9,7 +9,9 @@ to wait for them.
 
 For the calibration year it:
 - finds the benefit units with positive Pension Credit entitlement;
-- keeps reporters of Pension Credit as claimants;
+- keeps reporters of Pension Credit as claimants, except on SPI-synthetic
+  households, which copy an FRS household's benefit reports but replace its
+  incomes with SPI-imputed ones;
 - solves the probability that makes weighted take-up among entitled units
   equal DWP's caseload take-up rate;
 - applies that probability to every non-reporter, entitled or not, so a
@@ -31,6 +33,21 @@ from policyengine_uk_data.utils.takeup import (
 PENSION_CREDIT_TAKEUP_SEED = 1_792
 
 
+def spi_synthetic_benunits(dataset) -> np.ndarray:
+    """Benefit units in households flagged ``household_is_spi_synthetic``."""
+    household = dataset.household
+    if "household_is_spi_synthetic" not in household.columns:
+        return np.zeros(len(dataset.benunit), dtype=bool)
+    synthetic = household.loc[
+        household["household_is_spi_synthetic"].astype(bool), "household_id"
+    ]
+    person = dataset.person
+    benunits = person.loc[
+        person["person_household_id"].isin(synthetic), "person_benunit_id"
+    ]
+    return dataset.benunit["benunit_id"].isin(benunits).to_numpy()
+
+
 def assign_pension_credit_takeup(dataset, year: int):
     """Return a copy of ``dataset`` with ``would_claim_pc`` solved for
     ``year``, and a summary of weighted aggregates.
@@ -48,7 +65,8 @@ def assign_pension_credit_takeup(dataset, year: int):
     reported_amount = sim.calculate(
         "pension_credit_reported", year, map_to="benunit"
     ).values
-    reported = reported_amount > 0
+    spi_synthetic = spi_synthetic_benunits(dataset)
+    reported = (reported_amount > 0) & ~spi_synthetic
     weights = sim.calculate("benunit_weight", year).values
     country = sim.calculate("country", year).values
     in_ni = (
@@ -80,6 +98,9 @@ def assign_pension_credit_takeup(dataset, year: int):
         "fill_probability": round(probability, 4),
         "entitled_k": total(1, entitled, 1e3),
         "reporters_k": total(1, reported, 1e3),
+        "spi_synthetic_units_not_anchored": int(
+            (spi_synthetic & (reported_amount > 0)).sum()
+        ),
         "entitled_reporters_k": total(1, entitled & reported, 1e3),
         "gb_reporters_k": total(1, gb & reported, 1e3),
         "gb_entitled_reporters_k": total(1, gb & entitled & reported, 1e3),
