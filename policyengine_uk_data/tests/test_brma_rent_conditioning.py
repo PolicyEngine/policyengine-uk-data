@@ -458,29 +458,37 @@ def built_renters():
 
 
 def test_built_private_renters_match_the_census_within_each_region(built_renters):
-    """Calibration check on the built dataset.
-
-    Within each region, private renters' weighted mean probability of each
-    BRMA stays within 5 percentage points (total variation) of the census
-    shares for their homes' bedroom bands, and the BRMAs actually drawn are
-    consistent with those probabilities.
-    """
-    from scipy.stats import chi2
-
+    """Within each region, the built private renters' weighted mean probability
+    of each BRMA stays within 5 percentage points (total variation) of the
+    census shares for their homes' bedroom bands."""
     renters, brmas, p, census = built_renters
-    drawn = pd.Index(brmas).get_indexer(renters.brma)
-    assert (p[np.arange(len(renters)), drawn] > 0).all()
     for region in renters.region.unique():
         rows = (renters.region == region).to_numpy()
         w = renters.weight[rows].to_numpy()
         w = w / w.sum()
-        expected = w @ p[rows]
-        gap = 0.5 * np.abs(expected - w @ census[rows]).sum()
+        gap = 0.5 * np.abs(w @ p[rows] - w @ census[rows]).sum()
         assert gap < 0.05, (region, gap)
-        actual = np.bincount(drawn[rows], weights=w, minlength=len(brmas))
-        used = expected > 0
-        pearson = ((actual - expected)[used] ** 2 / expected[used]).sum() / (w**2).sum()
-        assert pearson < chi2.ppf(0.9999, used.sum() - 1), (region, pearson)
+
+
+def test_built_private_renters_brmas_are_draws_from_their_probabilities(
+    built_renters,
+):
+    """The BRMAs in the built dataset look like independent draws from the
+    probabilities, scored by their log probability.
+
+    For independent draws the log score's mean and variance are exact sums
+    over households, so the standardised score is close to normal. A draw
+    from the census shares instead (uk-data#516's) scores about -19.
+    """
+    renters, brmas, p, _ = built_renters
+    drawn = pd.Index(brmas).get_indexer(renters.brma)
+    rows = np.arange(len(renters))
+    assert (p[rows, drawn] > 0).all()
+    log_p = np.log(np.where(p > 0, p, 1))
+    score = np.log(p[rows, drawn]).sum()
+    expected = (p * log_p).sum()
+    variance = ((p * log_p**2).sum(axis=1) - (p * log_p).sum(axis=1) ** 2).sum()
+    assert abs(score - expected) / np.sqrt(variance) < 4
 
 
 def test_built_private_renters_rents_track_their_brmas_rent_levels(
