@@ -397,6 +397,23 @@ def _as_non_negative_array(values) -> np.ndarray:
     return np.maximum(np.nan_to_num(values, nan=0.0), 0.0)
 
 
+def split_self_employment_profit(weekly_profit) -> tuple[np.ndarray, np.ndarray]:
+    """Split FRS weekly self-employment profit (SEINCAM2) into annual
+    ``self_employment_income`` and ``trading_loss``.
+
+    SEINCAM2 keeps losses as negative values ("Any losses are recorded as
+    such", FRS methodology glossary). policyengine-uk wants profits and losses
+    as two non-negative inputs, because its programmes treat a loss
+    differently: Income Tax and tax credits set it against other income,
+    means-tested benefits do not, and HBAI counts it as negative income. So the
+    profit goes to ``self_employment_income`` and the loss, as a positive
+    amount, to ``trading_loss``. Their difference is the reported profit.
+    """
+    annual = np.nan_to_num(np.asarray(weekly_profit, dtype=float), nan=0.0)
+    annual = annual * WEEKS_IN_YEAR
+    return np.maximum(annual, 0.0), np.maximum(-annual, 0.0)
+
+
 def allocate_reported_education_grants(
     reported_grants, grant_capacities: dict[str, np.ndarray]
 ) -> dict[str, np.ndarray]:
@@ -1044,7 +1061,10 @@ def create_frs(
         pension_payment + pension_tax_paid + pension_deductions_removed
     ) * WEEKS_IN_YEAR
 
-    pe_person["self_employment_income"] = np.maximum(0, person.seincam2) * WEEKS_IN_YEAR
+    (
+        pe_person["self_employment_income"],
+        pe_person["trading_loss"],
+    ) = split_self_employment_profit(person.seincam2)
 
     INVERTED_BASIC_RATE = 1.25
 

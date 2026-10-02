@@ -1,0 +1,1 @@
+FRS self-employment losses (negative SEINCAM2) now go into policyengine-uk's `trading_loss` input as a positive amount, instead of being floored away; `self_employment_income` stays the non-negative profit. SPI-donor rows of the enhanced FRS carry no trading loss.

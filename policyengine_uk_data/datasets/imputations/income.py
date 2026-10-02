@@ -292,6 +292,13 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         target_dataset=zero_weight_copy,
     )
 
+    # A trading loss belongs with the self-employment profit it came from.
+    # The SPI-donor rows' profits now come from the SPI, which this build
+    # does not draw losses from, so the FRS donor's loss would sit beside
+    # another taxpayer's imputed incomes. They carry none.
+    if "trading_loss" in zero_weight_copy.person.columns:
+        zero_weight_copy.person["trading_loss"] = 0.0
+
     dataset = impute_over_incomes(
         dataset,
         model,

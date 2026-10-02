@@ -3,6 +3,7 @@ import pytest
 INCOME_VARIABLES = [
     "employment_income",
     "self_employment_income",
+    "trading_loss",
     "tax_free_savings_income",
     "savings_interest_income",
     "dividend_income",
