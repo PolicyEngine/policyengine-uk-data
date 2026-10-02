@@ -1,0 +1,1 @@
+Set policyengine-uk's Universal Credit input uc_is_in_gainful_self_employment from the FRS main-job status (EMPSTATI): true for every adult whose main job is self-employment, including traders who break even or make a loss, and false for a side trade beside an employee's main job (UC Regs 2013 reg 64(a)).
