@@ -256,6 +256,20 @@ class TestCloneAndAssign:
             original_regions = toy_dataset.household["region"].values
             np.testing.assert_array_equal(regions, original_regions)
 
+    def test_claimant_or_partner_follows_each_clone(self, toy_dataset, small_crosswalk):
+        roles = np.tile([True, False], len(toy_dataset.household))
+        toy_dataset.person["is_claimant_or_partner"] = roles
+        result = clone_and_assign(
+            toy_dataset,
+            n_clones=3,
+            crosswalk_path=str(small_crosswalk),
+        )
+
+        assert result.person["is_claimant_or_partner"].dtype == bool
+        np.testing.assert_array_equal(
+            result.person["is_claimant_or_partner"].values, np.tile(roles, 3)
+        )
+
     def test_single_clone_is_near_identity(self, toy_dataset, small_crosswalk):
         """With n_clones=1, output should match input dimensions."""
         result = clone_and_assign(
