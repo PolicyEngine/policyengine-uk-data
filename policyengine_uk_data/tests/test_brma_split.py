@@ -127,6 +127,63 @@ def test_spaced_records_track_the_expectation(case, k, seed):
     assert (np.abs(mean - expected) <= spread / k + 1e-9).all()
 
 
+class GridGenerator:
+    """Stands in for a Generator: ``random(n)`` returns the midpoints of n equal cells."""
+
+    def random(self, n):
+        return (np.arange(n) + 0.5) / n
+
+
+@settings(max_examples=60, deadline=None, derandomize=True)
+@given(distributions(max_rows=3), st.integers(1, 6))
+def test_every_split_record_has_its_households_distribution(case, k):
+    # Over a uniform phase, record i's quantile (u + i/k) mod 1 is uniform, so
+    # its BRMA has exactly the household's distribution.
+    probabilities, keys = case
+    n = 6_000
+    for row in range(len(probabilities)):
+        quantiles = spaced_quantiles(n, k, GridGenerator())
+        for i in range(k):
+            columns = brmas_at_quantiles(
+                np.repeat(probabilities[row : row + 1], n, axis=0),
+                np.repeat(keys[row : row + 1], n, axis=0),
+                quantiles[:, i],
+            )
+            frequency = np.bincount(columns, minlength=probabilities.shape[1]) / n
+            assert np.abs(frequency - probabilities[row]).max() <= 2 / n + 1e-12
+
+
+@pytest.mark.parametrize(
+    "probabilities, keys, quantile, expected",
+    [
+        ([0, 0.5, 0, 0.5], None, 0.0, 1),
+        ([0, 0.5, 0, 0.5], None, np.nextafter(0.5, 0), 1),
+        ([0, 0.5, 0, 0.5], None, 0.5, 3),
+        ([0, 0.5, 0, 0.5], None, np.nextafter(1.0, 0), 3),
+        ([0.2, 0.3, 0.5], [1.0, 1.0, 1.0], 0.0, 0),  # tied keys keep column order
+        ([0.2, 0.3, 0.5], [1.0, 1.0, 1.0], 0.2, 1),
+        ([0, 0.4, 0, 0.6], [np.inf, 2.0, np.inf, 1.0], 0.0, 3),  # lowest key first
+        ([0, 0.4, 0, 0.6], [np.inf, 2.0, np.inf, 1.0], 0.6, 1),
+        ([0, 0.4, 0, 0.6], [np.inf, 2.0, np.inf, 1.0], np.nextafter(1.0, 0), 1),
+        (
+            [0.5, 0.5, 0, 0],
+            [1.0, 2.0, np.inf, np.inf],
+            np.nextafter(1.0, 0),
+            1,
+        ),  # padding
+    ],
+)
+def test_quantile_boundaries(probabilities, keys, quantile, expected):
+    p = np.array([probabilities], dtype=float)
+    k = None if keys is None else np.array([keys], dtype=float)
+    assert brmas_at_quantiles(p, k, np.array([quantile]))[0] == expected
+
+
+def test_quantiles_outside_the_unit_interval_are_rejected():
+    with pytest.raises(ValueError):
+        brmas_at_quantiles(np.array([[1.0]]), None, np.array([1.0]))
+
+
 def test_spaced_quantiles_reject_k_below_one():
     with pytest.raises(ValueError):
         spaced_quantiles(3, 0, np.random.default_rng(0))
@@ -167,6 +224,16 @@ def test_household_distribution_fails_closed(weights):
     with pytest.raises(ValueError, match="benefit unit"):
         household_brma_probabilities(
             np.array(["WALES", "WALES"]), np.array([0]), np.array(["C"]), weights
+        )
+
+
+def test_household_distribution_rejects_zero_mass_cells(weights):
+    table = weights.copy()
+    cell = (table.region == "WALES") & (table.lha_category == "C")
+    table.loc[cell, "weight"] = 0.0
+    with pytest.raises(ValueError, match="No BRMA weights"):
+        household_brma_probabilities(
+            np.array(["WALES"]), np.array([0]), np.array(["C"]), table
         )
 
 
@@ -322,6 +389,7 @@ def test_identity_groups_do_nothing():
 
 @pytest.mark.skipif(importlib.util.find_spec("torch") is None, reason="needs torch")
 def test_grouped_records_calibrate_as_one_household(tmp_path, monkeypatch):
+    import h5py
     import torch
 
     from policyengine_uk_data.utils import calibrate as calibrate_module
@@ -338,15 +406,15 @@ def test_grouped_records_calibrate_as_one_household(tmp_path, monkeypatch):
 
     local = pd.DataFrame([[600.0, 300.0], [500.0, 400.0]])
 
-    def run(matrix, weights, groups):
+    def run(matrix, national, weights, groups):
         torch.manual_seed(0)
         n = len(weights)
-        return calibrate_local_areas(
+        result = calibrate_local_areas(
             dataset=Data(weights),
             matrix_fn=lambda d: (pd.DataFrame(matrix), local.copy(), np.ones((2, n))),
             national_matrix_fn=lambda d: (
-                pd.DataFrame(np.ones((n, 1))),
-                pd.Series([1_500.0]),
+                pd.DataFrame(national),
+                pd.Series([1_500.0, 900.0]),
             ),
             area_count=2,
             weight_file="w.h5",
@@ -354,6 +422,12 @@ def test_grouped_records_calibrate_as_one_household(tmp_path, monkeypatch):
             epochs=31,
             groups=groups,
         ).household.household_weight.to_numpy()
+        with h5py.File(tmp_path / "w.h5") as f:
+            saved = f["2024"][...]
+        # The saved area weights are the records' weights, in float32 like the optimiser's.
+        assert saved.shape == (2, n) and saved.dtype == np.float32
+        assert np.allclose(saved.sum(axis=0), result, rtol=1e-5)
+        return result
 
     # Household 0 split into three records (0-2) with different rows; a
     # zero-weight household split into two (5-6).
@@ -368,12 +442,147 @@ def test_grouped_records_calibrate_as_one_household(tmp_path, monkeypatch):
             [0.0, 3.0],
         ]
     )
+    # National rows differ within the split groups too (e.g. a BRMA-dependent benefit).
+    split_national = np.array(
+        [
+            [1.0, 0.0],
+            [1.0, 4.0],
+            [1.0, 2.0],
+            [1.0, 1.0],
+            [1.0, 0.0],
+            [1.0, 3.0],
+            [1.0, 1.0],
+        ]
+    )
     split_weights = np.array([100.0, 100.0, 100.0, 300.0, 300.0, 0.0, 0.0])
     groups = np.array([0, 0, 0, 1, 2, 3, 3])
-    grouped = run(split_rows, split_weights, groups)
-    # The same households unsplit, each holding its records' mean row.
+    grouped = run(split_rows, split_national, split_weights, groups)
+    # The same households unsplit, each holding its records' mean rows.
     one_rows = np.array([[2.0, 0.0], [0.0, 1.0], [0.0, 2.0], [0.5, 2.0]])
-    unsplit = run(one_rows, np.array([300.0, 300.0, 300.0, 0.0]), None)
+    one_national = np.array([[1.0, 2.0], [1.0, 1.0], [1.0, 0.0], [1.0, 2.0]])
+    unsplit = run(one_rows, one_national, np.array([300.0, 300.0, 300.0, 0.0]), None)
     assert np.allclose(grouped[:3], unsplit[0] / 3)
     assert np.allclose(grouped[3:5], unsplit[1:3])
     assert np.allclose(grouped[5:], unsplit[3] / 2)
+
+
+@pytest.mark.skipif(importlib.util.find_spec("torch") is None, reason="needs torch")
+def test_a_group_spanning_countries_is_rejected(tmp_path, monkeypatch):
+    from policyengine_uk_data.utils import calibrate as calibrate_module
+    from policyengine_uk_data.utils.calibrate import calibrate_local_areas
+
+    monkeypatch.setattr(calibrate_module, "STORAGE_FOLDER", tmp_path)
+
+    class Data:
+        def __init__(self, w):
+            self.household = pd.DataFrame({"household_weight": np.asarray(w, float)})
+
+        def copy(self):
+            return Data(self.household.household_weight.to_numpy().copy())
+
+    mask = np.array(
+        [[1.0, 0.0, 1.0], [0.0, 1.0, 0.0]]
+    )  # records 0 and 1 in different countries
+    with pytest.raises(ValueError, match="different countries"):
+        calibrate_local_areas(
+            dataset=Data([1.0, 1.0, 1.0]),
+            matrix_fn=lambda d: (
+                pd.DataFrame(np.eye(3, 2)),
+                pd.DataFrame(np.ones((2, 2))),
+                mask,
+            ),
+            national_matrix_fn=lambda d: (
+                pd.DataFrame(np.ones((3, 1))),
+                pd.Series([3.0]),
+            ),
+            area_count=2,
+            weight_file="w.h5",
+            dataset_key="2024",
+            epochs=1,
+            groups=np.array([0, 0, 1]),
+        )
+
+
+@needs_policyengine
+def test_split_records_keep_their_source_household(weights):
+    from policyengine_uk_data.datasets.brma import split_private_renters_across_brmas
+
+    result = split_private_renters_across_brmas(
+        toy_dataset(), k=3, seed=1, weights=weights
+    )
+    household = result.household
+    assert (household.source_household_id == household[BRMA_SPLIT_GROUP_COLUMN]).all()
+
+
+@needs_policyengine
+def test_a_benefit_unit_without_people_is_rejected(weights):
+    from policyengine_uk.data import UKSingleYearDataset
+
+    from policyengine_uk_data.datasets.brma import split_private_renters_across_brmas
+
+    dataset = toy_dataset()
+    benunit = pd.concat(
+        [dataset.benunit, pd.DataFrame({"benunit_id": [99_999]})], ignore_index=True
+    )
+    broken = UKSingleYearDataset(
+        person=dataset.person,
+        benunit=benunit,
+        household=dataset.household,
+        fiscal_year=2024,
+    )
+    with pytest.raises(ValueError, match="no people"):
+        split_private_renters_across_brmas(broken, k=2, seed=0, weights=weights)
+
+
+@needs_policyengine
+def test_rate_keys_match_fresh_simulations(weights):
+    # The keys come from one simulation with the BRMA reset and the rate's cache
+    # cleared per slot; each slot must equal a simulation built with that BRMA.
+    from policyengine_uk import Microsimulation
+    from policyengine_uk.data import UKSingleYearDataset
+
+    from policyengine_uk_data.datasets.brma import lha_rate_keys
+
+    dataset = toy_dataset()
+    year = int(dataset.time_period)
+    simulation = Microsimulation(dataset=dataset)
+    region = dataset.household.region.astype(str).to_numpy()
+    position = pd.Series(np.arange(len(region)), index=dataset.household.household_id)
+    owner = (
+        dataset.person.drop_duplicates("person_benunit_id")
+        .set_index("person_benunit_id")
+        .person_household_id
+    )
+    benunit_household = position.loc[owner.loc[dataset.benunit.benunit_id]].to_numpy()
+    brmas, _ = household_brma_probabilities(
+        region,
+        benunit_household,
+        np.asarray(simulation.calculate("LHA_category", year)).astype(str),
+        weights,
+    )
+    keys = lha_rate_keys(simulation, year, brmas, region, benunit_household)
+    variable = "uncapped_BRMA_LHA_rate"
+    if variable not in simulation.tax_benefit_system.variables:
+        variable = "BRMA_LHA_rate"
+    distinct = set()
+    for j in (0, 3, 7):
+        household = dataset.household.copy()
+        household["brma"] = [brmas[r][min(j, len(brmas[r]) - 1)] for r in region]
+        fresh = Microsimulation(
+            dataset=UKSingleYearDataset(
+                person=dataset.person,
+                benunit=dataset.benunit,
+                household=household,
+                fiscal_year=year,
+            )
+        )
+        rate = np.asarray(fresh.calculate(variable, year))
+        units = np.bincount(benunit_household, minlength=len(region))
+        mean = (
+            np.bincount(benunit_household, weights=rate, minlength=len(region)) / units
+        )
+        has_slot = np.array([j < len(brmas[r]) for r in region])
+        assert np.allclose(keys[has_slot, j], mean[has_slot])
+        assert np.isinf(keys[~has_slot, j]).all()
+        distinct.add(tuple(np.round(mean[has_slot], 2)))
+    assert len(distinct) == 3  # the slots really differ, so a stale cache would show
