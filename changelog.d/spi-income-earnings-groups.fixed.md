@@ -1,0 +1,1 @@
+Draw SPI incomes for the enhanced FRS's SPI-synthetic rows within earnings groups (employee, self-employed, both, neither) set by each row's FRS employment status, so employees draw pay, the self-employed draw a trade, people out of work draw no earnings, and children keep their own (zero) incomes.
