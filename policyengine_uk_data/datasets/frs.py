@@ -392,6 +392,32 @@ def derive_is_parent_from_frs_microdata(
     return is_adult_record & has_dependent_children
 
 
+def derive_is_claimant_or_partner_from_frs_microdata(
+    person_ids,
+    person_benunit_ids,
+    adult_person_ids,
+) -> np.ndarray:
+    """Identify each FRS benefit unit's single adult or couple.
+
+    An FRS benefit unit is one adult or a couple plus any dependent children.
+    The adult table holds the head (UPERSON 1) and any partner (UPERSON 2);
+    the child table holds the dependent children. Any other adult in the
+    household, such as a grown-up son or daughter, forms and heads their own
+    benefit unit. So adult-table membership is policyengine-uk's
+    `is_claimant_or_partner`, which the model otherwise infers from ages.
+    """
+
+    is_adult_record = np.isin(np.asarray(person_ids), np.asarray(adult_person_ids))
+    per_benunit = pd.Series(is_adult_record).groupby(np.asarray(person_benunit_ids))
+    counts = per_benunit.sum()
+    if not counts.between(1, 2).all():
+        raise ValueError(
+            "Every FRS benefit unit needs one or two adult-table records; "
+            f"{int((~counts.between(1, 2)).sum())} benefit units do not."
+        )
+    return is_adult_record
+
+
 def _as_non_negative_array(values) -> np.ndarray:
     values = np.asarray(values, dtype=float)
     return np.maximum(np.nan_to_num(values, nan=0.0), 0.0)
@@ -727,6 +753,13 @@ def create_frs(
         adult_person_ids=frs["adult"].person_id,
         benunit_ids=pe_benunit.benunit_id,
         dependent_children=dependent_children,
+    )
+    pe_person["is_claimant_or_partner"] = (
+        derive_is_claimant_or_partner_from_frs_microdata(
+            person_ids=pe_person.person_id,
+            person_benunit_ids=pe_person.person_benunit_id,
+            adult_person_ids=frs["adult"].person_id,
+        )
     )
     MARITAL = [
         "MARRIED",
