@@ -33,6 +33,7 @@ from policyengine_uk_data.utils.datasets import (
     STORAGE_FOLDER,
 )
 from policyengine_uk_data.parameters import load_take_up_rate, load_parameter
+from policyengine_uk_data.utils.takeup import assign_takeup_with_reported_anchors
 from policyengine_uk_data.datasets.childcare.assumptions import (
     EXTENDED_HOURS_MEAN,
     EXTENDED_HOURS_SD,
@@ -227,6 +228,24 @@ def reported_benunit_mask(
         person.loc[person[person_column] > 0, "person_benunit_id"].values
     )
     return benunit["benunit_id"].isin(reporter_benunits).values
+
+
+def assign_reported_takeup(
+    person: pd.DataFrame,
+    benunit: pd.DataFrame,
+    flag: str,
+    year: int,
+    draws: np.ndarray,
+) -> np.ndarray:
+    """Take-up for one ``REPORTED_TAKEUP_ANCHORS`` flag: benefit units
+    reporting receipt claim, and the rest are filled at random so the share
+    claiming matches the take-up rate (see ``utils/takeup.py``)."""
+    rate_name, report_column = REPORTED_TAKEUP_ANCHORS[flag]
+    return assign_takeup_with_reported_anchors(
+        draws,
+        load_take_up_rate(rate_name, year),
+        reported_mask=reported_benunit_mask(person, benunit, report_column),
+    )
 
 
 def derive_receives_benefits_in_own_right(pe_person: pd.DataFrame) -> pd.Series:
@@ -1505,9 +1524,6 @@ def create_frs(
     generator = np.random.default_rng(seed=100)
 
     # Load take-up rates from parameter files
-    child_benefit_rate = load_take_up_rate("child_benefit", year)
-    pension_credit_rate = load_take_up_rate("pension_credit", year)
-    universal_credit_rate = load_take_up_rate("universal_credit", year)
     marriage_allowance_rate = load_take_up_rate("marriage_allowance", year)
     child_benefit_opts_out_rate = load_take_up_rate("child_benefit_opts_out_rate", year)
     tfc_rate = load_take_up_rate("tax_free_childcare", year)
@@ -1525,19 +1541,6 @@ def create_frs(
     # who report positive receipt of a benefit are assigned takeup=True with
     # certainty; the remaining non-reporters are filled probabilistically to
     # hit the aggregate target rate. See policyengine_uk_data/utils/takeup.py.
-    from policyengine_uk_data.utils.takeup import (
-        assign_takeup_with_reported_anchors,
-    )
-
-    def _anchored_takeup(flag: str, rate: float) -> np.ndarray:
-        return assign_takeup_with_reported_anchors(
-            generator.random(len(pe_benunit)),
-            rate,
-            reported_mask=reported_benunit_mask(
-                pe_person, pe_benunit, REPORTED_TAKEUP_ANCHORS[flag][1]
-            ),
-        )
-
     # Person-level
     pe_person["would_claim_marriage_allowance"] = (
         generator.random(len(pe_person)) < marriage_allowance_rate
@@ -1545,17 +1548,21 @@ def create_frs(
 
     # Benefit unit-level — anchor on any adult in the benefit unit having
     # reported positive receipt in the FRS benefits table.
-    pe_benunit["would_claim_child_benefit"] = _anchored_takeup(
-        "would_claim_child_benefit", child_benefit_rate
+    pe_benunit["would_claim_child_benefit"] = assign_reported_takeup(
+        pe_person,
+        pe_benunit,
+        "would_claim_child_benefit",
+        year,
+        generator.random(len(pe_benunit)),
     )
     pe_benunit["child_benefit_opts_out"] = (
         generator.random(len(pe_benunit)) < child_benefit_opts_out_rate
     )
-    pe_benunit["would_claim_pc"] = _anchored_takeup(
-        "would_claim_pc", pension_credit_rate
+    pe_benunit["would_claim_pc"] = assign_reported_takeup(
+        pe_person, pe_benunit, "would_claim_pc", year, generator.random(len(pe_benunit))
     )
-    pe_benunit["would_claim_uc"] = _anchored_takeup(
-        "would_claim_uc", universal_credit_rate
+    pe_benunit["would_claim_uc"] = assign_reported_takeup(
+        pe_person, pe_benunit, "would_claim_uc", year, generator.random(len(pe_benunit))
     )
     pe_benunit["would_claim_tfc"] = generator.random(len(pe_benunit)) < tfc_rate
 
