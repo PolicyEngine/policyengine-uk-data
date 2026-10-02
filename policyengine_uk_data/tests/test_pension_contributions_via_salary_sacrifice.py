@@ -20,3 +20,33 @@ def test_pension_contributions_via_salary_sacrifice(baseline):
     assert total < total_employment, (
         f"Salary sacrifice contributions ({total / 1e9:.1f}B) cannot exceed total employment income ({total_employment / 1e9:.1f}B)"
     )
+
+
+def test_salary_sacrifice_needs_pay(baseline):
+    """A salary sacrifice comes out of pay: none without pay, none above it."""
+    pay = baseline.calculate("employment_income_before_lsr", period=2025).values
+    ss = baseline.calculate(
+        "pension_contributions_via_salary_sacrifice", period=2025
+    ).values
+    weight = baseline.calculate("person_weight", period=2025).values
+
+    without_pay = (ss > 0) & (pay <= 0)
+    assert not without_pay.any(), (
+        f"{without_pay.sum()} people ({weight[without_pay].sum() / 1e3:.0f}k "
+        "weighted) have salary sacrifice but no pay"
+    )
+    # Both columns uprate by the same index, so only rounding can separate them.
+    above_pay = ss > pay * (1 + 1e-9) + 1e-6
+    assert not above_pay.any(), (
+        f"{above_pay.sum()} people sacrifice more than their pay"
+    )
+
+
+def test_salary_sacrifice_cap_gives_nobody_pay_they_do_not_have(baseline):
+    """From 2029 the excess over the cap returns to pay, so it needs pay."""
+    pay = baseline.calculate("employment_income_before_lsr", period=2029).values
+    employment_income = baseline.calculate("employment_income", period=2029).values
+    phantom = (pay <= 0) & (employment_income > 0)
+    assert not phantom.any(), (
+        f"{phantom.sum()} people without pay have employment income in 2029"
+    )

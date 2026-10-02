@@ -46,6 +46,7 @@ dev = [
     "itables",
     "quantile-forest",
     "build",    "towncrier>=24.8.0",
+    "hypothesis",
 
 ]
 
