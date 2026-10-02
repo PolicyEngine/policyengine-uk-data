@@ -176,3 +176,6 @@ def test_built_dataset_roles(fixture, request):
     assert not (person.is_benunit_head & ~role).any()
     assert not (person.is_parent & ~role).any()
     assert (person.age[role] >= 16).all()
+    # FRS dependent children are 19 at most, so everyone older is in the
+    # adult table: a claimant or partner.
+    assert role[person.age >= 20].all()
