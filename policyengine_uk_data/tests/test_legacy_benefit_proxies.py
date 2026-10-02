@@ -483,6 +483,7 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
                 "cwatamtd": 0,
                 "gross4": 0,
                 "gvtregno": 1,
+                "intdate": 23650,
                 "hhrent": 0,
                 "mortint": 0,
                 "ptentyp2": 0,
@@ -518,9 +519,28 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
         "accounts": pd.DataFrame(
             columns=["person", "sernum", "accint", "acctax", "invtax", "account"]
         ),
-        "job": pd.DataFrame(columns=["person", "sernum", "deduc1", "spnamt", "salsac"]),
+        "job": pd.DataFrame(
+            columns=[
+                "person",
+                "sernum",
+                "deduc1",
+                "spnamt",
+                "salsac",
+                "jobtype",
+                "etype",
+                "sejblong",
+            ]
+        ),
         "benefits": pd.DataFrame(
-            columns=["person", "sernum", "benamt", "benefit", "var2"]
+            columns=[
+                "person",
+                "sernum",
+                "benunit",
+                "benamt",
+                "benefit",
+                "var2",
+                "ucstart",
+            ]
         ),
         "maint": pd.DataFrame(columns=["person", "sernum", "mramt", "mruamt", "mrus"]),
         "penprov": pd.DataFrame(columns=["person", "sernum", "penamt", "stemppen"]),
@@ -548,7 +568,9 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
         "age_started_or_accepted_current_education_or_training",
         "is_before_universal_credit_qualifying_young_person_terminal_date",
         "is_parent",
+        "uc_is_in_startup_period",
     }.issubset(dataset.person.columns)
+    assert not dataset.person["uc_is_in_startup_period"].iloc[0]
     assert not dataset.person["is_parent"].iloc[0]
     assert not dataset.person["is_in_non_advanced_education"].iloc[0]
     assert not dataset.person["is_in_approved_training"].iloc[0]
