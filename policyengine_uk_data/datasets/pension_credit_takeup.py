@@ -10,8 +10,8 @@ to wait for them.
 For the calibration year it:
 - finds the benefit units with positive Pension Credit entitlement;
 - keeps reporters of Pension Credit as claimants, except on SPI-synthetic
-  households, which copy an FRS household's benefit reports but replace its
-  incomes with SPI-imputed ones;
+  households, whose reports the second-stage imputation (frs_only.py)
+  predicts from their SPI incomes rather than observes;
 - solves the probability that makes weighted take-up among entitled units
   in Great Britain equal DWP's caseload take-up rate, which covers Great
   Britain only;
