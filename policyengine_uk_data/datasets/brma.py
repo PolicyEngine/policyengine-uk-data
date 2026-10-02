@@ -164,6 +164,11 @@ def household_brma_probabilities(
         if not mask.any():
             continue
         p = cell.set_index("brma").weight.reindex(brmas[cell_region]).fillna(0)
+        if not (p >= 0).all() or p.sum() <= 0:
+            raise ValueError(
+                f"No BRMA weights for region × LHA category cells "
+                f"{[(cell_region, category)]}."
+            )
         p = np.pad(p.to_numpy(float) / p.sum(), (0, width - len(p)))
         np.add.at(probabilities, benunit_household[mask], p)
         covered |= mask
@@ -262,10 +267,14 @@ def split_private_renters_across_brmas(
     BRMA. Every household gets ``BRMA_SPLIT_GROUP_COLUMN``: the id of the
     household its record came from.
 
-    Copies offset household ids by ``i * step``, benefit unit ids by
-    ``i * step * 100`` and person ids by ``i * step * 1000`` (``step`` a power
-    of ten above every household id, raised if needed so no id collides), so
-    ``benunit_id // 100 == household_id`` still holds wherever it held.
+    Copies offset household ids by ``i * step`` (``step`` a power of ten above
+    every household id), benefit unit ids by ``i * step * 100`` and person ids
+    by ``i * step * 1000``, each raised to a power of ten above that table's
+    largest id if needed so no id collides. When no raise is needed,
+    ``benunit_id // 100 == household_id`` still holds wherever it held. Every
+    benefit unit must have at least one person. Each record also gets
+    ``source_household_id``, the household it came from, which the OA clone
+    step keeps, so split records count as one source household.
 
     Returns:
         The new dataset. With ``k == 1`` it is the input plus the group column.
@@ -275,6 +284,7 @@ def split_private_renters_across_brmas(
 
     household = dataset.household.copy()
     household[BRMA_SPLIT_GROUP_COLUMN] = household.household_id.to_numpy()
+    household["source_household_id"] = household.household_id.to_numpy()
     if k == 1:
         return UKSingleYearDataset(
             person=dataset.person,
@@ -282,17 +292,39 @@ def split_private_renters_across_brmas(
             household=household,
             fiscal_year=dataset.time_period,
         )
+    person, benunit = dataset.person, dataset.benunit
+    owner = (
+        person.drop_duplicates("person_benunit_id")
+        .set_index("person_benunit_id")
+        .person_household_id
+    )
+    empty = ~benunit.benunit_id.isin(owner.index)
+    if empty.any():
+        raise ValueError(
+            f"{int(empty.sum())} benefit units have no people; every benefit "
+            "unit needs one to place it in a household."
+        )
+    benunit_owner = owner.loc[benunit.benunit_id].to_numpy()
+    renter = household.tenure_type.astype(str).to_numpy() == "RENT_PRIVATELY"
+    if not renter.any():
+        return UKSingleYearDataset(
+            person=person,
+            benunit=benunit,
+            household=household,
+            fiscal_year=dataset.time_period,
+        )
     year = int(dataset.time_period)
     simulation = Microsimulation(dataset=dataset)
     region = np.asarray(simulation.calculate("region", year)).astype(str)
-    renter = (
-        np.asarray(simulation.calculate("tenure_type", year)).astype(str)
-        == "RENT_PRIVATELY"
-    )
-    benunit_household = pd.Series(
+    position = pd.Series(
         np.arange(len(household)), index=household.household_id.to_numpy()
-    ).loc[np.asarray(simulation.populations["benunit"].household("household_id", year))]
-    benunit_household = benunit_household.to_numpy()
+    )
+    benunit_household = position.loc[benunit_owner].to_numpy()
+    sim_order = np.asarray(simulation.calculate("benunit_id", year))
+    if not np.array_equal(sim_order, benunit.benunit_id.to_numpy()):
+        raise ValueError(
+            "The simulation's benefit units are not in the dataset's order."
+        )
     category = np.asarray(simulation.calculate("LHA_category", year)).astype(str)
     brmas, probabilities = household_brma_probabilities(
         region, benunit_household, category, weights
@@ -308,16 +340,8 @@ def split_private_renters_across_brmas(
         dtype=object,
     ).reshape(-1, k)
 
-    person, benunit = dataset.person, dataset.benunit
     renter_ids = household.household_id.to_numpy()[renter]
-    benunit_of = (
-        person.drop_duplicates("person_benunit_id")
-        .set_index("person_benunit_id")
-        .person_household_id
-    )
-    renter_benunits = benunit[
-        np.isin(benunit_of.loc[benunit.benunit_id].to_numpy(), renter_ids)
-    ]
+    renter_benunits = benunit[np.isin(benunit_owner, renter_ids)]
     renter_people = person[person.person_household_id.isin(renter_ids)]
     step = 10 ** len(str(int(household.household_id.max())))
     benunit_step = max(step * 100, 10 ** len(str(int(benunit.benunit_id.max()))))

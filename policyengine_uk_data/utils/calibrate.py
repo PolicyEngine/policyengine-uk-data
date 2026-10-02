@@ -183,7 +183,9 @@ class RecordGroups:
         """Group weights (last axis) to records, split equally."""
         if self.identity:
             return weights
-        return np.asarray(weights)[..., self.codes] / self.sizes[self.codes]
+        weights = np.asarray(weights)
+        sizes = self.sizes[self.codes].astype(weights.dtype, copy=False)
+        return weights[..., self.codes] / sizes
 
 
 def _as_bool_mask(series: pd.Series) -> np.ndarray:
@@ -308,7 +310,11 @@ def calibrate_local_areas(
         )
         if groups is not None:
             r = np.asarray(r)
-            if not (r == r[:, record_groups.first[record_groups.codes]]).all():
+            # One fingerprint per record's area mask; a group's must all agree.
+            fingerprint = r.T @ np.random.default_rng(0).random(r.shape[0])
+            if not np.allclose(
+                fingerprint, fingerprint[record_groups.first[record_groups.codes]]
+            ):
                 raise ValueError("A record group spans areas of different countries.")
             matrix = record_groups.means(matrix)
             r = r[:, record_groups.first]
@@ -489,7 +495,7 @@ def calibrate_local_areas(
 
         diagnostics = _household_weight_diagnostics(
             dataset,
-            record_groups.expand(final_weights).sum(axis=0),
+            record_groups.expand(final_weights.sum(axis=0)),
             record_groups.expand(household_prior_weights),
         )
         for key, value in diagnostics.items():
@@ -549,8 +555,8 @@ def calibrate_local_areas(
                         )
 
                     dataset.household.household_weight = record_groups.expand(
-                        final_weights
-                    ).sum(axis=0)
+                        final_weights.sum(axis=0)
+                    )
     else:
         for epoch in range(epochs):
             optimizer.zero_grad()
@@ -593,7 +599,7 @@ def calibrate_local_areas(
                     )
 
                 dataset.household.household_weight = record_groups.expand(
-                    final_weights
-                ).sum(axis=0)
+                    final_weights.sum(axis=0)
+                )
 
     return dataset
