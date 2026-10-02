@@ -42,3 +42,38 @@ def test_output_is_sentinel_or_non_negative_for_random_inputs():
         keep = np.isfinite(values) & (values >= 0)
         np.testing.assert_array_equal(result[keep], values[keep])
         assert np.all(result[~keep] == -1)
+
+
+def test_uprating_rows_match_savings():
+    """The column grows with ``savings`` (policyengine-uk uprates it with the
+    same per-capita GDP index), so the build's uprating keeps them in step."""
+    from policyengine_uk_data.storage import STORAGE_FOLDER
+
+    for name in ["uprating_factors.csv", "uprating_growth_factors.csv"]:
+        table = pd.read_csv(STORAGE_FOLDER / name).set_index("Variable")
+        pd.testing.assert_series_equal(
+            table.loc["pension_credit_reported_capital"],
+            table.loc["savings"],
+            check_names=False,
+        )
+
+
+def test_spi_copy_records_no_capital():
+    """SPI-synthetic copies carry SPI-imputed incomes, so the FRS donor's
+    capital is cleared to -1 (household proxy) on them."""
+    from types import SimpleNamespace
+
+    from policyengine_uk_data.datasets.imputations.income import (
+        clear_frs_reported_capital,
+    )
+
+    copy = SimpleNamespace(
+        benunit=pd.DataFrame({"pension_credit_reported_capital": [0.0, 300.0, -1.0]})
+    )
+    assert clear_frs_reported_capital(copy).benunit[
+        "pension_credit_reported_capital"
+    ].tolist() == [-1.0, -1.0, -1.0]
+    without = SimpleNamespace(benunit=pd.DataFrame({"benunit_id": [1, 2]}))
+    assert "pension_credit_reported_capital" not in (
+        clear_frs_reported_capital(without).benunit.columns
+    )
