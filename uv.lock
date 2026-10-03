@@ -1322,7 +1322,7 @@ wheels = [
 
 [[package]]
 name = "policyengine-core"
-version = "3.32.12"
+version = "3.32.13"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "dpath" },
@@ -1342,9 +1342,9 @@ dependencies = [
     { name = "standard-imghdr" },
     { name = "wheel" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e3/cd/2e9c7e4a0c4395a0d556cebde1fa92b94c4c2c594815938e5bfd052b3b47/policyengine_core-3.32.12.tar.gz", hash = "sha256:1d163936b3e4b2704cf0fe33eee3b93832a84aa4bf027b552a745d6f6d35bad8", size = 451537, upload-time = "2026-10-02T04:58:58.42Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/40/0a/b6c27953e1083d3ab2c40330c49580130fff48a2fe9cbfc8d731e92882e6/policyengine_core-3.32.13.tar.gz", hash = "sha256:a870f7e212fdfa1b5fdad7df92aa2b325fd0280ede16a40aeeceea74d44fb864", size = 457899, upload-time = "2026-10-03T11:30:20.572Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/36/9e/f8f41e2f33454be51e9116c1b96db77ec9982d5d97d8691a0d8bd7b35b99/policyengine_core-3.32.12-py3-none-any.whl", hash = "sha256:44f0cdc100ff171f107671965bdbb41aa0c9965f632e400734e9eb2bf6ed80ee", size = 250582, upload-time = "2026-10-02T04:58:56.986Z" },
+    { url = "https://files.pythonhosted.org/packages/d8/01/00ebf4c13152347bc5396b40e80445fa92ea96712b9ec0bfdca7c5d11413/policyengine_core-3.32.13-py3-none-any.whl", hash = "sha256:262543c3ac696207f304f55664711b72e894fbad7b566407afa9d30b16086a41", size = 251251, upload-time = "2026-10-03T11:30:19.171Z" },
 ]
 
 [[package]]

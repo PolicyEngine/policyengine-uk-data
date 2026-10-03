@@ -1,1 +1,1 @@
-Carry each benefit unit's FRS total capital (TOTCAPB3) into policyengine-uk's `pension_credit_reported_capital`, so Pension Credit's capital test uses the survey's own benefit-unit capital instead of imputed household wealth.
+Carry each benefit unit's FRS total capital (TOTCAPB4, DWP's current benefit-unit savings and investments measure; TOTCAPB3 for earlier survey years) into policyengine-uk's `pension_credit_reported_capital`, so Pension Credit's capital test uses the survey's own benefit-unit capital instead of imputed household wealth.

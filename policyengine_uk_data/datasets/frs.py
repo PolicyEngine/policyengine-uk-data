@@ -573,25 +573,31 @@ def validate_frs_survey_year(raw_frs_folder, year: int) -> None:
 def derive_pension_credit_reported_capital(benunit: pd.DataFrame) -> np.ndarray:
     """Each benefit unit's capital as the FRS records it, for Pension Credit.
 
-    ``TOTCAPB3`` is DWP's derived benefit-unit total of the adults' savings and
-    investments (current, savings and NS&I accounts, gilts, unit and investment
-    trusts, shares and bonds, ISAs, credit unions), the measure its FRS-based
-    National Statistics use. Pension Credit counts the claimant's capital and,
-    under the State Pension Credit Act 2002 s. 5, the partner's, which is what
-    this records. The household wealth imputation instead draws a household's
-    wealth from Wealth and Assets Survey households with similar income,
-    composition, tenure and region, with no information on means-tested
-    receipt, and policyengine-uk spreads it over the household's pension-age
-    adults.
+    Uses ``TOTCAPB4``, DWP's derived benefit-unit total of the adults' savings
+    and investments, which its below-average-resources statistics use in place
+    of ``TOTCAPB3`` since it became available in 2019/20; ``TOTCAPB3`` is the
+    fallback for earlier survey years. Pension Credit counts the claimant's
+    capital and, under the State Pension Credit Act 2002 s. 5, the partner's,
+    and this is a benefit-unit measure. It is an approximation of Pension
+    Credit capital, not the assessed figure: it covers financial assets only
+    (second homes and land, which Pension Credit also counts, are not in it),
+    and no Schedule V disregard or reg. 19 valuation is applied to it. The
+    household wealth imputation instead draws a household's wealth from Wealth
+    and Assets Survey households with similar income, composition, tenure and
+    region, with no information on means-tested receipt, and policyengine-uk
+    spreads it over the household's pension-age adults.
 
-    ``TOTCAPB3`` covers financial assets only: second homes and land, which
-    Pension Credit also counts, are not in it. A missing or negative value gives
-    -1, so policyengine-uk falls back to the household proxy.
+    A missing or negative value gives -1, so policyengine-uk falls back to the
+    household proxy.
     """
-    if "totcapb3" not in benunit.columns:
-        return np.full(len(benunit), -1.0)
-    capital = pd.to_numeric(benunit["totcapb3"], errors="coerce").to_numpy(dtype=float)
-    return np.where(np.isfinite(capital) & (capital >= 0), capital, -1.0)
+    capital = pd.Series(np.nan, index=benunit.index, dtype=float)
+    for column in ("totcapb3", "totcapb4"):  # later columns take precedence
+        if column in benunit.columns:
+            values = pd.to_numeric(benunit[column], errors="coerce")
+            valid = np.isfinite(values) & (values >= 0)
+            capital = capital.where(~valid, values)
+    values = capital.to_numpy(dtype=float)
+    return np.where(np.isfinite(values) & (values >= 0), values, -1.0)
 
 
 def create_frs(
