@@ -43,7 +43,13 @@ INDEXED = [column for column in IMPUTATIONS if column not in SPI_NOMINAL_IMPUTAT
 FRS_YEAR = CURRENT_FRS_RELEASE.survey_year
 
 years = st.integers(START_YEAR, END_YEAR)
-money = st.floats(-1e10, 1e10, allow_nan=False, allow_infinity=False)
+# Subnormal floats (below ~2.2e-308) carry too few significant bits to keep a
+# relative tolerance through two multiplications: Hypothesis found
+# 2.2e-313 rebased 2022 -> 2020 -> 2021 off by 2e-11 relative. No amount of
+# money is subnormal, so they are excluded rather than loosening the bound.
+money = st.floats(
+    -1e10, 1e10, allow_nan=False, allow_infinity=False, allow_subnormal=False
+)
 pennies = st.integers(-(10**11), 10**11).map(lambda p: p / 100)
 
 
