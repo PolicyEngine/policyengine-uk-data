@@ -53,6 +53,10 @@ ESA_HEALTH_EMPLOYMENT_STATUSES = (
     EmploymentStatus.LONG_TERM_DISABLED.name,
     EmploymentStatus.SHORT_TERM_DISABLED.name,
 )
+SELF_EMPLOYED_STATUSES = (
+    EmploymentStatus.FT_SELF_EMPLOYED.name,
+    EmploymentStatus.PT_SELF_EMPLOYED.name,
+)
 FORMULA_MODELED_EDUCATION_GRANT_VARIABLES = (
     "childcare_grant",
     "parents_learning_allowance",
@@ -390,6 +394,39 @@ def derive_is_parent_from_frs_microdata(
     )
     is_adult_record = np.isin(np.asarray(person_ids), np.asarray(adult_person_ids))
     return is_adult_record & has_dependent_children
+
+
+def derive_uc_is_in_gainful_self_employment(
+    employment_status, self_employment_income, employment_income
+) -> np.ndarray:
+    """Whether each person is in gainful self-employment for Universal Credit.
+
+    UC Regs 2013 reg 64(a) asks whether the person carries on a trade as their
+    main employment. DWP's Advice for Decision Making starts from hours
+    (H4031) but lets earnings outweigh them: someone who works more hours as
+    an employee but earns more from self-employment is likely to be gainfully
+    self-employed (H4034). So the flag is true for:
+
+    - a self-employed main job (FRS EMPSTATI, the job the respondent names as
+      their dominant activity, else the one with more hours), whatever its
+      profit: a trade can make a loss or break even and still be carried on
+      in expectation of profit (ADM H4013, H4054, H4503);
+    - a side trade whose profit is above the person's employment income.
+
+    policyengine-uk's default reads any self-employment income other than
+    zero as gainful self-employment, and none as none.
+
+    The flag is fixed from survey-year (or SPI-imputed) incomes. Uprating
+    reprices the two incomes by different indices, so in a projected year a
+    flagged side trade can earn less than the job, and the reverse; the flag
+    does not follow.
+    """
+    self_employed_main_job = np.isin(
+        np.asarray(employment_status, dtype=object), SELF_EMPLOYED_STATUSES
+    )
+    profit = np.asarray(self_employment_income, dtype=float)
+    pay = np.asarray(employment_income, dtype=float)
+    return self_employed_main_job | ((profit > 0) & (profit > pay))
 
 
 def _as_non_negative_array(values) -> np.ndarray:
@@ -1045,6 +1082,15 @@ def create_frs(
     ) * WEEKS_IN_YEAR
 
     pe_person["self_employment_income"] = np.maximum(0, person.seincam2) * WEEKS_IN_YEAR
+    # policyengine-uk releases without this input skip the column and keep
+    # their formula.
+    pe_person["uc_is_in_gainful_self_employment"] = (
+        derive_uc_is_in_gainful_self_employment(
+            pe_person.employment_status,
+            pe_person.self_employment_income,
+            pe_person.employment_income,
+        )
+    )
 
     INVERTED_BASIC_RATE = 1.25
 

@@ -292,6 +292,23 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         target_dataset=zero_weight_copy,
     )
 
+    # The copy keeps its FRS donor's employment status but now has SPI
+    # incomes, so derive its gainful self-employment flag again from the
+    # copy's own values.
+    if "uc_is_in_gainful_self_employment" in zero_weight_copy.person.columns:
+        from policyengine_uk_data.datasets.frs import (
+            derive_uc_is_in_gainful_self_employment,
+        )
+
+        person = zero_weight_copy.person
+        person["uc_is_in_gainful_self_employment"] = (
+            derive_uc_is_in_gainful_self_employment(
+                person.employment_status,
+                person.self_employment_income,
+                person.employment_income,
+            )
+        )
+
     dataset = impute_over_incomes(
         dataset,
         model,
