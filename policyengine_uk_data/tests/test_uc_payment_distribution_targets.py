@@ -4,7 +4,6 @@ The Stat-Xplore extract (storage/uc_national_payment_dist.xlsx, May 2025)
 counts households on UC by monthly award band and family type. Its top band,
 '£2500.01 or over', is open-ended; it used to parse to NaN bounds, so its four
 targets (1.4k to 83k households) had a column of zeros and could never be met.
-The other bands keep their bounds: [monthly minimum, monthly maximum) x 12.
 """
 
 from types import SimpleNamespace
@@ -42,16 +41,21 @@ def _raw_extract() -> pd.DataFrame:
 
 
 def test_parse_monthly_award_band():
-    # The bounded bands are parsed exactly as before this change.
-    for band, (low, high) in {
-        "£0.01 to £100.00": (0.01, 100.00),
-        "£100.01 to £200.00": (100.01, 200.00),
-        "£1000.01 to £1100.00": (1000.01, 1100.00),
-    }.items():
-        assert parse_monthly_award_band(band) == (low * 12, high * 12)
-    assert parse_monthly_award_band("£2,500.01 or over") == (2500.01 * 12, np.inf)
+    assert parse_monthly_award_band("£0.01 to £100.00") == (0, 1_200)
+    assert parse_monthly_award_band("£100.01 to £200.00") == (1_200, 2_400)
+    assert parse_monthly_award_band("£1000.01 to £1100.00") == (12_000, 13_200)
+    assert parse_monthly_award_band("£2,500.01 or over") == (30_000, np.inf)
     with pytest.raises(ValueError):
         parse_monthly_award_band("No payment")
+
+
+@pytest.mark.parametrize(
+    "band",
+    ["£nan or over", "£inf or over", "£100.01 to £99.00", "£1.00 to £nan"],
+)
+def test_invalid_bands_are_rejected(band):
+    with pytest.raises(ValueError):
+        parse_monthly_award_band(band)
 
 
 def test_top_band_targets_are_reachable():
@@ -61,7 +65,7 @@ def test_top_band_targets_are_reachable():
         target = targets[
             f"dwp/uc_payment_dist/{family_type}_annual_payment_30_000_to_inf"
         ]
-        assert target.lower_bound == 2500.01 * 12
+        assert target.lower_bound == 30_000
         assert target.upper_bound == np.inf
         assert target.values[2025] == top[label]
     for target in targets.values():
@@ -85,14 +89,13 @@ def test_band_counts_sum_to_households_with_a_payment():
         assert abs(parsed.household_count.sum() - with_payment) <= 10, label
 
 
-def test_bands_run_from_a_penny_to_infinity_without_overlap():
-    """Each band starts a penny a month (12p a year) above the last one ends."""
+def test_bands_tile_the_positive_awards():
     for family_type, bands in uc_national_payment_dist.groupby("family_type"):
         bands = bands.sort_values("uc_annual_payment_min")
         lower = bands.uc_annual_payment_min.to_numpy()
         upper = bands.uc_annual_payment_max.to_numpy()
-        assert lower[0] == pytest.approx(0.12), family_type
-        np.testing.assert_allclose(lower[1:] - upper[:-1], 0.12, atol=1e-6)
+        assert lower[0] == 0, family_type
+        assert np.array_equal(lower[1:], upper[:-1]), family_type
         assert upper[-1] == np.inf, family_type
 
 
@@ -123,62 +126,64 @@ def _fake_ctx(uc, family_type, household):
 
 
 _TARGETS = _uc_payment_distribution_targets()
-_EDGES = sorted(
-    {t.lower_bound for t in _TARGETS}
-    | {t.upper_bound for t in _TARGETS if np.isfinite(t.upper_bound)}
-)
+_EDGES = sorted({t.upper_bound for t in _TARGETS if np.isfinite(t.upper_bound)})
 _AWARDS = st.one_of(
     st.just(0.0),  # no payment
     st.floats(0, 1e6, allow_nan=False),  # anywhere, including the open top band
     st.sampled_from(_EDGES),  # exactly on a band edge
     st.sampled_from(_EDGES).map(lambda edge: np.nextafter(edge, np.inf)),
     st.sampled_from(_EDGES).map(lambda edge: np.nextafter(edge, -np.inf)),
+    st.sampled_from(_EDGES).map(lambda e: np.nextafter(np.float32(e), np.inf)),
+    st.sampled_from(_EDGES).map(lambda e: np.nextafter(np.float32(e), -np.inf)),
+)
+_BENEFIT_UNITS = st.lists(
+    st.tuples(_AWARDS, st.sampled_from(list(FAMILY_TYPES.values())), st.integers(0, 9)),
+    min_size=1,
+    max_size=60,
 )
 
 
-def _band_count(uc, family_type):
-    """Oracle: how many of the family type's bands hold each award, by an
-    interval search rather than the compute function's comparisons."""
-    count = np.zeros(len(uc))
+def _oracle_band(uc, family_type):
+    """Target name of the band holding each award (None for no payment), found
+    by searching the family type's sorted upper bounds rather than by the
+    compute function's comparisons."""
+    names = np.full(len(uc), None, dtype=object)
     for ft in np.unique(family_type):
         bands = sorted(
-            (t.lower_bound, t.upper_bound)
+            (t.upper_bound, t.lower_bound, t.name)
             for t in _TARGETS
             if t.name.removeprefix("dwp/uc_payment_dist/").startswith(ft + "_annual")
         )
-        lower = np.array([b[0] for b in bands])
-        upper = np.array([b[1] for b in bands])
+        upper = np.array([b[0] for b in bands])
         m = family_type == ft
-        i = np.searchsorted(lower, uc[m], side="right") - 1
-        count[m] = (i >= 0) & (uc[m] < upper[np.maximum(i, 0)])
-    return count
+        i = np.searchsorted(upper, uc[m], side="left")
+        names[m] = [
+            bands[k][2] if k < len(bands) and award > bands[k][1] else None
+            for k, award in zip(i, uc[m])
+        ]
+    return names
 
 
 @settings(max_examples=200, deadline=None)
-@given(
-    st.lists(
-        st.tuples(
-            _AWARDS, st.sampled_from(list(FAMILY_TYPES.values())), st.integers(0, 9)
-        ),
-        min_size=1,
-        max_size=60,
-    )
-)
-def test_each_award_lands_in_at_most_one_band(benefit_units):
-    """Property: summed over the bands, each household's column counts its
-    benefit units whose award lies in one of their family type's bands, once
-    (differential against an interval-search oracle). Awards from the top
-    band's lower bound up are always counted; zero awards never are."""
+@given(_BENEFIT_UNITS, st.booleans())
+def test_each_award_lands_in_its_own_band(benefit_units, as_float32):
+    """Property: every target's column counts exactly the household's benefit
+    units whose award an interval search places in that target's band (so no
+    award is counted twice, moved to a neighbouring band, or lost), for float64
+    and float32 awards, on band edges and one ulp either side."""
     uc, family_type, household = (np.array(column) for column in zip(*benefit_units))
-    uc = uc.astype(float)
+    uc = uc.astype(np.float32 if as_float32 else float)
     ctx = _fake_ctx(uc, family_type, household)
+    band = _oracle_band(uc, family_type)
 
-    per_target = [compute_uc_payment_dist(t, ctx) for t in _TARGETS]
-    total = sum(per_target)
-    in_band = _band_count(uc, family_type)
-    expected = np.bincount(household, weights=in_band, minlength=len(total))
-    np.testing.assert_array_equal(total, expected)
-
-    top = 2500.01 * 12
-    assert (in_band[uc >= top] == 1).all()
-    assert (in_band[uc == 0] == 0).all()
+    for target in _TARGETS:
+        expected = np.bincount(
+            household,
+            weights=(band == target.name).astype(float),
+            minlength=household.max() + 1,
+        )
+        np.testing.assert_array_equal(
+            compute_uc_payment_dist(target, ctx), expected, err_msg=target.name
+        )
+    # Every positive award is in some band; no payment is in none.
+    assert all((b is not None) == (award > 0) for b, award in zip(band, uc))

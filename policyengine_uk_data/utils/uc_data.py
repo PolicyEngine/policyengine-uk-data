@@ -4,29 +4,34 @@ from pathlib import Path
 
 
 def parse_monthly_award_band(band: str) -> tuple[float, float]:
-    """Annual [lower, upper) payment bounds of a Stat-Xplore monthly award band.
+    """Annual (lower, upper] payment bounds of a Stat-Xplore monthly award band.
 
-    '£100.01 to £200.00' gives (1,200.12, 2,400). The open top band
-    '£2500.01 or over' gives (30,000.12, inf); it used to parse to missing
-    bounds, so its targets could never be met.
+    Awards are whole pence, so the band '£100.01 to £200.00' holds monthly
+    awards over £100.00 and up to £200.00: annual bounds (1,200, 2,400]. The
+    lower bound is the previous band's top, so consecutive bands meet with no
+    gap. The open top band '£2500.01 or over' is (30,000, inf).
     """
     text = band.replace("£", "").replace(",", "").strip()
     if text.endswith(" or over"):
-        return float(text.removesuffix(" or over")) * 12, np.inf
-    parts = text.split(" to ")
-    if len(parts) != 2:
-        raise ValueError(f"Unrecognised UC monthly award band: {band!r}")
-    lower, upper = (float(part) * 12 for part in parts)
+        lower, upper = float(text.removesuffix(" or over")), np.inf
+    else:
+        parts = text.split(" to ")
+        if len(parts) != 2:
+            raise ValueError(f"Unrecognised UC monthly award band: {band!r}")
+        lower, upper = float(parts[0]), float(parts[1]) * 12
+    lower = round((lower - 0.01) * 12, 2)
+    if not (np.isfinite(lower) and lower >= 0 and upper > lower):
+        raise ValueError(f"Invalid UC monthly award band: {band!r}")
     return lower, upper
 
 
 def _check_bands_disjoint(bands: pd.DataFrame) -> None:
     """Fail if any family type's payment bands overlap.
 
-    Stat-Xplore also lists summary bands ('£1500.01 or over') that span the
-    finer bands below them. They are suppressed ('..') in the committed
-    extract; if a new extract filled one in, counting it as well would double
-    count those households.
+    Stat-Xplore's '£1500.01 or over' band is its top band for months up to
+    August 2022 and spans the finer bands added from September 2022. It is
+    suppressed ('..') in the committed extract; if a new extract filled it
+    in, counting it as well would double count those households.
     """
     for family_type, group in bands.groupby("family_type"):
         group = group.sort_values("uc_annual_payment_min")

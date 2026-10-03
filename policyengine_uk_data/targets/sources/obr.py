@@ -455,13 +455,14 @@ def _parse_nics(wb: openpyxl.Workbook) -> list[Target]:
     return targets
 
 
-def _universal_credit_rows(ws, max_row: int = 55) -> tuple[int, int]:
+def _universal_credit_rows(ws) -> tuple[int, int]:
     """Table 4.9's universal credit rows inside and outside the welfare cap.
 
     Each section has exactly one row starting "Universal credit"; the
     outside-the-cap section starts at the row headed "Welfare spending
     outside the welfare cap".
     """
+    max_row = ws.max_row
     boundary = _find_row(
         ws, "Welfare spending outside the welfare cap", max_row=max_row
     )

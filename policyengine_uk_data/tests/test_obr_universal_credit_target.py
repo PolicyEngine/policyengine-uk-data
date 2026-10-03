@@ -7,20 +7,23 @@ identify the Intensive Work Search group, so the two rows are one target:
 GB universal credit, the sum of both rows.
 """
 
+from functools import lru_cache
 from types import SimpleNamespace
 
 import numpy as np
 import openpyxl
+import pandas as pd
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from policyengine_uk_data.storage import STORAGE_FOLDER
+from policyengine_uk_data.targets import build_loss_matrix
 from policyengine_uk_data.targets.build_loss_matrix import (
     _compute_column,
     restrict_to_countries,
 )
-from policyengine_uk_data.targets.schema import GREAT_BRITAIN
+from policyengine_uk_data.targets.schema import GREAT_BRITAIN, GeographicLevel
 from policyengine_uk_data.targets.sources import obr
 
 COUNTRIES = ("ENGLAND", "SCOTLAND", "WALES", "NORTHERN_IRELAND")
@@ -33,6 +36,11 @@ def _committed_table() -> openpyxl.Workbook:
 
 def _uc_targets(wb) -> dict:
     return {t.name: t for t in obr._parse_welfare(wb) if "universal_credit" in t.name}
+
+
+@lru_cache(maxsize=1)
+def _committed_target():
+    return _uc_targets(_committed_table())["obr/universal_credit"]
 
 
 def test_universal_credit_is_one_gb_target():
@@ -115,6 +123,78 @@ def test_no_target_unless_both_rows_are_unambiguous(rows):
     assert _uc_targets(_table(rows)) == {}
 
 
+def test_no_target_when_the_rows_cover_different_years():
+    wb = _table(
+        [
+            ("Universal credit", 60.0),
+            ("Welfare spending outside the welfare cap", None),
+            ("Universal credit", 10.0),
+        ]
+    )
+    wb["4.9"]["I8"] = None  # 2030-31 missing from the outside-the-cap row only
+    assert _uc_targets(wb) == {}
+
+
+def test_rows_below_row_55_are_found():
+    padding = [(f"Other benefit {i}", 1.0) for i in range(60)]
+    wb = _table(
+        [("Universal credit", 60.0)]
+        + padding
+        + [("Welfare spending outside the welfare cap", None)]
+        + padding
+        + [("Universal credit", 10.0)]
+    )
+    target = _uc_targets(wb)["obr/universal_credit"]
+    assert set(target.values.values()) == {70e9}
+
+
+def test_target_matrix_counts_gb_households_only(monkeypatch):
+    """Through create_target_matrix itself: England has two benefit units on
+    UC, Northern Ireland and Wales one each, Scotland none."""
+    import policyengine_uk
+
+    target = _committed_target()
+    uc = pd.Series([100.0, 50.0, 300.0, 20.0])
+    benunit_household = np.array([0, 0, 1, 2])
+    country = pd.Series(["ENGLAND", "NORTHERN_IRELAND", "WALES", "SCOTLAND"])
+
+    class FakeMicrosimulation:
+        tax_benefit_system = SimpleNamespace(
+            variables={
+                "universal_credit": SimpleNamespace(
+                    entity=SimpleNamespace(key="benunit")
+                )
+            }
+        )
+
+        def __init__(self, dataset=None, reform=None):
+            pass
+
+        def calculate(self, variable, *args, **kwargs):
+            return {"universal_credit": uc, "country": country}[variable]
+
+        def map_result(self, values, source, target_entity):
+            assert (source, target_entity) == ("benunit", "household")
+            return np.bincount(
+                benunit_household, weights=np.asarray(values), minlength=len(country)
+            )
+
+    monkeypatch.setattr(policyengine_uk, "Microsimulation", FakeMicrosimulation)
+    monkeypatch.setattr(
+        build_loss_matrix,
+        "get_all_targets",
+        lambda geographic_level=None: (
+            [target] if geographic_level == GeographicLevel.NATIONAL else []
+        ),
+    )
+
+    matrix, values = build_loss_matrix.create_target_matrix(
+        SimpleNamespace(time_period="2025"), time_period="2025"
+    )
+    np.testing.assert_array_equal(matrix["obr/universal_credit"], [150, 0, 20, 0])
+    assert values["obr/universal_credit"] == target.values[2025]
+
+
 def _fake_ctx(uc, benunit_household, household_country):
     n_households = len(household_country)
     variables = {
@@ -154,7 +234,7 @@ def test_column_counts_gb_universal_credit_once(case):
     benunit_household = np.array([h for h, _ in benunits], dtype=int)
     uc = np.array([amount for _, amount in benunits], dtype=float)
     ctx = _fake_ctx(uc, benunit_household, household_country)
-    target = _uc_targets(_committed_table())["obr/universal_credit"]
+    target = _committed_target()
 
     column = restrict_to_countries(
         _compute_column(target, ctx, 2025), ctx.country, target.countries
