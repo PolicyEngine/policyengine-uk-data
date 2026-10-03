@@ -13,8 +13,11 @@ Invariants, for any weekly profit (including missing values):
 And for the built datasets:
 
 4. No FRS person has both a profit and a loss, and no loss is negative.
-5. SPI-donor rows of the enhanced FRS carry no trading loss; their
-   self-employment profits come from the SPI, not their FRS donor.
+5. The same holds on the SPI-donor rows of the enhanced FRS, whose losses the
+   second-stage QRF imputes from FRS respondents with similar incomes.
+
+The data checks assert on counts only, so a failure never prints a record's
+amounts (the FRS is licensed microdata).
 """
 
 import numpy as np
@@ -60,16 +63,24 @@ def test_split_is_monotone_in_reported_profit(weekly, rise):
     assert np.all(higher_loss <= loss)
 
 
+def _violations(person, mask=None) -> dict:
+    income = person["self_employment_income"].to_numpy()
+    loss = person["trading_loss"].to_numpy()
+    keep = np.ones(len(person), dtype=bool) if mask is None else mask
+    return {
+        "negative_loss": int((loss[keep] < 0).sum()),
+        "profit_and_loss": int(((income > 0) & (loss > 0))[keep].sum()),
+    }
+
+
 def test_frs_profit_and_loss_never_both_positive(frs):
     if "trading_loss" not in frs.person.columns:
         pytest.skip("Dataset built before trading_loss was added")
-    income = frs.person["self_employment_income"].to_numpy()
-    loss = frs.person["trading_loss"].to_numpy()
-    assert loss.min() >= 0
-    assert not np.any((income > 0) & (loss > 0))
+    counts = _violations(frs.person)
+    assert counts == {"negative_loss": 0, "profit_and_loss": 0}, counts
 
 
-def test_spi_donor_rows_carry_no_trading_loss(enhanced_frs):
+def test_spi_donor_rows_never_have_both(enhanced_frs):
     person = enhanced_frs.person
     if "trading_loss" not in person.columns:
         pytest.skip("Dataset built before trading_loss was added")
@@ -78,7 +89,7 @@ def test_spi_donor_rows_carry_no_trading_loss(enhanced_frs):
         household.household_is_spi_synthetic.astype(bool)
     ]
     synthetic = person.person_household_id.isin(synthetic_households).to_numpy()
-    loss = person["trading_loss"].to_numpy()
-    assert synthetic.any(), "expected SPI-donor rows in the enhanced FRS"
-    assert np.all(loss[synthetic] == 0)
-    assert loss.min() >= 0
+    assert int(synthetic.sum()) > 0, "expected SPI-donor rows in the enhanced FRS"
+    counts = _violations(person, synthetic)
+    assert counts == {"negative_loss": 0, "profit_and_loss": 0}, counts
+    assert _violations(person)["negative_loss"] == 0

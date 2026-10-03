@@ -292,12 +292,15 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         target_dataset=zero_weight_copy,
     )
 
-    # A trading loss belongs with the self-employment profit it came from.
-    # The SPI-donor rows' profits now come from the SPI, which this build
-    # does not draw losses from, so the FRS donor's loss would sit beside
-    # another taxpayer's imputed incomes. They carry none.
+    # The second stage imputes trading_loss from FRS respondents with similar
+    # demographics and imputed incomes (the SPI has no current-year loss).
+    # SEINCAM2 nets a person's trades, so an FRS respondent has a profit or a
+    # loss, never both; keep the SPI-donor rows the same.
     if "trading_loss" in zero_weight_copy.person.columns:
-        zero_weight_copy.person["trading_loss"] = 0.0
+        person = zero_weight_copy.person
+        person["trading_loss"] = np.where(
+            person["self_employment_income"] > 0, 0.0, person["trading_loss"]
+        )
 
     dataset = impute_over_incomes(
         dataset,
