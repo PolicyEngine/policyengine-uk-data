@@ -210,7 +210,7 @@ def adult(
     )
 
 
-def start_up_flags(people):
+def start_up_flags(people, intdate=None):
     """Run add_uc_start_up_period on raw-shaped tables (ids combined as create_frs does)."""
     person_rows, job_rows, benefit_rows, households = [], [], [], {}
     for i, p in enumerate(people):
@@ -255,7 +255,9 @@ def start_up_flags(people):
     household = pd.DataFrame(
         {
             "household_id": list(households),
-            "intdate": sas_date(INTERVIEW),
+            "intdate": [
+                (intdate or {}).get(h, sas_date(INTERVIEW)) for h in households
+            ],
             "gross4": list(households.values()),
         }
     ).set_index("household_id")
@@ -480,6 +482,21 @@ def test_unlinked_share_is_survey_weighted_per_person(people, low, high):
         people + [adult(10 + h, claims=[UNLINKED]) for h in range(600)]
     )
     assert low < np.mean(flags[linked:]) < high
+
+
+def test_missing_interview_date_raises():
+    with pytest.raises(ValueError, match="INTDATE"):
+        start_up_flags([adult(1, claims=[RECENT_CLAIM]), adult(2)], intdate={2: np.nan})
+
+
+def test_benefits_table_without_ucstart_raises(tmp_path):
+    from policyengine_uk_data.datasets.frs import create_frs
+
+    pd.DataFrame(columns=["sernum", "benunit", "person", "benefit", "benamt"]).to_csv(
+        tmp_path / "benefits.tab", sep="\t", index=False
+    )
+    with pytest.warns(UserWarning), pytest.raises(ValueError, match="UCSTART"):
+        create_frs(tmp_path, 2024)
 
 
 def test_imputation_leaves_global_random_state_alone():

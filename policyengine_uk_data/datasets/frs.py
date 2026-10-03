@@ -676,7 +676,10 @@ def derive_uc_is_in_startup_period(
     UC claim or their trade began less than 12 months before interview.
 
     The flag says whether a period was running at interview. Across a steady
-    population that equals the expected share of the year spent in one.
+    population that equals the expected share of the year spent in one. The
+    2024-25 survey year overlapped tax credit managed migration, but the share
+    of linked UC claims under 12 months old held at 27-29% in every interview
+    quarter, so the cross-section shows no migration bump.
 
     The FRS cannot see earlier UC awards, so a re-claim after the floor
     applied for the same trade, and a second start-up period within five
@@ -706,6 +709,8 @@ def add_uc_start_up_period(
     """
     interview = frs_interview_date(household.intdate)
     interview.index = household.index
+    if interview.isna().any():
+        raise ValueError("FRS INTDATE (interview date) is missing for some households.")
     uc = benefits.benefit.to_numpy() == UC_BENEFIT_CODE
     claim = pd.DataFrame(
         {
@@ -753,16 +758,22 @@ def add_uc_start_up_period(
     )
 
     # Unlinked UC records are drawn at the share of linked self-employed
-    # claimants (survey-weighted) whose claim began within the window.
+    # claimants (survey-weighted) whose claim began within the window. That
+    # treats a missing link as unrelated to the claim's age.
     person_benunit = pd.Index(benunit_ids).get_indexer(person.benunit_id)
     assert (person_benunit >= 0).all(), "a person's benefit unit is missing"
     person_months = months_by_benunit.to_numpy()[person_benunit]
     linked_se = self_employed & ~np.isnan(person_months)
+    linked_recent = uc_claim_began_in_start_up_window(
+        person_months,
+        np.zeros(len(person_months), dtype=bool),
+        np.ones(len(person_months)),
+        0.0,
+    )
     weight = household.gross4.reindex(person.household_id).to_numpy(dtype=float)
     linked_weight = weight[linked_se].sum()
     unlinked_share = (
-        weight[linked_se][person_months[linked_se] < UC_START_UP_PERIOD_MONTHS].sum()
-        / linked_weight
+        weight[linked_se & linked_recent].sum() / linked_weight
         if linked_weight > 0
         else 0.0
     )
