@@ -205,6 +205,9 @@ def test_policybench_transfer_family_structure_matches_person_membership(
     person_benunit_ids = sim.calculate("person_benunit_id", map_to="person").values
     is_adult = sim.calculate("is_adult", map_to="person").values
     is_child = sim.calculate("is_child", map_to="person").values
+    is_claimant_or_partner = sim.calculate(
+        "is_claimant_or_partner", map_to="person"
+    ).values
     is_married = sim.calculate("is_married", map_to="benunit").values
     family_type = sim.calculate("family_type", map_to="benunit").values
 
@@ -213,7 +216,12 @@ def test_policybench_transfer_family_structure_matches_person_membership(
         adults = int(is_adult[member_mask].sum())
         children = int(is_child[member_mask].sum())
 
-        assert bool(married) == (adults == 2)
+        # policyengine-uk (from 2.107, #1896) presumes a couple married when
+        # the dataset does not say, and a couple is a claimant and partner,
+        # not any two adults: a member under 20 and 16+ years younger than
+        # the claimant is presumed to be their child.
+        claimant_and_partner = int(is_claimant_or_partner[member_mask].sum())
+        assert bool(married) == (claimant_and_partner == 2)
 
         if adults == 2 and children > 0:
             expected = "COUPLE_WITH_CHILDREN"
