@@ -1,9 +1,11 @@
 import numpy as np
 import pandas as pd
 import policyengine_uk
+import pytest
 import policyengine_uk_data.datasets.frs as frs_module
 
 from policyengine_uk_data.datasets.frs import (
+    WEEKS_IN_YEAR,
     add_legacy_benefit_proxies,
     attach_legacy_benefit_proxies_from_frs_person,
     apply_legacy_benefit_proxies,
@@ -373,7 +375,13 @@ class FakeMicrosimulation:
         raise KeyError(variable)
 
 
-def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "convbl, cvpay, boarder_weekly, lodger_weekly",
+    [(0, 0, 0, 0), (1, 100, 100, 0), (2, 80, 0, 80)],
+)
+def test_create_frs_smoke_includes_legacy_proxy_columns(
+    tmp_path, monkeypatch, convbl, cvpay, boarder_weekly, lodger_weekly
+):
     original_read_csv = frs_module.pd.read_csv
 
     def fake_read_csv(path, *args, **kwargs):
@@ -421,7 +429,8 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
                 "ademaamt": 0,
                 "age": 30,
                 "age80": 30,
-                "cvpay": 0,
+                "convbl": convbl,
+                "cvpay": cvpay,
                 "educft": 0,
                 "educqual": 0,
                 "eduma": 0,
@@ -561,3 +570,10 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
     ].iloc[0]
     assert dataset.person["education_grants"].iloc[0] == 100
     assert dataset.person["disabled_students_allowance_eligible_expenses"].iloc[0] == 0
+    # create_frs carries the rent this person pays the householder, by class.
+    assert dataset.person["rent_paid_as_boarder"].iloc[0] == pytest.approx(
+        boarder_weekly * WEEKS_IN_YEAR
+    )
+    assert dataset.person["rent_paid_as_lodger"].iloc[0] == pytest.approx(
+        lodger_weekly * WEEKS_IN_YEAR
+    )
