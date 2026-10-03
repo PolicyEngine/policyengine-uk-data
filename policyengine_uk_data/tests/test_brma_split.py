@@ -678,9 +678,11 @@ def test_column_agreement_is_exact(labels, rows, chunk, seed):
     matrix = (rng.random((rows, len(labels))) < 0.5).astype(float)
     if rng.random() < 0.5:  # often make the groups agree
         matrix = matrix[:, groups.first[groups.codes]]
-    first = groups.first[groups.codes]
     expected = all(
-        np.array_equal(matrix[:, j], matrix[:, first[j]]) for j in range(len(labels))
+        np.array_equal(matrix[:, i], matrix[:, j])
+        for i in range(len(labels))
+        for j in range(len(labels))
+        if labels[i] == labels[j]
     )
     assert groups.columns_agree(matrix, chunk=chunk) == expected
 
@@ -692,3 +694,36 @@ def test_one_hot_area_masks_that_differ_never_agree():
     mask[506, 0] = mask[173, 1] = 1.0
     assert not RecordGroups(np.array([0, 0]), 2).columns_agree(mask)
     assert RecordGroups(np.array([0, 1]), 2).columns_agree(mask)
+
+
+@needs_policyengine
+def test_a_dataset_without_private_renters_is_returned_unsplit(weights):
+    from policyengine_uk_data.datasets.brma import split_private_renters_across_brmas
+
+    dataset = toy_dataset()
+    household = dataset.household.copy()
+    household["tenure_type"] = "OWNED_OUTRIGHT"
+    owners = _with_tables(dataset, household=household)
+    result = split_private_renters_across_brmas(owners, k=3, seed=0, weights=weights)
+    assert len(result.household) == len(household)
+    assert (result.household[BRMA_SPLIT_GROUP_COLUMN] == household.household_id).all()
+    assert (result.household.brma.astype(str) == "INNER_NORTH_LONDON").all()
+
+
+@needs_policyengine
+@pytest.mark.parametrize("problem", ["no_tenure", "duplicate_household"])
+def test_split_refuses_ambiguous_tables(problem, weights):
+    from policyengine_uk_data.datasets.brma import split_private_renters_across_brmas
+
+    dataset = toy_dataset()
+    household = dataset.household.copy()
+    if problem == "no_tenure":
+        household = household.drop(columns="tenure_type")
+        match = "needs tenure_type"
+    else:
+        household.loc[1, "household_id"] = household.household_id[0]
+        match = "duplicate household_id"
+    with pytest.raises(ValueError, match=match):
+        split_private_renters_across_brmas(
+            _with_tables(dataset, household=household), k=2, seed=0, weights=weights
+        )
