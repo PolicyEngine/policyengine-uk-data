@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Optional
 
 import numpy as np
+import pandas as pd
 
 
 def assign_takeup_with_reported_anchors(
@@ -57,3 +58,81 @@ def assign_takeup_with_reported_anchors(
     adjusted_rate = remaining_needed / int(non_reporters.sum())
     result |= non_reporters & (draws < adjusted_rate)
     return result
+
+
+# Legacy means-tested benefits, in the order their names are joined into a
+# combination key in parameters/take_up/uc_managed_migration.yaml.
+LEGACY_BENEFITS = (
+    "child_tax_credit",
+    "working_tax_credit",
+    "housing_benefit",
+    "esa_income",
+    "income_support",
+    "jsa_income",
+)
+# Seeds for the Move to Universal Credit draw. Each has its own generator, so
+# the draws behind every other take-up flag are unchanged.
+UC_MANAGED_MIGRATION_SEED = 492
+UC_MANAGED_MIGRATION_SPI_SEED = 493
+
+
+def reported_benunit_mask(
+    person: pd.DataFrame, benunit: pd.DataFrame, column: str
+) -> np.ndarray:
+    """Benefit units with a member reporting a positive ``column``."""
+    reporters = person.loc[person[column] > 0, "person_benunit_id"].unique()
+    return benunit["benunit_id"].isin(reporters).values
+
+
+def legacy_benefit_combination(
+    person: pd.DataFrame, benunit: pd.DataFrame
+) -> np.ndarray:
+    """The legacy benefits each benefit unit reports, joined by "+".
+
+    An empty string marks a benefit unit that reports none of them.
+    """
+    reported = [
+        reported_benunit_mask(person, benunit, f"{benefit}_reported")
+        for benefit in LEGACY_BENEFITS
+    ]
+    return np.array(
+        [
+            "+".join(b for b, has in zip(LEGACY_BENEFITS, row) if has)
+            for row in zip(*reported)
+        ],
+        dtype=object,
+    )
+
+
+def assign_uc_claim_at_legacy_closure(
+    person: pd.DataFrame,
+    benunit: pd.DataFrame,
+    rates: dict[str, float],
+    seed: int,
+) -> np.ndarray:
+    """Draw ``would_claim_uc_at_legacy_closure`` for each benefit unit.
+
+    policyengine-uk reads it once a legacy benefit the unit reports has
+    closed: the unit then claims Universal Credit if this is True and loses
+    its legacy awards either way. A unit reporting legacy benefits but not
+    Universal Credit claims with DWP's Move to Universal Credit claim rate for
+    its combination of benefits (``rates``; "all" where DWP reports none).
+    Units reporting Universal Credit, and units reporting no legacy benefit,
+    are True, the model's default.
+
+    Args:
+        person: Person table with ``person_benunit_id`` and the
+            ``<benefit>_reported`` columns.
+        benunit: Benefit unit table with ``benunit_id``.
+        rates: Claim rate by combination, from
+            ``load_uc_managed_migration_claim_rates``.
+        seed: Seed for this draw's own generator.
+
+    Returns:
+        Boolean array aligned with ``benunit``.
+    """
+    combination = legacy_benefit_combination(person, benunit)
+    on_uc = reported_benunit_mask(person, benunit, "universal_credit_reported")
+    rate = np.array([rates.get(c, rates["all"]) for c in combination])
+    draws = np.random.default_rng(seed).random(len(benunit))
+    return on_uc | (combination == "") | (draws < rate)
