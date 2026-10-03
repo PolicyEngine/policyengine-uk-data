@@ -3,7 +3,8 @@ Income imputation using Survey of Personal Incomes data.
 
 This module imputes detailed income components (employment, self-employment,
 pensions, property, savings interest, dividends) using machine learning
-models trained on HMRC Survey of Personal Incomes (SPI) data.
+models trained on HMRC Survey of Personal Incomes (SPI) data, rebased from
+the SPI year to the year of the dataset they are drawn into.
 """
 
 import pandas as pd
@@ -15,11 +16,13 @@ from policyengine_uk import Microsimulation
 from policyengine_uk_data.datasets.spi import (
     AGE_RANGES,
     REGION_MAP,
+    SPI_FISCAL_YEAR,
     SPI_RELEASE_NAME,
     SPI_TAB_FILENAME,
 )
 from policyengine_uk_data.utils.stack import stack_datasets
 from policyengine_uk_data.utils.subsample import subsample_dataset
+from policyengine_uk_data.utils.uprating import uprate_values
 
 SPI_TAB_FOLDER = STORAGE_FOLDER / SPI_RELEASE_NAME
 SPI_RENAMES = dict(
@@ -125,6 +128,34 @@ INCOME_COMPONENTS = [
 # its own policyengine-uk variable.
 IMPUTATIONS = INCOME_COMPONENTS + ["gift_aid", "charitable_investment_gifts"]
 
+# The QRF draws amounts in SPI-year pounds (2022-23), but the FRS rows they
+# are drawn into, and the FRS respondents the second-stage QRF in
+# `frs_only.py` trains on, are in the dataset's own year (2024-25). Each
+# draw is rebased with the index `uprate_dataset` applies to that variable
+# (storage/uprating_factors.csv) before anything conditions on it or the
+# halves are stacked. Gift Aid and qualifying-investment gifts have no
+# uprating index in policyengine-uk (no `uprating` on the variable, nothing
+# in its load-time `uprating_indices.yaml`, so no row in the table), so they
+# keep their SPI amounts, as `uprate_dataset` keeps them.
+SPI_NOMINAL_IMPUTATIONS = ("gift_aid", "charitable_investment_gifts")
+
+
+def rebase_spi_draws(
+    draws: pd.DataFrame, year: int, spi_year: int = SPI_FISCAL_YEAR
+) -> pd.DataFrame:
+    """Move SPI draws from ``spi_year`` pounds to ``year`` pounds.
+
+    Each column is multiplied by its variable's uprating-index ratio, so
+    zeros stay zero, order within a column is kept and equal years change
+    nothing. A column with neither an index nor a place in
+    ``SPI_NOMINAL_IMPUTATIONS`` raises rather than staying nominal.
+    """
+    rebased = draws.copy()
+    for column in rebased.columns:
+        if column not in SPI_NOMINAL_IMPUTATIONS:
+            rebased[column] = uprate_values(rebased[column], column, spi_year, year)
+    return rebased
+
 
 INCOME_MODEL_METADATA = {
     "spi_release_name": SPI_RELEASE_NAME,
@@ -206,6 +237,9 @@ def impute_over_incomes(
     """
     Impute specified income components using trained model.
 
+    The draws are rebased from the SPI year to ``dataset.time_period``
+    (``rebase_spi_draws``) before they are written.
+
     Args:
         dataset: PolicyEngine UK dataset to augment with income data.
         output_variables: List of income components to impute.
@@ -216,7 +250,7 @@ def impute_over_incomes(
     dataset = dataset.copy()
     sim = Microsimulation(dataset=dataset)
     input_df = sim.calculate_dataframe(["age", "gender", "region"])
-    output_df = model.predict(input_df)
+    output_df = rebase_spi_draws(model.predict(input_df), int(dataset.time_period))
 
     for column in output_variables:
         dataset.person[column] = output_df[column].fillna(0).values
@@ -248,7 +282,6 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     Returns:
         Combined dataset with original data plus synthetic high-income individuals.
     """
-    # Impute wealth, assuming same time period as trained data
     dataset = dataset.copy()
     # gift_aid and charitable_investment_gifts are in IMPUTATIONS but are not
     # columns on the raw FRS build, so initialise them to zero everywhere
