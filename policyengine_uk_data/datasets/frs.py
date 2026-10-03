@@ -267,8 +267,16 @@ def frs_boarder_and_lodger_rent(person: pd.DataFrame) -> tuple[np.ndarray, np.nd
     the benefit unit (HBOTHAMT); they equal the unit's summed CVPAY in every
     paying unit of the raw 2023-24 and 2024-25 data.
 
-    The FRS asks the householder nothing about this rent. policyengine-uk
-    works out what the householder receives from these two inputs.
+    The released data hold this rent only on the payer's record; there is
+    no separate variable for what the householder receives, and the FRS
+    gross-income derivation leaves it out. policyengine-uk works out the
+    householder's receipt from these two inputs.
+
+    Weekly amounts are annualised with ``WEEKS_IN_YEAR`` (365.25 / 7), as for
+    every other weekly FRS amount. policyengine-uk converts annual amounts
+    back to weekly with 52 weeks, so a weekly amount reaches its weekly
+    disregards about 0.34% higher; that convention gap is not specific to
+    these columns.
     """
     rent_paid = np.maximum(0, person.cvpay.fillna(0).values) * WEEKS_IN_YEAR
     is_boarder = person.convbl.values == 1

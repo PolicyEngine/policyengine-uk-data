@@ -133,3 +133,51 @@ def test_rent_paid_and_property_income_do_not_affect_each_other(seed):
         frs_boarder_and_lodger_rent(other_property), rent_paid
     ):
         np.testing.assert_array_equal(changed, original)
+
+
+RENT_COLUMNS = ["rent_paid_as_boarder", "rent_paid_as_lodger"]
+
+
+@pytest.mark.parametrize(
+    "table", ["uprating_factors.csv", "uprating_growth_factors.csv"]
+)
+def test_rent_paid_is_uprated_like_sublet_income(table):
+    # policyengine-uk uprates both inputs with the per capita GDP index it
+    # uses for sublet_income, so their rows must match.
+    from policyengine_uk_data.storage import STORAGE_FOLDER
+
+    factors = pd.read_csv(STORAGE_FOLDER / table).set_index("Variable")
+    for column in RENT_COLUMNS:
+        pd.testing.assert_series_equal(
+            factors.loc[column], factors.loc["sublet_income"], check_names=False
+        )
+
+
+def test_rent_paid_is_uprated_to_the_calibration_year():
+    # The build materialises the survey-year dataset at the calibration year
+    # before calibrating; the rent paid must move with it.
+    from policyengine_uk.data import UKSingleYearDataset
+
+    from policyengine_uk_data.storage import STORAGE_FOLDER
+    from policyengine_uk_data.utils.uprating import uprate_dataset
+
+    person = pd.DataFrame(
+        {
+            "person_id": [1_001, 1_002],
+            "person_benunit_id": [101, 102],
+            "person_household_id": [1, 1],
+            "rent_paid_as_boarder": [0.0, 100 * WEEKS_IN_YEAR],
+            "rent_paid_as_lodger": [80 * WEEKS_IN_YEAR, 0.0],
+        }
+    )
+    benunit = pd.DataFrame({"benunit_id": [101, 102]})
+    household = pd.DataFrame({"household_id": [1], "household_weight": [1.0]})
+    dataset = UKSingleYearDataset(
+        person=person, benunit=benunit, household=household, fiscal_year=2024
+    )
+    uprated = uprate_dataset(dataset, 2025)
+    factors = pd.read_csv(STORAGE_FOLDER / "uprating_factors.csv").set_index("Variable")
+    growth = factors.loc["sublet_income", "2025"] / factors.loc["sublet_income", "2024"]
+    assert growth > 1
+    for column in RENT_COLUMNS:
+        np.testing.assert_allclose(uprated.person[column], person[column] * growth)
