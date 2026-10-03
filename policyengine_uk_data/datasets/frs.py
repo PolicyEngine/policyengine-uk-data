@@ -677,9 +677,10 @@ def derive_uc_is_in_startup_period(
 
     The flag says whether a period was running at interview. Across a steady
     population that equals the expected share of the year spent in one. The
-    2024-25 survey year overlapped tax credit managed migration, but the share
-    of linked UC claims under 12 months old held at 27-29% in every interview
-    quarter, so the cross-section shows no migration bump.
+    2024-25 survey year was not steady: it overlapped tax credit managed
+    migration. 28% of linked UC claims were under 12 months old (34% for
+    self-employed main jobs), against 21% (19%) in FRS 2023-24, so the claim
+    route reflects 2024-25 and will overstate later years.
 
     The FRS cannot see earlier UC awards, so a re-claim after the floor
     applied for the same trade, and a second start-up period within five
@@ -721,6 +722,8 @@ def add_uc_start_up_period(
             ),
         }
     )
+    if (claim.months < 0).any():
+        raise ValueError("Some FRS UC claims start after their household's interview.")
     benunit_ids = pe_benunit.benunit_id.to_numpy()
     # One UC claim per benefit unit; take the latest start if rows disagree.
     months_by_benunit = claim.groupby("benunit_id").months.min().reindex(benunit_ids)
@@ -759,7 +762,8 @@ def add_uc_start_up_period(
 
     # Unlinked UC records are drawn at the share of linked self-employed
     # claimants (survey-weighted) whose claim began within the window. That
-    # treats a missing link as unrelated to the claim's age.
+    # treats a missing link as unrelated to the claim's age; claims under about
+    # five weeks old are never linked, so if anything it understates.
     person_benunit = pd.Index(benunit_ids).get_indexer(person.benunit_id)
     assert (person_benunit >= 0).all(), "a person's benefit unit is missing"
     person_months = months_by_benunit.to_numpy()[person_benunit]

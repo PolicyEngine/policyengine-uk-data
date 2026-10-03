@@ -489,6 +489,11 @@ def test_missing_interview_date_raises():
         start_up_flags([adult(1, claims=[RECENT_CLAIM]), adult(2)], intdate={2: np.nan})
 
 
+def test_claim_starting_after_interview_raises():
+    with pytest.raises(ValueError, match="after their household's interview"):
+        start_up_flags([adult(1, claims=["11/1/2024"])])
+
+
 def test_benefits_table_without_ucstart_raises(tmp_path):
     from policyengine_uk_data.datasets.frs import create_frs
 
