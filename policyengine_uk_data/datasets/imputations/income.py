@@ -8,6 +8,13 @@ models trained on HMRC Survey of Personal Incomes (SPI) data.
 The draw is conditioned on each person's earnings group (see
 ``EARNINGS_GROUPS``) as well as their age, gender and region, so the incomes
 agree with the employment status the FRS donor row keeps.
+
+Within that cell a person does not draw at a random quantile: each income is
+drawn at the person's rank of the same income among FRS people in the same
+cell (``draw_quantiles``). A part-time employee with low FRS pay draws low
+SPI pay, a donor at the top of their cell draws from the top of the SPI, and
+the SPI's distribution within each cell is kept, because the ranks are
+uniform within every cell.
 """
 
 import pandas as pd
@@ -216,6 +223,77 @@ PREDICTORS = [
     "region",
 ]
 
+# The SPI gives age only as a band, so the forests learn nothing within a
+# band. A person's rank is taken within (earnings group, SPI age band,
+# gender, region): the cells the forests condition on. Ranking over a wider
+# pool would bias the draw: a London donor's national rank is higher than
+# their rank in London, and London's SPI distribution is already higher.
+SPI_AGE_BAND_STARTS = sorted({low for code, (low, _) in AGE_RANGES.items() if code > 0})
+
+
+def spi_age_band(age) -> np.ndarray:
+    """SPI age band (1 = 16-24, ..., 7 = 74 and over; 0 = under 16)."""
+    return np.searchsorted(
+        SPI_AGE_BAND_STARTS, np.asarray(age, dtype=float), side="right"
+    )
+
+
+def rank_cells(inputs: pd.DataFrame) -> np.ndarray:
+    """Integer cell of each person: earnings group, SPI age band, gender, region."""
+    keys = pd.DataFrame(
+        {
+            "earnings_group": np.asarray(inputs["earnings_group"], dtype=object),
+            "band": spi_age_band(inputs["age"]),
+            "gender": np.asarray(inputs["gender"], dtype=object),
+            "region": np.asarray(inputs["region"], dtype=object),
+        }
+    )
+    return keys.groupby(list(keys.columns), sort=True, dropna=False).ngroup().to_numpy()
+
+
+def rank_quantiles(values, cells, weights, ids, seed: int = 0) -> np.ndarray:
+    """Each row's quantile, in [0, 1), in its cell's weighted distribution of
+    ``values``.
+
+    Within a cell, rows are ordered by value, rows with equal values (most
+    often zero) in random order. Each row then holds the interval [weight of
+    the rows before it, that plus its own weight) as a share of the cell's
+    weight, and takes a uniform point in it. The intervals tile [0, 1), so
+    the quantiles are uniform within every cell, and a lower value always
+    gets a lower quantile than a higher one in the same cell. A cell of one
+    row gets a uniform random quantile. A cell with no weight is ranked with
+    equal weights. Random numbers are drawn in (cell, value, id) order, so
+    the result does not depend on the order of the rows.
+    """
+    values = np.asarray(values, dtype=float)
+    weights = np.asarray(weights, dtype=float)
+    cells = pd.factorize(np.asarray(cells), sort=True)[0]
+    ids = np.asarray(ids)
+    if np.isnan(values).any() or np.isnan(weights).any():
+        raise ValueError("Ranked values and weights must not be missing")
+    if (weights < 0).any():
+        raise ValueError("Rank weights must not be negative")
+    n = len(values)
+    rng = np.random.default_rng(seed)
+    canonical = np.lexsort((ids, values, cells))
+    tie_order, offset = np.empty(n), np.empty(n)
+    tie_order[canonical] = rng.random(n)
+    offset[canonical] = rng.random(n)
+    order = np.lexsort((tie_order, values, cells))
+    sorted_rows = pd.DataFrame({"cell": cells[order], "weight": weights[order]})
+    total = sorted_rows.groupby("cell").weight.transform("sum").to_numpy()
+    if (total <= 0).any():
+        sorted_rows.loc[total <= 0, "weight"] = 1.0
+        total = sorted_rows.groupby("cell").weight.transform("sum").to_numpy()
+    weight = sorted_rows.weight.to_numpy()
+    before = sorted_rows.groupby("cell").weight.cumsum().to_numpy() - weight
+    quantiles = np.empty(n)
+    quantiles[order] = np.minimum(
+        (before + offset[order] * weight) / total, np.nextafter(1.0, 0.0)
+    )
+    return quantiles
+
+
 INCOME_COMPONENTS = [
     "employment_income",
     "self_employment_income",
@@ -240,6 +318,63 @@ INCOME_COMPONENTS = [
 # variable; the enhanced-FRS path here keeps them separate so each maps to
 # its own policyengine-uk variable.
 IMPUTATIONS = INCOME_COMPONENTS + ["gift_aid", "charitable_investment_gifts"]
+
+# Each output is drawn at the forest's conditional quantile nearest the
+# person's rank, on this grid of 1,000 midpoints (0.0005 to 0.9995). The
+# draw used to be microimpute 1.8's: a random pick from ten quantiles between
+# 1/11 and 10/11, so no one drew from the top or bottom 9% of their cell.
+DRAW_QUANTILE_GRID = (np.arange(1_000) + 0.5) / 1_000
+# Seed for the rank tie-breaks (and for the random quantiles of a draw made
+# without ranks).
+DRAW_SEED = 0
+
+
+def draw_quantile_column(variable: str) -> str:
+    return f"{variable}_draw_quantile"
+
+
+def draw_at_quantiles(results, X: pd.DataFrame, quantiles: dict, grid) -> pd.DataFrame:
+    """Draw every output of a fitted microimpute QRF at given quantiles.
+
+    Outputs are drawn in the model's order, each conditioned on the ones
+    drawn before it, as microimpute's own ``predict`` does; but where that
+    picks a random quantile, row ``i`` of ``variable`` takes the forest's
+    conditional quantile ``grid[int(quantiles[variable][i] * len(grid))]``.
+    With microimpute 1.8's grid and its random draws this reproduces its
+    ``predict`` exactly (tested).
+    """
+    from microimpute.models.imputer import _ConstantValueModel
+    from microimpute.models.qrf import _get_sequential_predictors, _QRFModel
+
+    grid = np.asarray(grid, dtype=float)
+    k = len(grid)
+    augmented, _ = results.preprocess_data_types(
+        X, results.original_predictors, getattr(results, "dummy_processor", None)
+    )
+    output = pd.DataFrame(index=X.index)
+    for i, variable in enumerate(results.imputed_variables):
+        model = results.models[variable]
+        columns = results._get_encoded_predictors(
+            _get_sequential_predictors(results.predictors, results.imputed_variables, i)
+        )
+        if isinstance(model, _ConstantValueModel):
+            values = np.asarray(model.predict(augmented))
+        elif isinstance(model, _QRFModel):
+            features = augmented[columns]
+            if hasattr(model, "_align_features"):  # microimpute >= 2
+                features = model._align_features(features)
+            pred = np.asarray(model.qrf.predict(features, quantiles=list(grid)))
+            pred = pred.reshape(len(features), k)
+            index = np.clip(
+                (np.asarray(quantiles[variable], dtype=float) * k).astype(int), 0, k - 1
+            )
+            values = pred[np.arange(len(pred)), index]
+        else:
+            values = np.asarray(model.predict(augmented[columns], return_probs=False))
+        output[variable] = values
+        augmented[variable] = values
+        augmented = results._encode_imputed_variable(augmented, variable)
+    return output
 
 
 INCOME_MODEL_METADATA = {
@@ -273,7 +408,10 @@ class EarningsGroupIncomeModel:
     A person is drawn only from SPI records in their own earnings group, so an
     employee always draws pay, a self-employed person always draws a trade
     (whose profit can be zero), and someone with neither draws neither.
-    ``predict`` returns NaN for rows in no group (``NOT_IMPUTED``).
+    Each output is drawn at the quantile in the input's
+    ``draw_quantile_column(output)`` (see ``draw_quantiles``); without those
+    columns, at independent uniform random quantiles. ``predict`` returns NaN
+    for rows in no group (``NOT_IMPUTED``).
     """
 
     def __init__(self, models: dict, metadata: dict | None = None):
@@ -286,6 +424,15 @@ class EarningsGroupIncomeModel:
 
     def predict(self, X: pd.DataFrame) -> pd.DataFrame:
         groups = np.asarray(X["earnings_group"], dtype=object)
+        rng = np.random.default_rng(DRAW_SEED)
+        quantiles = {
+            variable: (
+                np.asarray(X[draw_quantile_column(variable)], dtype=float)
+                if draw_quantile_column(variable) in X
+                else rng.random(len(X))
+            )
+            for variable in IMPUTATIONS
+        }
         output = pd.DataFrame(np.nan, index=X.index, columns=IMPUTATIONS)
         for group, model in self.models.items():
             in_group = groups == group
@@ -293,7 +440,12 @@ class EarningsGroupIncomeModel:
                 inputs = pd.DataFrame(
                     {column: np.asarray(X[column])[in_group] for column in PREDICTORS}
                 )
-                draws = model.predict(inputs)
+                draws = draw_at_quantiles(
+                    model.model,
+                    inputs,
+                    {v: q[in_group] for v, q in quantiles.items()},
+                    DRAW_QUANTILE_GRID,
+                )
                 output.loc[in_group, IMPUTATIONS] = draws[IMPUTATIONS].to_numpy()
         return output
 
@@ -401,6 +553,43 @@ def income_model_inputs(dataset: UKSingleYearDataset) -> pd.DataFrame:
     return inputs
 
 
+def draw_quantiles(
+    dataset: UKSingleYearDataset, inputs: pd.DataFrame | None = None
+) -> pd.DataFrame:
+    """Each person's draw quantile for every output, indexed by person ID.
+
+    The quantile is the person's rank of the same income in ``dataset``,
+    among people in the same cell (``rank_cells``), at household weights:
+    pay sets the pay draw, profit the profit draw, a private pension the
+    pension draw. Ties, most often at zero, are broken at random, so an
+    employee with no recorded pay draws from the bottom of their cell and
+    an output the FRS does not record (gift aid) is drawn at a uniform
+    random quantile.
+    """
+    if inputs is None:
+        inputs = income_model_inputs(dataset)
+    person = dataset.person
+    weights = person.person_household_id.map(
+        dataset.household.set_index("household_id").household_weight
+    )
+    cells = rank_cells(inputs)
+    return pd.DataFrame(
+        {
+            draw_quantile_column(variable): rank_quantiles(
+                person[variable]
+                if variable in person.columns
+                else np.zeros(len(person)),
+                cells,
+                weights,
+                person.person_id,
+                seed=DRAW_SEED + i,
+            )
+            for i, variable in enumerate(IMPUTATIONS)
+        },
+        index=person.person_id.to_numpy(),
+    )
+
+
 def apply_income_draws(
     person: pd.DataFrame, draws: pd.DataFrame, groups, output_variables
 ) -> pd.DataFrame:
@@ -421,24 +610,36 @@ def apply_income_draws(
 
 
 def impute_over_incomes(
-    dataset: UKSingleYearDataset, model, output_variables: list[str]
+    dataset: UKSingleYearDataset,
+    model,
+    output_variables: list[str],
+    quantiles: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """
     Impute specified income components using trained model.
 
     Each person draws from SPI records in their earnings group
-    (``frs_earnings_group``); children keep their own values.
+    (``frs_earnings_group``), at their draw quantiles; children keep their
+    own values.
 
     Args:
         dataset: PolicyEngine UK dataset to augment with income data.
         model: Fitted ``EarningsGroupIncomeModel``.
         output_variables: List of income components to impute.
+        quantiles: Draw quantiles by person ID (``draw_quantiles``),
+            covering every person in ``dataset``. Defaults to ranks within
+            ``dataset`` itself.
 
     Returns:
         DataFrame with imputed income components.
     """
     dataset = dataset.copy()
     input_df = income_model_inputs(dataset)
+    if quantiles is None:
+        quantiles = draw_quantiles(dataset, input_df)
+    person_quantiles = quantiles.loc[dataset.person.person_id.to_numpy()]
+    for column in person_quantiles.columns:
+        input_df[column] = person_quantiles[column].to_numpy()
     output_df = model.predict(input_df)
     dataset.person = apply_income_draws(
         dataset.person, output_df, input_df.earnings_group, output_variables
@@ -488,6 +689,9 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     zero_weight_copy = subsample_dataset(zero_weight_copy, 10_000)
 
     model = create_income_model()
+    # Ranks come from the full, weighted FRS: the copy is an unweighted
+    # subsample of it.
+    quantiles = draw_quantiles(dataset)
 
     # Impute just dividends on the original, full variable set on the copy
 
@@ -495,6 +699,7 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         zero_weight_copy,
         model,
         IMPUTATIONS,
+        quantiles,
     )
 
     # Second-stage QRF: rewrite FRS-only variables (benefit `_reported`
@@ -519,6 +724,7 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         dataset,
         model,
         ["dividend_income"],
+        quantiles,
     )
 
     zero_weight_copy.validate()
