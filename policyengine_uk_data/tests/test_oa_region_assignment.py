@@ -15,9 +15,13 @@ import pandas as pd
 import pytest
 from policyengine_uk.data import UKSingleYearDataset
 
-from policyengine_uk_data.calibration.clone_and_assign import clone_and_assign
+from policyengine_uk_data.calibration.clone_and_assign import (
+    _household_country_codes,
+    clone_and_assign,
+)
 from policyengine_uk_data.calibration.oa_assignment import (
     FRS_REGION_TO_CODE,
+    _normalise_region,
     assign_random_geography,
 )
 from policyengine_uk_data.calibration.oa_crosswalk import (
@@ -76,13 +80,21 @@ def _write_crosswalk(directory: Path, rows: list) -> tuple[pd.DataFrame, str]:
     return frame, str(path)
 
 
-def _countries(regions: list[str]) -> np.ndarray:
-    return np.array(
-        [COUNTRY_TO_FRS_CODE[REGION_TO_COUNTRY.get(r, "England")] for r in regions]
-    )
+def _countries(countries: list[str]) -> np.ndarray:
+    return np.array([COUNTRY_TO_FRS_CODE[c] for c in countries])
 
 
-def _toy_dataset(regions: list[str], weights: list[float]) -> UKSingleYearDataset:
+# Ways a region can arrive: FRS name, crosswalk code, bytes, untidy text.
+REPRESENTATIONS = {
+    "name": lambda region: region,
+    "code": lambda region: FRS_REGION_TO_CODE[region],
+    "bytes": lambda region: region.encode(),
+    "untidy": lambda region: f"  {region.lower()} ",
+}
+UNKNOWN_VALUES = ["UNKNOWN", "", None, np.nan, b"UNKNOWN"]
+
+
+def _toy_dataset(regions: list, weights: list[float]) -> UKSingleYearDataset:
     ids = np.arange(1, len(regions) + 1)
     return UKSingleYearDataset(
         person=pd.DataFrame(
@@ -95,15 +107,35 @@ def _toy_dataset(regions: list[str], weights: list[float]) -> UKSingleYearDatase
         ),
         benunit=pd.DataFrame({"benunit_id": ids * 100 + 1}),
         household=pd.DataFrame(
-            {"household_id": ids, "household_weight": weights, "region": regions}
+            {
+                "household_id": ids,
+                "household_weight": weights,
+                "region": pd.Series(regions, dtype=object),
+            }
         ),
         fiscal_year=2024,
     )
 
 
 @st.composite
-def crosswalk_and_regions(draw, allow_unassignable: bool = False):
-    """A synthetic crosswalk plus household regions it can serve."""
+def households(draw, crosswalk_regions: list[str], unknown_countries: list[str]):
+    """Households as (FRS region or None, country, raw region value)."""
+    known = [(region, REGION_TO_COUNTRY[region]) for region in crosswalk_regions]
+    unknown = [(None, country) for country in unknown_countries]
+    region, country = draw(st.sampled_from(known + unknown))
+    if region is None:
+        raw = draw(st.sampled_from(UNKNOWN_VALUES))
+    else:
+        raw = REPRESENTATIONS[draw(st.sampled_from(sorted(REPRESENTATIONS)))](region)
+    return region, country, raw
+
+
+@st.composite
+def crosswalk_and_households(draw):
+    """A synthetic crosswalk plus households the sampler can serve.
+
+    A household with no region can belong to any country in the crosswalk.
+    """
     crosswalk_regions = draw(
         st.lists(
             st.sampled_from(sorted(FRS_REGION_TO_CODE)),
@@ -124,13 +156,11 @@ def crosswalk_and_regions(draw, allow_unassignable: bool = False):
                 )
             ),
         )
-    choices = list(crosswalk_regions)
-    if any(REGION_TO_COUNTRY[r] == "England" for r in crosswalk_regions):
-        choices.append("UNKNOWN")
-    if allow_unassignable and "NORTHERN_IRELAND" not in crosswalk_regions:
-        choices.append("NORTHERN_IRELAND")
-    regions = draw(st.lists(st.sampled_from(choices), min_size=1, max_size=12))
-    return rows, regions
+    countries = sorted({REGION_TO_COUNTRY[r] for r in crosswalk_regions})
+    sample = draw(
+        st.lists(households(crosswalk_regions, countries), min_size=1, max_size=12)
+    )
+    return rows, sample
 
 
 def _as_tuple(geography) -> tuple:
@@ -142,18 +172,19 @@ def _as_tuple(geography) -> tuple:
 
 class TestRegionConstraintProperties:
     @given(
-        case=crosswalk_and_regions(),
+        case=crosswalk_and_households(),
         n_clones=st.integers(1, 4),
         seed=st.integers(0, 2**32 - 1),
     )
-    @settings(max_examples=60, deadline=None)
+    @settings(max_examples=80, deadline=None)
     def test_assignment_invariants(self, case, n_clones, seed):
-        rows, regions = case
+        rows, sample = case
+        regions, countries, raw = map(list, zip(*sample))
         with tempfile.TemporaryDirectory() as directory:
             crosswalk, path = _write_crosswalk(directory, rows)
             kwargs = dict(
-                household_countries=_countries(regions),
-                household_regions=np.array(regions, dtype=object),
+                household_countries=_countries(countries),
+                household_regions=np.array(raw, dtype=object),
                 n_clones=n_clones,
                 seed=seed,
                 crosswalk_path=path,
@@ -164,26 +195,22 @@ class TestRegionConstraintProperties:
         # Determinism: same inputs and seed, same assignment.
         assert _as_tuple(geography) == _as_tuple(repeat)
 
-        n = len(regions)
+        n = len(sample)
         assert len(geography.oa_code) == n * n_clones
         by_oa = crosswalk.set_index("oa_code")
         region_population = crosswalk.groupby("region_code")["population"].sum()
-        england_population = crosswalk.loc[
-            crosswalk["country"] == "England", "population"
-        ].sum()
+        country_population = crosswalk.groupby("country")["population"].sum()
         for i, oa in enumerate(geography.oa_code):
-            region = regions[i % n]
+            region, country = regions[i % n], countries[i % n]
             row = by_oa.loc[oa]
-            # The OA's region is the household's region; an unknown region
-            # still keeps the household in its country.
-            if region == "UNKNOWN":
-                assert row["country"] == "England"
-                stratum_population = england_population
+            # The OA's region is the household's region; a household with
+            # no region stays in its country.
+            assert row["country"] == country == geography.country[i]
+            if region is None:
+                stratum_population = country_population[country]
             else:
                 assert geography.region_code[i] == FRS_REGION_TO_CODE[region]
                 stratum_population = region_population[FRS_REGION_TO_CODE[region]]
-            assert geography.country[i] == REGION_TO_COUNTRY.get(region, "England")
-            assert row["country"] == geography.country[i]
             # Every other code is the crosswalk's own row for that OA.
             for field, column in GEOGRAPHY_FIELDS.items():
                 assert getattr(geography, field)[i] == row[column]
@@ -192,17 +219,34 @@ class TestRegionConstraintProperties:
                 assert row["population"] > 0
 
     @given(
-        case=crosswalk_and_regions(allow_unassignable=True),
+        case=crosswalk_and_households(),
+        uncovered=st.lists(
+            st.sampled_from(
+                [("NORTHERN_IRELAND", "Northern Ireland"), (None, "England")]
+            ),
+            max_size=3,
+        ),
         weights=st.lists(
-            st.floats(0, 5_000, allow_nan=False), min_size=12, max_size=12
+            st.floats(0, 5_000, allow_nan=False), min_size=15, max_size=15
         ),
         n_clones=st.integers(1, 4),
         seed=st.integers(0, 2**32 - 1),
     )
-    @settings(max_examples=40, deadline=None)
-    def test_clone_and_assign_invariants(self, case, weights, n_clones, seed):
-        rows, regions = case
-        dataset = _toy_dataset(regions, weights[: len(regions)])
+    @settings(max_examples=50, deadline=None)
+    def test_clone_and_assign_invariants(
+        self, case, uncovered, weights, n_clones, seed
+    ):
+        rows, sample = case
+        # clone_and_assign reads a household without a region as English.
+        sample = [(r, "England" if r is None else c, raw) for r, c, raw in sample]
+        covered_countries = {row["country"] for row in rows}
+        sample += [
+            (region, country, region or "UNKNOWN")
+            for region, country in uncovered
+            if country not in covered_countries
+        ]
+        regions, countries, raw = map(list, zip(*sample))
+        dataset = _toy_dataset(raw, weights[: len(sample)])
         with tempfile.TemporaryDirectory() as directory:
             _, path = _write_crosswalk(directory, rows)
             kwargs = dict(n_clones=n_clones, seed=seed, crosswalk_path=path)
@@ -225,50 +269,68 @@ class TestRegionConstraintProperties:
             rtol=1e-12,
             atol=1e-9,
         )
-        # Cloning never rewrites the FRS region.
-        assert household["region"].tolist() == original["region"].tolist() * n_clones
 
-        expected = household["region"].map(FRS_REGION_TO_CODE)
-        known = household["region"].isin(FRS_REGION_TO_CODE) & (
-            household["oa_code"] != ""
-        )
-        assert (household.loc[known, "region_code_oa"] == expected[known]).all()
-        unknown = household["region"] == "UNKNOWN"
-        assert household.loc[unknown, "region_code_oa"].str.startswith("E12").all()
-        # A region the crosswalk does not cover gets no geography at all.
-        covered = {row["region_code"] for row in rows}
-        uncovered = ~unknown & ~expected.isin(covered)
-        for column in ["oa_code", "la_code_oa", "constituency_code_oa"]:
-            assert (household.loc[uncovered, column] == "").all()
-            assert (household.loc[~uncovered, column] != "").all()
+        # Cloning never rewrites the FRS region (a missing value may come
+        # back as None or NaN; both are missing).
+        def tidy(values):
+            return [None if pd.isna(v) else v for v in values]
+
+        assert tidy(household["region"]) == tidy(original["region"]) * n_clones
+
+        for i, (region, country) in enumerate(
+            zip(regions * n_clones, countries * n_clones)
+        ):
+            assigned = household.iloc[i]
+            if country not in covered_countries:
+                # A country the crosswalk does not cover gets no geography.
+                for column in ["oa_code", "la_code_oa", "constituency_code_oa"]:
+                    assert assigned[column] == ""
+            elif region is None:
+                assert assigned["region_code_oa"].startswith("E12")
+            else:
+                assert assigned["region_code_oa"] == FRS_REGION_TO_CODE[region]
+                assert assigned["oa_code"] != ""
 
     @given(
-        case=crosswalk_and_regions(),
+        unknown_countries=st.lists(
+            st.sampled_from(["England", "Wales", "Scotland", "Northern Ireland"]),
+            max_size=6,
+        ),
+        known=st.lists(
+            st.sampled_from(["LONDON", "WALES", "SCOTLAND", "NORTHERN_IRELAND"]),
+            max_size=6,
+        ),
+        order=st.randoms(use_true_random=False),
         n_clones=st.integers(1, 4),
         seed=st.integers(0, 2**32 - 1),
     )
-    @settings(max_examples=40, deadline=None)
+    @settings(max_examples=60, deadline=None)
     def test_matches_country_sampling_when_region_is_the_country(
-        self, case, n_clones, seed
+        self, unknown_countries, known, order, n_clones, seed
     ):
-        """Differential: with one region per country the two paths agree."""
-        _, regions = case
-        one_region_each = ["LONDON", "WALES", "SCOTLAND", "NORTHERN_IRELAND"]
-        regions = [r for r in regions if r in one_region_each] or ["LONDON"]
+        """Differential: when each country is one region, giving regions
+        changes nothing, even with households of unknown region mixed in."""
+        sample = [(None, c) for c in unknown_countries] + [
+            (r, REGION_TO_COUNTRY[r]) for r in known
+        ] or [("LONDON", "England")]
+        order.shuffle(sample)
         rows = []
-        for region in one_region_each:
+        for region in ["LONDON", "WALES", "SCOTLAND", "NORTHERN_IRELAND"]:
             rows += _crosswalk_rows(region, [[30, 10, 0], [5, 55], [20]])
         with tempfile.TemporaryDirectory() as directory:
             _, path = _write_crosswalk(directory, rows)
             kwargs = dict(
-                household_countries=_countries(regions),
+                household_countries=_countries([c for _, c in sample]),
                 n_clones=n_clones,
                 seed=seed,
                 crosswalk_path=path,
             )
             by_country = assign_random_geography(**kwargs)
             by_region = assign_random_geography(
-                household_regions=np.array(regions, dtype=object), **kwargs
+                household_regions=np.array(
+                    [r or "UNKNOWN" for r, _ in sample], dtype=object
+                ),
+                **kwargs,
             )
         assert _as_tuple(by_country) == _as_tuple(by_region)
 
@@ -407,6 +469,69 @@ class TestRegionConstraintExamples:
         )
         assert len(set(geography.constituency_code)) == 1
 
+    def test_zero_population_region_samples_uniformly(self, tmp_path):
+        """A region with no recorded population draws its OAs uniformly."""
+        rows = _crosswalk_rows("WALES", [[0, 0], [0, 0]]) + _crosswalk_rows(
+            "LONDON", [[100]]
+        )
+        crosswalk, path = _write_crosswalk(tmp_path, rows)
+        n = 8_000
+        geography = assign_random_geography(
+            household_countries=np.full(n, 2),
+            household_regions=np.array(["WALES"] * n, dtype=object),
+            n_clones=1,
+            seed=5,
+            crosswalk_path=path,
+        )
+        shares = pd.Series(geography.oa_code).value_counts(normalize=True)
+        welsh = set(crosswalk.loc[crosswalk["country"] == "Wales", "oa_code"])
+        assert set(shares.index) == welsh
+        # Binomial(8,000, 0.25): four standard errors is 0.019.
+        assert (shares - 0.25).abs().max() < 0.02
+
+    def test_mixed_unknown_and_sole_region_draw_like_the_country(self, tmp_path):
+        """Review counterexample: an UNKNOWN and a London household, London
+        being England's only region, draw exactly as a country-only call."""
+        rows = (
+            _crosswalk_rows("LONDON", [[100], [100]])
+            + _crosswalk_rows("WALES", [[100]])
+            + _crosswalk_rows("SCOTLAND", [[100]])
+            + _crosswalk_rows("NORTHERN_IRELAND", [[100]])
+        )
+        _, path = _write_crosswalk(tmp_path, rows)
+        kwargs = dict(
+            household_countries=np.array([1, 1]),
+            n_clones=1,
+            seed=0,
+            crosswalk_path=path,
+        )
+        by_country = assign_random_geography(**kwargs)
+        by_region = assign_random_geography(
+            household_regions=np.array(["UNKNOWN", "LONDON"], dtype=object),
+            **kwargs,
+        )
+        assert _as_tuple(by_country) == _as_tuple(by_region)
+
+    def test_clone_and_assign_reads_untidy_regions_like_the_sampler(self, tmp_path):
+        """Review counterexample: bytes, codes and untidy text give the
+        same country in cloning as in the sampler."""
+        rows = _crosswalk_rows("WALES", [[100]]) + _crosswalk_rows("LONDON", [[100]])
+        _, path = _write_crosswalk(tmp_path, rows)
+        raw = [b"WALES", " wales ", "W99999999", b"NORTHERN_IRELAND", "UNKNOWN"]
+        assert _household_country_codes(
+            _toy_dataset(raw, [1.0] * len(raw))
+        ).tolist() == [2, 2, 2, 4, 1]
+        household = clone_and_assign(
+            _toy_dataset(raw, [1.0] * len(raw)), n_clones=1, crosswalk_path=path
+        ).household
+        assert household["region_code_oa"].tolist() == [
+            "W99999999",
+            "W99999999",
+            "W99999999",
+            "",
+            "E12000007",
+        ]
+
 
 @pytest.fixture(scope="module")
 def real_crosswalk() -> pd.DataFrame:
@@ -466,7 +591,7 @@ class TestRealCrosswalk:
         regions = np.array(covered * 40, dtype=object)
         n_clones = 10
         geography = assign_random_geography(
-            household_countries=_countries(list(regions)),
+            household_countries=_countries([REGION_TO_COUNTRY[r] for r in regions]),
             household_regions=regions,
             n_clones=n_clones,
             seed=42,
@@ -481,11 +606,19 @@ class TestRealCrosswalk:
 
 
 def test_built_dataset_oa_region_matches_frs_region(enhanced_frs):
-    """Every household of the built enhanced FRS sits in its own region."""
+    """Every household of the built enhanced FRS sits in its own region.
+
+    A household with no region below the country is English to
+    clone_and_assign, so its OA must be English.
+    """
     household = enhanced_frs.household
-    decode = lambda value: value.decode() if isinstance(value, bytes) else str(value)  # noqa: E731
-    region_code = household["region_code_oa"].map(decode)
-    expected = household["region"].map(decode).map(FRS_REGION_TO_CODE)
+    region_code = household["region_code_oa"].map(
+        lambda value: value.decode() if isinstance(value, bytes) else str(value)
+    )
+    expected = household["region"].map(_normalise_region)
     has_oa = region_code != ""
     assert has_oa.any()
-    assert int((region_code[has_oa] != expected[has_oa]).sum()) == 0
+    known = has_oa & expected.notna()
+    assert int((region_code[known] != expected[known]).sum()) == 0
+    unknown = has_oa & expected.isna()
+    assert region_code[unknown].str.startswith("E12").all()

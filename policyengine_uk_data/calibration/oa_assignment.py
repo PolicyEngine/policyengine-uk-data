@@ -296,19 +296,34 @@ def assign_random_geography(
                 n_unknown,
             )
 
-    # Sampling stratum per household: its region code where known,
-    # otherwise its country name.
-    strata = np.array(
-        [
-            region if region is not None else country
-            for region, country in zip(regions, countries)
-        ],
-        dtype=object,
-    )
     path_key = str(crosswalk_path) if crosswalk_path else None
     country_distributions = _load_country_distributions(path_key)
     region_distributions = (
         _load_region_distributions(path_key) if household_regions is not None else {}
+    )
+    # A region that holds every OA of its country (Wales and Scotland in
+    # the crosswalk) samples from the same pool as the country, so it
+    # shares the country's stratum: its households then draw exactly as a
+    # country-only call would draw them.
+    sole_region_country = {}
+    for country, dist in country_distributions.items():
+        codes = set(pd.Series(dist["region_codes"]).fillna("").astype(str).str.strip())
+        if len(codes) == 1:
+            (code,) = codes
+            region_dist = region_distributions.get(code)
+            if region_dist is not None and len(region_dist["oa_codes"]) == len(
+                dist["oa_codes"]
+            ):
+                sole_region_country[code] = country
+
+    # Sampling stratum per household: its region code where known,
+    # otherwise its country name.
+    strata = np.array(
+        [
+            country if region is None else sole_region_country.get(region, region)
+            for region, country in zip(regions, countries)
+        ],
+        dtype=object,
     )
     distributions = {}
     missing_distributions = []
