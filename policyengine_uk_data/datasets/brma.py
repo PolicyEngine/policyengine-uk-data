@@ -306,6 +306,15 @@ def split_private_renters_across_brmas(
             "unit needs one to place it in a household."
         )
     benunit_owner = owner.loc[benunit.benunit_id].to_numpy()
+    if "tenure_type" not in household.columns:
+        # The model would default every household to renting privately.
+        raise ValueError("The household table needs tenure_type to find renters.")
+    for entity, ids in (
+        ("household", household.household_id),
+        ("benunit", benunit.benunit_id),
+    ):
+        if not ids.is_unique:
+            raise ValueError(f"The {entity} table has duplicate {entity}_id values.")
     year = int(dataset.time_period)
     simulation = Microsimulation(dataset=dataset)
     for entity, ids in (
