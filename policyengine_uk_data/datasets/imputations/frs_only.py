@@ -100,6 +100,9 @@ FRS_ONLY_PERSON_VARIABLES = [
     "jsa_income_reported",
     "esa_contrib_reported",
     "esa_income_reported",
+    # Self-employment losses. Last, so the QRF's sequential imputation of
+    # every variable above is unchanged by it.
+    "trading_loss",
 ]
 
 
