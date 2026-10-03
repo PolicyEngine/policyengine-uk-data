@@ -465,6 +465,8 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
                 "allpay4": 0,
                 "grtdir1": 100,
                 "grtdir2": 0,
+                "samesit": 2,
+                **{f"sdemp{month:02d}": 0 for month in range(1, 13)},
             }
         ]
     )
@@ -529,6 +531,8 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
                 "jobtype",
                 "etype",
                 "sejblong",
+                "jobbus",
+                "seend",
             ]
         ),
         "benefits": pd.DataFrame(

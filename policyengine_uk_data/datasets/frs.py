@@ -53,6 +53,10 @@ ESA_HEALTH_EMPLOYMENT_STATUSES = (
     EmploymentStatus.LONG_TERM_DISABLED.name,
     EmploymentStatus.SHORT_TERM_DISABLED.name,
 )
+SELF_EMPLOYED_STATUSES = (
+    EmploymentStatus.FT_SELF_EMPLOYED.name,
+    EmploymentStatus.PT_SELF_EMPLOYED.name,
+)
 FORMULA_MODELED_EDUCATION_GRANT_VARIABLES = (
     "childcare_grant",
     "parents_learning_allowance",
@@ -575,9 +579,10 @@ def validate_frs_survey_year(raw_frs_folder, year: int) -> None:
 UC_BENEFIT_CODE = 95  # BENEFITS.BENEFIT
 UC_START_UP_PERIOD_MONTHS = 12  # reg 63(1)
 FRS_SELF_EMPLOYED_EMPSTATI = (3, 4)  # ADULT.EMPSTATI: FT / PT self-employed
+FRS_SELF_EMPLOYED_ACTIVITIES = (3, 4)  # ADULT.SDEMP01-12: FT / PT self-employed
 FRS_SELF_EMPLOYED_JOB_ETYPES = (2, 3, 4, 5, 6, 7)  # JOB.ETYPE other than employee
+FRS_JOBBUS_BUSINESS = 2  # JOB.JOBBUS: "A business", not "Job"
 UC_CLAIM_RECENCY_SEED = 63
-_MONTHS_PER_DAY = 12 / 365.25
 
 
 def frs_interview_date(intdate) -> pd.Series:
@@ -607,6 +612,17 @@ def parse_frs_uc_claim_start(raw) -> pd.Series:
     return parsed
 
 
+def completed_months(later, earlier) -> np.ndarray:
+    """Whole calendar months from ``earlier`` to ``later``; NaN where either is missing."""
+    later, earlier = pd.DatetimeIndex(later), pd.DatetimeIndex(earlier)
+    months = (
+        (later.year - earlier.year) * 12
+        + (later.month - earlier.month)
+        - (later.day < earlier.day)
+    )
+    return np.where(later.isna() | earlier.isna(), np.nan, months)
+
+
 def uc_claim_began_in_start_up_window(
     months_since_claim_start, reports_uc, draws, unlinked_share
 ) -> np.ndarray:
@@ -623,6 +639,27 @@ def uc_claim_began_in_start_up_window(
     return recent | (unlinked & (np.asarray(draws, dtype=float) < unlinked_share))
 
 
+def years_running_trade(
+    years_in_job, describes_business, self_employed_all_year
+) -> np.ndarray:
+    """Completed years in the trade behind a self-employed job; NaN when unknown.
+
+    SEJBLONG asks someone running a business how long they have run it, and
+    anyone else how long they have been in their current self-employed job.
+    For a person self-employed throughout the last 12 months, a job under a
+    year old is a new engagement in the same trade (ADM H4102 example 4 treats
+    a hairdresser turned hairstylist as one trade), so it does not date the
+    trade.
+    """
+    years = np.asarray(years_in_job, dtype=float)
+    new_engagement = (
+        (years < 1)
+        & ~np.asarray(describes_business, dtype=bool)
+        & np.asarray(self_employed_all_year, dtype=bool)
+    )
+    return np.where(new_engagement, np.nan, years)
+
+
 def derive_uc_is_in_startup_period(
     self_employed, uc_claim_began_in_window, years_running_business
 ) -> np.ndarray:
@@ -636,12 +673,17 @@ def derive_uc_is_in_startup_period(
     one. DWP determines gainful self-employment at the start of a claim, or
     when a claimant reports a new trade, so in survey terms the period is
     running when the person is self-employed and either their benefit unit's
-    UC claim or their current business began less than 12 months before
-    interview.
+    UC claim or their trade began less than 12 months before interview.
+
+    The flag says whether a period was running at interview. Across a steady
+    population that equals the expected share of the year spent in one.
 
     The FRS cannot see earlier UC awards, so a re-claim after the floor
     applied for the same trade, and a second start-up period within five
-    years (reg 63(2)), count as start-up periods here.
+    years (reg 63(2)), count as start-up periods here. Nor can it see a move
+    into the all-work-related-requirements group on an old claim (DWP decides
+    gainful self-employment only then, for example when the youngest child
+    turns 3), which starts a period the flag misses.
     """
     years = np.asarray(years_running_business, dtype=float)
     return np.asarray(self_employed, dtype=bool) & (
@@ -656,22 +698,22 @@ def add_uc_start_up_period(
     household: pd.DataFrame,
     job: pd.DataFrame,
     benefits: pd.DataFrame,
-    uc_claim_start_raw: pd.Series,
 ) -> None:
-    """Set ``uc_is_in_startup_period`` on ``pe_person`` from the raw FRS tables."""
+    """Set ``uc_is_in_startup_period`` on ``pe_person`` from the raw FRS tables.
+
+    ``benefits.ucstart_raw`` must hold UCSTART as read, before numeric
+    conversion.
+    """
     interview = frs_interview_date(household.intdate)
     interview.index = household.index
     uc = benefits.benefit.to_numpy() == UC_BENEFIT_CODE
-    claim_start = parse_frs_uc_claim_start(uc_claim_start_raw[uc])
     claim = pd.DataFrame(
         {
             "benunit_id": benefits.benunit_id.to_numpy()[uc],
-            "months": (
-                interview.reindex(benefits.household_id.to_numpy()[uc]).to_numpy()
-                - claim_start.to_numpy()
-            )
-            / np.timedelta64(1, "D")
-            * _MONTHS_PER_DAY,
+            "months": completed_months(
+                interview.reindex(benefits.household_id.to_numpy()[uc]),
+                parse_frs_uc_claim_start(benefits.ucstart_raw.to_numpy()[uc]),
+            ),
         }
     )
     benunit_ids = pe_benunit.benunit_id.to_numpy()
@@ -679,19 +721,33 @@ def add_uc_start_up_period(
     months_by_benunit = claim.groupby("benunit_id").months.min().reindex(benunit_ids)
     reports_uc = np.isin(benunit_ids, claim.benunit_id)
 
-    se_jobs = job[job.etype.isin(FRS_SELF_EMPLOYED_JOB_ETYPES)]
+    # Self-employed jobs still held (SEEND is the date a respondent stopped).
+    se_jobs = job[
+        job.etype.isin(FRS_SELF_EMPLOYED_JOB_ETYPES) & ~(job.seend.fillna(0) > 0)
+    ]
     # The person's first self-employed job (main job first) is the trade the
-    # start-up period follows. SEJBLONG is completed years running it.
-    first_se_job = se_jobs.sort_values("jobtype").drop_duplicates("person_id")
+    # start-up period follows.
+    first_se_job = (
+        se_jobs.sort_values("jobtype")
+        .drop_duplicates("person_id")
+        .set_index("person_id")
+    )
     person_ids = person.person_id.to_numpy()
-    years_running_business = (
-        first_se_job.set_index("person_id")
-        .sejblong.where(lambda years: years >= 0)
-        .reindex(person_ids)
-        .to_numpy(dtype=float)
+    calendar = person[[f"sdemp{month:02d}" for month in range(1, 13)]]
+    main_job_self_employed = person.empstati.isin(FRS_SELF_EMPLOYED_EMPSTATI).to_numpy()
+    self_employed_all_year = main_job_self_employed & (
+        (person.samesit == 2).to_numpy()
+        | calendar.isin(FRS_SELF_EMPLOYED_ACTIVITIES).all(axis=1).to_numpy()
+    )
+    years_running_business = years_running_trade(
+        first_se_job.sejblong.where(lambda years: years >= 0).reindex(person_ids),
+        (first_se_job.jobbus == FRS_JOBBUS_BUSINESS).reindex(
+            person_ids, fill_value=False
+        ),
+        self_employed_all_year,
     )
     self_employed = (
-        person.empstati.isin(FRS_SELF_EMPLOYED_EMPSTATI).to_numpy()
+        main_job_self_employed
         | np.isin(person_ids, se_jobs.person_id)
         | (person.seincam2.to_numpy() != 0)
     )
@@ -780,12 +836,19 @@ def create_frs(
         if table_name == "job" and "salsac" in df_raw.columns:
             job_salsac_raw = df_raw["salsac"].copy()
         # UCSTART is a month/day/year date string, which numeric conversion
-        # would blank.
+        # would blank, so keep it as read.
         if table_name == "benefits":
-            uc_claim_start_raw = df_raw["ucstart"].copy()
+            if "ucstart" not in df_raw.columns:
+                raise ValueError(
+                    "The FRS BENEFITS table has no UCSTART column (the UC claim "
+                    "start date), which the UC start-up period input needs."
+                )
+            ucstart_raw = df_raw["ucstart"].to_numpy()
 
         # Make numeric where possible
         df = df_raw.apply(pd.to_numeric, errors="coerce")
+        if table_name == "benefits":
+            df["ucstart_raw"] = ucstart_raw
 
         # Standardise column names to lower case (already done above)
         # df.columns = df.columns.str.lower()
@@ -1332,9 +1395,7 @@ def create_frs(
             )
             * WEEKS_IN_YEAR
         )
-    add_uc_start_up_period(
-        pe_person, pe_benunit, person, household, job, benefits, uc_claim_start_raw
-    )
+    add_uc_start_up_period(pe_person, pe_benunit, person, household, job, benefits)
 
     pe_person = add_disability_benefit_categories_from_reported_amounts(
         pe_person,

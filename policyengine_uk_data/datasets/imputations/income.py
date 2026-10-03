@@ -298,6 +298,17 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         ["dividend_income"],
     )
 
+    # The copy keeps its donor's start-up flag, which follows the donor's own
+    # trade and UC claim; clear it where the copy's status and imputed income
+    # leave no self-employment.
+    if "uc_is_in_startup_period" in zero_weight_copy.person.columns:
+        from policyengine_uk_data.datasets.frs import SELF_EMPLOYED_STATUSES
+
+        person = zero_weight_copy.person
+        person["uc_is_in_startup_period"] &= person.employment_status.isin(
+            SELF_EMPLOYED_STATUSES
+        ) | (person.self_employment_income != 0)
+
     zero_weight_copy.validate()
     dataset.validate()
 
