@@ -415,6 +415,11 @@ def derive_uc_is_in_gainful_self_employment(
 
     policyengine-uk's default reads any self-employment income other than
     zero as gainful self-employment, and none as none.
+
+    The flag is fixed from survey-year (or SPI-imputed) incomes. Uprating
+    reprices the two incomes by different indices, so in a projected year a
+    flagged side trade can earn less than the job, and the reverse; the flag
+    does not follow.
     """
     self_employed_main_job = np.isin(
         np.asarray(employment_status, dtype=object), SELF_EMPLOYED_STATUSES

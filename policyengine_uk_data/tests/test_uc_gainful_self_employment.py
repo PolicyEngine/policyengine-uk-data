@@ -25,6 +25,13 @@ def derive(status, profit, pay):
     return derive_uc_is_in_gainful_self_employment([status], [profit], [pay])[0]
 
 
+def oracle(status, profit, pay):
+    # Written out per person, independently of the vectorised helper.
+    if status == "FT_SELF_EMPLOYED" or status == "PT_SELF_EMPLOYED":
+        return True
+    return profit > 0 and profit > pay
+
+
 def test_self_employed_statuses_are_model_enum_members():
     assert set(SELF_EMPLOYED_STATUSES) <= set(STATUSES)
 
@@ -55,6 +62,15 @@ def test_side_trade_counts_only_when_it_out_earns_pay():
     assert derive("UNEMPLOYED", 1.0, 0.0)
 
 
+@pytest.mark.parametrize("status", STATUSES)
+@pytest.mark.parametrize(
+    "profit, pay",
+    [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (1.0, 1.0), (2.0, 1.0), (1.0, 2.0)],
+)
+def test_truth_table_against_oracle(status, profit, pay):
+    assert derive(status, profit, pay) == oracle(status, profit, pay)
+
+
 @settings(max_examples=500, deadline=None)
 @given(st.sampled_from(STATUSES), incomes, incomes)
 def test_invariants(status, profit, pay):
@@ -78,7 +94,7 @@ def test_vectorised_matches_elementwise(rows):
     pays = [r[2] for r in rows]
     result = derive_uc_is_in_gainful_self_employment(statuses, profits, pays)
     assert result.dtype == bool
-    assert result.tolist() == [derive(*r) for r in rows]
+    assert result.tolist() == [oracle(*r) for r in rows]
     np.testing.assert_array_equal(
         derive_uc_is_in_gainful_self_employment(
             pd.Series(statuses, dtype="category"),
@@ -169,22 +185,38 @@ def test_spi_copy_flag_follows_its_own_imputed_incomes(rows):
     assert len(person) == 2 * n
     # The SPI copy kept the donors' statuses and took the imputed incomes.
     assert person.self_employment_income.iloc[n:].tolist() == imputed_profit
-    np.testing.assert_array_equal(
-        person[GAINFUL].to_numpy(dtype=bool),
-        derive_uc_is_in_gainful_self_employment(
+    assert person[GAINFUL].tolist() == [
+        oracle(*values)
+        for values in zip(
             person.employment_status,
             person.self_employment_income,
             person.employment_income,
-        ),
+        )
+    ]
+
+
+def test_frs_only_stage_leaves_the_rule_inputs_alone():
+    # The second-stage QRF rewrites these columns on the SPI copy after the
+    # flag's inputs are set; none of them may be an input to the flag.
+    from policyengine_uk_data.datasets.imputations.frs_only import (
+        FRS_ONLY_PERSON_VARIABLES,
     )
+
+    rule_columns = {
+        GAINFUL,
+        "employment_status",
+        "employment_income",
+        "self_employment_income",
+    }
+    assert rule_columns.isdisjoint(FRS_ONLY_PERSON_VARIABLES)
 
 
 @pytest.mark.parametrize("fixture", ["frs", "enhanced_frs"])
 def test_built_dataset_flag(fixture, request):
+    # Skips only when no built dataset exists; a build without the column fails.
     dataset = request.getfixturevalue(fixture)
     person = dataset.person
-    if GAINFUL not in person.columns:
-        pytest.skip(f"{fixture} was built before this input existed")
+    assert GAINFUL in person.columns, f"{fixture} lacks {GAINFUL}: rebuild it"
     gainful = person[GAINFUL].to_numpy(dtype=bool)
     self_employed = np.isin(person.employment_status, SELF_EMPLOYED_STATUSES)
     assert gainful[self_employed].all()
