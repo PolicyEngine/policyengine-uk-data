@@ -16,7 +16,9 @@ the FRS has 28.1m employees against the LFS's 29.1m for 2024.
 
 Source: ONS Labour market overview, series MGRN (LFS: Employees: UK: All,
 aged 16 and over, seasonally adjusted) and MGRQ (LFS: Self-employed: UK:
-All), annual four-quarter averages, release of 14 September 2026.
+All), annual four-quarter averages, release of 15 September 2026. The loss
+matrix holds the latest year's value for up to three later years and drops the
+targets after that (``_resolve_value``), so add each new annual average.
 """
 
 import numpy as np

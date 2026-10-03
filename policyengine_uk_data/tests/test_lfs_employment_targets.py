@@ -29,7 +29,7 @@ from policyengine_uk_data.utils.employment_status import (
     SELF_EMPLOYED_STATUSES,
 )
 
-# ONS Labour market overview, 14 September 2026: MGRN and MGRQ, annual
+# ONS Labour market overview, 15 September 2026: MGRN and MGRQ, annual
 # four-quarter averages, thousands.
 ONS_THOUSANDS = {
     "ons/lfs_employees": {2022: 28_564, 2023: 28_821, 2024: 29_126, 2025: 29_590},

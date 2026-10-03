@@ -80,13 +80,15 @@ EARNINGS_GROUPS = (
 )
 # FRS rows that take no SPI draw and keep their own values: the FRS child
 # table (dependent children, including 16-19-year-olds in education), whose
-# earnings the FRS build does not record, and anyone under 16. The SPI has no
-# record of them as earners.
+# earnings this FRS build does not record, and anyone under 16. With no
+# earnings or job information, there is nothing to tie a taxpayer's SPI
+# incomes to.
 NOT_IMPUTED = "NOT_IMPUTED"
 
 
-# Every earnings group gets at least this share of the training sample, so the
-# small self-employed groups are not fitted on a few thousand records.
+# Every earnings group gets at least this share of the nominal training sample
+# size, so the small self-employed groups are not fitted on a few thousand
+# records. Floors are added on top, so the sample can exceed the nominal size.
 MIN_GROUP_SAMPLE_SHARE = 0.1
 
 
@@ -143,8 +145,10 @@ def earnings_group_sample_sizes(
     group_weights: dict[str, float], sample_size: int
 ) -> dict[str, int]:
     """Training records per earnings group: the group's weighted share of
-    ``sample_size``, but never under ``MIN_GROUP_SAMPLE_SHARE`` of it. Groups
-    with no weight get no records."""
+    ``sample_size``, but never under ``MIN_GROUP_SAMPLE_SHARE`` of
+    ``sample_size``. Groups with no weight get no records. Floored groups are
+    not offset elsewhere, so the total can exceed ``sample_size`` (by at most
+    one floor per group, plus rounding)."""
     weights = {group: float(w) for group, w in group_weights.items() if w > 0}
     total = sum(weights.values())
     floor = int(np.ceil(MIN_GROUP_SAMPLE_SHARE * sample_size))

@@ -8,11 +8,13 @@ Invariants (Hypothesis properties unless noted):
    and only if the main job is self-employment or the FRS records a profit.
 2. SPI records: the group has pay if and only if PAY + EPB + TAXTERM > 0, and
    a trade if and only if SEINC_NUM = 1 or PROFITS > 0.
-3. Both mappings are monotone (more income never removes a source) and give
-   the same answer elementwise as row by row.
+3. Both mappings are monotone (more of one income adds that source and leaves
+   the other alone) and give the same answer elementwise as row by row.
 4. Training sample: every group with weight gets at least
-   ``MIN_GROUP_SAMPLE_SHARE`` of the sample, groups without weight get none,
-   and groups above the floor get their weighted share.
+   ``MIN_GROUP_SAMPLE_SHARE`` of the nominal sample size, groups without
+   weight get none, and groups above the floor get their weighted share.
+   Floors are not offset elsewhere, so the total lies between the nominal size
+   (less rounding) and the nominal size plus one floor per group.
 5. ``generate_spi_table`` resamples each group only from its own records.
 6. Model draws: pay is positive exactly in the groups with pay, profit is zero
    in the groups without a trade, and ``NOT_IMPUTED`` rows get no draw.
@@ -196,6 +198,31 @@ def test_spi_group_follows_pay_and_self_employment_pages(records):
 
 @RELAXED
 @given(
+    st.lists(
+        st.tuples(amounts, amounts, st.sampled_from([-1, 0, 1])),
+        min_size=1,
+        max_size=40,
+    ),
+    st.floats(0.01, 1e6),
+    st.sampled_from(["pay", "profit"]),
+)
+def test_spi_group_monotone_in_income(records, extra, source):
+    pay, profit, indicator = (np.array(column, dtype=float) for column in zip(*records))
+    before = spi_earnings_group(pay, profit, indicator)
+    if source == "pay":
+        after = spi_earnings_group(pay + extra, profit, indicator)
+        gained, other = PAY_GROUPS, TRADE_GROUPS
+    else:
+        after = spi_earnings_group(pay, profit + extra, indicator)
+        gained, other = TRADE_GROUPS, PAY_GROUPS
+    assert np.isin(after, list(gained)).all()
+    np.testing.assert_array_equal(
+        np.isin(after, list(other)), np.isin(before, list(other))
+    )
+
+
+@RELAXED
+@given(
     st.dictionaries(
         st.sampled_from(EARNINGS_GROUPS),
         st.one_of(st.just(0.0), st.floats(1e-3, 1e8)),
@@ -216,6 +243,9 @@ def test_group_sample_sizes(weights, sample_size):
         assert size >= floor
         if share > floor + 1:
             assert abs(size - share) <= 0.5 + 1e-9
+    groups = len(positive)
+    assert sample_size - 0.5 * groups <= sum(sizes.values())
+    assert sum(sizes.values()) <= sample_size + groups * (floor + 0.5)
     assert sizes == earnings_group_sample_sizes(weights, sample_size)
 
 
@@ -333,15 +363,16 @@ def test_model_draws_agree_with_group(fitted_model, inputs):
     assert (draws[drawn].to_numpy() >= 0).all()
 
 
-def test_model_draws_some_profit_for_traders(fitted_model):
-    """The trade groups draw zero and positive profits, as the SPI has both."""
+@pytest.mark.parametrize("group", [SELF_EMPLOYED, EMPLOYEE_AND_SELF_EMPLOYED])
+def test_model_draws_some_profit_for_traders(fitted_model, group):
+    """Both trade groups draw zero and positive profits, as the SPI has both."""
     n = 400
     inputs = pd.DataFrame(
         {
             "age": np.linspace(20, 80, n),
             "gender": ["MALE", "FEMALE"] * (n // 2),
             "region": ["LONDON"] * n,
-            "earnings_group": [SELF_EMPLOYED] * n,
+            "earnings_group": [group] * n,
         }
     )
     profit = fitted_model.predict(inputs).self_employment_income
