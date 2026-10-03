@@ -32,7 +32,11 @@ from policyengine_uk_data.utils.datasets import (
     fill_with_mean,
     STORAGE_FOLDER,
 )
-from policyengine_uk_data.parameters import load_take_up_rate, load_parameter
+from policyengine_uk_data.parameters import (
+    load_parameter,
+    load_take_up_rate,
+    load_uc_managed_migration_claim_rates,
+)
 from policyengine_uk_data.datasets.childcare.assumptions import (
     EXTENDED_HOURS_MEAN,
     EXTENDED_HOURS_SD,
@@ -1508,7 +1512,9 @@ def create_frs(
     # certainty; the remaining non-reporters are filled probabilistically to
     # hit the aggregate target rate. See policyengine_uk_data/utils/takeup.py.
     from policyengine_uk_data.utils.takeup import (
+        UC_MANAGED_MIGRATION_SEED,
         assign_takeup_with_reported_anchors,
+        assign_uc_claim_at_legacy_closure,
     )
 
     def _reported_benunit_mask(person_column: str) -> np.ndarray:
@@ -1541,6 +1547,20 @@ def create_frs(
         generator.random(len(pe_benunit)),
         universal_credit_rate,
         reported_mask=_reported_benunit_mask("universal_credit_reported"),
+    )
+    # Whether a legacy-benefit family claims Universal Credit once its legacy
+    # benefits close, at DWP's Move to Universal Credit claim rates. Its own
+    # generator keeps every other draw on the seed=100 sequence. Checked
+    # because the dataset loader drops columns the model does not define.
+    require_variable(
+        "would_claim_uc_at_legacy_closure",
+        "Move to Universal Credit claim flag",
+    )
+    pe_benunit["would_claim_uc_at_legacy_closure"] = assign_uc_claim_at_legacy_closure(
+        pe_person,
+        pe_benunit,
+        load_uc_managed_migration_claim_rates(),
+        seed=UC_MANAGED_MIGRATION_SEED,
     )
     pe_benunit["would_claim_tfc"] = generator.random(len(pe_benunit)) < tfc_rate
 
