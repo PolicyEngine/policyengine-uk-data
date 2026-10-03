@@ -570,6 +570,36 @@ def validate_frs_survey_year(raw_frs_folder, year: int) -> None:
         )
 
 
+def derive_pension_credit_reported_capital(benunit: pd.DataFrame) -> np.ndarray:
+    """Each benefit unit's capital as the FRS records it, for Pension Credit.
+
+    Uses ``TOTCAPB4``, DWP's derived benefit-unit total of the adults' savings
+    and investments, which its below-average-resources statistics use in place
+    of ``TOTCAPB3`` since it became available in 2019/20; ``TOTCAPB3`` is the
+    fallback for earlier survey years. Pension Credit counts the claimant's
+    capital and, under the State Pension Credit Act 2002 s. 5, the partner's,
+    and this is a benefit-unit measure. It is an approximation of Pension
+    Credit capital, not the assessed figure: it covers financial assets only
+    (second homes and land, which Pension Credit also counts, are not in it),
+    and no Schedule V disregard or reg. 19 valuation is applied to it. The
+    household wealth imputation instead draws a household's wealth from Wealth
+    and Assets Survey households with similar income, composition, tenure and
+    region, with no information on means-tested receipt, and policyengine-uk
+    spreads it over the household's pension-age adults.
+
+    A missing or negative value gives -1, so policyengine-uk falls back to the
+    household proxy.
+    """
+    capital = pd.Series(np.nan, index=benunit.index, dtype=float)
+    for column in ("totcapb3", "totcapb4"):  # later columns take precedence
+        if column in benunit.columns:
+            values = pd.to_numeric(benunit[column], errors="coerce")
+            valid = np.isfinite(values) & (values >= 0)
+            capital = capital.where(~valid, values)
+    values = capital.to_numpy(dtype=float)
+    return np.where(np.isfinite(values) & (values >= 0), values, -1.0)
+
+
 def create_frs(
     raw_frs_folder: str,
     year: int,
@@ -1626,6 +1656,13 @@ def create_frs(
     # Add marital status at the benefit unit level
 
     pe_benunit["is_married"] = benunit.famtypb2.isin([5, 7])
+
+    # Pension Credit capital as the FRS records it for the benefit unit, in
+    # place of the household wealth proxy (policyengine-uk
+    # `pension_credit_reported_capital`).
+    pe_benunit["pension_credit_reported_capital"] = (
+        derive_pension_credit_reported_capital(benunit)
+    )
 
     # Assign property_purchased to a share of households matching the UK
     # housing transaction rate, so only genuine purchasers are charged SDLT.
