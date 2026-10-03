@@ -230,8 +230,13 @@ def test_impute_over_incomes_writes_draws_in_the_datasets_year(
 
 
 def test_second_stage_and_frs_dividends_see_rebased_draws(monkeypatch):
-    """The SPI-synthetic copy reaches the FRS-only QRF already rebased, and the
-    FRS half's dividend draw is rebased too."""
+    """Only the draws are rebased, and before the second stage sees them.
+
+    The SPI-synthetic copy reaches the FRS-only QRF with rebased draws; the
+    FRS respondents that QRF trains on, the FRS rows' undrawn incomes and
+    every undrawn money column keep their survey-year values. The FRS half's
+    dividend draw is rebased too. (If #498 lands, FRS dividends are no longer
+    drawn and that last assertion goes.)"""
     from policyengine_uk_data.datasets import disability_benefits
     from policyengine_uk_data.datasets.imputations import frs_only
 
@@ -241,7 +246,9 @@ def test_second_stage_and_frs_dividends_see_rebased_draws(monkeypatch):
             "person_household_id": [1, 2],
             "person_benunit_id": [1, 2],
             "employment_status": ["FT_EMPLOYED", "FT_EMPLOYED"],
-            **{column: [0.0, 0.0] for column in IMPUTATIONS},
+            **{column: [1_234.0, 56_789.0] for column in IMPUTATIONS},
+            # Undrawn and indexed in the uprating table: must not move.
+            "employee_pension_contributions": [500.0, 2_500.0],
         }
     )
     household = pd.DataFrame({"household_id": [1, 2], "household_weight": [1.0, 1.0]})
@@ -262,7 +269,8 @@ def test_second_stage_and_frs_dividends_see_rebased_draws(monkeypatch):
     seen = {}
 
     def _capture_stage_two(train_dataset, target_dataset):
-        seen["stage_two"] = target_dataset.person[IMPUTATIONS].copy()
+        seen["train"] = train_dataset.person.copy()
+        seen["target"] = target_dataset.person.copy()
         return target_dataset
 
     monkeypatch.setattr(income_module, "Microsimulation", _FakeSimulation)
@@ -278,20 +286,31 @@ def test_second_stage_and_frs_dividends_see_rebased_draws(monkeypatch):
     )
     monkeypatch.setattr(income_module, "stack_datasets", lambda frs, spi: (frs, spi))
 
-    frs, _ = income_module.impute_income(_FullDataset(person, household, FRS_YEAR))
+    frs, spi = income_module.impute_income(_FullDataset(person, household, FRS_YEAR))
 
     raw = _FixedDraws().predict(person)
-    for column in IMPUTATIONS:
-        factor = (
+    rebased = {
+        column: raw[column]
+        * (
             1.0
             if column in SPI_NOMINAL_IMPUTATIONS
             else _factor(column, SPI_FISCAL_YEAR, FRS_YEAR)
         )
-        np.testing.assert_allclose(
-            seen["stage_two"][column], raw[column] * factor, rtol=1e-12
-        )
+        for column in IMPUTATIONS
+    }
+    for column in IMPUTATIONS:
+        np.testing.assert_allclose(seen["target"][column], rebased[column], rtol=1e-12)
+        np.testing.assert_allclose(spi.person[column], rebased[column], rtol=1e-12)
+        np.testing.assert_array_equal(seen["train"][column], person[column])
+    for column in INDEXED:
+        if column != "dividend_income":
+            np.testing.assert_array_equal(frs.person[column], person[column])
     np.testing.assert_allclose(
-        frs.person["dividend_income"],
-        raw["dividend_income"] * _factor("dividend_income", SPI_FISCAL_YEAR, FRS_YEAR),
-        rtol=1e-12,
+        frs.person["dividend_income"], rebased["dividend_income"], rtol=1e-12
     )
+    for half in (frs, spi, seen["train"], seen["target"]):
+        table = half if isinstance(half, pd.DataFrame) else half.person
+        np.testing.assert_array_equal(
+            table["employee_pension_contributions"],
+            person["employee_pension_contributions"],
+        )
