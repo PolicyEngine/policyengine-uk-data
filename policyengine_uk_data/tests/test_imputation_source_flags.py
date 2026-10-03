@@ -74,6 +74,7 @@ def test_impute_income_marks_spi_synthetic_households(monkeypatch):
     from policyengine_uk_data.datasets.imputations import frs_only
 
     monkeypatch.setattr(income_module, "create_income_model", lambda: object())
+    monkeypatch.setattr(income_module, "draw_quantiles", lambda dataset: None)
     monkeypatch.setattr(
         income_module,
         "subsample_dataset",
@@ -82,7 +83,7 @@ def test_impute_income_marks_spi_synthetic_households(monkeypatch):
     monkeypatch.setattr(
         income_module,
         "impute_over_incomes",
-        lambda dataset, _model, _output_variables: dataset,
+        lambda dataset, _model, _output_variables, _quantiles=None: dataset,
     )
     monkeypatch.setattr(
         frs_only,
