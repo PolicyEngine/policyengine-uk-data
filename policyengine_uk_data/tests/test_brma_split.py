@@ -245,7 +245,7 @@ needs_policyengine = pytest.mark.skipif(
 )
 
 
-def toy_dataset():
+def toy_dataset(id_offset: int = 0):
     from policyengine_uk.data import UKSingleYearDataset
 
     regions = ["LONDON", "LONDON", "SCOTLAND", "WALES", "NORTH_WEST", "LONDON"] * 2
@@ -253,7 +253,7 @@ def toy_dataset():
     n = len(regions)
     household = pd.DataFrame(
         {
-            "household_id": np.arange(1, n + 1),
+            "household_id": np.arange(1, n + 1) + id_offset,
             "household_weight": np.r_[np.linspace(100, 2_000, n - 2), 0.0, 0.0],
             "region": regions,
             "tenure_type": tenure,
@@ -265,7 +265,7 @@ def toy_dataset():
     people, units = [], []
     for h in household.household_id:
         # Households 3 and 6 hold two benefit units (a lodger family).
-        for b in range(1, 3 if h % 3 == 0 else 2):
+        for b in range(1, 3 if (h - id_offset) % 3 == 0 else 2):
             units.append({"benunit_id": h * 100 + b})
             for p in range(1, 3):
                 people.append(
@@ -586,3 +586,109 @@ def test_rate_keys_match_fresh_simulations(weights):
         assert np.isinf(keys[~has_slot, j]).all()
         distinct.add(tuple(np.round(mean[has_slot], 2)))
     assert len(distinct) == 3  # the slots really differ, so a stale cache would show
+
+
+def _with_tables(dataset, **tables):
+    from policyengine_uk.data import UKSingleYearDataset
+
+    parts = {
+        "person": dataset.person,
+        "benunit": dataset.benunit,
+        "household": dataset.household,
+    }
+    parts.update(tables)
+    return UKSingleYearDataset(**parts, fiscal_year=dataset.time_period)
+
+
+@needs_policyengine
+@pytest.mark.parametrize("table", ["benunit", "household"])
+def test_tables_out_of_id_order_are_rejected(table, weights):
+    # PolicyEngine UK sorts entities by id but reads input columns in table
+    # order, so swapping two rows would misalign every input.
+    from policyengine_uk_data.datasets.brma import split_private_renters_across_brmas
+
+    dataset = toy_dataset()
+    frame = getattr(dataset, table)
+    swapped = frame.iloc[[1, 0] + list(range(2, len(frame)))].reset_index(drop=True)
+    with pytest.raises(ValueError, match=f"{table} table is not sorted"):
+        split_private_renters_across_brmas(
+            _with_tables(dataset, **{table: swapped}), k=2, seed=0, weights=weights
+        )
+
+
+@needs_policyengine
+def test_ids_beyond_int32_split_like_small_ones(weights):
+    # Benefit unit ids above 2**31 must not trip the order check.
+    from policyengine_uk_data.datasets.brma import split_private_renters_across_brmas
+
+    offset = 30_000_000
+    small = split_private_renters_across_brmas(
+        toy_dataset(), k=3, seed=5, weights=weights
+    )
+    large = split_private_renters_across_brmas(
+        toy_dataset(offset), k=3, seed=5, weights=weights
+    )
+    assert large.benunit.benunit_id.max() > 2**31
+    assert len(large.household) == len(small.household)
+    assert (
+        large.household.brma.astype(str).to_numpy()
+        == small.household.brma.astype(str).to_numpy()
+    ).all()
+
+
+@needs_policyengine
+def test_encoded_tenure_splits_the_same_renters(weights):
+    # A tenure column holding enum codes must select the same private renters
+    # as one holding names.
+    from policyengine_uk.variables.household.demographic.tenure_type import (
+        TenureType,
+    )
+
+    from policyengine_uk_data.datasets.brma import split_private_renters_across_brmas
+
+    dataset = toy_dataset()
+    household = dataset.household.copy()
+    members = list(TenureType)
+    household["tenure_type"] = [
+        members.index(TenureType[name]) for name in household.tenure_type.astype(str)
+    ]
+    assert pd.api.types.is_integer_dtype(household.tenure_type)
+    named = split_private_renters_across_brmas(dataset, k=2, seed=4, weights=weights)
+    coded = split_private_renters_across_brmas(
+        _with_tables(dataset, household=household), k=2, seed=4, weights=weights
+    )
+    assert len(named.household) > len(dataset.household)
+    assert len(coded.household) == len(named.household)
+    assert (
+        coded.household.brma.astype(str).to_numpy()
+        == named.household.brma.astype(str).to_numpy()
+    ).all()
+
+
+@settings(max_examples=200, deadline=None, derandomize=True)
+@given(
+    st.lists(st.integers(0, 3), min_size=1, max_size=10),
+    st.integers(1, 4),
+    st.integers(1, 3),
+    st.integers(0, 2**32 - 1),
+)
+def test_column_agreement_is_exact(labels, rows, chunk, seed):
+    rng = np.random.default_rng(seed)
+    groups = RecordGroups(np.array(labels), len(labels))
+    matrix = (rng.random((rows, len(labels))) < 0.5).astype(float)
+    if rng.random() < 0.5:  # often make the groups agree
+        matrix = matrix[:, groups.first[groups.codes]]
+    first = groups.first[groups.codes]
+    expected = all(
+        np.array_equal(matrix[:, j], matrix[:, first[j]]) for j in range(len(labels))
+    )
+    assert groups.columns_agree(matrix, chunk=chunk) == expected
+
+
+def test_one_hot_area_masks_that_differ_never_agree():
+    # Two records of a group placed in different single areas of 650 (masks
+    # whose seeded random projections nearly coincide) must be told apart.
+    mask = np.zeros((650, 2))
+    mask[506, 0] = mask[173, 1] = 1.0
+    assert not RecordGroups(np.array([0, 0]), 2).columns_agree(mask)
+    assert RecordGroups(np.array([0, 1]), 2).columns_agree(mask)
