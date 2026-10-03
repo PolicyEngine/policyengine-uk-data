@@ -75,16 +75,41 @@ def _spi_age_bounds(age_code) -> tuple[int, int]:
 # floored at zero, so SEINC_NUM is what finds break-even and loss-making
 # traders. The FRS gives the same split through the main job's ILO status
 # (EMPSTATI) and any second-job earnings.
+#
+# People with both pay and a trade are split by which is their main source.
+# The SPI's MAINSRCE is the self-assessment "main source of income" HMRC
+# stratifies its sample by (1 pay, 3 sole trader, 4 partnership), not the
+# larger income: in 2022-23, 57% (weighted) of those whose main source is a
+# trade had more pay than profit. The FRS equivalent is the main job's
+# status. Where neither says (MAINSRCE -1 not classified, 2 occupational
+# pension, 5 other; an FRS main job that is neither), the larger of pay and
+# profit decides. FRS people with both are too few (about 300) for their rank
+# within a cell to say much, so the main source is most of what links their
+# draw to their own jobs.
 NO_EARNINGS = "NO_EARNINGS"
 EMPLOYEE = "EMPLOYEE"
 SELF_EMPLOYED = "SELF_EMPLOYED"
-EMPLOYEE_AND_SELF_EMPLOYED = "EMPLOYEE_AND_SELF_EMPLOYED"
+EMPLOYEE_MAIN_AND_SELF_EMPLOYED = "EMPLOYEE_MAIN_AND_SELF_EMPLOYED"
+SELF_EMPLOYED_MAIN_AND_EMPLOYEE = "SELF_EMPLOYED_MAIN_AND_EMPLOYEE"
 EARNINGS_GROUPS = (
     NO_EARNINGS,
     EMPLOYEE,
     SELF_EMPLOYED,
-    EMPLOYEE_AND_SELF_EMPLOYED,
+    EMPLOYEE_MAIN_AND_SELF_EMPLOYED,
+    SELF_EMPLOYED_MAIN_AND_EMPLOYEE,
 )
+PAY_GROUPS = (
+    EMPLOYEE,
+    EMPLOYEE_MAIN_AND_SELF_EMPLOYED,
+    SELF_EMPLOYED_MAIN_AND_EMPLOYEE,
+)
+TRADE_GROUPS = (
+    SELF_EMPLOYED,
+    EMPLOYEE_MAIN_AND_SELF_EMPLOYED,
+    SELF_EMPLOYED_MAIN_AND_EMPLOYEE,
+)
+SPI_PAY_MAIN_SOURCE = 1
+SPI_TRADE_MAIN_SOURCES = (3, 4)
 # FRS rows that take no SPI draw and keep their own values: the FRS child
 # table (dependent children, including 16-19-year-olds in education), whose
 # earnings this FRS build does not record, and anyone under 16. With no
@@ -99,29 +124,43 @@ NOT_IMPUTED = "NOT_IMPUTED"
 MIN_GROUP_SAMPLE_SHARE = 0.1
 
 
-def earnings_group(has_pay, has_trade) -> np.ndarray:
-    """Earnings group from whether a person has pay and a trade."""
+def earnings_group(has_pay, has_trade, pay_is_main) -> np.ndarray:
+    """Earnings group from whether a person has pay and a trade, and, for
+    people with both, whether pay is their main source."""
     has_pay = np.asarray(has_pay, dtype=bool)
     has_trade = np.asarray(has_trade, dtype=bool)
+    both = has_pay & has_trade
+    pay_is_main = np.asarray(pay_is_main, dtype=bool)
     return np.select(
-        [has_pay & has_trade, has_trade, has_pay],
-        [EMPLOYEE_AND_SELF_EMPLOYED, SELF_EMPLOYED, EMPLOYEE],
+        [both & pay_is_main, both, has_trade, has_pay],
+        [
+            EMPLOYEE_MAIN_AND_SELF_EMPLOYED,
+            SELF_EMPLOYED_MAIN_AND_EMPLOYEE,
+            SELF_EMPLOYED,
+            EMPLOYEE,
+        ],
         NO_EARNINGS,
     ).astype(object)
 
 
 def spi_earnings_group(
-    employment_income, self_employment_income, self_employed_indicator
+    employment_income, self_employment_income, self_employed_indicator, main_source
 ) -> np.ndarray:
     """Earnings group of SPI records.
 
     Pay is PAY + EPB + TAXTERM. A trade is SEINC_NUM = 1 (self-employment
-    pages filed, whatever the profit) or any assessable profit.
+    pages filed, whatever the profit) or any assessable profit. Pay is the
+    main source if MAINSRCE says pay, or if it names neither pay nor a trade
+    and pay is at least the profit.
     """
-    has_trade = (np.asarray(self_employed_indicator) == 1) | (
-        np.asarray(self_employment_income, dtype=float) > 0
+    pay = np.asarray(employment_income, dtype=float)
+    profit = np.asarray(self_employment_income, dtype=float)
+    main_source = np.asarray(main_source)
+    has_trade = (np.asarray(self_employed_indicator) == 1) | (profit > 0)
+    pay_is_main = (main_source == SPI_PAY_MAIN_SOURCE) | (
+        ~np.isin(main_source, SPI_TRADE_MAIN_SOURCES) & (pay >= profit)
     )
-    return earnings_group(np.asarray(employment_income, dtype=float) > 0, has_trade)
+    return earnings_group(pay > 0, has_trade, pay_is_main)
 
 
 def frs_earnings_group(
@@ -132,20 +171,22 @@ def frs_earnings_group(
     An employee main job always draws pay and a self-employed main job always
     draws a trade, whatever the FRS recorded for the donor. Earnings the FRS
     records outside the main job (a second job or a side trade) add the other
-    source. Everyone else, retired, unemployed or inactive, draws from SPI
-    records with neither.
+    source, and the main job's source is the main one. Everyone else, retired,
+    unemployed or inactive, draws from SPI records with neither, unless the
+    FRS records earnings for them.
     """
     status = np.asarray(employment_status, dtype=object)
-    has_pay = np.isin(status, EMPLOYEE_STATUSES) | (
-        np.asarray(employment_income, dtype=float) > 0
-    )
-    has_trade = np.isin(status, SELF_EMPLOYED_STATUSES) | (
-        np.asarray(self_employment_income, dtype=float) > 0
-    )
+    pay = np.asarray(employment_income, dtype=float)
+    profit = np.asarray(self_employment_income, dtype=float)
+    employee = np.isin(status, EMPLOYEE_STATUSES)
+    self_employed = np.isin(status, SELF_EMPLOYED_STATUSES)
+    has_pay = employee | (pay > 0)
+    has_trade = self_employed | (profit > 0)
+    pay_is_main = employee | (~self_employed & (pay >= profit))
     is_child = (status == CHILD_STATUS) | (np.asarray(age, dtype=float) < 16)
-    return np.where(is_child, NOT_IMPUTED, earnings_group(has_pay, has_trade)).astype(
-        object
-    )
+    return np.where(
+        is_child, NOT_IMPUTED, earnings_group(has_pay, has_trade, pay_is_main)
+    ).astype(object)
 
 
 def earnings_group_sample_sizes(
@@ -197,7 +238,10 @@ def generate_spi_table(
 
     spi["employment_income"] = spi[["PAY", "EPB", "TAXTERM"]].sum(axis=1)
     spi["earnings_group"] = spi_earnings_group(
-        spi.employment_income, spi.self_employment_income, spi.SEINC_NUM
+        spi.employment_income,
+        spi.self_employment_income,
+        spi.SEINC_NUM,
+        spi.MAINSRCE,
     )
 
     if sample_size is not None:

@@ -6,8 +6,12 @@ Invariants (Hypothesis properties unless noted):
    Everyone else is in exactly one earnings group, which has pay if and only
    if the main job is as an employee or the FRS records pay, and a trade if
    and only if the main job is self-employment or the FRS records a profit.
+   People with both are in the employee-main group if and only if the main
+   job is as an employee, or is neither and pay is at least the profit.
 2. SPI records: the group has pay if and only if PAY + EPB + TAXTERM > 0, and
-   a trade if and only if SEINC_NUM = 1 or PROFITS > 0.
+   a trade if and only if SEINC_NUM = 1 or PROFITS > 0. People with both are
+   in the employee-main group if and only if MAINSRCE is 1 (pay), or is not 3
+   or 4 (a trade) and pay is at least the profit.
 3. Both mappings are monotone (more of one income adds that source and leaves
    the other alone) and give the same answer elementwise as row by row.
 4. Training sample: every group with weight gets at least
@@ -39,7 +43,7 @@ from policyengine_uk_data.datasets.imputations.income import (
     CHILD_STATUS,
     EARNINGS_GROUPS,
     EMPLOYEE,
-    EMPLOYEE_AND_SELF_EMPLOYED,
+    EMPLOYEE_MAIN_AND_SELF_EMPLOYED,
     EMPLOYEE_STATUSES,
     IMPUTATIONS,
     MIN_GROUP_SAMPLE_SHARE,
@@ -47,6 +51,7 @@ from policyengine_uk_data.datasets.imputations.income import (
     NOT_IMPUTED,
     PREDICTORS,
     SELF_EMPLOYED,
+    SELF_EMPLOYED_MAIN_AND_EMPLOYEE,
     SELF_EMPLOYED_STATUSES,
     EarningsGroupIncomeModel,
     apply_income_draws,
@@ -56,8 +61,10 @@ from policyengine_uk_data.datasets.imputations.income import (
     spi_earnings_group,
 )
 
-PAY_GROUPS = {EMPLOYEE, EMPLOYEE_AND_SELF_EMPLOYED}
-TRADE_GROUPS = {SELF_EMPLOYED, EMPLOYEE_AND_SELF_EMPLOYED}
+PAY_GROUPS = set(income_module.PAY_GROUPS)
+TRADE_GROUPS = set(income_module.TRADE_GROUPS)
+BOTH_GROUPS = {EMPLOYEE_MAIN_AND_SELF_EMPLOYED, SELF_EMPLOYED_MAIN_AND_EMPLOYEE}
+MAIN_SOURCES = (-1, 1, 2, 3, 4, 5, 6)
 NON_WORKING_STATUSES = (
     "UNEMPLOYED",
     "RETIRED",
@@ -179,27 +186,55 @@ def test_frs_group_elementwise_equals_rowwise(people):
 @RELAXED
 @given(
     st.lists(
-        st.tuples(amounts, amounts, st.sampled_from([-1, 0, 1])),
+        st.tuples(
+            amounts, amounts, st.sampled_from([-1, 0, 1]), st.sampled_from(MAIN_SOURCES)
+        ),
         min_size=1,
         max_size=40,
     )
 )
 def test_spi_group_follows_pay_and_self_employment_pages(records):
-    pay, profit, indicator = (np.array(column) for column in zip(*records))
-    groups = spi_earnings_group(pay, profit, indicator)
+    pay, profit, indicator, source = (np.array(column) for column in zip(*records))
+    groups = spi_earnings_group(pay, profit, indicator, source)
     assert np.isin(groups, EARNINGS_GROUPS).all()
     np.testing.assert_array_equal(np.isin(groups, list(PAY_GROUPS)), pay > 0)
     np.testing.assert_array_equal(
         np.isin(groups, list(TRADE_GROUPS)), (indicator == 1) | (profit > 0)
     )
-    rowwise = [spi_earnings_group([p], [q], [i])[0] for p, q, i in records]
+    # People with both: MAINSRCE decides, then the larger income.
+    both = np.isin(groups, list(BOTH_GROUPS))
+    pay_main = (source == 1) | (~np.isin(source, [3, 4]) & (pay >= profit))
+    np.testing.assert_array_equal(
+        groups[both] == EMPLOYEE_MAIN_AND_SELF_EMPLOYED, pay_main[both]
+    )
+    rowwise = [spi_earnings_group([p], [q], [i], [s])[0] for p, q, i, s in records]
     assert list(groups) == rowwise
+
+
+@RELAXED
+@given(frs_people())
+def test_frs_both_group_follows_main_job(people):
+    groups = _frs_groups(people)
+    status = people.employment_status.to_numpy()
+    both = np.isin(groups, list(BOTH_GROUPS))
+    pay, profit = (
+        people.employment_income.to_numpy(),
+        people.self_employment_income.to_numpy(),
+    )
+    pay_main = np.isin(status, EMPLOYEE_STATUSES) | (
+        ~np.isin(status, SELF_EMPLOYED_STATUSES) & (pay >= profit)
+    )
+    np.testing.assert_array_equal(
+        groups[both] == EMPLOYEE_MAIN_AND_SELF_EMPLOYED, pay_main[both]
+    )
 
 
 @RELAXED
 @given(
     st.lists(
-        st.tuples(amounts, amounts, st.sampled_from([-1, 0, 1])),
+        st.tuples(
+            amounts, amounts, st.sampled_from([-1, 0, 1]), st.sampled_from(MAIN_SOURCES)
+        ),
         min_size=1,
         max_size=40,
     ),
@@ -207,13 +242,15 @@ def test_spi_group_follows_pay_and_self_employment_pages(records):
     st.sampled_from(["pay", "profit"]),
 )
 def test_spi_group_monotone_in_income(records, extra, source):
-    pay, profit, indicator = (np.array(column, dtype=float) for column in zip(*records))
-    before = spi_earnings_group(pay, profit, indicator)
+    pay, profit, indicator, main = (
+        np.array(column, dtype=float) for column in zip(*records)
+    )
+    before = spi_earnings_group(pay, profit, indicator, main)
     if source == "pay":
-        after = spi_earnings_group(pay + extra, profit, indicator)
+        after = spi_earnings_group(pay + extra, profit, indicator, main)
         gained, other = PAY_GROUPS, TRADE_GROUPS
     else:
-        after = spi_earnings_group(pay, profit + extra, indicator)
+        after = spi_earnings_group(pay, profit + extra, indicator, main)
         gained, other = TRADE_GROUPS, PAY_GROUPS
     assert np.isin(after, list(gained)).all()
     np.testing.assert_array_equal(
@@ -266,6 +303,15 @@ def _raw_spi(rng: np.random.Generator, n: int) -> pd.DataFrame:
         has_trade & (rng.random(n) < 0.7), rng.lognormal(9, 1, n), 0.0
     )
     raw["SEINC_NUM"] = has_trade.astype(int)
+    # MAINSRCE agrees with the group for people with both; anything for others.
+    raw["MAINSRCE"] = np.select(
+        [
+            group == EMPLOYEE_MAIN_AND_SELF_EMPLOYED,
+            group == SELF_EMPLOYED_MAIN_AND_EMPLOYEE,
+        ],
+        [1, rng.choice([3, 4], n)],
+        rng.choice(MAIN_SOURCES, n),
+    )
     for column in ("INCBBS", "DIVIDENDS", "PENSION", "INCPROP", "GIFTAID", "GIFTINV"):
         raw[column] = rng.exponential(1_000, n) * (rng.random(n) < 0.3)
     raw["FACT"] = rng.uniform(1, 500, n)
@@ -283,11 +329,14 @@ def test_generate_spi_table_resamples_within_groups(seed, sample_size):
     np.testing.assert_array_equal(
         table.earnings_group.to_numpy(),
         spi_earnings_group(
-            table.employment_income, table.self_employment_income, table.SEINC_NUM
+            table.employment_income,
+            table.self_employment_income,
+            table.SEINC_NUM,
+            table.MAINSRCE,
         ),
     )
     raw_groups = spi_earnings_group(
-        raw.PAY + raw.EPB + raw.TAXTERM, raw.PROFITS, raw.SEINC_NUM
+        raw.PAY + raw.EPB + raw.TAXTERM, raw.PROFITS, raw.SEINC_NUM, raw.MAINSRCE
     )
     weights = raw.FACT.groupby(raw_groups).sum().to_dict()
     assert table.earnings_group.value_counts().to_dict() == (
@@ -363,9 +412,9 @@ def test_model_draws_agree_with_group(fitted_model, inputs):
     assert (draws[drawn].to_numpy() >= 0).all()
 
 
-@pytest.mark.parametrize("group", [SELF_EMPLOYED, EMPLOYEE_AND_SELF_EMPLOYED])
+@pytest.mark.parametrize("group", income_module.TRADE_GROUPS)
 def test_model_draws_some_profit_for_traders(fitted_model, group):
-    """Both trade groups draw zero and positive profits, as the SPI has both."""
+    """Every trade group draws zero and positive profits, as the SPI has both."""
     n = 400
     inputs = pd.DataFrame(
         {

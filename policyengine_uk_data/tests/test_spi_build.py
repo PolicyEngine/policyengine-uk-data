@@ -67,6 +67,7 @@ SPI_COLUMNS = [
     "BPADUE",
     "MAIND",
     "SEINC_NUM",
+    "MAINSRCE",
 ]
 
 
