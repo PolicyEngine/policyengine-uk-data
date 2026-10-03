@@ -275,35 +275,66 @@ def frs_boarder_and_lodger_rent(person: pd.DataFrame) -> tuple[np.ndarray, np.nd
     return rent_paid * is_boarder, rent_paid * ~is_boarder
 
 
+UNIVERSAL_CREDIT_BENEFIT_CODE = 95
+
+
 def frs_liable_for_share_of_household_rent(
-    benunit: pd.DataFrame, person: pd.DataFrame, household: pd.DataFrame
+    benunit: pd.DataFrame,
+    person: pd.DataFrame,
+    household: pd.DataFrame,
+    benefits: pd.DataFrame | None = None,
 ) -> np.ndarray:
     """Whether each benefit unit shares liability for its household's rent.
 
     In a shared household (HHSTAT 2: "shared on an equal basis", the head of
     household unclear or arbitrary), each benefit unit after the first is
     asked how much rent it pays (SRENTAMT, on its adults' records) and how
-    much housing benefit it gets (HBOTHAMT). HHRENT is the rent of the whole
-    dwelling, built from benefit unit 1's rent plus the others' SRENTAMT and
-    HBOTHAMT, so a later unit with either amount positive is one of the
-    people liable for HHRENT. policyengine-uk splits ``rent`` among them.
+    much housing benefit it gets (HBOTHAMT). The questionnaire takes SRENTAMT
+    after state help with the rent, so a unit whose share is wholly met by
+    Universal Credit can report zero in both. Such a unit is still liable:
+    it counts where a Universal Credit record linked to DWP administrative
+    data carries a housing element (UCHOUSEL on a BENEFIT 95 record). A later
+    unit with any of the three is one of the people liable for HHRENT, the
+    rent of the whole dwelling, and policyengine-uk splits ``rent`` among
+    them. Total Universal Credit alone is not evidence of a rent liability.
 
-    The FRS's own split (BURENT) is not used: in shared households of the
-    2023-24 and 2024-25 releases it gives the later units all of HHRENT
-    between them and benefit unit 1 a further amount, so the units' BURENT
-    sum to about two and a half times HHRENT.
+    ``benefits`` is the FRS benefits table. Without it, or in a release
+    whose benefits table has no UCHOUSEL column, only SRENTAMT and HBOTHAMT
+    are used.
+
+    Scope: conventional households (HHSTAT 1) are left out. Their later
+    units can also report HBOTHAMT or a Universal Credit housing element,
+    but the data do not say whether they owe a share of HHRENT to the
+    landlord or rent to the householder, which policyengine-uk treats
+    differently (the boarder and lodger inputs).
+
+    The FRS's own split (BURENT) is not used. In shared households of the
+    2023-24 and 2024-25 releases the later units between them get all of
+    HHRENT and benefit unit 1 a further amount; in 2024-25 the units' BURENT
+    sum to about two and a half times HHRENT. The published derivation of
+    HHRENT from benefit unit 1's rent plus the later units' SRENTAMT and
+    HBOTHAMT is the May 2003 derived-variable specification; this function
+    does not rely on a later one.
     """
-    unit_number = benunit.benunit_id.values % 100
+    benunit_id = benunit.benunit_id.values
+    unit_number = benunit_id % 100
     shared = household.hhstat.reindex(benunit.household_id.values).values == 2
     srent = (
         person.srentamt.where(person.srentamt > 0, 0)
         .groupby(person.benunit_id.values)
         .sum()
-        .reindex(benunit.benunit_id.values, fill_value=0)
+        .reindex(benunit_id, fill_value=0)
         .values
     )
     hb = np.maximum(0, benunit.hbothamt.fillna(0).values)
-    return (unit_number > 1) & shared & ((srent > 0) | (hb > 0))
+    uc_housing = np.zeros(len(benunit), dtype=bool)
+    if benefits is not None and "uchousel" in benefits.columns:
+        with_housing_element = benefits.benunit_id[
+            (benefits.benefit == UNIVERSAL_CREDIT_BENEFIT_CODE)
+            & (benefits.uchousel > 0)
+        ]
+        uc_housing = np.isin(benunit_id, with_housing_element.values)
+    return (unit_number > 1) & shared & ((srent > 0) | (hb > 0) | uc_housing)
 
 
 def derive_is_in_non_advanced_education(
@@ -1352,7 +1383,7 @@ def create_frs(
     )
     pe_household["rent"] = household.hhrent.fillna(0).values * WEEKS_IN_YEAR
     pe_benunit["liable_for_share_of_household_rent"] = (
-        frs_liable_for_share_of_household_rent(benunit, person, household)
+        frs_liable_for_share_of_household_rent(benunit, person, household, benefits)
     )
     pe_household["mortgage_interest_repayment"] = (
         household.mortint.fillna(0).values * WEEKS_IN_YEAR
