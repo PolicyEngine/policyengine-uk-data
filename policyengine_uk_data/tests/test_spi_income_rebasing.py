@@ -205,7 +205,13 @@ def test_impute_over_incomes_writes_draws_in_the_datasets_year(
     monkeypatch, time_period
 ):
     monkeypatch.setattr(income_module, "Microsimulation", _FakeSimulation)
-    person = pd.DataFrame({column: np.full(3, -1.0) for column in IMPUTATIONS})
+    # Working-age employees, so an earnings-group draw (#529) draws them too.
+    person = pd.DataFrame(
+        {
+            "employment_status": "FT_EMPLOYED",
+            **{c: np.full(3, -1.0) for c in IMPUTATIONS},
+        }
+    )
     expected = _FixedDraws().predict(person)
 
     result = income_module.impute_over_incomes(
@@ -234,6 +240,7 @@ def test_second_stage_and_frs_dividends_see_rebased_draws(monkeypatch):
             "person_id": [1, 2],
             "person_household_id": [1, 2],
             "person_benunit_id": [1, 2],
+            "employment_status": ["FT_EMPLOYED", "FT_EMPLOYED"],
             **{column: [0.0, 0.0] for column in IMPUTATIONS},
         }
     )
