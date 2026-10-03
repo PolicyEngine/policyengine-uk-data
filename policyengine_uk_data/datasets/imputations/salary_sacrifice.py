@@ -8,10 +8,10 @@ Two-stage imputation:
    not asked.
 
 2. Headcount-targeted imputation: converts a fraction of pension
-   contributors without SS into below-cap (≤£2,000) SS users, moving
-   employee pension contributions to salary sacrifice and taking the
-   amount moved out of their pay. Targets the OBR/ASHE estimate of
-   ~4.3mn below-cap SS users.
+   contributors without SS into SS users, moving employee pension
+   contributions to salary sacrifice and taking the amount moved out of
+   their pay, so the calibrator has enough records to reach the OBR
+   headcounts (7.7mn users: 4.3mn at or below £2,000, 3.3mn above).
 
 A salary sacrifice is pay given up for an employer pension contribution,
 so every amount, reported or imputed, is limited to the person's pay:
@@ -160,8 +160,8 @@ def impute_salary_sacrifice(
     Stage 1: QRF predicts SS amounts for respondents not asked SALSAC.
     Every amount, reported or predicted, is then limited to the person's
     pay (see ``limit_salary_sacrifice_to_pay``).
-    Stage 2: Converts a fraction of pension contributors to below-cap
-    SS users, targeting ~4.3mn (OBR/ASHE). Moves employee pension
+    Stage 2: Converts a fraction of pension contributors to SS users,
+    for the OBR headcount targets. Moves employee pension
     contributions to salary sacrifice to keep total pension consistent,
     and takes the amount moved out of pay (at most half the pay).
 
@@ -181,7 +181,7 @@ def impute_salary_sacrifice(
     # calculate a later year and uprate pay but not salary sacrifice).
     age = sim.calculate("age").values
     employment_income = sim.calculate("employment_income").values
-    pay = dataset.person["employment_income"].values
+    pay = dataset.person["employment_income"].values.copy()
     current_ss = dataset.person.pension_contributions_via_salary_sacrifice.values
 
     # Get indicator for who was asked
@@ -225,8 +225,9 @@ def impute_salary_sacrifice(
     # self-reporting bias in auto-enrolment. Impute additional SS users
     # from pension contributors to create enough records for calibration
     # to hit OBR headcount targets (7.7mn total, 3.3mn above 2k,
-    # 4.3mn below 2k). Donors keep their full employee pension amount
-    # so those above 2k become above-cap records and the rest below-cap.
+    # 4.3mn below 2k). Donors move their employee pension amount (at
+    # most half their pay), so those above 2k become above-cap records
+    # and the rest below-cap.
     person_weight = sim.calculate("person_weight").values
     employee_pension = dataset.person["employee_pension_contributions"].values.copy()
     has_ss = final_ss > 0
@@ -252,7 +253,7 @@ def impute_salary_sacrifice(
             # split reflects the natural pension distribution. The FRS
             # pay these contributions were deducted from is before the
             # sacrifice, so the sacrifice comes out of it: pay falls by
-            # the amount moved, which keeps taxable pay unchanged. At most
+            # the amount moved, which keeps pay plus sacrifice unchanged. At most
             # half the pay moves, so the sacrifice never exceeds the pay
             # that remains.
             ss_new = limit_salary_sacrifice_to_pay(employee_pension, pay / 2)
