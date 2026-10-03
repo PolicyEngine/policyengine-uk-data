@@ -32,6 +32,10 @@ from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk import Microsimulation
 
+# Trained only on SALSAC respondents with pay; the name changed with that
+# training set so a forest cached by an older build is not reused.
+MODEL_FILE = "salary_sacrifice_paid_respondents.pkl"
+
 PREDICTORS = [
     "age",
     "employment_income",
@@ -47,10 +51,12 @@ def limit_salary_sacrifice_to_pay(
 ) -> np.ndarray:
     """Limit salary sacrifice amounts to the pay they are sacrificed from.
 
-    A person without pay sacrifices nothing, and nobody sacrifices more
-    than the pay they still receive. No FRS 2024-25 respondent who reports
-    a sacrifice and has pay reports more than that pay, so the upper bound
-    only binds on imputed amounts.
+    A person without pay sacrifices nothing. The upper bound is an
+    imputation bound, not a legal one (an employee may sacrifice, for
+    example, a whole bonus, as long as cash pay stays above the National
+    Minimum Wage): no FRS 2024-25 respondent who reports a sacrifice and
+    has pay reports more than the pay they still receive, so imputed
+    amounts are held to the same bound.
 
     Args:
         salary_sacrifice: Annual salary sacrifice pension contributions.
@@ -69,8 +75,8 @@ def save_salary_sacrifice_model():
     Uses FRS respondents with pay who were asked about salary sacrifice
     (SALSAC field) as training data. The model learns to predict the SS
     pension amount directly - non-participants have 0, participants have
-    their reported SPNAMT value. Respondents without pay are left out: the
-    model only predicts for people with pay.
+    their reported SPNAMT value. Respondents without pay are left out: only
+    predictions for people with pay are kept.
 
     Returns:
         Trained QRF model for salary sacrifice imputation.
@@ -106,7 +112,10 @@ def save_salary_sacrifice_model():
     training_mask = (ss_asked == 1) & (employment_income > 0)
 
     if training_mask.sum() == 0:
-        raise ValueError("No training data found - no respondents were asked SALSAC.")
+        raise ValueError(
+            "No training data found - no SALSAC respondents with positive "
+            "employment income."
+        )
 
     train_df = pd.DataFrame(
         {
@@ -119,7 +128,7 @@ def save_salary_sacrifice_model():
     # Train QRF model
     model = QRF()
     model.fit(train_df[PREDICTORS], train_df[IMPUTATIONS])
-    model.save(STORAGE_FOLDER / "salary_sacrifice.pkl")
+    model.save(STORAGE_FOLDER / MODEL_FILE)
 
     return model
 
@@ -136,7 +145,7 @@ def create_salary_sacrifice_model(overwrite_existing: bool = False):
     """
     from policyengine_uk_data.utils.qrf import QRF
 
-    model_path = STORAGE_FOLDER / "salary_sacrifice.pkl"
+    model_path = STORAGE_FOLDER / MODEL_FILE
     if model_path.exists() and not overwrite_existing:
         return QRF(file_path=model_path)
     return save_salary_sacrifice_model()
@@ -166,9 +175,13 @@ def impute_salary_sacrifice(
     dataset = dataset.copy()
     sim = Microsimulation(dataset=dataset)
 
-    # Get variables needed for imputation
+    # Get variables needed for imputation. The predictors come from the
+    # simulation, as in training; the limits use the stored pay, which is in
+    # the same year as the stored salary sacrifice (the simulation may
+    # calculate a later year and uprate pay but not salary sacrifice).
     age = sim.calculate("age").values
     employment_income = sim.calculate("employment_income").values
+    pay = dataset.person["employment_income"].values
     current_ss = dataset.person.pension_contributions_via_salary_sacrifice.values
 
     # Get indicator for who was asked
@@ -205,7 +218,7 @@ def impute_salary_sacrifice(
     # A sacrifice comes out of pay. This also covers SPI-synthetic rows
     # copied from a SALSAC respondent, whose kept amounts come from the
     # FRS-only imputation rather than the survey.
-    final_ss = limit_salary_sacrifice_to_pay(final_ss, employment_income)
+    final_ss = limit_salary_sacrifice_to_pay(final_ss, pay)
 
     # Stage 2: Headcount-targeted imputation for SS users.
     # ASHE data shows many more SS users than the FRS captures due to
@@ -219,7 +232,7 @@ def impute_salary_sacrifice(
     has_ss = final_ss > 0
 
     # Donor pool: employed pension contributors not already SS users
-    is_donor = (employee_pension > 0) & ~has_ss & (employment_income > 0)
+    is_donor = (employee_pension > 0) & ~has_ss & (pay > 0)
 
     # Create enough SS records for the calibrator to work with.
     # Target ~70% of the 7.7mn total so the calibrator can gently
@@ -242,9 +255,7 @@ def impute_salary_sacrifice(
             # the amount moved, which keeps taxable pay unchanged. At most
             # half the pay moves, so the sacrifice never exceeds the pay
             # that remains.
-            ss_new = limit_salary_sacrifice_to_pay(
-                employee_pension, employment_income / 2
-            )
+            ss_new = limit_salary_sacrifice_to_pay(employee_pension, pay / 2)
             final_ss = np.where(newly_imputed, ss_new, final_ss)
 
             # Reduce employee pension and pay correspondingly
@@ -254,9 +265,7 @@ def impute_salary_sacrifice(
                 employee_pension,
             )
             dataset.person["employment_income"] = np.where(
-                newly_imputed,
-                dataset.person["employment_income"].values - ss_new,
-                dataset.person["employment_income"].values,
+                newly_imputed, pay - ss_new, pay
             )
 
     dataset.person["pension_contributions_via_salary_sacrifice"] = final_ss

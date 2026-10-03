@@ -70,6 +70,12 @@ def test_limit_is_monotone_in_sacrifice_and_pay(rows, more_ss, more_pay):
     assert np.all(limit_salary_sacrifice_to_pay(ss, pay + more_pay) >= limited)
 
 
+# The build imputes on the survey-year dataset (2024) while the simulation
+# calculates a later default year, uprating pay but not salary sacrifice, so
+# the wiring is checked in both years.
+YEARS = pytest.mark.parametrize("year", [2024, 2025])
+
+
 class _StubModel:
     """Stands in for the trained QRF: predicts a fixed amount per row."""
 
@@ -83,7 +89,7 @@ class _StubModel:
         )
 
 
-def _dataset(pay, asked, reported, employee_pension):
+def _dataset(pay, asked, reported, employee_pension, year):
     from policyengine_uk.data import UKSingleYearDataset
 
     n = len(pay)
@@ -113,17 +119,17 @@ def _dataset(pay, asked, reported, employee_pension):
         }
     )
     return UKSingleYearDataset(
-        person=person, benunit=benunit, household=household, fiscal_year=2025
+        person=person, benunit=benunit, household=household, fiscal_year=year
     )
 
 
-def _impute(monkeypatch, predictions, **columns):
+def _impute(monkeypatch, predictions, year=2024, **columns):
     monkeypatch.setattr(
         salary_sacrifice_module,
         "create_salary_sacrifice_model",
         lambda: _StubModel(predictions),
     )
-    dataset = _dataset(**columns)
+    dataset = _dataset(year=year, **columns)
     before = dataset.person.copy()
     after = salary_sacrifice_module.impute_salary_sacrifice(dataset).person
     return before, after
@@ -148,10 +154,12 @@ def _assert_invariants(before, after):
     assert np.array_equal(pay[~moved], pay_before[~moved])
 
 
-def test_nobody_without_pay_keeps_a_sacrifice(monkeypatch):
+@YEARS
+def test_nobody_without_pay_keeps_a_sacrifice(monkeypatch, year):
     pay = [0, 0, -500, 30_000, 30_000, 8_000, 0]
     before, after = _impute(
         monkeypatch,
+        year=year,
         # The model predicts a large sacrifice for everyone.
         predictions=[25_000] * 7,
         pay=pay,
@@ -170,10 +178,12 @@ def test_nobody_without_pay_keeps_a_sacrifice(monkeypatch):
     _assert_invariants(before, after)
 
 
-def test_stage_two_takes_the_sacrifice_out_of_pay(monkeypatch):
+@YEARS
+def test_stage_two_takes_the_sacrifice_out_of_pay(monkeypatch, year):
     n = 40
     before, after = _impute(
         monkeypatch,
+        year=year,
         predictions=[0] * n,
         pay=[30_000] * n,
         asked=[0] * n,
@@ -190,12 +200,14 @@ def test_stage_two_takes_the_sacrifice_out_of_pay(monkeypatch):
     _assert_invariants(before, after)
 
 
-def test_stage_two_moves_at_most_half_the_pay(monkeypatch):
+@YEARS
+def test_stage_two_moves_at_most_half_the_pay(monkeypatch, year):
     n = 40
     # Every donor's employee pension exceeds half their pay, so each one
     # moved sacrifices half and keeps the rest as employee pension.
     before, after = _impute(
         monkeypatch,
+        year=year,
         predictions=[0] * n,
         pay=[1_000] * n,
         asked=[0] * n,
