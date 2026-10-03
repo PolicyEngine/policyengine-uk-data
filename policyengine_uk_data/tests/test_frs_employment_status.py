@@ -18,7 +18,8 @@ from policyengine_uk_data.datasets.frs import (
 
 # EMPSTATI ("Adult - Employment Status - ILO definition") value labels in the
 # UKDS FRS 2024-25 data dictionary (SN 9563, adult table), with the status each
-# label means. The 2020-21, 2022-23 and 2023-24 releases use the same codes.
+# label means. Every adult in the 2020-21, 2022-23 and 2023-24 releases also
+# has a code from 1 to 11.
 DATA_DICTIONARY = {
     1: ("Full-time Employee", "FT_EMPLOYED"),
     2: ("Part-time Employee", "PT_EMPLOYED"),
@@ -129,7 +130,8 @@ def test_each_row_maps_on_its_own(rows):
 def test_mapping_commutes_with_row_order(rows, rng):
     order = list(range(len(rows)))
     rng.shuffle(order)
-    assert derive([rows[i] for i in order]).tolist() == [derive(rows)[i] for i in order]
+    statuses = derive(rows)
+    assert derive([rows[i] for i in order]).tolist() == [statuses[i] for i in order]
 
 
 @given(people, unknown_adult_codes, st.integers(0, 60))

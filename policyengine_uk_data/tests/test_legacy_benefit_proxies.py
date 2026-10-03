@@ -579,10 +579,8 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
 def test_create_frs_maps_every_empstati_code(tmp_path, monkeypatch, empstati):
     person = create_single_adult_frs(tmp_path, monkeypatch, empstati).person
 
-    assert (
-        person["employment_status"].iloc[0]
-        == (FRS_EMPSTATI_EMPLOYMENT_STATUS[empstati])
-    )
+    status = person["employment_status"].iloc[0]
+    assert status == FRS_EMPSTATI_EMPLOYMENT_STATUS[empstati]
     # A working-age adult reporting no hours: only the sick/disabled codes
     # (9 permanently, 10 temporarily) are ESA health states.
     assert person["esa_health_condition_proxy"].iloc[0] == (empstati in (9, 10))
