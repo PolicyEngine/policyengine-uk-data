@@ -179,6 +179,19 @@ class RecordGroups:
             return values
         return np.bincount(self.codes, weights=np.asarray(values, dtype=float))
 
+    def columns_agree(self, matrix: np.ndarray, chunk: int = 4096) -> bool:
+        """Whether every record's column (last axis) equals its group's first.
+
+        Compared exactly, a chunk of records at a time.
+        """
+        records = np.flatnonzero(self.first[self.codes] != np.arange(len(self.codes)))
+        for start in range(0, len(records), chunk):
+            columns = records[start : start + chunk]
+            firsts = self.first[self.codes[columns]]
+            if not np.array_equal(matrix[..., columns], matrix[..., firsts]):
+                return False
+        return True
+
     def expand(self, weights: np.ndarray) -> np.ndarray:
         """Group weights (last axis) to records, split equally."""
         if self.identity:
@@ -310,11 +323,7 @@ def calibrate_local_areas(
         )
         if groups is not None:
             r = np.asarray(r)
-            # One fingerprint per record's area mask; a group's must all agree.
-            fingerprint = r.T @ np.random.default_rng(0).random(r.shape[0])
-            if not np.allclose(
-                fingerprint, fingerprint[record_groups.first[record_groups.codes]]
-            ):
+            if not record_groups.columns_agree(r):
                 raise ValueError("A record group spans areas of different countries.")
             matrix = record_groups.means(matrix)
             r = r[:, record_groups.first]

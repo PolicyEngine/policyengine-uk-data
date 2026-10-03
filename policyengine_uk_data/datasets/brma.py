@@ -272,7 +272,8 @@ def split_private_renters_across_brmas(
     by ``i * step * 1000``, each raised to a power of ten above that table's
     largest id if needed so no id collides. When no raise is needed,
     ``benunit_id // 100 == household_id`` still holds wherever it held. Every
-    benefit unit must have at least one person. Each record also gets
+    benefit unit must have at least one person, and the household and benefit
+    unit tables must be sorted by id (as PolicyEngine UK needs). Each record also gets
     ``source_household_id``, the household it came from, which the OA clone
     step keeps, so split records count as one source household.
 
@@ -305,7 +306,21 @@ def split_private_renters_across_brmas(
             "unit needs one to place it in a household."
         )
     benunit_owner = owner.loc[benunit.benunit_id].to_numpy()
-    renter = household.tenure_type.astype(str).to_numpy() == "RENT_PRIVATELY"
+    year = int(dataset.time_period)
+    simulation = Microsimulation(dataset=dataset)
+    for entity, ids in (
+        ("household", household.household_id),
+        ("benunit", benunit.benunit_id),
+    ):
+        # PolicyEngine UK orders each entity by id but reads input columns in
+        # table order, so the two orders must agree.
+        if not np.array_equal(simulation.populations[entity].ids, ids.to_numpy()):
+            raise ValueError(
+                f"The {entity} table is not sorted by {entity}_id, so the "
+                "simulation would misalign its rows."
+            )
+    tenure = np.asarray(simulation.calculate("tenure_type", year)).astype(str)
+    renter = tenure == "RENT_PRIVATELY"
     if not renter.any():
         return UKSingleYearDataset(
             person=person,
@@ -313,18 +328,11 @@ def split_private_renters_across_brmas(
             household=household,
             fiscal_year=dataset.time_period,
         )
-    year = int(dataset.time_period)
-    simulation = Microsimulation(dataset=dataset)
     region = np.asarray(simulation.calculate("region", year)).astype(str)
     position = pd.Series(
         np.arange(len(household)), index=household.household_id.to_numpy()
     )
     benunit_household = position.loc[benunit_owner].to_numpy()
-    sim_order = np.asarray(simulation.calculate("benunit_id", year))
-    if not np.array_equal(sim_order, benunit.benunit_id.to_numpy()):
-        raise ValueError(
-            "The simulation's benefit units are not in the dataset's order."
-        )
     category = np.asarray(simulation.calculate("LHA_category", year)).astype(str)
     brmas, probabilities = household_brma_probabilities(
         region, benunit_household, category, weights
