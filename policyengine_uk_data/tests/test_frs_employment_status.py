@@ -98,26 +98,44 @@ def test_unknown_adult_code_fails_the_build(code):
         derive_employment_status_from_frs([1, code], [True, True])
 
 
-def test_failure_message_lists_blank_and_numeric_codes():
+def listed_codes(message):
+    return message.split("FRS_EMPSTATI_EMPLOYMENT_STATUS: ")[1].split(". Map")[0]
+
+
+def test_failure_message_lists_codes_in_numeric_order_with_blank_last():
     # Formatted from the float codes, not Series.astype(str), whose NaN
-    # handling differs between pandas 2 and 3.
-    with pytest.raises(ValueError, match=": 0, 12, blank. "):
-        derive_employment_status_from_frs([np.nan, 0, 12, 1], [True] * 4)
+    # handling differs between pandas 2 and 3. A string sort would put 100
+    # before 11.5.
+    codes = [100, 12, np.nan, -1, 12, 11.5, 1]
+    with pytest.raises(ValueError) as error:
+        derive_employment_status_from_frs(codes, [True] * len(codes))
+    assert listed_codes(str(error.value)) == "-1, 11.5, 12, 100, blank"
+
+
+@given(st.lists(unknown_adult_codes, min_size=1, max_size=20))
+def test_failure_message_lists_each_unknown_code_once_in_order(bad_codes):
+    with pytest.raises(ValueError) as error:
+        derive_employment_status_from_frs(bad_codes, [True] * len(bad_codes))
+    listed = listed_codes(str(error.value)).split(", ")
+    blank = any(np.isnan(code) for code in bad_codes)
+    assert (listed[-1] == "blank") == blank
+    numbers = [float(code) for code in listed[: len(listed) - blank]]
+    assert numbers == sorted(numbers)
+    assert set(listed) - {"blank"} == {
+        f"{code:g}" for code in bad_codes if not np.isnan(code)
+    }
 
 
 @given(st.integers(1, 30), st.integers(1, 30))
-def test_failure_message_suppresses_small_counts(n_twelve, n_thirteen):
+def test_failure_message_discloses_no_count(n_twelve, n_thirteen):
+    # Adults are not survey households, so no count of them is safe to print
+    # in a public build log: the message depends only on which codes occur.
     codes = [12] * n_twelve + [13] * n_thirteen
     with pytest.raises(ValueError) as error:
         derive_employment_status_from_frs(codes, [True] * len(codes))
-    total = n_twelve + n_thirteen
-    prefix = f"{total} FRS adults" if total >= 10 else "Fewer than 10 FRS adults"
     message = str(error.value)
-    assert message.startswith(prefix)
-    assert ": 12, 13. " in message
-    # No other number (such as a per-code count) is disclosed.
-    rest = message.removeprefix(prefix).replace(": 12, 13. ", "")
-    assert not any(character.isdigit() for character in rest)
+    assert listed_codes(message) == "12, 13"
+    assert not any(character.isdigit() for character in message.replace("12, 13", ""))
 
 
 @given(people)
