@@ -84,9 +84,9 @@ def compute_uc_by_family_type(target, ctx) -> np.ndarray | None:
 def compute_uc_payment_dist(target, ctx) -> np.ndarray:
     """Compute UC payment distribution band x family type.
 
-    Bands are (lower, upper] annual amounts (see
-    utils.uc_data.parse_monthly_award_band), so consecutive bands meet and
-    the open top band has an infinite upper bound.
+    Bands are [lower, upper) annual amounts (see
+    utils.uc_data.parse_monthly_award_band); the open top band has an
+    infinite upper bound.
     """
     name = target.name.removeprefix("dwp/uc_payment_dist/")
     idx = name.index("_annual_payment_")
@@ -98,7 +98,7 @@ def compute_uc_payment_dist(target, ctx) -> np.ndarray:
     uc_family_type = ctx.sim.calculate("family_type", map_to="benunit").values
 
     in_band = (
-        (uc_payments > lower) & (uc_payments <= upper) & (uc_family_type == family_type)
+        (uc_payments >= lower) & (uc_payments < upper) & (uc_family_type == family_type)
     )
     return ctx.household_from_family(in_band)
 

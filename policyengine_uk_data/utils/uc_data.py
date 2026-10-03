@@ -4,22 +4,20 @@ from pathlib import Path
 
 
 def parse_monthly_award_band(band: str) -> tuple[float, float]:
-    """Annual (lower, upper] payment bounds of a Stat-Xplore monthly award band.
+    """Annual [lower, upper) payment bounds of a Stat-Xplore monthly award band.
 
-    Awards are whole pence, so the band '£100.01 to £200.00' holds monthly
-    awards over £100.00 and up to £200.00: annual bounds (1,200, 2,400]. The
-    lower bound is the previous band's top, so consecutive bands meet with no
-    gap. The open top band '£2500.01 or over' is (30,000, inf).
+    '£100.01 to £200.00' gives (1,200.12, 2,400). The open top band
+    '£2500.01 or over' gives (30,000.12, inf); it used to parse to missing
+    bounds, so its targets could never be met.
     """
     text = band.replace("£", "").replace(",", "").strip()
     if text.endswith(" or over"):
-        lower = float(text.removesuffix(" or over"))
-        return round((lower - 0.01) * 12, 2), np.inf
+        return float(text.removesuffix(" or over")) * 12, np.inf
     parts = text.split(" to ")
     if len(parts) != 2:
         raise ValueError(f"Unrecognised UC monthly award band: {band!r}")
-    lower, upper = (float(part) for part in parts)
-    return round((lower - 0.01) * 12, 2), upper * 12
+    lower, upper = (float(part) * 12 for part in parts)
+    return lower, upper
 
 
 def _check_bands_disjoint(bands: pd.DataFrame) -> None:
