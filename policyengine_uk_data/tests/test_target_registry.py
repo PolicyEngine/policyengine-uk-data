@@ -81,6 +81,25 @@ def test_dwp_uc_households_target_uses_count_fallback():
     assert _compute_column(target, DummyCtx(), 2025) == [1, 0, 1]
 
 
+def test_hmrc_salary_sacrifice_relief_targets():
+    """HMRC Table 6.1/6.2 relief targets reach the registry (uk-data: 410 Gone
+    on the old CSV dropped them from every build without failing it)."""
+    targets = {t.name: t for t in get_all_targets(year=2025)}
+    for name in (
+        "hmrc/salary_sacrifice_it_relief_total",
+        "hmrc/salary_sacrifice_it_relief_basic_rate",
+        "hmrc/salary_sacrifice_it_relief_higher_rate",
+        "hmrc/salary_sacrifice_it_relief_additional_rate",
+        "hmrc/salary_sacrifice_employee_nics_relief",
+        "hmrc/salary_sacrifice_employer_nics_relief",
+    ):
+        assert name in targets, f"{name} missing from the target registry"
+    # One NICs relief target per class: the OBR-labelled copies of the
+    # 2023-24 figures are gone.
+    assert "obr/salary_sacrifice_employee_ni_relief" not in targets
+    assert "obr/salary_sacrifice_employer_ni_relief" not in targets
+
+
 def test_voa_council_tax_targets():
     """VOA council tax band targets should exist."""
     targets = get_all_targets(year=2025)

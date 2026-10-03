@@ -617,9 +617,7 @@ def _parse_tv_licence(wb: openpyxl.Workbook) -> list[Target]:
 # ISC census: private school students (roughly constant at ~557k)
 _PRIVATE_SCHOOL = {y: 557_000 for y in range(2018, 2032)}
 
-# SPP Review: salary sacrifice NI relief (uprated 3% pa from 2024 base)
-_SS_EMPLOYEE_NI = {y: 1.2e9 * 1.03 ** max(0, y - 2024) for y in range(2024, 2032)}
-_SS_EMPLOYER_NI = {y: 2.9e9 * 1.03 ** max(0, y - 2024) for y in range(2024, 2032)}
+# Salary sacrifice NICs relief comes from HMRC Table 6.2 (hmrc_salary_sacrifice.py).
 
 # Salary sacrifice headcount: 7.7m total (3.3m above £2k, 4.3m below)
 # OBR para 1.7: SS population grows 0.9% faster than employees (~2.4%/yr)
@@ -664,26 +662,6 @@ def get_targets() -> list[Target]:
             values=_PRIVATE_SCHOOL,
             is_count=True,
             reference_url="https://www.isc.co.uk/research/annual-census/",
-        )
-    )
-    targets.append(
-        Target(
-            name="obr/salary_sacrifice_employee_ni_relief",
-            variable="ni_employee",
-            source="obr",
-            unit=Unit.GBP,
-            values=_SS_EMPLOYEE_NI,
-            reference_url="https://assets.publishing.service.gov.uk/media/67ce0e7c08e764d17a5d3c21/2025_SPP_Review.pdf",
-        )
-    )
-    targets.append(
-        Target(
-            name="obr/salary_sacrifice_employer_ni_relief",
-            variable="ni_employer",
-            source="obr",
-            unit=Unit.GBP,
-            values=_SS_EMPLOYER_NI,
-            reference_url="https://assets.publishing.service.gov.uk/media/67ce0e7c08e764d17a5d3c21/2025_SPP_Review.pdf",
         )
     )
 

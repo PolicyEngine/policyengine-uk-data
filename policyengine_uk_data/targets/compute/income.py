@@ -20,34 +20,66 @@ def compute_income_band(target, ctx) -> np.ndarray:
         return ctx.household_from_person(income_df[variable] * in_band)
 
 
+# Income tax on earned income in each rUK band (rates.uk thresholds on
+# earned_taxable_income), keyed by the band word in the target name. Scottish
+# taxpayers are split on the same rUK boundaries, an approximation: HMRC
+# groups their relief by Scottish marginal rate (starter and intermediate
+# with basic), and the Scottish band thresholds differ from the rUK ones.
+_BAND_TAX_VARIABLES = {
+    "basic": "basic_rate_earned_income_tax",
+    "higher": "higher_rate_earned_income_tax",
+    "additional": "add_rate_earned_income_tax",
+}
+
+
+def split_relief_by_band(
+    relief: np.ndarray, band_tax_cf: dict, band_tax_base: dict
+) -> dict:
+    """Share each person's income tax relief across the bands it is given in.
+
+    HMRC's Table 6.1 models contributions that straddle bands ("not all be
+    relievable at the same rate"; private pension statistics, background and
+    methodology), so a person's relief is split in proportion to the fall in
+    their earned-income tax within each band. Relief with no fall in any
+    earned band (it comes through savings or dividend bands) counts as basic
+    rate. The shares sum to one, so the bands add up to ``relief``.
+    """
+    drops = {
+        band: np.maximum(np.asarray(band_tax_cf[band]) - band_tax_base[band], 0)
+        for band in _BAND_TAX_VARIABLES
+    }
+    total = sum(drops.values())
+    has_drop = total > 0
+    safe_total = np.where(has_drop, total, 1)
+    relief = np.asarray(relief)
+    return {
+        band: relief
+        * np.where(has_drop, drop / safe_total, 1.0 if band == "basic" else 0.0)
+        for band, drop in drops.items()
+    }
+
+
 def compute_ss_it_relief(target, ctx) -> np.ndarray:
-    """Compute salary sacrifice IT relief by tax band."""
-    it_base = ctx.sim.calculate("income_tax")
-    it_cf = ctx.counterfactual_sim.calculate("income_tax", ctx.time_period)
-    it_relief = it_cf - it_base
-
-    adj_net_income_cf = ctx.counterfactual_sim.calculate(
-        "adjusted_net_income", ctx.time_period
+    """Compute salary sacrifice IT relief, in total or for one rate band."""
+    period = ctx.time_period
+    cf, base = ctx.counterfactual_sim, ctx.sim
+    relief = np.asarray(cf.calculate("income_tax", period)) - np.asarray(
+        base.calculate("income_tax", period)
     )
-
-    params = ctx.sim.tax_benefit_system.parameters.gov.hmrc.income_tax.rates.uk
-    basic_thresh = params[0].threshold(ctx.time_period)
-    higher_thresh = params[1].threshold(ctx.time_period)
-    additional_thresh = params[2].threshold(ctx.time_period)
-
-    name = target.name
-    if "basic" in name:
-        mask = (adj_net_income_cf > basic_thresh) & (adj_net_income_cf <= higher_thresh)
-    elif "higher" in name:
-        mask = (adj_net_income_cf > higher_thresh) & (
-            adj_net_income_cf <= additional_thresh
-        )
-    elif "additional" in name:
-        mask = adj_net_income_cf > additional_thresh
-    else:
-        mask = np.ones_like(it_relief, dtype=bool)
-
-    return ctx.household_from_person(it_relief * mask)
+    band = next((b for b in _BAND_TAX_VARIABLES if b in target.name), None)
+    if band is not None:
+        relief = split_relief_by_band(
+            relief,
+            {
+                b: np.asarray(cf.calculate(v, period))
+                for b, v in _BAND_TAX_VARIABLES.items()
+            },
+            {
+                b: np.asarray(base.calculate(v, period))
+                for b, v in _BAND_TAX_VARIABLES.items()
+            },
+        )[band]
+    return ctx.household_from_person(relief)
 
 
 def compute_ss_contributions(target, ctx) -> np.ndarray:
