@@ -1,0 +1,1 @@
+Mark the benefit units of FRS shared households that are liable for part of the rent (liable_for_share_of_household_rent), so policyengine-uk can split the household's rent among them. A unit counts where it reports rent (SRENTAMT), housing benefit (HBOTHAMT) or a Universal Credit housing element on a linked benefit record (UCHOUSEL).
