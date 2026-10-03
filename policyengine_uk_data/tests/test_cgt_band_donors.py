@@ -162,8 +162,9 @@ _REDUCED_BUILD_SLACK = 5.0 if os.environ.get("TESTING") == "1" else 1.0
 # of main and of #529 carry about £243bn and £267bn (relative errors 2.7 and
 # 3.1, beyond the 0.5 x slack bound), while their full builds carry about
 # £53bn. Under TESTING the total-gains check only guards against
-# order-of-magnitude errors; the full build keeps the 50% bound.
-_TOTAL_GAINS_RELATIVE_BOUND = 5.0 if _REDUCED_BUILD_SLACK > 1 else 0.5
+# order-of-magnitude errors, in either direction: the total must lie within a
+# factor of 6 of HMRC's. The full build keeps the 50% bound.
+_REDUCED_GAINS_FACTOR = 6.0
 
 
 def _built_with_band_donors(enhanced_frs):
@@ -221,11 +222,15 @@ def test_built_total_gains(enhanced_frs):
     enhanced_frs = _built_with_band_donors(enhanced_frs)
     gains, weights = _person_gains_and_weights(enhanced_frs)
     total = float((gains * weights)[gains > _AEA].sum())
-    assert abs(total / _HMRC_TOTAL_GAINS - 1) < _TOTAL_GAINS_RELATIVE_BOUND, (
+    ratio = total / _HMRC_TOTAL_GAINS
+    message = (
         f"£{total / 1e9:.1f}bn of above-AEA gains against HMRC's "
-        f"£{_HMRC_TOTAL_GAINS / 1e9:.1f}bn "
-        f"(relative error {abs(total / _HMRC_TOTAL_GAINS - 1):.0%})."
+        f"£{_HMRC_TOTAL_GAINS / 1e9:.1f}bn (ratio {ratio:.2f})."
     )
+    if _REDUCED_BUILD_SLACK > 1:
+        assert 1 / _REDUCED_GAINS_FACTOR < ratio < _REDUCED_GAINS_FACTOR, message
+    else:
+        assert abs(ratio - 1) < 0.5, message
 
 
 @pytest.mark.slow
