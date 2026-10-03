@@ -1,0 +1,1 @@
+Say which joint occupiers each FRS non-dependant family normally resides with (non_dependant_normally_resides_with), from the household relationship grid: a family related to exactly one joint occupier's family resides with that family only, so policyengine-uk counts it in that tenant's Housing Benefit size criteria and deducts it from that tenant alone.
