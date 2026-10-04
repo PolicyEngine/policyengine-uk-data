@@ -44,9 +44,11 @@ FRS_YEAR = CURRENT_FRS_RELEASE.survey_year
 
 years = st.integers(START_YEAR, END_YEAR)
 # Subnormal floats (below ~2.2e-308) carry too few significant bits to keep a
-# relative tolerance through two multiplications: Hypothesis found
-# 2.2e-313 rebased 2022 -> 2020 -> 2021 off by 2e-11 relative. No amount of
-# money is subnormal, so they are excluded rather than loosening the bound.
+# 1e-12 relative tolerance through two multiplications: Hypothesis found
+# 2.2250738585e-313 rebased 2022 -> 2020 -> 2021 off by 2.4e-11 relative.
+# No amount of money is subnormal, so they are excluded rather than loosening
+# the bound for real amounts (normal floats stay within 6e-16 relative over
+# every pair of rebasings between 2020 and 2034).
 money = st.floats(
     -1e10, 1e10, allow_nan=False, allow_infinity=False, allow_subnormal=False
 )
