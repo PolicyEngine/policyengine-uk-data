@@ -112,6 +112,9 @@ def test_failed_download_uses_committed_table(get):
         ),
         lambda df: df.assign(tax_year="2025 to 2026"),
         lambda df: df.drop(columns="sector_scheme"),
+        lambda df: df.assign(
+            value_of_relief=df["value_of_relief"].where(df["tax_rate"] != "Basic Rate")
+        ),
     ],
     ids=[
         "no-higher-rate",
@@ -120,6 +123,7 @@ def test_failed_download_uses_committed_table(get):
         "two-years",
         "next-release",
         "no-column",
+        "blank-cell",
     ],
 )
 def test_changed_table_raises(change):
@@ -153,19 +157,25 @@ def test_tax_by_band_adds_up_to_the_schedule_and_rises_with_income(year, schedul
 
 
 def test_tax_by_band_groups_scottish_rates_into_hmrc_categories():
-    # 2025-26 Scottish taxable-income bands: intermediate (21%) up to £31,092,
-    # higher (42%) to £62,430, advanced (45%) to £112,570, then top (48%).
+    """Starter, basic and intermediate → basic; higher and advanced → higher;
+    top → additional. Thresholds come from PolicyEngine's 2025 schedule
+    (policyengine-uk#2130: its top-rate threshold is £112,570 rather than
+    the statutory £125,140)."""
     scale = _scales("2025")["scotland"]
-    bands = tax_by_band(
-        np.array([20_000, 50_000, 100_000, 150_000]), scale.thresholds, scale.rates
+    (_, _, _, higher, advanced, top) = scale.thresholds
+    assert list(scale.rates) == [0.19, 0.20, 0.21, 0.42, 0.45, 0.48]
+    income = np.array(
+        [higher - 1, (higher + advanced) / 2, (advanced + top) / 2, top + 10_000]
     )
+    bands = tax_by_band(income, scale.thresholds, scale.rates)
     assert bands["higher"][0] == 0 and bands["additional"][0] == 0
-    assert bands["higher"][1] > 0 and bands["additional"][1] == 0
+    assert bands["higher"][1] == pytest.approx(0.42 * (income[1] - higher))
     # The advanced rate counts as higher rate.
     assert bands["higher"][2] == pytest.approx(
-        0.42 * (62_430 - 31_092) + 0.45 * (100_000 - 62_430)
+        0.42 * (advanced - higher) + 0.45 * (income[2] - advanced)
     )
-    assert bands["additional"][3] == pytest.approx(0.48 * (150_000 - 112_570))
+    assert bands["additional"][2] == 0
+    assert bands["additional"][3] == pytest.approx(0.48 * 10_000)
 
 
 class _Ctx:
@@ -173,14 +183,18 @@ class _Ctx:
 
     time_period = 2025
 
-    def __init__(self, base_pay, sacrifice, region="LONDON"):
+    def __init__(self, base_pay, sacrifice, region="LONDON", dividends=0):
         from policyengine_uk import Simulation
 
         def sim(pay):
             return Simulation(
                 situation={
                     "people": {
-                        "a": {"age": {2025: 40}, "employment_income": {2025: pay}}
+                        "a": {
+                            "age": {2025: 40},
+                            "employment_income": {2025: pay},
+                            "dividend_income": {2025: dividends},
+                        }
                     },
                     "benunits": {"b": {"members": ["a"]}},
                     "households": {"h": {"members": ["a"], "region": {2025: region}}},
@@ -260,3 +274,19 @@ def test_relief_targets_produce_loss_matrix_columns(enhanced_frs):
         column = np.asarray(_compute_column(target, ctx, year), dtype=float)
         assert np.isfinite(column).all(), target.name
         assert column @ weights > 0, target.name
+
+
+def test_relief_is_tax_on_pay_not_on_other_income():
+    """HMRC applies income tax rates to pay. Paying the sacrifice as salary
+    also pushes £10k of dividends from the basic into the higher dividend
+    band; that extra dividend tax is not salary sacrifice relief."""
+    ctx = _Ctx(48_000, 4_000, dividends=10_000)
+    by_band = {band: _relief(ctx, band) for band in ("basic", "higher", "additional")}
+    assert by_band == pytest.approx(
+        {"basic": 454, "higher": 692, "additional": 0}, abs=0.01
+    )
+    income_tax = [
+        float(s.calculate("income_tax", 2025)[0])
+        for s in (ctx.counterfactual_sim, ctx.sim)
+    ]
+    assert income_tax[0] - income_tax[1] > sum(by_band.values()) + 100

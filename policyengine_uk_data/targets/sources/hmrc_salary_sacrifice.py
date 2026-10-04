@@ -149,7 +149,7 @@ def _nics_rate_factors(rows: pd.DataFrame, nics_class: str, base_year: int) -> d
 def _relief(rows: pd.DataFrame, column: str, label: str) -> float:
     """The single positive £m value in ``rows`` whose ``column`` is ``label``."""
     values = rows.loc[rows[column] == label, "value_of_relief"].map(to_float)
-    if len(values) != 1 or values.iloc[0] <= 0:
+    if len(values) != 1 or not values.iloc[0] > 0:  # also rejects a blank cell
         raise ValueError(
             f"HMRC salary sacrifice relief: expected one positive value for "
             f"{label!r}, got {values.tolist()}"
