@@ -183,3 +183,17 @@ def test_derived_outputs_hold_their_identities(output):
     for asset in wealth.SECURED_DEBT_ASSETS.values():
         assert derived[asset].equals(output[asset])
     pd.testing.assert_frame_equal(wealth.derive_wealth_outputs(derived), derived)
+
+
+def test_each_target_draws_its_quantile_independently():
+    """microimpute seeds every target alike; the wealth model must not."""
+    from types import SimpleNamespace
+
+    models = {v: SimpleNamespace(seed=42) for v in wealth.IMPUTE_VARIABLES}
+    model = SimpleNamespace(model=SimpleNamespace(models=models))
+    wealth.use_independent_quantile_draws(model)
+    seeds = [models[v].seed for v in wealth.IMPUTE_VARIABLES]
+    assert len(set(seeds)) == len(seeds)
+    assert dict(wealth.get_wealth_model_metadata()["quantile_draw_seeds"]) == {
+        v: models[v].seed for v in wealth.IMPUTE_VARIABLES
+    }

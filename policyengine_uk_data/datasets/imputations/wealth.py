@@ -86,6 +86,15 @@ SECURED_DEBT_ASSETS = {
     "owned_land_secured_debt": "owned_land",
 }
 
+# microimpute draws each target's quantile from the same seed, so a household
+# gets the same quantile for every target. Chained on earlier draws, that makes
+# sparse targets near-certain for households drawn high for a related asset
+# (nearly every imputed land holder had debt secured on the land). Each target
+# gets its own seed so the draws are independent.
+QUANTILE_DRAW_SEEDS = {
+    variable: 1_000 + index for index, variable in enumerate(IMPUTE_VARIABLES)
+}
+
 # WAS round 8 sources of the targets built from more than one column. Part of
 # the model metadata, so a change of definition retrains a cached model.
 DERIVED_TARGETS = {
@@ -218,6 +227,7 @@ WEALTH_MODEL_METADATA = {
     "predictor_variables": tuple(PREDICTOR_VARIABLES),
     "impute_variables": tuple(IMPUTE_VARIABLES),
     "derived_targets": tuple(DERIVED_TARGETS.items()),
+    "quantile_draw_seeds": tuple(QUANTILE_DRAW_SEEDS.items()),
 }
 
 
@@ -344,6 +354,13 @@ def derive_wealth_outputs(output_df: pd.DataFrame) -> pd.DataFrame:
     return output_df
 
 
+def use_independent_quantile_draws(model: QRF) -> QRF:
+    """Give each imputed target its own quantile-draw seed."""
+    for variable, seed in QUANTILE_DRAW_SEEDS.items():
+        model.model.models[variable].seed = seed
+    return model
+
+
 def save_imputation_models():
     """
     Train and save wealth imputation model.
@@ -365,6 +382,7 @@ def save_imputation_models():
         was[PREDICTOR_VARIABLES],
         was[IMPUTE_VARIABLES],
     )
+    use_independent_quantile_draws(wealth)
     wealth.save(get_wealth_model_path())
     return wealth
 

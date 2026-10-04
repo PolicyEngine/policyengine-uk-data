@@ -61,7 +61,9 @@ Imputes household wealth components using demographic and income predictors. The
 | `non_residential_property_secured_debt` | `DVBldDebtR8_sum` | Mortgages and loans secured on other buildings |
 | `owned_land_secured_debt` | `DVLUKDebtR8_sum` | Loans secured on UK land |
 
-`corporate_wealth` is the exact sum of its three components on every household; private pension wealth is not part of it, because pension rights are disregarded capital in every means test. A secured debt is zero wherever the household holds none of the asset it is secured on. Land and property overseas (`DVLOSValR8_sum`), other real estate (`DVOPrValR8_sum`) and overseas shares (`DVFShOSVR8_aggr`) are not mapped to any output.
+`corporate_wealth` is the exact sum of its three components on every household; private pension wealth is not part of it, because pension rights are disregarded capital in every means test. A secured debt is zero wherever the household holds none of the asset it is secured on. Land and property overseas (`DVLOSValR8_sum`), other real estate (`DVOPrValR8_sum`) and overseas shares (`DVFShOSVR8_aggr`) are not exported separately; `property_wealth` and the financial wealth totals include them.
+
+Each target draws its quantile with its own seed. microimpute otherwise uses one seed for every target, so a household drawn high for one asset is drawn high for every later target conditioned on it, which makes sparse targets such as the debt secured on land near-certain for the households that hold the asset.
 
 ---
 
