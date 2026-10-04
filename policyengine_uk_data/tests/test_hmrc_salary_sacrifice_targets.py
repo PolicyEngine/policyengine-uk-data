@@ -278,8 +278,9 @@ def test_relief_targets_produce_loss_matrix_columns(enhanced_frs):
 
 def test_relief_is_tax_on_pay_not_on_other_income():
     """HMRC applies income tax rates to pay. Paying the sacrifice as salary
-    also pushes £10k of dividends from the basic into the higher dividend
-    band; that extra dividend tax is not salary sacrifice relief."""
+    also moves the dividends that were taxed in the basic rate band into the
+    higher dividend band; that extra dividend tax is not salary sacrifice
+    relief."""
     ctx = _Ctx(48_000, 4_000, dividends=10_000)
     by_band = {band: _relief(ctx, band) for band in ("basic", "higher", "additional")}
     assert by_band == pytest.approx(
