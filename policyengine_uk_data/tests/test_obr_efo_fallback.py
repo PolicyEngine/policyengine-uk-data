@@ -11,6 +11,7 @@ burn the retry budget.
 """
 
 import io
+import logging
 import zipfile
 from contextlib import contextmanager
 from types import SimpleNamespace
@@ -29,10 +30,6 @@ def _clear_workbook_cache():
     obr._download_workbook.cache_clear()
     yield
     obr._download_workbook.cache_clear()
-
-
-def _forbidden(*args, **kwargs):
-    return SimpleNamespace(status_code=403, headers={}, content=b"")
 
 
 def _response(status_code, content=b"", content_type=None):
@@ -81,6 +78,10 @@ _FAILED_DOWNLOADS = {
                 }
             ),
         ),
+        1,
+    ),
+    "200-zip-with-malformed-xml": (
+        lambda: _response(200, _zip({"[Content_Types].xml": "<Types"})),
         1,
     ),
     "403": (lambda: _response(403), 1),
@@ -141,39 +142,14 @@ def test_fallback_workbooks_are_committed_and_parseable():
     assert obr._find_receipts_sheet(receipts) is not None
 
 
-def test_403_uses_fallback_without_retrying():
-    calls = []
-
-    def get(*args, **kwargs):
-        calls.append(args)
-        return _forbidden()
-
-    with patch.object(obr.requests, "get", side_effect=get):
-        wb = obr._download_workbook(
-            "https://obr.uk/download/whatever-forecast-tables-receipts/"
-        )
-    assert wb is not None
-    assert len(calls) == 1, "403 is permanent; it should not be retried"
-
-
-def test_connection_failure_uses_fallback():
-    def get(*args, **kwargs):
-        raise requests.ConnectionError("no route to obr.uk")
-
-    with (
-        patch.object(obr.requests, "get", side_effect=get),
-        patch.object(obr.time, "sleep", lambda s: None),
-    ):
-        wb = obr._download_workbook(
-            "https://obr.uk/download/whatever-forecast-tables-expenditure/"
-        )
-    assert wb is not None
-
-
-def test_unknown_url_with_failed_download_still_raises():
-    with patch.object(obr.requests, "get", side_effect=_forbidden):
-        with pytest.raises(requests.HTTPError):
-            obr._download_workbook("https://obr.uk/download/some-other-file/")
+@pytest.mark.parametrize(
+    "kind, error", [("403", requests.HTTPError), ("200-html-page", ValueError)]
+)
+def test_unknown_url_with_failed_download_still_raises(kind, error):
+    url = "https://obr.uk/download/some-other-file/"
+    with _obr_answering(_FAILED_DOWNLOADS[kind][0]):
+        with pytest.raises(error, match=f"for url: {url}"):
+            obr._download_workbook(url)
 
 
 def test_full_target_set_available_offline():
@@ -231,3 +207,15 @@ def test_workbook_response_is_parsed_without_fallback():
     assert fallbacks_used == []
     assert len(requests_made) == 1
     assert obr._find_receipts_sheet(wb) is not None
+
+
+def test_non_workbook_200_warning_names_url_status_and_parse_error(caplog):
+    caplog.set_level(logging.WARNING, logger=obr.logger.name)
+    url = load_config()["obr"]["efo_receipts"]
+    with _obr_answering(_FAILED_DOWNLOADS["200-html-page"][0]):
+        obr._download_workbook(url)
+    assert (
+        f"200 for url: {url}, but the body (text/html; charset=UTF-8) is not "
+        "an xlsx workbook (BadZipFile: File is not a zip file)); using "
+        "committed workbook fallback"
+    ) in caplog.text
