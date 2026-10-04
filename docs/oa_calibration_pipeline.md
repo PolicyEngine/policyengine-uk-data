@@ -42,14 +42,14 @@ Clone each FRS household N times and assign each clone a different OA.
 
 **Deliverables:**
 - `policyengine_uk_data/calibration/clone_and_assign.py` — clones all three entity tables (household, person, benunit), remaps IDs, divides weights by N, attaches OA geography columns
-- `datasets/create_datasets.py` — clone step inserted after imputations, before uprating/calibration (N=10 production, N=2 testing)
+- `datasets/create_datasets.py` — clone step inserted after imputations, before uprating/calibration (N defaults to 10, or 2 with `TESTING=1`; `PE_UK_DATA_OA_CLONES` overrides it)
 - `tests/test_clone_and_assign.py` — 14 tests covering dimensions, weight preservation, ID uniqueness, FK integrity, country constraints, data preservation
 
 **Key design:**
-- N=10 clones in production, N=2 in testing mode
+- N defaults to 10 clones (2 with `TESTING=1`); the `PE_UK_DATA_OA_CLONES` environment variable overrides it, and the release (`push.yaml`) and pull request workflows set it to 1
 - Constituency collision avoidance: each clone gets a different constituency where possible
 - Region constraint: each clone's OA is drawn from the household's own FRS region (Wales and Scotland are one region each), so `region_code_oa`, `la_code_oa` and `constituency_code_oa` never contradict `region`. A household with no region below the country falls back to its country. No LA or constituency straddles a region, so every OA stays reachable
-- Collision avoidance draws from the same region; the smallest (North East) has 27 constituencies, more than the 10 production clones
+- Collision avoidance draws from the same region; the smallest (North East) has 27 constituencies, more than the default 10 clones
 - Weights divided by N so population totals are preserved
 - Pure pandas/numpy operations — no simulation required, fast execution
 
