@@ -1,0 +1,1 @@
+Add optional household weight bounds (`min_weight_ratio`, `max_weight_ratio`, as multiples of each household's prior weight) and a prior-drift penalty (`prior_drift_penalty`) to `calibrate_local_areas`. All are off by default, so builds are unchanged.

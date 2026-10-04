@@ -159,6 +159,42 @@ def _weight_share(weight: float, total: float) -> float:
     return weight / total if total > 0 else 0.0
 
 
+def bound_household_weights(
+    log_weights: torch.Tensor,
+    country_mask: torch.Tensor,
+    log_lower: torch.Tensor | None,
+    log_upper: torch.Tensor | None,
+) -> None:
+    """Rescale each household's area weights, in place, so its total across
+    areas lies within its bounds.
+
+    ``log_weights`` is (areas, households); a household's total is the sum
+    of ``exp(log_weights) * country_mask`` over areas. A household inside
+    its bounds is untouched, and a rescaled household keeps its split across
+    areas. Either bound may be None.
+    """
+    with torch.no_grad():
+        log_totals = torch.log(
+            (torch.exp(log_weights) * country_mask).sum(dim=0).clamp_min(1e-30)
+        )
+        shift = torch.zeros_like(log_totals)
+        if log_upper is not None:
+            shift = shift - torch.clamp(log_totals - log_upper, min=0)
+        if log_lower is not None:
+            shift = shift + torch.clamp(log_lower - log_totals, min=0)
+        log_weights += shift
+
+
+def prior_drift(weights: torch.Tensor, log_prior: torch.Tensor) -> torch.Tensor:
+    """Mean squared log drift of household totals from their priors.
+
+    ``weights`` is the (areas, households) weight matrix with the country
+    mask applied; a household's total is its column sum.
+    """
+    totals = weights.sum(dim=0).clamp_min(1e-30)
+    return torch.mean((torch.log(totals) - log_prior) ** 2)
+
+
 def _household_weight_diagnostics(
     dataset: UKSingleYearDataset,
     household_weights: np.ndarray,
@@ -221,6 +257,9 @@ def calibrate_local_areas(
     nested_progress=None,
     time_period: int | str | None = None,
     zero_weight_prior_total_share: float = DEFAULT_ZERO_WEIGHT_PRIOR_TOTAL_SHARE,
+    prior_drift_penalty: float = 0.0,
+    min_weight_ratio: float | None = None,
+    max_weight_ratio: float | None = None,
 ):
     """
     Generic calibration function for local areas (constituencies, local authorities, etc.)
@@ -239,7 +278,20 @@ def calibrate_local_areas(
         area_name: Name of the area type for logging
         zero_weight_prior_total_share: Share of prior household mass to reserve for
             rows whose incoming household_weight is zero.
+        prior_drift_penalty: Weight on the mean squared log drift of each
+            household's total weight from its prior, added to the training
+            loss. It makes a target cheaper to meet by moving many records a
+            little than a few records a lot.
+        min_weight_ratio, max_weight_ratio: If set, each household's total
+            weight is kept within these multiples of its prior weight after
+            every optimiser step.
     """
+    if (
+        min_weight_ratio is not None
+        and max_weight_ratio is not None
+        and min_weight_ratio > max_weight_ratio
+    ):
+        raise ValueError("min_weight_ratio must not exceed max_weight_ratio")
     if dataset_key is None:
         dataset_key = default_weight_dataset_key()
     if time_period is None and str(dataset_key).isdigit():
@@ -322,6 +374,18 @@ def calibrate_local_areas(
             dtype=torch.float32,
         )
         r = torch.tensor(r, dtype=torch.float32)
+        log_prior = torch.tensor(np.log(household_prior_weights), dtype=torch.float32)
+        log_lower = (
+            log_prior + float(np.log(min_weight_ratio))
+            if min_weight_ratio is not None
+            else None
+        )
+        log_upper = (
+            log_prior + float(np.log(max_weight_ratio))
+            if max_weight_ratio is not None
+            else None
+        )
+        bounded = log_lower is not None or log_upper is not None
 
     def sre(x, y):
         one_way = ((1 + x) / (1 + y) - 1) ** 2
@@ -354,7 +418,10 @@ def calibrate_local_areas(
         else:
             mse_national = torch.mean(sre(pred_national, y_national))
 
-        return mse_local + mse_national
+        total = mse_local + mse_national
+        if prior_drift_penalty and not validation:
+            total = total + prior_drift_penalty * prior_drift(w, log_prior)
+        return total
 
     def pct_close(w, t=0.1, local=True, national=True):
         """Return the percentage of metrics that are within t% of the target"""
@@ -453,6 +520,8 @@ def calibrate_local_areas(
                 loss_value = loss(weights_)
                 loss_value.backward()
                 optimizer.step()
+                if bounded:
+                    bound_household_weights(weights, r, log_lower, log_upper)
 
                 local_close = pct_close(weights_, local=True, national=False)
                 national_close = pct_close(weights_, local=False, national=True)
@@ -497,6 +566,8 @@ def calibrate_local_areas(
             loss_value = loss(weights_)
             loss_value.backward()
             optimizer.step()
+            if bounded:
+                bound_household_weights(weights, r, log_lower, log_upper)
 
             local_close = pct_close(weights_, local=True, national=False)
             national_close = pct_close(weights_, local=False, national=True)
