@@ -39,9 +39,32 @@ _DWP_TOTAL_CASELOAD_K = {
     2030: 1_414,
 }
 
+# Same sheet, "Housing Benefit by Accomodation Type: of which General
+# Needs" (£ million and thousands, all ages), transcribed separately.
+_DWP_GENERAL_NEEDS_GBP_M = {
+    2024: 10_760.6,
+    2025: 7_699.5,
+    2026: 6_894.5,
+    2027: 6_938.0,
+    2028: 7_034.6,
+    2029: 7_282.5,
+    2030: 7_448.0,
+}
+_DWP_GENERAL_NEEDS_K = {
+    2024: 1_734,
+    2025: 1_216,
+    2026: 1_047,
+    2027: 1_021,
+    2028: 1_004,
+    2029: 1_000,
+    2030: 1_004,
+}
+
 _CALIBRATED = {
     "dwp/housing_benefit/over_pension_credit_age",
     "dwp/housing_benefit/over_pension_credit_age_claims",
+    "dwp/housing_benefit/under_pension_credit_age_general_needs",
+    "dwp/housing_benefit/under_pension_credit_age_general_needs_claims",
 }
 _ALL = _CALIBRATED | {
     "dwp/housing_benefit/under_pension_credit_age",
@@ -50,7 +73,8 @@ _ALL = _CALIBRATED | {
 
 
 def _targets():
-    """Both age groups, including the one calibration leaves out."""
+    """Every group's targets, including the full working-age line that
+    calibration leaves out."""
     return {t.name: t for t in dwp_housing_benefit.build_targets()}
 
 
@@ -82,11 +106,70 @@ def test_age_split_reconciles_with_dwp_totals():
         assert abs((over_k[year] + under_k[year]) / 1e3 - total) <= 1, year
 
 
-def test_only_pension_age_housing_benefit_is_calibrated():
+def test_calibration_uses_working_age_net_of_supported_and_temporary():
     housing_benefit_targets = {
         t.name for t in get_all_targets() if t.variable == "housing_benefit"
     }
     assert housing_benefit_targets == _CALIBRATED
+
+
+def test_accommodation_types_reconcile_with_the_age_split():
+    """General needs + supported + temporary is all Housing Benefit, the
+    same total as over + under, in every year DWP splits it."""
+    h = dwp_housing_benefit
+    for year, general_needs in _DWP_GENERAL_NEEDS_GBP_M.items():
+        by_type = general_needs + h._SUPPORTED_GBP_M[year] + h._TEMPORARY_GBP_M[year]
+        by_age = h._SPENDING_GBP_M["over"][year] + h._SPENDING_GBP_M["under"][year]
+        assert abs(by_type - by_age) <= 0.2, year
+        by_type_k = (
+            _DWP_GENERAL_NEEDS_K[year]
+            + h._SUPPORTED_THOUSANDS[year]
+            + h._TEMPORARY_THOUSANDS[year]
+        )
+        by_age_k = (
+            h._CASELOAD_THOUSANDS["over"][year] + h._CASELOAD_THOUSANDS["under"][year]
+        )
+        assert abs(by_type_k - by_age_k) <= 1, year
+
+
+def test_working_age_general_needs_two_ways():
+    """Working-age less supported and temporary accommodation equals all-age
+    general needs less pension-age Housing Benefit, since the two splits
+    share one total; it is defined only where positive (2024-25, 2025-26)."""
+    h = dwp_housing_benefit
+    spending = h._SPENDING_GBP_M["under_general_needs"]
+    caseload = h._CASELOAD_THOUSANDS["under_general_needs"]
+    assert set(spending) == set(caseload) == {2024, 2025}
+    assert spending[2025] == 584.8 and caseload[2025] == 107
+    for year in spending:
+        other_way = _DWP_GENERAL_NEEDS_GBP_M[year] - h._SPENDING_GBP_M["over"][year]
+        assert abs(spending[year] - other_way) <= 0.2, year
+        other_way_k = _DWP_GENERAL_NEEDS_K[year] - h._CASELOAD_THOUSANDS["over"][year]
+        assert abs(caseload[year] - other_way_k) <= 1, year
+        assert spending[year] < h._SPENDING_GBP_M["under"][year]
+        assert caseload[year] < h._CASELOAD_THOUSANDS["under"][year]
+
+
+
+@settings(max_examples=200, deadline=None)
+@given(
+    st.dictionaries(st.integers(2020, 2035), st.floats(0, 1e4), max_size=8),
+    st.dictionaries(st.integers(2020, 2035), st.floats(0, 1e4), max_size=8),
+    st.dictionaries(st.integers(2020, 2035), st.floats(0, 1e4), max_size=8),
+)
+def test_net_of_supported_and_temporary(working_age, supported, temporary):
+    net = dwp_housing_benefit.net_of_supported_and_temporary(
+        working_age, supported, temporary
+    )
+    common = working_age.keys() & supported.keys() & temporary.keys()
+    assert set(net) <= common
+    for year in common:
+        difference = working_age[year] - supported[year] - temporary[year]
+        if year in net:
+            assert net[year] > 0
+            assert abs(net[year] - difference) <= 0.05 + 1e-9
+        else:
+            assert round(difference, 1) <= 0
 
 
 def test_obr_housing_benefit_row_is_not_parsed():
@@ -231,6 +314,18 @@ def test_age_split_partitions_housing_benefit(population):
     under = _column(ctx, "dwp/housing_benefit/under_pension_credit_age")
     over_k = _column(ctx, "dwp/housing_benefit/over_pension_credit_age_claims")
     under_k = _column(ctx, "dwp/housing_benefit/under_pension_credit_age_claims")
+    # The model pays no supported or temporary accommodation HB, so the
+    # calibrated working-age group shares the full line's column.
+    np.testing.assert_array_equal(
+        _column(ctx, "dwp/housing_benefit/under_pension_credit_age_general_needs"),
+        under,
+    )
+    np.testing.assert_array_equal(
+        _column(
+            ctx, "dwp/housing_benefit/under_pension_credit_age_general_needs_claims"
+        ),
+        under_k,
+    )
     np.testing.assert_allclose(
         over + under, np.bincount(household, hb, minlength=n_households)
     )
@@ -280,7 +375,9 @@ def test_country_restriction_partitions_the_uk(rows):
 
 def test_calibrated_columns_build_on_the_dataset(baseline, enhanced_frs):
     """The loss matrix skips a target whose column raises, so check that the
-    calibrated columns build on a real simulation and land near DWP."""
+    calibrated columns build on a real simulation and land in range. The
+    working-age range is wider: a dataset calibrated without its target
+    carries about a sixth of it (17k of 107k claims in 2025-26)."""
     from policyengine_uk_data.targets.build_loss_matrix import _SimContext
 
     year = 2025
@@ -293,4 +390,5 @@ def test_calibrated_columns_build_on_the_dataset(baseline, enhanced_frs):
         )
         assert np.isfinite(column).all(), target.name
         ratio = (column * weight).sum() / target.values[year]
-        assert 0.5 < ratio < 2, (target.name, ratio)
+        low = 0.5 if "over_pension_credit_age" in target.name else 0.1
+        assert low < ratio < 2, (target.name, ratio)

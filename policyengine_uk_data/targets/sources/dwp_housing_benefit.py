@@ -29,16 +29,30 @@ couples who kept pension-age Housing Benefit after May 2019 fall in the
 older group; DWP does not publish its rule for them, and this assumes they
 sit in its Pension Credit and State Pension groups.
 
-Only the older group is calibrated. policyengine-uk pays working-age
-Housing Benefit only as a continuing award to families that report it and
-do not claim Universal Credit: 267 of the 770 working-age records that
-report it, about 17,000 weighted claims in 2025-26 against DWP's 460,000.
-DWP's working-age figure also includes temporary and supported
-accommodation (together £5.2bn of Housing Benefit in 2025-26, not split by
-age), which the FRS barely samples. A test build on 2026-09-30 that also
-targeted the younger group reached DWP's £5.8bn by loading it onto about
-three effective records, and fitted the other targets no better. The
-younger group's figures stay here for diagnostics and tests.
+Working-age Housing Benefit is calibrated net of supported and temporary
+accommodation. policyengine-uk pays no Housing Benefit for specified
+(supported) or temporary accommodation (``housing_benefit_eligible``: such
+claims "are not modelled"; policyengine-uk#1911). So every working-age award
+it pays is general-needs Housing Benefit: a continuing award to a family that
+reports it and does not claim Universal Credit. DWP's working-age line
+includes both kinds, but DWP splits accommodation type only across all ages
+(Housing Benefit by Accomodation Type). The calibrated working-age figure is
+therefore DWP's working-age line less all of its supported and temporary
+accommodation: £584.8m and 107k claims in 2025-26, against the full line's
+£5,778.1m and 460k. Part of that accommodation is pension-age, so the figure
+is a lower bound on working-age general-needs Housing Benefit. It exists only
+for 2024-25 and 2025-26. From 2026-27, DWP's all-age supported and temporary
+accommodation exceeds its whole working-age line.
+
+Seeded test calibrations on 2026-10-04 tried the full working-age line too.
+With only the pension-age figures calibrated, the model pays about 17,000
+working-age claims in 2025-26. Calibrated to the full line, it came within
+12% of DWP's spending by loading it onto about three effective records. With
+household weights capped at 20-40 times their prior, it reached only 54-60%
+of that spending, and income-related ESA claimants rose to 1.6-2.0 times
+DWP's count. Against the net figure, no other national target crosses the
+10% line compared with calibrating the pension-age figures only. The full
+working-age lines stay here (group "under") for tests and diagnostics.
 
 Source: https://www.gov.uk/government/publications/benefit-expenditure-and-caseload-tables-2026
 """
@@ -116,6 +130,75 @@ _CASELOAD_THOUSANDS = {
 }
 
 
+# Housing benefits sheet, "Housing Benefit by Accomodation Type", rows "of
+# which Supported Accomodation" and "of which Temporary Accomodation": all
+# ages, same units, first published for 2024-25.
+_SUPPORTED_GBP_M = {
+    2024: 3_262.8,
+    2025: 3_631.4,
+    2026: 3_936.0,
+    2027: 4_164.1,
+    2028: 4_399.2,
+    2029: 4_687.1,
+    2030: 4_892.2,
+}
+_TEMPORARY_GBP_M = {
+    2024: 1_431.1,
+    2025: 1_561.9,
+    2026: 1_643.7,
+    2027: 1_732.1,
+    2028: 1_819.1,
+    2029: 1_929.8,
+    2030: 2_006.6,
+}
+_SUPPORTED_THOUSANDS = {
+    2024: 235,
+    2025: 242,
+    2026: 246,
+    2027: 251,
+    2028: 256,
+    2029: 262,
+    2030: 267,
+}
+_TEMPORARY_THOUSANDS = {
+    2024: 104,
+    2025: 111,
+    2026: 117,
+    2027: 123,
+    2028: 129,
+    2029: 136,
+    2030: 143,
+}
+
+
+def net_of_supported_and_temporary(
+    working_age: dict, supported: dict, temporary: dict
+) -> dict:
+    """Working-age figures less all-age supported and temporary
+    accommodation, for the years with all three where the result is
+    positive."""
+    net = {}
+    for year in sorted(working_age.keys() & supported.keys() & temporary.keys()):
+        value = round(working_age[year] - supported[year] - temporary[year], 1)
+        if value > 0:
+            net[year] = value
+    return net
+
+
+_SPENDING_GBP_M["under_general_needs"] = net_of_supported_and_temporary(
+    _SPENDING_GBP_M["under"], _SUPPORTED_GBP_M, _TEMPORARY_GBP_M
+)
+_CASELOAD_THOUSANDS["under_general_needs"] = net_of_supported_and_temporary(
+    _CASELOAD_THOUSANDS["under"], _SUPPORTED_THOUSANDS, _TEMPORARY_THOUSANDS
+)
+
+_NAMES = {
+    "over": "dwp/housing_benefit/over_pension_credit_age",
+    "under": "dwp/housing_benefit/under_pension_credit_age",
+    "under_general_needs": "dwp/housing_benefit/under_pension_credit_age_general_needs",
+}
+
+
 def _over_pension_credit_age(ctx) -> np.ndarray:
     """Benefit units assessed under the pension-age Housing Benefit rules."""
     claimant = np.asarray(
@@ -135,7 +218,7 @@ def _over_pension_credit_age(ctx) -> np.ndarray:
 
 
 # Age groups the calibration targets; see the module docstring.
-_CALIBRATED_AGE_GROUPS = ("over",)
+_CALIBRATED_AGE_GROUPS = ("over", "under_general_needs")
 
 
 def _make_compute(age_group: str, count: bool):
@@ -144,7 +227,9 @@ def _make_compute(age_group: str, count: bool):
             ctx.sim.calculate("housing_benefit").values, dtype=float
         )
         in_group = _over_pension_credit_age(ctx)
-        if age_group == "under":
+        if age_group != "over":
+            # The model pays no supported or temporary accommodation Housing
+            # Benefit, so both working-age groups share one column.
             in_group = ~in_group
         value = (housing_benefit > 0) if count else housing_benefit
         return np.asarray(ctx.household_from_family(value * in_group), dtype=float)
@@ -156,11 +241,13 @@ def get_targets() -> list[Target]:
     return build_targets(_CALIBRATED_AGE_GROUPS)
 
 
-def build_targets(age_groups=("over", "under")) -> list[Target]:
+def build_targets(
+    age_groups=("over", "under", "under_general_needs"),
+) -> list[Target]:
     """Housing Benefit spending and claims targets for these age groups."""
     targets = []
     for age_group in age_groups:
-        name = f"dwp/housing_benefit/{age_group}_pension_credit_age"
+        name = _NAMES[age_group]
         targets.append(
             Target(
                 name=name,
