@@ -12,10 +12,12 @@ Sources:
 import io
 import logging
 import time
+import zipfile
 from functools import lru_cache
 
 import openpyxl
 import requests
+from openpyxl.utils.exceptions import InvalidFileException
 
 from policyengine_uk_data.targets.schema import Target, Unit
 from policyengine_uk_data.targets.sources._common import (
@@ -43,6 +45,20 @@ _FY_COL_TO_YEAR = {
 # drop the whole OBR target set and red an unrelated build.
 _DOWNLOAD_MAX_ATTEMPTS = 4
 _DOWNLOAD_RETRY_STATUSES = {429, 500, 502, 503, 504}
+
+# obr.uk can also answer 200 with an HTML "No Access" page instead of the
+# workbook (observed 2026-10-04 from a local machine). These are the errors
+# openpyxl raises on a body that is not a readable xlsx: not a zip
+# (BadZipFile), a zip without the xlsx manifest (KeyError) or workbook part
+# (OSError), or malformed XML inside (ValueError). Such a body will not turn
+# into a workbook on retry, so it is treated as permanent, like a 403.
+_WORKBOOK_PARSE_ERRORS = (
+    zipfile.BadZipFile,
+    InvalidFileException,
+    KeyError,
+    OSError,
+    ValueError,
+)
 
 
 # obr.uk serves 403 Forbidden to GitHub Actions runner IPs (observed on the
@@ -78,7 +94,8 @@ def _download_workbook(url: str) -> openpyxl.Workbook:
     Retries transient HTTP errors (429/5xx) and connection failures with
     exponential backoff, honouring a numeric Retry-After header when
     present. Falls back to the committed workbook in storage/obr_efo/ when
-    the download ultimately fails (obr.uk 403s CI runner IPs).
+    the download ultimately fails: obr.uk 403s CI runner IPs, and can answer
+    200 with an HTML page that is not a workbook. Neither is retried.
     """
     last_error: Exception | None = None
     for attempt in range(_DOWNLOAD_MAX_ATTEMPTS):
@@ -89,7 +106,17 @@ def _download_workbook(url: str) -> openpyxl.Workbook:
             last_error = e  # connection/timeout — retryable
         else:
             if r.status_code < 400:
-                return openpyxl.load_workbook(io.BytesIO(r.content), data_only=False)
+                try:
+                    return openpyxl.load_workbook(
+                        io.BytesIO(r.content), data_only=False
+                    )
+                except _WORKBOOK_PARSE_ERRORS as e:
+                    last_error = ValueError(
+                        f"{r.status_code} for url: {url}, but the body "
+                        f"({r.headers.get('Content-Type', 'no Content-Type')}) "
+                        f"is not an xlsx workbook ({type(e).__name__}: {e})"
+                    )
+                    break
             last_error = requests.HTTPError(
                 f"{r.status_code} for url: {url}", response=r
             )
