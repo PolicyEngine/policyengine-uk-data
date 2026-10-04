@@ -590,14 +590,19 @@ def derive_pension_credit_reported_capital(benunit: pd.DataFrame) -> np.ndarray:
     A missing or negative value gives -1, so policyengine-uk falls back to the
     household proxy.
     """
-    capital = pd.Series(np.nan, index=benunit.index, dtype=float)
+    capital = np.full(len(benunit), np.nan)
     for column in ("totcapb3", "totcapb4"):  # later columns take precedence
         if column in benunit.columns:
-            values = pd.to_numeric(benunit[column], errors="coerce")
+            # Plain float64, so nullable (pd.NA) inputs become NaN and the
+            # validity mask is a plain bool array with no missing entries.
+            values = (
+                pd.to_numeric(benunit[column], errors="coerce")
+                .astype("float64")
+                .to_numpy(dtype=float, na_value=np.nan)
+            )
             valid = np.isfinite(values) & (values >= 0)
-            capital = capital.where(~valid, values)
-    values = capital.to_numpy(dtype=float)
-    return np.where(np.isfinite(values) & (values >= 0), values, -1.0)
+            capital = np.where(valid, values, capital)
+    return np.where(np.isfinite(capital) & (capital >= 0), capital, -1.0)
 
 
 def create_frs(

@@ -36,6 +36,19 @@ def test_totcapb4_takes_precedence_with_totcapb3_fallback():
     assert result.tolist() == [150.0, 200.0, 300.0, 400.0, -1.0]
 
 
+def test_nullable_inputs_keep_the_totcapb3_fallback():
+    """Nullable (pd.NA) columns must not wipe a valid TOTCAPB3 where TOTCAPB4
+    is missing."""
+    benunit = pd.DataFrame(
+        {
+            "totcapb3": pd.array([0.0, 250.0, pd.NA, -3.0], dtype="Float64"),
+            "totcapb4": pd.array([pd.NA, pd.NA, 400.0, pd.NA], dtype="Float64"),
+        }
+    )
+    result = derive_pension_credit_reported_capital(benunit)
+    assert result.tolist() == [0.0, 250.0, 400.0, -1.0]
+
+
 def test_missing_column_gives_sentinel():
     benunit = pd.DataFrame({"benunit_id": [101, 102, 201]})
     assert derive_pension_credit_reported_capital(benunit).tolist() == [-1.0] * 3
