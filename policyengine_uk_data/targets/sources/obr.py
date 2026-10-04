@@ -93,8 +93,8 @@ def _download_workbook(url: str) -> openpyxl.Workbook:
                 # obr.uk can answer 200 with an HTML "No Access" page instead
                 # of the workbook (observed 2026-10-04). A body openpyxl cannot
                 # read will not become a workbook on retry, so it is permanent,
-                # like a 403. Catching broadly cannot hide an openpyxl break:
-                # the fallback is parsed by the same call outside any try.
+                # like a 403. An openpyxl break on every workbook still
+                # surfaces, as the fallback goes through the same load_workbook.
                 try:
                     return openpyxl.load_workbook(
                         io.BytesIO(r.content), data_only=False
@@ -103,7 +103,8 @@ def _download_workbook(url: str) -> openpyxl.Workbook:
                     last_error = ValueError(
                         f"{r.status_code} for url: {url}, but the body "
                         f"({r.headers.get('Content-Type', 'no Content-Type')}) "
-                        f"is not an xlsx workbook ({type(e).__name__}: {e})"
+                        "could not be read as an xlsx workbook "
+                        f"({type(e).__name__}: {e})"
                     )
                     last_error.__cause__ = e
                     break

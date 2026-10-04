@@ -143,13 +143,18 @@ def test_fallback_workbooks_are_committed_and_parseable():
 
 
 @pytest.mark.parametrize(
-    "kind, error", [("403", requests.HTTPError), ("200-html-page", ValueError)]
+    "kind, error, cause",
+    [
+        ("403", requests.HTTPError, type(None)),
+        ("200-html-page", ValueError, zipfile.BadZipFile),
+    ],
 )
-def test_unknown_url_with_failed_download_still_raises(kind, error):
+def test_unknown_url_with_failed_download_still_raises(kind, error, cause):
     url = "https://obr.uk/download/some-other-file/"
     with _obr_answering(_FAILED_DOWNLOADS[kind][0]):
-        with pytest.raises(error, match=f"for url: {url}"):
+        with pytest.raises(error, match=f"for url: {url}") as raised:
             obr._download_workbook(url)
+    assert isinstance(raised.value.__cause__, cause)
 
 
 def test_full_target_set_available_offline():
@@ -215,7 +220,7 @@ def test_non_workbook_200_warning_names_url_status_and_parse_error(caplog):
     with _obr_answering(_FAILED_DOWNLOADS["200-html-page"][0]):
         obr._download_workbook(url)
     assert (
-        f"200 for url: {url}, but the body (text/html; charset=UTF-8) is not "
-        "an xlsx workbook (BadZipFile: File is not a zip file)); using "
-        "committed workbook fallback"
+        f"200 for url: {url}, but the body (text/html; charset=UTF-8) could "
+        "not be read as an xlsx workbook (BadZipFile: File is not a zip "
+        "file)); using committed workbook fallback"
     ) in caplog.text
