@@ -86,7 +86,6 @@ def test_hmrc_salary_sacrifice_relief_targets():
     on the old CSV dropped them from every build without failing it)."""
     targets = {t.name: t for t in get_all_targets(year=2025)}
     for name in (
-        "hmrc/salary_sacrifice_it_relief_total",
         "hmrc/salary_sacrifice_it_relief_basic_rate",
         "hmrc/salary_sacrifice_it_relief_higher_rate",
         "hmrc/salary_sacrifice_it_relief_additional_rate",
@@ -94,6 +93,8 @@ def test_hmrc_salary_sacrifice_relief_targets():
         "hmrc/salary_sacrifice_employer_nics_relief",
     ):
         assert name in targets, f"{name} missing from the target registry"
+    # The bands, not HMRC's separately rounded total, are the targets.
+    assert "hmrc/salary_sacrifice_it_relief_total" not in targets
     # One NICs relief target per class: the OBR-labelled copies of the
     # 2023-24 figures are gone.
     assert "obr/salary_sacrifice_employee_ni_relief" not in targets
