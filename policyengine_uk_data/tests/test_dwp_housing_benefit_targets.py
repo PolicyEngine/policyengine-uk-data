@@ -150,7 +150,6 @@ def test_working_age_general_needs_two_ways():
         assert caseload[year] < h._CASELOAD_THOUSANDS["under"][year]
 
 
-
 @settings(max_examples=200, deadline=None)
 @given(
     st.dictionaries(st.integers(2020, 2035), st.floats(0, 1e4), max_size=8),
