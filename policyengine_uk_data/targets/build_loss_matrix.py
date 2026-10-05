@@ -52,7 +52,6 @@ from policyengine_uk_data.targets.compute import (
     compute_two_child_limit,
     compute_uc_by_children,
     compute_uc_by_family_type,
-    compute_uc_outside_cap,
     compute_uc_payment_dist,
     compute_uk_population,
     compute_vehicles,
@@ -407,10 +406,6 @@ def _compute_column(target: Target, ctx: _SimContext, year: int) -> np.ndarray |
         "obr/salary_sacrifice_employer_ni_relief",
     ):
         return compute_ss_ni_relief(target, ctx)
-
-    # UC outside benefit cap
-    if name == "obr/universal_credit_outside_cap":
-        return compute_uc_outside_cap(target, ctx)
 
     # Two-child limit
     if "two_child_limit" in name:

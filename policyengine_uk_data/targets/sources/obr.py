@@ -17,7 +17,7 @@ from functools import lru_cache
 import openpyxl
 import requests
 
-from policyengine_uk_data.targets.schema import Target, Unit
+from policyengine_uk_data.targets.schema import GREAT_BRITAIN, Target, Unit
 from policyengine_uk_data.targets.sources._common import (
     HEADERS,
     load_config,
@@ -455,6 +455,32 @@ def _parse_nics(wb: openpyxl.Workbook) -> list[Target]:
     return targets
 
 
+def _universal_credit_rows(ws) -> tuple[int, int]:
+    """Table 4.9's universal credit rows inside and outside the welfare cap.
+
+    Each section has exactly one row starting "Universal credit"; the
+    outside-the-cap section starts at the row headed "Welfare spending
+    outside the welfare cap".
+    """
+    max_row = ws.max_row
+    boundary = _find_row(
+        ws, "Welfare spending outside the welfare cap", max_row=max_row
+    )
+    rows = [
+        row
+        for row in range(1, max_row + 1)
+        if str(ws[f"B{row}"].value or "").strip().startswith("Universal credit")
+    ]
+    inside = [row for row in rows if row < boundary]
+    outside = [row for row in rows if row > boundary]
+    if len(inside) != 1 or len(outside) != 1:
+        raise ValueError(
+            f"expected one universal credit row each side of row {boundary}, "
+            f"found rows {rows}"
+        )
+    return inside[0], outside[0]
+
+
 def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
     """Parse Table 4.9 (welfare spending) from expenditure xlsx."""
     config = load_config()
@@ -505,10 +531,6 @@ def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
             "Winter fuel payment",
             "winter_fuel_allowance",
         ),
-        "universal_credit_in_cap": (
-            "Universal credit",
-            "universal_credit",
-        ),
         "child_benefit": ("Child benefit", "child_benefit"),
         "state_pension": ("State pension", "state_pension"),
         "jobseekers_allowance": (
@@ -538,30 +560,41 @@ def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
         except ValueError:
             logger.warning("OBR welfare: row '%s' not found", label)
 
-    # Universal credit outside cap (row 43) is jobseekers UC
+    # Universal credit has two rows: spending inside the welfare cap (row 18
+    # of the March 2026 table) and outside it (row 43). The welfare cap is the
+    # Charter for Budget Responsibility's limit on welfare spending, not the
+    # household benefit cap. It excludes the State Pension and the payments
+    # most sensitive to the economic cycle: JSA, associated Housing Benefit
+    # and their UC equivalent. DWP's benefit expenditure and caseload tables
+    # (Spring Forecast 2026) give the same £12.876bn for 2025-26 and define
+    # it (Notes) as "the total expenditure ... directed to those in the
+    # Intensive Work Search group"; EFO March 2026 para 4.24 n.20 uses the
+    # same regime. policyengine-uk has no UC conditionality regime. A proxy
+    # built from the legal tests and FRS employment status went from 5% under
+    # to 27% over DWP's 2025-26 figure when one employment-status code was
+    # mapped correctly, too fragile to calibrate to, so the two rows are
+    # targeted as one total. Both sit under "DWP social security",
+    # which covers Great Britain: Northern Ireland's UC is in the "NI social
+    # security" rows.
     try:
-        # UC outside cap = predominantly JSA-conditionality UC
-        uc_outside_row = _find_row(ws, "Universal credit", col="B", max_row=55)
-        # Find the second UC row (outside cap section)
-        for row in range(uc_outside_row + 1, 55):
-            cell_val = ws[f"B{row}"].value
-            if cell_val and str(cell_val).strip().startswith("Universal credit"):
-                values = read_49(row)
-                if values:
-                    targets.append(
-                        Target(
-                            name="obr/universal_credit_outside_cap",
-                            variable="universal_credit",
-                            source="obr",
-                            unit=Unit.GBP,
-                            values=values,
-                            reference_url=ref,
-                            forecast_vintage=vintage,
-                        )
-                    )
-                break
-    except ValueError:
-        logger.warning("OBR welfare: UC outside cap not found")
+        inside_row, outside_row = _universal_credit_rows(ws)
+        inside, outside = read_49(inside_row), read_49(outside_row)
+        if not inside or inside.keys() != outside.keys():
+            raise ValueError("the two universal credit rows cover different years")
+        targets.append(
+            Target(
+                name="obr/universal_credit",
+                variable="universal_credit",
+                source="obr",
+                unit=Unit.GBP,
+                values={year: inside[year] + outside[year] for year in inside},
+                countries=GREAT_BRITAIN,
+                reference_url=ref,
+                forecast_vintage=vintage,
+            )
+        )
+    except ValueError as e:
+        logger.warning("OBR welfare: universal credit not parsed: %s", e)
 
     return targets
 
