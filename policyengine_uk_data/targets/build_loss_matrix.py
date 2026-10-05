@@ -60,6 +60,22 @@ from policyengine_uk_data.targets.compute import (
 logger = logging.getLogger(__name__)
 
 
+def calibration_targets() -> list[Target]:
+    """The national, regional and country targets the national matrix uses."""
+    targets = []
+    seen = set()
+    for level in (
+        GeographicLevel.NATIONAL,
+        GeographicLevel.REGION,
+        GeographicLevel.COUNTRY,
+    ):
+        for t in get_all_targets(geographic_level=level):
+            if t.name not in seen:
+                seen.add(t.name)
+                targets.append(t)
+    return targets
+
+
 def create_target_matrix(
     dataset,
     time_period: str = None,
@@ -88,23 +104,11 @@ def create_target_matrix(
 
     ctx = _SimContext(sim, time_period, dataset, reform)
 
-    all_targets = []
-    seen = set()
-    for level in (
-        GeographicLevel.NATIONAL,
-        GeographicLevel.REGION,
-        GeographicLevel.COUNTRY,
-    ):
-        for t in get_all_targets(geographic_level=level):
-            if t.name not in seen:
-                seen.add(t.name)
-                all_targets.append(t)
-
     df = pd.DataFrame()
     target_names = []
     target_values = []
 
-    for target in all_targets:
+    for target in calibration_targets():
         try:
             val = _resolve_value(target, year)
             if val is None:
