@@ -5,6 +5,11 @@ counts, benefit cap, UC payment distribution, UC claimant counts by
 children/family type, two-child limit breakdowns, and Scotland UC
 households with child under 1.
 
+DWP's statistics cover Great Britain: benefits for Northern Ireland
+residents are the Northern Ireland Executive's, so every target here sets
+``countries``. The PIP statistics cover England and Wales, since Adult
+Disability Payment replaced PIP in Scotland.
+
 Sources:
 - DWP benefit statistics: https://www.gov.uk/government/statistics/dwp-benefit-statistics-february-2026/dwp-benefit-statistics-february-2026
 - DWP PIP statistics: https://www.gov.uk/government/statistics/personal-independence-payment-statistics-to-january-2026
@@ -13,7 +18,12 @@ Sources:
 - DWP two-child limit: https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025
 """
 
-from policyengine_uk_data.targets.schema import Target, Unit
+from policyengine_uk_data.targets.schema import (
+    ENGLAND_AND_WALES,
+    GREAT_BRITAIN,
+    Target,
+    Unit,
+)
 
 
 _DWP_BENEFIT_STATS_FEB_2026 = (
@@ -40,6 +50,7 @@ def get_targets() -> list[Target]:
             source="dwp",
             unit=Unit.COUNT,
             values={2025: 1_283_000},
+            countries=ENGLAND_AND_WALES,
             is_count=True,
             reference_url=_PIP_STATS_JAN_2026,
         )
@@ -51,6 +62,7 @@ def get_targets() -> list[Target]:
             source="dwp",
             unit=Unit.COUNT,
             values={2025: 1_608_000},
+            countries=ENGLAND_AND_WALES,
             is_count=True,
             reference_url=_PIP_STATS_JAN_2026,
         )
@@ -69,6 +81,7 @@ def get_targets() -> list[Target]:
                 source="dwp",
                 unit=Unit.COUNT,
                 values={2025: 999_000},
+                countries=GREAT_BRITAIN,
                 is_count=True,
                 reference_url=_DWP_BENEFIT_STATS_FEB_2026,
             ),
@@ -78,6 +91,7 @@ def get_targets() -> list[Target]:
                 source="dwp",
                 unit=Unit.COUNT,
                 values={2025: 620_000},
+                countries=GREAT_BRITAIN,
                 is_count=True,
                 reference_url=_DWP_BENEFIT_STATS_FEB_2026,
             ),
@@ -87,6 +101,7 @@ def get_targets() -> list[Target]:
                 source="dwp",
                 unit=Unit.COUNT,
                 values={2025: 180_000},
+                countries=GREAT_BRITAIN,
                 is_count=True,
                 reference_url=_DWP_BENEFIT_STATS_FEB_2026,
             ),
@@ -96,6 +111,7 @@ def get_targets() -> list[Target]:
                 source="dwp",
                 unit=Unit.COUNT,
                 values={2025: 71_000},
+                countries=GREAT_BRITAIN,
                 is_count=True,
                 reference_url=_DWP_BENEFIT_STATS_FEB_2026,
             ),
@@ -110,6 +126,7 @@ def get_targets() -> list[Target]:
             source="dwp",
             unit=Unit.COUNT,
             values={2025: 110_637},
+            countries=GREAT_BRITAIN,
             is_count=True,
             reference_url="https://www.gov.uk/government/statistics/benefit-cap-number-of-households-capped-to-november-2025/benefit-cap-number-of-households-capped-to-november-2025",
         )
@@ -123,6 +140,7 @@ def get_targets() -> list[Target]:
             # Uses the November 2025 point-in-time cap distribution midpoint by band,
             # annualized to align with the model's yearly benefit_cap_reduction output.
             values={2025: 320_866_000},
+            countries=GREAT_BRITAIN,
             reference_url="https://www.gov.uk/government/statistics/benefit-cap-number-of-households-capped-to-november-2025/benefit-cap-number-of-households-capped-to-november-2025",
         )
     )
@@ -135,6 +153,7 @@ def get_targets() -> list[Target]:
             source="dwp",
             unit=Unit.COUNT,
             values={2025: 14_000},
+            countries=("SCOTLAND",),
             is_count=True,
             reference_url="https://stat-xplore.dwp.gov.uk/",
         )
@@ -156,6 +175,7 @@ def get_targets() -> list[Target]:
                 source="dwp",
                 unit=Unit.COUNT,
                 values={2025: count},
+                countries=GREAT_BRITAIN,
                 is_count=True,
                 reference_url="https://stat-xplore.dwp.gov.uk/",
             )
@@ -177,6 +197,7 @@ def get_targets() -> list[Target]:
                 source="dwp",
                 unit=Unit.COUNT,
                 values={2025: count_k * 1e3},
+                countries=GREAT_BRITAIN,
                 is_count=True,
                 reference_url="https://stat-xplore.dwp.gov.uk/",
             )
@@ -194,6 +215,7 @@ def get_targets() -> list[Target]:
             source="dwp",
             unit=Unit.COUNT,
             values={2025: 6_700_000, 2026: 7_200_000},
+            countries=GREAT_BRITAIN,
             is_count=True,
             reference_url="https://www.gov.uk/government/statistics/universal-credit-quarterly-statistics-29-april-2013-to-12-february-2026/universal-credit-deductions-statistics-march-2025-to-february-2026",
         )
@@ -207,6 +229,7 @@ def get_targets() -> list[Target]:
             source="dwp",
             unit=Unit.COUNT,
             values={2026: 453_600},
+            countries=GREAT_BRITAIN,
             is_count=True,
             reference_url="https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025",
         )
@@ -218,6 +241,7 @@ def get_targets() -> list[Target]:
             source="dwp",
             unit=Unit.COUNT,
             values={2026: 1_613_980},
+            countries=GREAT_BRITAIN,
             is_count=True,
             reference_url="https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025",
         )
@@ -229,6 +253,7 @@ def get_targets() -> list[Target]:
             source="dwp",
             unit=Unit.COUNT,
             values={2026: 580_400},
+            countries=GREAT_BRITAIN,
             is_count=True,
             reference_url="https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025",
         )
@@ -249,6 +274,7 @@ def get_targets() -> list[Target]:
                 source="dwp",
                 unit=Unit.COUNT,
                 values={2026: households},
+                countries=GREAT_BRITAIN,
                 is_count=True,
                 reference_url="https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025",
             )
@@ -260,6 +286,7 @@ def get_targets() -> list[Target]:
                 source="dwp",
                 unit=Unit.COUNT,
                 values={2026: children},
+                countries=GREAT_BRITAIN,
                 is_count=True,
                 reference_url="https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025",
             )
@@ -274,6 +301,7 @@ def get_targets() -> list[Target]:
                 source="dwp",
                 unit=Unit.COUNT,
                 values={2026: 62_260},
+                countries=GREAT_BRITAIN,
                 is_count=True,
                 reference_url="https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025",
             ),
@@ -283,6 +311,7 @@ def get_targets() -> list[Target]:
                 source="dwp",
                 unit=Unit.COUNT,
                 values={2026: 225_320},
+                countries=GREAT_BRITAIN,
                 is_count=True,
                 reference_url="https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025",
             ),
@@ -292,6 +321,7 @@ def get_targets() -> list[Target]:
                 source="dwp",
                 unit=Unit.COUNT,
                 values={2026: 124_560},
+                countries=GREAT_BRITAIN,
                 is_count=True,
                 reference_url="https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025",
             ),
@@ -301,6 +331,7 @@ def get_targets() -> list[Target]:
                 source="dwp",
                 unit=Unit.COUNT,
                 values={2026: 462_660},
+                countries=GREAT_BRITAIN,
                 is_count=True,
                 reference_url="https://www.gov.uk/government/statistics/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025/universal-credit-claimants-statistics-on-the-two-child-limit-policy-april-2025",
             ),
@@ -330,6 +361,7 @@ def _uc_payment_distribution_targets() -> list[Target]:
                 source="dwp",
                 unit=Unit.COUNT,
                 values={2025: float(row.household_count)},
+                countries=GREAT_BRITAIN,
                 is_count=True,
                 breakdown_variable="universal_credit",
                 lower_bound=float(lower),

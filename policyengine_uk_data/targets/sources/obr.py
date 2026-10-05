@@ -17,7 +17,8 @@ from functools import lru_cache
 import openpyxl
 import requests
 
-from policyengine_uk_data.targets.schema import Target, Unit
+from policyengine_uk_data.targets.schema import GREAT_BRITAIN, Target, Unit
+from policyengine_uk_data.targets.schema import ENGLAND_AND_WALES
 from policyengine_uk_data.targets.sources._common import (
     HEADERS,
     load_config,
@@ -517,6 +518,28 @@ def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
             "jsa",
         ),
     }
+    # Table 4.9 lists DWP's spending under "DWP social security", the figures
+    # DWP's benefit expenditure and caseload tables (Spring Forecast 2026)
+    # give as "DWP Social Security (GB)": Northern Ireland's benefits are the
+    # table's "NI social security" rows. Those tables also leave out Scotland
+    # for benefits whose executive competence passed to the Scottish
+    # Government (Notes K, L and N): disability benefits from 2020-21, Carer's
+    # Allowance from 2018-19 and Winter Fuel Payment from 2024-25. Child
+    # benefit is HMRC's and covers the UK.
+    coverage = {
+        "housing_benefit": GREAT_BRITAIN,
+        "pip": ENGLAND_AND_WALES,
+        "esa": GREAT_BRITAIN,
+        "attendance_allowance": ENGLAND_AND_WALES,
+        "pension_credit": GREAT_BRITAIN,
+        "carers_allowance": ENGLAND_AND_WALES,
+        "statutory_maternity_pay": GREAT_BRITAIN,
+        "winter_fuel_allowance": ENGLAND_AND_WALES,
+        "universal_credit_in_cap": GREAT_BRITAIN,
+        "child_benefit": None,
+        "state_pension": GREAT_BRITAIN,
+        "jobseekers_allowance": GREAT_BRITAIN,
+    }
 
     targets = []
     # Welfare cap section (rows 6-36)
@@ -532,6 +555,7 @@ def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
                         source="obr",
                         unit=Unit.GBP,
                         values=values,
+                        countries=coverage[name],
                         reference_url=ref,
                         forecast_vintage=vintage,
                     )
@@ -556,6 +580,7 @@ def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
                             source="obr",
                             unit=Unit.GBP,
                             values=values,
+                            countries=GREAT_BRITAIN,
                             reference_url=ref,
                             forecast_vintage=vintage,
                         )
