@@ -9,10 +9,10 @@ from policyengine_uk_data.parameters import load_take_up_rate
 from policyengine_uk_data.targets import get_all_targets
 from policyengine_uk_data.targets.schema import GREAT_BRITAIN, Unit
 from policyengine_uk_data.targets.sources import dwp_pension_credit, obr
-from policyengine_uk_data.utils.takeup import (
-    assign_takeup_over_eligible,
-    solve_fill_probability,
+from policyengine_uk_data.datasets.pension_credit_takeup import (
+    pension_credit_takeup_flags,
 )
+from policyengine_uk_data.utils.takeup import solve_fill_probability
 
 _units = st.lists(
     st.tuples(st.floats(0, 5_000), st.booleans(), st.booleans()),
@@ -44,40 +44,59 @@ def test_fill_probability_meets_the_rate_or_hits_a_bound(units, rate):
 
 
 @settings(max_examples=200, deadline=None)
-@given(_units, st.floats(0, 1), st.integers(0, 2**32 - 1))
-def test_reporters_claim_and_every_non_reporter_shares_one_probability(
-    units, rate, seed
+@given(
+    _units, st.floats(0, 1), st.floats(0, 1), st.floats(0, 1), st.integers(0, 2**32 - 1)
+)
+def test_reporters_claim_entitled_units_share_the_solved_probability_others_the_new_rate(
+    units, rate, newly_entitled_rate, other_rate, seed
 ):
     weights = np.array([u[0] for u in units])
-    eligible = np.array([u[1] for u in units])
+    entitled = np.array([u[1] for u in units])
     reported = np.array([u[2] for u in units])
+    gb = np.ones(len(units), dtype=bool)
     draws = np.random.default_rng(seed).random(len(units))
-    result = assign_takeup_over_eligible(draws, rate, weights, eligible, reported)
-    p = solve_fill_probability(rate, weights, eligible, reported)
+    result, p = pension_credit_takeup_flags(
+        draws, rate, weights, entitled, reported, gb, newly_entitled_rate
+    )
+    assert p == solve_fill_probability(rate, weights, entitled, reported)
     assert result[reported].all()
-    # Eligibility does not change a non-reporter's flag, so a unit a reform
-    # makes entitled claims at the same rate.
-    np.testing.assert_array_equal(result[~reported], (draws < p)[~reported])
+    entitled_non_reporters = entitled & ~reported
+    np.testing.assert_array_equal(
+        result[entitled_non_reporters], (draws < p)[entitled_non_reporters]
+    )
+    others = ~entitled & ~reported
+    np.testing.assert_array_equal(result[others], (draws < newly_entitled_rate)[others])
+    # The newly entitled rate changes neither the probability nor any flag of
+    # an entitled unit, so the calibration year's take-up is unchanged.
+    other, p_other = pension_credit_takeup_flags(
+        draws, rate, weights, entitled, reported, gb, other_rate
+    )
+    assert p_other == p
+    np.testing.assert_array_equal(other[entitled], result[entitled])
 
 
 def test_weighted_take_up_among_eligible_matches_rate():
     rng = np.random.default_rng(0)
     n = 200_000
     weights = rng.uniform(100, 3_000, n)
-    eligible = rng.random(n) < 0.2
-    reported = eligible & (rng.random(n) < 0.4)
-    result = assign_takeup_over_eligible(
-        rng.random(n), 0.62, weights, eligible, reported
+    entitled = rng.random(n) < 0.2
+    reported = entitled & (rng.random(n) < 0.4)
+    result, _ = pension_credit_takeup_flags(
+        rng.random(n), 0.62, weights, entitled, reported, np.ones(n, bool), 0.37
     )
-    take_up = weights[eligible & result].sum() / weights[eligible].sum()
+    take_up = weights[entitled & result].sum() / weights[entitled].sum()
     assert abs(take_up - 0.62) < 0.005
-    # Non-entitled units are drawn at the same probability as entitled ones.
-    p = solve_fill_probability(0.62, weights, eligible, reported)
-    assert abs(result[~eligible].mean() - p) < 0.01
+    # Units with no entitlement claim at the newly entitled rate.
+    assert abs(result[~entitled].mean() - 0.37) < 0.01
 
 
 def test_rate_is_dwp_fye_2024_caseload_take_up():
     assert load_take_up_rate("pension_credit", 2025) == 0.62
+
+
+def test_newly_entitled_rate_is_dwp_savings_credit_only_take_up():
+    assert load_take_up_rate("pension_credit_newly_entitled", 2025) == 0.37
+    assert load_take_up_rate("pension_credit_newly_entitled", 2022) == 0.42
 
 
 def test_targets_reconcile_with_dwp_components():
@@ -177,9 +196,6 @@ def test_northern_ireland_cannot_change_the_gb_solution(gb_units, ni_units, rate
     """DWP's take-up rate covers Great Britain, so Northern Ireland's
     entitlement, reporting and weights leave the probability and every GB
     flag unchanged."""
-    from policyengine_uk_data.datasets.pension_credit_takeup import (
-        pension_credit_takeup_flags,
-    )
 
     def arrays(units):
         return (
@@ -192,7 +208,7 @@ def test_northern_ireland_cannot_change_the_gb_solution(gb_units, ni_units, rate
     nw, ne, nr = arrays(ni_units)
     draws = np.random.default_rng(seed).random(len(gw) + len(nw))
     gb_only, p_gb = pension_credit_takeup_flags(
-        draws[: len(gw)], rate, gw, ge, gr, np.ones(len(gw), dtype=bool)
+        draws[: len(gw)], rate, gw, ge, gr, np.ones(len(gw), dtype=bool), 0.37
     )
     combined, p_uk = pension_credit_takeup_flags(
         draws,
@@ -201,9 +217,13 @@ def test_northern_ireland_cannot_change_the_gb_solution(gb_units, ni_units, rate
         np.concatenate([ge, ne]),
         np.concatenate([gr, nr]),
         np.concatenate([np.ones(len(gw), bool), np.zeros(len(nw), bool)]),
+        0.37,
     )
     assert p_uk == p_gb
     np.testing.assert_array_equal(combined[: len(gw)], gb_only)
-    # Northern Ireland non-reporters are drawn at the GB probability.
+    # Entitled Northern Ireland non-reporters are drawn at the GB probability,
+    # the rest at the newly entitled rate.
     ni_draws = draws[len(gw) :]
-    np.testing.assert_array_equal(combined[len(gw) :][~nr], (ni_draws < p_gb)[~nr])
+    ni_flags = combined[len(gw) :]
+    np.testing.assert_array_equal(ni_flags[ne & ~nr], (ni_draws < p_gb)[ne & ~nr])
+    np.testing.assert_array_equal(ni_flags[~ne & ~nr], (ni_draws < 0.37)[~ne & ~nr])

@@ -84,21 +84,3 @@ def solve_fill_probability(
     with np.errstate(over="ignore", divide="ignore"):
         probability = needed / remaining_weight
     return float(np.clip(probability, 0.0, 1.0))
-
-
-def assign_takeup_over_eligible(
-    draws: np.ndarray,
-    rate: float,
-    weights: np.ndarray,
-    eligible: np.ndarray,
-    reported: np.ndarray,
-) -> np.ndarray:
-    """Take-up flags with ``rate`` met over eligible entities.
-
-    Reporters claim. Every non-reporter, eligible or not, claims with the
-    probability ``solve_fill_probability`` finds for eligible non-reporters,
-    so a unit a reform makes newly eligible claims at the same rate.
-    """
-    probability = solve_fill_probability(rate, weights, eligible, reported)
-    reported = np.asarray(reported, dtype=bool)
-    return reported | (np.asarray(draws, dtype=np.float64) < probability)

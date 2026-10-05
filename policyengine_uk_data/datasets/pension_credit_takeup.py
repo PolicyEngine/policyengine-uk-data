@@ -15,9 +15,14 @@ For the calibration year it:
 - solves the probability that makes weighted take-up among entitled units
   in Great Britain equal DWP's caseload take-up rate, which covers Great
   Britain only;
-- applies that probability to every non-reporter, entitled or not and in
-  Northern Ireland too, so a unit that a reform makes entitled claims at the
-  same rate.
+- applies that probability to every entitled non-reporter, in Northern
+  Ireland too;
+- draws every unit with no entitlement in the calibration year at DWP's
+  take-up for Savings Credit-only awards (37% in FYE 2024), the rate at
+  which a unit claims once a reform or a later year entitles it. This step
+  finds no entitlement for them in the calibration year, so their rate only
+  matters under a reform, in a later year, or where the saved dataset's
+  calibration-year entitlement differs from this step's (#479).
 
 Weights are the survey grossing weights, before calibration.
 """
@@ -25,10 +30,7 @@ Weights are the survey grossing weights, before calibration.
 import numpy as np
 
 from policyengine_uk_data.parameters import load_take_up_rate
-from policyengine_uk_data.utils.takeup import (
-    assign_takeup_over_eligible,
-    solve_fill_probability,
-)
+from policyengine_uk_data.utils.takeup import solve_fill_probability
 
 # Separate from the FRS build's take-up generator, so redrawing here leaves
 # every other stochastic input unchanged.
@@ -51,17 +53,21 @@ def spi_synthetic_benunits(dataset) -> np.ndarray:
 
 
 def pension_credit_takeup_flags(
-    draws, rate, weights, entitled, reported, great_britain
+    draws, rate, weights, entitled, reported, great_britain, newly_entitled_rate
 ):
     """Claim flags and the fill probability solved over GB entitled units.
 
     Only Great Britain enters the solve, because DWP's take-up rate covers
-    Great Britain. Every non-reporter, wherever it lives, claims when its
-    draw is below the probability.
+    Great Britain. Reporters claim. Every other entitled unit, wherever it
+    lives, claims when its draw is below the probability; every unit that
+    isn't entitled claims when its draw is below ``newly_entitled_rate``.
     """
-    eligible = np.asarray(entitled, dtype=bool) & np.asarray(great_britain, dtype=bool)
+    entitled = np.asarray(entitled, dtype=bool)
+    reported = np.asarray(reported, dtype=bool)
+    eligible = entitled & np.asarray(great_britain, dtype=bool)
     probability = solve_fill_probability(rate, weights, eligible, reported)
-    claims = assign_takeup_over_eligible(draws, rate, weights, eligible, reported)
+    claim_probability = np.where(entitled, probability, newly_entitled_rate)
+    claims = reported | (np.asarray(draws, dtype=np.float64) < claim_probability)
     return claims, probability
 
 
@@ -98,9 +104,10 @@ def assign_pension_credit_takeup(dataset, year: int):
     )
     gb = ~in_ni
     rate = load_take_up_rate("pension_credit", year)
+    newly_entitled_rate = load_take_up_rate("pension_credit_newly_entitled", year)
     draws = np.random.default_rng(PENSION_CREDIT_TAKEUP_SEED).random(len(entitled))
     claims, probability = pension_credit_takeup_flags(
-        draws, rate, weights, entitled, reported, gb
+        draws, rate, weights, entitled, reported, gb, newly_entitled_rate
     )
 
     dataset = dataset.copy()
@@ -113,6 +120,7 @@ def assign_pension_credit_takeup(dataset, year: int):
         "year": year,
         "rate": rate,
         "fill_probability": round(probability, 4),
+        "newly_entitled_rate": newly_entitled_rate,
         "entitled_k": total(1, entitled, 1e3),
         "gb_entitled_k": total(1, gb & entitled, 1e3),
         "reporters_k": total(1, reported, 1e3),
@@ -128,5 +136,13 @@ def assign_pension_credit_takeup(dataset, year: int):
         ),
         "gb_claims_after_fill_k": total(1, gb & entitled & claims, 1e3),
         "gb_pension_credit_after_fill_bn": total(entitlement, gb & claims, 1e9),
+        "gb_not_entitled_k": total(1, gb & ~entitled, 1e3),
+        "gb_not_entitled_flagged_share": round(
+            float(
+                weights[gb & ~entitled & claims].sum()
+                / max(weights[gb & ~entitled].sum(), 1)
+            ),
+            4,
+        ),
     }
     return dataset, summary
