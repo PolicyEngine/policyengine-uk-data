@@ -22,6 +22,10 @@ class Unit(str, Enum):
 # DWP statistics cover Great Britain: benefits for Northern Ireland residents
 # are the Northern Ireland Executive's responsibility.
 GREAT_BRITAIN = ("ENGLAND", "SCOTLAND", "WALES")
+# For benefits whose executive competence passed to the Scottish Government
+# (disability benefits, Carer's Allowance, Winter Fuel Payment), DWP's
+# statistics cover England and Wales only.
+ENGLAND_AND_WALES = ("ENGLAND", "WALES")
 
 
 class Target(BaseModel):
