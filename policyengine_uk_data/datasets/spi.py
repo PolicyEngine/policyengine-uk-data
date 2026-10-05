@@ -1,3 +1,6 @@
+import re
+from importlib.metadata import version
+
 from policyengine_uk_data.storage import STORAGE_FOLDER
 import pandas as pd
 import numpy as np
@@ -23,10 +26,11 @@ AGE_RANGES = {
     7: (74, 90),
 }
 
-# SPI GORCODE → policyengine-uk region enum.
-# NB the SPI codebook does not include a "region unknown" code; we surface
-# unknown codes explicitly rather than silently mapping them to SOUTH_EAST
-# (which the previous implementation did, distorting regional income totals).
+# SPI GORCODE → policyengine-uk region enum. GORCODE also takes 13 ("Address
+# abroad"), 14 ("Address unknown or not available") and -1 (composite
+# records). None of those is a UK region, so they become "UNKNOWN" rather
+# than SOUTH_EAST (which the previous implementation used, distorting
+# regional income totals).
 REGION_MAP = {
     1: "NORTH_EAST",
     2: "NORTH_WEST",
@@ -41,6 +45,16 @@ REGION_MAP = {
     11: "SCOTLAND",
     12: "NORTHERN_IRELAND",
 }
+
+# First policyengine-uk release that can simulate Region.UNKNOWN: it uprates
+# their rent by the UK-wide index (PolicyEngine/policyengine-uk#1985).
+UNKNOWN_REGION_MODEL_VERSION = (2, 104, 5)
+
+
+def model_simulates_unknown_region() -> bool:
+    """Whether the installed policyengine-uk can simulate Region.UNKNOWN."""
+    release = re.match(r"\d+(\.\d+)*", version("policyengine-uk")).group()
+    return tuple(map(int, release.split("."))) >= UNKNOWN_REGION_MODEL_VERSION
 
 
 def _get_marriage_allowance(fiscal_year: int) -> float:
@@ -98,10 +112,10 @@ def create_spi(
             existing call sites don't break.
         seed: Seed for the random age imputation. Fixed by default so builds
             are deterministic.
-        unknown_region: Fallback region label for SPI GORCODE values outside
-            the documented 1-12 range. Defaults to ``"UNKNOWN"`` so regional
-            totals are not silently distorted; pass ``"SOUTH_EAST"`` to
-            reproduce legacy behaviour if needed.
+        unknown_region: Region label for SPI GORCODE values outside 1-12
+            (address abroad, address unknown, composite records). Defaults to
+            ``"UNKNOWN"`` so regional totals are not silently distorted; pass
+            ``"SOUTH_EAST"`` to reproduce legacy behaviour if needed.
     """
     df = pd.read_csv(spi_data_file_path, delimiter="\t")
     rng = np.random.default_rng(seed)
@@ -119,6 +133,15 @@ def create_spi(
     person["dividend_income"] = df.DIVIDENDS
     person["gift_aid"] = df.GIFTAID
     household["region"] = df.GORCODE.map(REGION_MAP).fillna(unknown_region)
+    # GORCODE is the address at the end of the tax year; SCOT_TXP marks
+    # records HMRC taxed under the Scottish system for the year. The two
+    # disagree for some records and SCOT_TXP is also set on records with no
+    # UK region, so SCOT_TXP decides the rates. HMRC documents it as "." or 1;
+    # the 2022-23 tape holds 0 or 1. WELSH_TXP is not used: policyengine-uk
+    # has no separate Welsh rates.
+    person["pays_scottish_income_tax"] = (
+        pd.to_numeric(df.SCOT_TXP, errors="coerce") == 1
+    )
     household["rent"] = 0
     household["tenure_type"] = "OWNED_OUTRIGHT"
     household["council_tax"] = 0
