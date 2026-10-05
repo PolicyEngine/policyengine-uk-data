@@ -19,6 +19,10 @@ Invariants, checked for every row and every year (or pair of years):
   ``uprate_dataset`` there and back between any two years is the identity;
 - every variable a target projection uprates has a row.
 
+The engine's other load-time changes are outside the table: council tax by
+country, rent by region and tenure, and student loan plan reassignment, which
+zeroes the repayments of loans it writes off.
+
 test_income_projection checks that incomes_projection.csv is the committed
 SPI table projected with this table.
 """
@@ -180,6 +184,52 @@ def test_uprate_dataset_from_the_base_year_matches_policyengine_uk(year):
             _value(engine, variable) * _value(engine, "household_weight"),
             rel=ROUNDING,
         ), variable
+
+
+def test_student_loan_plan_reassignment_is_outside_the_table():
+    """The table grows repayments by average earnings, as the engine does for a
+    loan it keeps. It does not zero a loan the engine writes off at load."""
+    base_year = CURRENT_FRS_RELEASE.base_year
+    year = base_year + 1
+    dataset = UKSingleYearDataset(
+        person=pd.DataFrame(
+            {
+                "person_id": [1, 2],
+                "person_benunit_id": [1, 2],
+                "person_household_id": [1, 1],
+                # University starts in 2012 (Plan 2) and 1982 (written off).
+                "age": [base_year - 2012 + 18.0, base_year - 1982 + 18.0],
+                "student_loan_plan": ["PLAN_2", "PLAN_1"],
+                "highest_education": ["TERTIARY", "TERTIARY"],
+                "student_loan_repayments": [1.0, 1.0],
+            }
+        ),
+        benunit=pd.DataFrame({"benunit_id": [1, 2]}),
+        household=pd.DataFrame(
+            {
+                "household_id": [1],
+                "region": ["LONDON"],
+                "tenure_type": ["RENT_PRIVATELY"],
+                **{variable: [1.0] for variable in NOT_SINGLE_INDICES},
+            }
+        ),
+        fiscal_year=base_year,
+    )
+    engine = _project_with_policyengine_uk(dataset, year)[year].person
+    calibration = uprate_dataset(dataset, year).person
+    growth = (
+        TABLE.loc["student_loan_repayments", year]
+        / TABLE.loc["student_loan_repayments", base_year]
+    )
+    assert list(engine.student_loan_plan) == ["PLAN_2", "NONE"]
+    assert engine.student_loan_repayments.tolist() == [
+        pytest.approx(growth, rel=ROUNDING),
+        0,
+    ]
+    assert calibration.student_loan_repayments.tolist() == [
+        pytest.approx(growth, rel=1e-15),
+        pytest.approx(growth, rel=1e-15),
+    ]
 
 
 def test_every_row_is_a_level_index():

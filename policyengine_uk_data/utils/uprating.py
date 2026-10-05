@@ -89,11 +89,13 @@ def policyengine_uk_load_time_index(
     each year, every variable listed in ``uprating_indices.yaml`` is
     multiplied by one plus the year-on-year growth parameter it is listed
     under. Variables the file does not list are carried forward unchanged,
-    and a variable's own ``uprating`` attribute only applies after the last
-    year the dataset is projected to, so neither appears here; past that year
-    this index keeps compounding the same growth parameters. Council tax and
-    rent, which the engine uprates by country and region, are not single
-    indices and are not covered.
+    and a variable's own ``uprating`` attribute only applies to periods with
+    no stored value (for a dataset column, after the last year the dataset is
+    projected to), so neither appears here; past that year this index keeps
+    compounding the same growth parameters. Council tax and rent, which the
+    engine uprates by country and by region and tenure, are not single
+    indices and are not covered, nor is the engine's yearly reassignment of
+    student loan plans, which zeroes the repayments of loans it writes off.
     """
     from policyengine_uk.system import system
 

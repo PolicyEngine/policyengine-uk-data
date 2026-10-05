@@ -9,8 +9,10 @@ import os
 from types import SimpleNamespace
 
 import numpy as np
+import pandas as pd
 
 from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
+from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk_data.targets.compute.income import compute_ss_headcount
 
 # The total combines below-cap and above-cap users and moves slightly with
@@ -128,3 +130,16 @@ def test_headcount_targets_split_users_at_the_cap_on_simulated_amounts():
         np.testing.assert_array_equal(
             masks["below_cap"].astype(int) + masks["above_cap"], masks["total"]
         )
+
+
+def test_calibration_year_contributions_are_the_survey_amounts():
+    """The cap split classifies survey-year contributions only while
+    policyengine-uk carries them unchanged at load, so the table has no row.
+
+    If policyengine-uk starts uprating them (policyengine-uk#1863), the
+    regenerated table gains a row and the split moves to nominal
+    calibration-year amounts. Decide then which of the two the headcount
+    targets should classify (policyengine-uk-data#541).
+    """
+    table = pd.read_csv(STORAGE_FOLDER / "uprating_factors.csv", index_col="Variable")
+    assert "pension_contributions_via_salary_sacrifice" not in table.index
