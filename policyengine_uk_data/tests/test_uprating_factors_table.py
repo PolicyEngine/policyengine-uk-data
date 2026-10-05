@@ -197,8 +197,9 @@ def test_student_loan_plan_reassignment_is_outside_the_table():
                 "person_id": [1, 2],
                 "person_benunit_id": [1, 2],
                 "person_household_id": [1, 1],
-                # University starts in 2012 (Plan 2) and 1982 (written off).
-                "age": [base_year - 2012 + 18.0, base_year - 1982 + 18.0],
+                # Ages are carried unchanged, so in `year` these borrowers
+                # started university in 2012 (Plan 2) and 1982 (written off).
+                "age": [year - 2012 + 18.0, year - 1982 + 18.0],
                 "student_loan_plan": ["PLAN_2", "PLAN_1"],
                 "highest_education": ["TERTIARY", "TERTIARY"],
                 "student_loan_repayments": [1.0, 1.0],
