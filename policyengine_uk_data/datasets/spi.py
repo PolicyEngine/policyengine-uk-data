@@ -1,5 +1,4 @@
-import re
-from importlib.metadata import version
+from functools import cache
 
 from policyengine_uk_data.storage import STORAGE_FOLDER
 import pandas as pd
@@ -46,15 +45,49 @@ REGION_MAP = {
     12: "NORTHERN_IRELAND",
 }
 
-# First policyengine-uk release that can simulate Region.UNKNOWN: it uprates
-# their rent by the UK-wide index (PolicyEngine/policyengine-uk#1985).
-UNKNOWN_REGION_MODEL_VERSION = (2, 104, 5)
 
-
+@cache
 def model_simulates_unknown_region() -> bool:
-    """Whether the installed policyengine-uk can simulate Region.UNKNOWN."""
-    release = re.match(r"\d+(\.\d+)*", version("policyengine-uk")).group()
-    return tuple(map(int, release.split("."))) >= UNKNOWN_REGION_MODEL_VERSION
+    """Whether the imported policyengine-uk can simulate Region.UNKNOWN.
+
+    Releases before 2.104.5 have no rent index for it
+    (PolicyEngine/policyengine-uk#1985). This simulates one household rather
+    than reading the installed version, which need not be the imported code
+    (``make data-local`` puts a checkout on PYTHONPATH).
+    """
+    from policyengine_core.errors import ParameterNotFoundError
+    from policyengine_uk import Microsimulation
+
+    ids = [1]
+    household = UKSingleYearDataset(
+        person=pd.DataFrame(
+            {
+                "person_id": ids,
+                "person_benunit_id": ids,
+                "person_household_id": ids,
+                "age": [40],
+            }
+        ),
+        benunit=pd.DataFrame({"benunit_id": ids}),
+        household=pd.DataFrame(
+            {
+                "household_id": ids,
+                "household_weight": [1.0],
+                "region": ["UNKNOWN"],
+                "rent": [0.0],
+                "tenure_type": ["OWNED_OUTRIGHT"],
+                "council_tax": [0.0],
+            }
+        ),
+        fiscal_year=SPI_FISCAL_YEAR,
+    )
+    try:
+        Microsimulation(dataset=household)
+    except ParameterNotFoundError as error:
+        if ".UNKNOWN'" not in str(error):
+            raise
+        return False
+    return True
 
 
 def _get_marriage_allowance(fiscal_year: int) -> float:
@@ -138,7 +171,8 @@ def create_spi(
     # disagree for some records and SCOT_TXP is also set on records with no
     # UK region, so SCOT_TXP decides the rates. HMRC documents it as "." or 1;
     # the 2022-23 tape holds 0 or 1. WELSH_TXP is not used: policyengine-uk
-    # has no separate Welsh rates.
+    # has no separate Welsh rates. policyengine-uk carries dataset inputs to
+    # 2030; from 2031 it derives the status from the region again.
     person["pays_scottish_income_tax"] = (
         pd.to_numeric(df.SCOT_TXP, errors="coerce") == 1
     )
