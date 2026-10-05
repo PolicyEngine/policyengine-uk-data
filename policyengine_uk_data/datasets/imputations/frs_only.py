@@ -117,10 +117,10 @@ FRS_ONLY_PERSON_VARIABLES = [
 # - Income-related awards. Entitlement turns on the unit's joint means and
 #   make-up, which here come from the imputed incomes. UC and Pension Credit
 #   keep a route: their take-up flags are redrawn below. In
-#   policyengine-uk 2.93.0 the others (housing benefit, council tax
-#   reduction, income support, tax credits, income-related ESA and JSA) can
-#   only be claimed with a report, so these rows no longer receive them.
-#   Sure Start Maternity Grant needs one of these awards.
+#   policyengine-uk 2.93.0 the others (housing benefit, income support, tax
+#   credits, income-related ESA and JSA) can only be claimed with a report,
+#   so these rows no longer receive them. Sure Start Maternity Grant needs
+#   one of these awards. Council tax reduction is kept (below).
 # - Benefits paid only to people out of work or incapable of it: ESA and JSA
 #   (contributory), incapacity benefit and severe disablement allowance. On
 #   the 2024-25 build, 41% of SPI-row ESA (contributory) reporters by weight
@@ -137,7 +137,10 @@ FRS_ONLY_PERSON_VARIABLES = [
 # Kept as drawn: state pension (paid as reported once over pension age),
 # winter fuel payment (not read by the model), the disability benefits and
 # carer's allowance, whose drawn rates sit below the FRS rates as the income
-# gradient implies.
+# gradient implies. Council tax reduction is also kept as drawn for now. In
+# 2.93.0 it too can only be claimed with a report, and zeroing it cut 2025
+# CTR by 21% on the 2024-25 build. It will be zeroed together with a
+# household-level CTR imputation (#499).
 #
 # Every column stays in the QRF chain above, so the values kept do not
 # change. They were drawn alongside the values later zeroed or restored.
@@ -145,7 +148,6 @@ SPI_DONOR_ZEROED_PERSON_VARIABLES = [
     "universal_credit_reported",
     "pension_credit_reported",
     "housing_benefit_reported",
-    "council_tax_benefit_reported",
     "income_support_reported",
     "working_tax_credit_reported",
     "child_tax_credit_reported",

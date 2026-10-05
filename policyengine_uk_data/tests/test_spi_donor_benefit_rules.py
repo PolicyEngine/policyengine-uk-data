@@ -59,7 +59,6 @@ def test_rule_sets_are_pinned():
         "universal_credit_reported",
         "pension_credit_reported",
         "housing_benefit_reported",
-        "council_tax_benefit_reported",
         "income_support_reported",
         "working_tax_credit_reported",
         "child_tax_credit_reported",
@@ -76,6 +75,20 @@ def test_rule_sets_are_pinned():
         "iidb_reported",
         "afcs_reported",
         "bsp_reported",
+    }
+    # Kept as drawn: every report the QRF draws that no rule above touches.
+    drawn_reports = {c for c in FRS_ONLY_PERSON_VARIABLES if c.endswith("_reported")}
+    assert drawn_reports - RULED == {
+        "state_pension_reported",
+        "winter_fuel_allowance_reported",
+        "attendance_allowance_reported",
+        "dla_sc_reported",
+        "dla_m_reported",
+        "pip_m_reported",
+        "pip_dl_reported",
+        "carers_allowance_reported",
+        "maternity_allowance_reported",
+        "council_tax_benefit_reported",
     }
     assert set(SPI_DONOR_REDRAWN_TAKEUP_FLAGS) == {"would_claim_uc", "would_claim_pc"}
     assert not set(SPI_DONOR_ZEROED_PERSON_VARIABLES) & set(
@@ -285,3 +298,28 @@ def test_stage_two_applies_the_rules_and_keeps_drawn_values(monkeypatch):
         ruled.person.drop(columns=flags), int(str(ruled.time_period)[:4])
     )
     pd.testing.assert_frame_equal(ruled.person[flags], recomputed[flags])
+
+
+def test_council_tax_reduction_keeps_the_stage_two_draw():
+    """SPI rows carry the QRF's CTR draw through unchanged, as before the
+    rules: not zeroed, not the donor's. Zeroing waits for #499."""
+    from policyengine_uk_data.tests.test_frs_only_imputation import _fake_dataset
+
+    train = _fake_dataset(person_rows=400, seed=0)
+    rng = np.random.default_rng(2)
+    train.person["council_tax_benefit_reported"] = np.where(
+        rng.random(400) < 0.3, 1_200.0, 0.0
+    )
+    target = _fake_dataset(person_rows=80, seed=1)
+    target.person["council_tax_benefit_reported"] = 999.0
+    outputs = [c for c in FRS_ONLY_PERSON_VARIABLES if c in target.person.columns]
+
+    # The draw alone, which is what stage two returned before the rules.
+    drawn = frs_only._impute_outputs(train, target.copy(), outputs).person
+    ruled = frs_only.impute_frs_only_variables(train, target).person
+
+    np.testing.assert_array_equal(
+        ruled.council_tax_benefit_reported, drawn.council_tax_benefit_reported
+    )
+    assert (drawn.council_tax_benefit_reported > 0).any()
+    assert (drawn.council_tax_benefit_reported != 999.0).any()
