@@ -137,8 +137,9 @@ def restrict_to_countries(column, household_country, countries):
 def _resolve_value(target: Target, year: int) -> float | None:
     """Get the target value for a year, falling back to nearest year.
 
-    A missing year takes the latest earlier value within three years, unless
-    the target sets ``carry_forward=False``. VOA council tax targets are
+    A missing year takes the value of the nearest listed year (the earlier
+    on a tie) if that year is earlier and at most three years away, unless
+    the target sets ``carry_forward=False``; otherwise there is no value. VOA council tax targets are
     population-uprated when extrapolating from their base year (2024).
     """
     if year in target.values:

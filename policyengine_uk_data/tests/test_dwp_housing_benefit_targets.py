@@ -366,7 +366,7 @@ def test_age_split_partitions_housing_benefit(population):
     under = _column(ctx, "dwp/housing_benefit/under_pension_credit_age")
     over_k = _column(ctx, "dwp/housing_benefit/over_pension_credit_age_claims")
     under_k = _column(ctx, "dwp/housing_benefit/under_pension_credit_age_claims")
-    # The model pays no supported or temporary accommodation HB, so the
+    # The model has no supported or temporary accommodation rules, so the
     # calibrated working-age group shares the full line's column.
     np.testing.assert_array_equal(
         _column(ctx, "dwp/housing_benefit/under_pension_credit_age_general_needs"),
