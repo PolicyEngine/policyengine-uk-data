@@ -10,7 +10,6 @@ from types import SimpleNamespace
 
 import numpy as np
 import openpyxl
-import pandas as pd
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -111,11 +110,19 @@ def test_no_countries_means_the_whole_uk(case):
 
 
 def test_target_matrix_counts_only_households_in_a_targets_countries(monkeypatch):
-    """Through create_target_matrix itself, with one household per country."""
+    """Through create_target_matrix, on a real simulation with one household in
+    each country, so the coverage constants meet the `country` variable's own
+    output. Each country's household holds a distinct power of two, so a
+    column's total says which countries it counted."""
     import policyengine_uk
 
-    country = pd.Series(["ENGLAND", "SCOTLAND", "WALES", "NORTHERN_IRELAND"])
-    column = np.array([1.0, 2.0, 4.0, 8.0])
+    amount = {"ENGLAND": 1.0, "SCOTLAND": 2.0, "WALES": 4.0, "NORTHERN_IRELAND": 8.0}
+    situation = {
+        "people": {c: {"age": {2025: 40}} for c in amount},
+        "benunits": {c: {"members": [c]} for c in amount},
+        "households": {c: {"members": [c], "country": {2025: c}} for c in amount},
+    }
+    microsimulation = policyengine_uk.Microsimulation
 
     def target(name, countries):
         return Target(
@@ -125,24 +132,22 @@ def test_target_matrix_counts_only_households_in_a_targets_countries(monkeypatch
             unit=Unit.GBP,
             values={2025: 1.0},
             countries=countries,
-            custom_compute=lambda ctx, target, year: column,
+            custom_compute=lambda ctx, target, year: np.array(
+                [amount[c] for c in ctx.country]
+            ),
         )
 
     targets = [
         target("uk", None),
         target("gb", GREAT_BRITAIN),
         target("ew", ENGLAND_AND_WALES),
+        target("ni", ("NORTHERN_IRELAND",)),
     ]
-
-    class FakeMicrosimulation:
-        def __init__(self, dataset=None, reform=None):
-            pass
-
-        def calculate(self, variable, *args, **kwargs):
-            assert variable == "country"
-            return country
-
-    monkeypatch.setattr(policyengine_uk, "Microsimulation", FakeMicrosimulation)
+    monkeypatch.setattr(
+        policyengine_uk,
+        "Microsimulation",
+        lambda dataset=None, reform=None: microsimulation(situation=situation),
+    )
     monkeypatch.setattr(
         build_loss_matrix,
         "get_all_targets",
@@ -154,10 +159,9 @@ def test_target_matrix_counts_only_households_in_a_targets_countries(monkeypatch
     matrix, values = build_loss_matrix.create_target_matrix(
         SimpleNamespace(time_period="2025"), time_period="2025"
     )
-    np.testing.assert_array_equal(matrix["uk"], [1, 2, 4, 8])
-    np.testing.assert_array_equal(matrix["gb"], [1, 2, 4, 0])
-    np.testing.assert_array_equal(matrix["ew"], [1, 0, 4, 0])
-    assert list(values) == [1.0, 1.0, 1.0]
+    assert list(matrix.columns) == ["uk", "gb", "ew", "ni"]
+    assert matrix.sum().to_dict() == {"uk": 15, "gb": 7, "ew": 5, "ni": 8}
+    assert list(values) == [1.0] * 4
 
 
 # ── OBR table 4.9 ──────────────────────────────────────────────────────

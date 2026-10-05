@@ -17,8 +17,12 @@ from functools import lru_cache
 import openpyxl
 import requests
 
-from policyengine_uk_data.targets.schema import GREAT_BRITAIN, Target, Unit
-from policyengine_uk_data.targets.schema import ENGLAND_AND_WALES
+from policyengine_uk_data.targets.schema import (
+    ENGLAND_AND_WALES,
+    GREAT_BRITAIN,
+    Target,
+    Unit,
+)
 from policyengine_uk_data.targets.sources._common import (
     HEADERS,
     load_config,
