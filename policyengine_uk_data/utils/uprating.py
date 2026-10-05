@@ -1,9 +1,15 @@
+from pathlib import Path
+
 from policyengine_uk_data.storage import STORAGE_FOLDER
 import pandas as pd
+import yaml
 from policyengine_uk.data import UKSingleYearDataset
 
 START_YEAR = 2020
 END_YEAR = 2034
+# Decimal places stored in uprating_factors.csv. At 3 places the rounding
+# alone moved the factor between two years by up to 0.08%.
+UPRATING_TABLE_DECIMALS = 6
 
 # These variables are named as spending, but PolicyEngine UK derives fuel
 # litres through ``litres = spending / price`` and uprates household weights
@@ -31,6 +37,10 @@ HOUSEHOLD_WEIGHT_UPRATING_INDEX = {
     2033: 1.064,
     2034: 1.064,
 }
+# Rows of the table that deliberately differ from policyengine-uk's own
+# index. The fuel rows divide by the household-weight row, so together they
+# keep weighted fuel spending on the engine's path.
+OVERRIDDEN_VARIABLES = ("household_weight",) + VOLUME_OVERRIDDEN_VARIABLES
 
 
 class UpratingYearOutOfRangeError(ValueError):
@@ -55,32 +65,67 @@ def _check_year_in_range(year: int, *, kind: str) -> None:
         )
 
 
-def create_policyengine_uprating_factors_table():
+def policyengine_uk_uprating_indices() -> dict[str, list[str]]:
+    """The growth index policyengine-uk projects each dataset variable by.
+
+    Read from the ``uprating_indices.yaml`` that
+    ``policyengine_uk.data.economic_assumptions`` loads: a mapping from a
+    year-on-year growth parameter to the variables it uprates.
+    """
+    from policyengine_uk.data import economic_assumptions
+
+    path = Path(economic_assumptions.__file__).with_name("uprating_indices.yaml")
+    with open(path) as f:
+        return yaml.safe_load(f)
+
+
+def policyengine_uk_load_time_index(
+    start_year: int = START_YEAR, end_year: int = END_YEAR
+) -> pd.DataFrame:
+    """Level index (``start_year`` = 1) that policyengine-uk applies to data.
+
+    policyengine-uk projects a single-year dataset to later years with
+    ``economic_assumptions.extend_single_year_dataset`` (to 2030 by default):
+    each year, every variable listed in ``uprating_indices.yaml`` is
+    multiplied by one plus the year-on-year growth parameter it is listed
+    under. Variables the file does not list are carried forward unchanged,
+    and a variable's own ``uprating`` attribute only applies after the last
+    year the dataset is projected to, so neither appears here; past that year
+    this index keeps compounding the same growth parameters. Council tax and
+    rent, which the engine uprates by country and region, are not single
+    indices and are not covered.
+    """
     from policyengine_uk.system import system
 
-    df = pd.DataFrame()
+    rows = {}
+    for index_name, variables in policyengine_uk_uprating_indices().items():
+        growth = system.parameters.get_child(index_name)
+        level = [1.0]
+        for year in range(start_year + 1, end_year + 1):
+            level.append(level[-1] * (1 + growth(str(year))))
+        for variable in variables:
+            if variable in rows:
+                raise ValueError(
+                    f"{variable} is listed under two indices in "
+                    "policyengine-uk's uprating_indices.yaml."
+                )
+            rows[variable] = level
+    df = pd.DataFrame.from_dict(
+        rows, orient="index", columns=range(start_year, end_year + 1)
+    )
+    df.index.name = "Variable"
+    return df.sort_index()
 
-    variable_names = []
-    years = []
-    index_values = []
 
-    for variable in system.variables.values():
-        if variable.uprating is not None:
-            parameter = system.parameters.get_child(variable.uprating)
-            start_value = parameter(START_YEAR)
-            for year in range(START_YEAR, END_YEAR + 1):
-                variable_names.append(variable.name)
-                years.append(year)
-                growth = parameter(year) / start_value
-                index_values.append(round(growth, 3))
+def build_uprating_factors_table() -> pd.DataFrame:
+    """The uprating factor table: policyengine-uk's load-time index, overridden.
 
-    df["Variable"] = variable_names
-    df["Year"] = years
-    df["Value"] = index_values
-
-    # Convert to there is a column for each year
-    df = df.pivot(index="Variable", columns="Year", values="Value")
-    df = df.sort_values("Variable")
+    ``uprate_dataset`` moves the build between the FRS base year and the
+    calibration year with this table, and policyengine-uk moves the saved file
+    with its own load-time index, so the two must agree for calibrated values
+    to be the values the model runs on. Only ``OVERRIDDEN_VARIABLES`` differ.
+    """
+    df = policyengine_uk_load_time_index().round(UPRATING_TABLE_DECIMALS)
 
     # Keep the population calibration row stable. Current PolicyEngine UK
     # population indices would inflate final calibrated population above the
@@ -90,14 +135,20 @@ def create_policyengine_uprating_factors_table():
     # Ensure petrol/diesel use sourced road-fuel clearances and model pump
     # prices. This keeps litres aligned after PolicyEngine divides by price.
     df = _apply_road_fuel_litre_proxy_override(df)
+    return df
 
+
+def create_policyengine_uprating_factors_table():
+    df = build_uprating_factors_table()
     df.to_csv(STORAGE_FOLDER / "uprating_factors.csv")
 
     # Create a table with growth factors by year
 
     df_growth = df.copy()
     for year in range(END_YEAR, START_YEAR, -1):
-        df_growth[year] = round(df_growth[year] / df_growth[year - 1] - 1, 3)
+        df_growth[year] = round(
+            df_growth[year] / df_growth[year - 1] - 1, UPRATING_TABLE_DECIMALS
+        )
     df_growth[START_YEAR] = 0
 
     df_growth.to_csv(STORAGE_FOLDER / "uprating_growth_factors.csv")
@@ -224,7 +275,7 @@ def _apply_road_fuel_litre_proxy_override(df: pd.DataFrame) -> pd.DataFrame:
                 + ", ".join(str(year) for year in missing_years)
             )
         for year in range(START_YEAR, END_YEAR + 1):
-            df.loc[variable, year] = round(index[year], 3)
+            df.loc[variable, year] = round(index[year], UPRATING_TABLE_DECIMALS)
     return df
 
 
