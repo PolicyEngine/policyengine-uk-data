@@ -30,29 +30,36 @@ older group; DWP does not publish its rule for them, and this assumes they
 sit in its Pension Credit and State Pension groups.
 
 Working-age Housing Benefit is calibrated net of supported and temporary
-accommodation. policyengine-uk pays no Housing Benefit for specified
+accommodation. policyengine-uk has no rules or input for specified
 (supported) or temporary accommodation (``housing_benefit_eligible``: such
-claims "are not modelled"; policyengine-uk#1911). So every working-age award
-it pays is general-needs Housing Benefit: a continuing award to a family that
-reports it and does not claim Universal Credit. DWP's working-age line
-includes both kinds, but DWP splits accommodation type only across all ages
+claims "are not modelled"; policyengine-uk#1911). It pays working-age
+Housing Benefit only as a continuing award to a family that reports it and
+does not claim Universal Credit, computed under the general-needs rules. The
+FRS does not identify those accommodation types, so a respondent in them who
+reports Housing Benefit is modelled the same way; treating the model's
+working-age Housing Benefit as general needs is an approximation. DWP's
+Spring 2026 forecast tables split accommodation type only across all ages
 (Housing Benefit by Accomodation Type). The calibrated working-age figure is
 therefore DWP's working-age line less all of its supported and temporary
 accommodation: £584.8m and 107k claims in 2025-26, against the full line's
 £5,778.1m and 460k. Part of that accommodation is pension-age, so the figure
-is a lower bound on working-age general-needs Housing Benefit. It exists only
-for 2024-25 and 2025-26. From 2026-27, DWP's all-age supported and temporary
-accommodation exceeds its whole working-age line.
+is a lower bound on working-age general-needs Housing Benefit. It exists
+only for 2024-25 and 2025-26, and the targets do not carry it forward
+(``carry_forward=False``): from 2026-27, DWP's all-age supported and
+temporary accommodation exceeds its whole working-age line, so these lines
+give no positive lower bound. That leaves DWP's supported and temporary
+accommodation Housing Benefit, £5.2bn across all ages in 2025-26, unmodelled
+as such: a known limitation.
 
 Seeded test calibrations on 2026-10-04 tried the full working-age line too.
 With only the pension-age figures calibrated, the model pays about 17,000
-working-age claims in 2025-26. Calibrated to the full line, it came within
-12% of DWP's spending by loading it onto about three effective records. With
-household weights capped at 20-40 times their prior, it reached only 54-60%
-of that spending, and income-related ESA claimants rose to 1.6-2.0 times
-DWP's count. Against the net figure, no other national target crosses the
-10% line compared with calibrating the pension-age figures only. The full
-working-age lines stay here (group "under") for tests and diagnostics.
+working-age claims in 2025-26. Calibrated to the full line, it came about
+12% below DWP's spending by loading it onto about three effective records.
+With household weights capped at 20-40 times their prior, it reached only
+54-60% of that spending, and income-related ESA claimants rose to 1.6-2.0
+times DWP's count. Against the net figure, no other national target crosses
+the 10% line compared with calibrating the pension-age figures only. The
+full working-age lines stay here (group "under") for tests and diagnostics.
 
 Source: https://www.gov.uk/government/publications/benefit-expenditure-and-caseload-tables-2026
 """
@@ -228,8 +235,9 @@ def _make_compute(age_group: str, count: bool):
         )
         in_group = _over_pension_credit_age(ctx)
         if age_group != "over":
-            # The model pays no supported or temporary accommodation Housing
-            # Benefit, so both working-age groups share one column.
+            # The model has no supported or temporary accommodation rules,
+            # so both working-age groups share one column (see the module
+            # docstring).
             in_group = ~in_group
         value = (housing_benefit > 0) if count else housing_benefit
         return np.asarray(ctx.household_from_family(value * in_group), dtype=float)
@@ -261,6 +269,7 @@ def build_targets(
                 reference_url=_REFERENCE_URL,
                 forecast_vintage=_VINTAGE,
                 countries=GREAT_BRITAIN,
+                carry_forward=age_group != "under_general_needs",
                 custom_compute=_make_compute(age_group, count=False),
             )
         )
@@ -278,6 +287,7 @@ def build_targets(
                 reference_url=_REFERENCE_URL,
                 forecast_vintage=_VINTAGE,
                 countries=GREAT_BRITAIN,
+                carry_forward=age_group != "under_general_needs",
                 custom_compute=_make_compute(age_group, count=True),
             )
         )

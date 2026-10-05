@@ -9,8 +9,11 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from policyengine_uk_data.targets import get_all_targets
-from policyengine_uk_data.targets.build_loss_matrix import restrict_to_countries
-from policyengine_uk_data.targets.schema import GREAT_BRITAIN, Unit
+from policyengine_uk_data.targets.build_loss_matrix import (
+    _resolve_value,
+    restrict_to_countries,
+)
+from policyengine_uk_data.targets.schema import GREAT_BRITAIN, Target, Unit
 from policyengine_uk_data.targets.sources import dwp_housing_benefit, obr
 
 # Other rows of the same DWP Housing benefits sheet, transcribed separately:
@@ -148,6 +151,56 @@ def test_working_age_general_needs_two_ways():
         assert abs(caseload[year] - other_way_k) <= 1, year
         assert spending[year] < h._SPENDING_GBP_M["under"][year]
         assert caseload[year] < h._CASELOAD_THOUSANDS["under"][year]
+
+
+def test_net_working_age_targets_are_not_carried_forward():
+    """The net figure is negative from 2026-27, so the loss matrix must not
+    reuse 2025-26's value for later years. Other HB targets still resolve."""
+    targets = _targets()
+    for suffix in ("", "_claims"):
+        net = targets[
+            f"dwp/housing_benefit/under_pension_credit_age_general_needs{suffix}"
+        ]
+        assert not net.carry_forward
+        assert _resolve_value(net, 2024) == net.values[2024]
+        assert _resolve_value(net, 2025) == net.values[2025]
+        for year in (2023, 2026, 2027, 2028):
+            assert _resolve_value(net, year) is None, year
+        for group in ("over", "under"):
+            target = targets[f"dwp/housing_benefit/{group}_pension_credit_age{suffix}"]
+            assert target.carry_forward
+            for year in (2026, 2027, 2028):
+                assert _resolve_value(target, year) == target.values[year]
+            assert _resolve_value(target, 2031) == target.values[2030]
+
+
+@settings(max_examples=300, deadline=None)
+@given(
+    st.dictionaries(
+        st.integers(2015, 2035), st.floats(-1e9, 1e9), min_size=1, max_size=8
+    ),
+    st.integers(2010, 2040),
+    st.booleans(),
+)
+def test_resolve_value_carries_forward_only_when_allowed(values, year, carry):
+    target = Target(
+        name="test/target",
+        variable="housing_benefit",
+        source="test",
+        unit=Unit.GBP,
+        values=values,
+        carry_forward=carry,
+    )
+    resolved = _resolve_value(target, year)
+    if year in values:
+        assert resolved == values[year]
+        return
+    # Nearest listed year; an earlier year wins a tie.
+    closest = min(sorted(values), key=lambda y: abs(y - year))
+    if carry and closest < year and year - closest <= 3:
+        assert resolved == values[closest]
+    else:
+        assert resolved is None
 
 
 @settings(max_examples=200, deadline=None)

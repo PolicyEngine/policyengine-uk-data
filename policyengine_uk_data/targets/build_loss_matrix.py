@@ -137,11 +137,14 @@ def restrict_to_countries(column, household_country, countries):
 def _resolve_value(target: Target, year: int) -> float | None:
     """Get the target value for a year, falling back to nearest year.
 
-    VOA council tax targets are population-uprated when extrapolating
-    from their base year (2024).
+    A missing year takes the latest earlier value within three years, unless
+    the target sets ``carry_forward=False``. VOA council tax targets are
+    population-uprated when extrapolating from their base year (2024).
     """
     if year in target.values:
         return target.values[year]
+    if not target.carry_forward:
+        return None
     available = sorted(target.values.keys())
     if not available:
         return None
