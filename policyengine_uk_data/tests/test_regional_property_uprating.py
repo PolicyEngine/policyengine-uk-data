@@ -42,7 +42,6 @@ def test_calibration_rescales_means():
             {
                 "region": region,
                 "main_residence_value": v,
-                "property_wealth": v * 1.1,
                 "household_weight": 1.0,
             }
             for v in values
@@ -53,7 +52,6 @@ def test_calibration_rescales_means():
             {
                 "region": region,
                 "main_residence_value": 0.0,
-                "property_wealth": 0.0,
                 "household_weight": 1.0,
             }
             for _ in range(10)
@@ -79,7 +77,6 @@ def test_renters_unchanged():
         {
             "region": ["LONDON", "LONDON", "LONDON"],
             "main_residence_value": [500_000.0, 0.0, 0.0],
-            "property_wealth": [500_000.0, 0.0, 0.0],
             "household_weight": [1.0, 1.0, 1.0],
         }
     )
@@ -88,20 +85,25 @@ def test_renters_unchanged():
     assert calibrated.iloc[2]["main_residence_value"] == 0.0
 
 
-def test_property_wealth_scales_proportionally():
-    """property_wealth should scale by the same factor as main_residence_value."""
-    prices = _load_regional_house_prices()
+def test_only_main_residence_value_is_rescaled():
+    """Other property columns are untouched and no property_wealth is created.
+
+    policyengine-uk sums property_wealth from main_residence_value and the
+    other property components, so the rescaling reaches it through them.
+    """
     df = pd.DataFrame(
         {
             "region": ["LONDON", "LONDON"],
             "main_residence_value": [400_000.0, 300_000.0],
-            "property_wealth": [500_000.0, 400_000.0],
+            "other_residential_property_value": [150_000.0, 0.0],
+            "non_residential_property_value": [0.0, 80_000.0],
             "household_weight": [1.0, 1.0],
         }
     )
-    original_ratio = df["property_wealth"].values / df["main_residence_value"].values
     calibrated = _calibrate_property_to_hpi(df)
-    new_ratio = (
-        calibrated["property_wealth"].values / calibrated["main_residence_value"].values
-    )
-    np.testing.assert_allclose(original_ratio, new_ratio, rtol=1e-10)
+    assert "property_wealth" not in calibrated.columns
+    for column in (
+        "other_residential_property_value",
+        "non_residential_property_value",
+    ):
+        np.testing.assert_array_equal(calibrated[column], df[column])

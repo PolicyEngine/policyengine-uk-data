@@ -59,6 +59,14 @@ IMPUTE_VARIABLES = [
     "student_loan_balance",
 ]
 
+# Imputed in sequence so the variables after it are predicted conditional on
+# it, but never saved. policyengine-uk defines `property_wealth` as the sum of
+# `main_residence_value`, `other_residential_property_value` and
+# `non_residential_property_value`; a saved column overrides that formula and,
+# having no uprating index, stays frozen at the dataset year while the
+# components are uprated.
+CONDITIONING_ONLY_VARIABLES = ("property_wealth",)
+
 WAS_RENAMES = {
     "R8xshhwgt": "household_weight",
     # Components for estimating land holdings.
@@ -269,6 +277,27 @@ def _allocate_student_loan_balance_to_people(
     return balances
 
 
+def store_wealth_predictions(
+    dataset: UKSingleYearDataset, predictions: pd.DataFrame
+) -> UKSingleYearDataset:
+    """Write imputed wealth to the dataset, skipping conditioning-only outputs.
+
+    `student_loan_balance` is allocated to people; every other saved output is
+    a household column.
+    """
+    for column in predictions.columns:
+        if column in CONDITIONING_ONLY_VARIABLES:
+            continue
+        if column == "student_loan_balance":
+            dataset.person[column] = _allocate_student_loan_balance_to_people(
+                household_balances=predictions[column].clip(lower=0),
+                person=dataset.person,
+            )
+            continue
+        dataset.household[column] = predictions[column].values
+    return dataset
+
+
 def save_imputation_models():
     """
     Train and save wealth imputation model.
@@ -339,16 +368,7 @@ def impute_wealth(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         "NORTHERN_IRELAND", "WALES"
     )  # WAS doesn't sample NI -> put NI households in Wales (closest aggregate)
     output_df = model.predict(input_df)
-
-    for column in output_df.columns:
-        if column == "student_loan_balance":
-            dataset.person[column] = _allocate_student_loan_balance_to_people(
-                household_balances=output_df[column].clip(lower=0),
-                person=dataset.person,
-            )
-            continue
-        dataset.household[column] = output_df[column].values
-
+    dataset = store_wealth_predictions(dataset, output_df)
     dataset.validate()
 
     return dataset
