@@ -484,7 +484,8 @@ def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
 
     # "Housing benefit (not on JSA)" is not targeted: it is DWP-funded GB
     # spending only, and dwp_housing_benefit.py targets total GB Housing
-    # Benefit split by age instead.
+    # Benefit split by age instead. "Pension credit" is the same DWP GB line
+    # that dwp_pension_credit.py targets, with its caseload.
     benefit_rows = {
         "pip": (
             "Disability living allowance and personal independence p",
@@ -495,7 +496,6 @@ def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
             "Attendance allowance",
             "attendance_allowance",
         ),
-        "pension_credit": ("Pension credit", "pension_credit"),
         "carers_allowance": ("Carer's allowance", "carers_allowance"),
         "statutory_maternity_pay": (
             "Statutory maternity pay",

@@ -100,6 +100,7 @@ def main():
             "Impute capital gains",
             "Impute salary sacrifice",
             "Impute student loan plan",
+            "Assign Pension Credit take-up",
             "Clone and assign OA geography",
             "Calibrate constituency weights",
             "Calibrate local authority weights",
@@ -201,6 +202,18 @@ def main():
                 year=frs_release.calibration_year,
             )
             update_dataset("Impute student loan plan", "completed")
+
+            # Pension Credit entitlement needs the imputed capital, so its
+            # take-up is solved here rather than in the FRS build.
+            update_dataset("Assign Pension Credit take-up", "processing")
+            from policyengine_uk_data.datasets.pension_credit_takeup import (
+                assign_pension_credit_takeup,
+            )
+
+            frs, pension_credit_takeup = assign_pension_credit_takeup(
+                frs, year=frs_release.calibration_year
+            )
+            update_dataset("Assign Pension Credit take-up", "completed")
 
             # Clone households and assign OA geography
             update_dataset("Clone and assign OA geography", "processing")
@@ -397,6 +410,7 @@ def main():
                 "long_geography_weights": "local_geography_weights.csv.gz",
                 "imputations_applied": "consumption, wealth, VAT, services, income, capital_gains, cgt_band_donors, salary_sacrifice, student_loan_plan",
                 "calibration": "national, LA and  constituency targets",
+                "pension_credit_take_up": pension_credit_takeup,
             },
         )
 
