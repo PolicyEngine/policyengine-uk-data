@@ -1,3 +1,10 @@
+## [1.57.4] - 2026-09-25
+
+### Changed
+
+- Documentation: the private HuggingFace repo is now public + gated (manual approval) as of 31 July 2026 — file contents remain restricted; never weaken the gate or flip the repo back to private.
+
+
 ## [1.57.3] - 2026-09-04
 
 No significant changes.
