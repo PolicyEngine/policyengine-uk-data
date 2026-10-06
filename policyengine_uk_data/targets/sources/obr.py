@@ -17,7 +17,7 @@ from functools import lru_cache
 import openpyxl
 import requests
 
-from policyengine_uk_data.targets.schema import Target, Unit
+from policyengine_uk_data.targets.schema import GREAT_BRITAIN, Target, Unit
 from policyengine_uk_data.targets.sources._common import (
     HEADERS,
     load_config,
@@ -173,6 +173,28 @@ def _find_row(ws, label: str, col: str = "B", max_row: int = 80) -> int:
         if cell_val and str(cell_val).strip().startswith(label):
             return row
     raise ValueError(f"Row '{label}' not found in sheet")
+
+
+def _dwp_social_security_rows(ws, max_row: int = 55) -> set[int]:
+    """Rows of table 4.9 inside its "DWP social security" blocks.
+
+    Inside and outside the welfare cap, the table opens a block with a "DWP
+    social security" total, lists its components and closes it with an
+    "Other DWP" line. DWP's benefit expenditure and caseload tables label
+    these lines "DWP Social Security (GB)": Northern Ireland has its own "NI
+    social security" rows, and the HMRC lines after the first block (tax
+    credits, child benefit, tax-free childcare) cover the UK.
+    """
+    rows = set()
+    block_start = None
+    for row in range(1, max_row + 1):
+        label = str(ws[f"B{row}"].value or "").strip()
+        if label.startswith("DWP social security"):
+            block_start = row
+        elif block_start is not None and label.startswith("Other DWP"):
+            rows.update(range(block_start + 1, row + 1))
+            block_start = None
+    return rows
 
 
 def _parse_receipts(wb: openpyxl.Workbook) -> list[Target]:
@@ -519,6 +541,8 @@ def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
     }
 
     targets = []
+    # DWP lines cover Great Britain; the model columns count GB households only.
+    gb_rows = _dwp_social_security_rows(ws)
     # Welfare cap section (rows 6-36)
     for name, (label, variable) in benefit_rows.items():
         try:
@@ -532,6 +556,7 @@ def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
                         source="obr",
                         unit=Unit.GBP,
                         values=values,
+                        countries=GREAT_BRITAIN if row_num in gb_rows else None,
                         reference_url=ref,
                         forecast_vintage=vintage,
                     )
@@ -556,6 +581,7 @@ def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
                             source="obr",
                             unit=Unit.GBP,
                             values=values,
+                            countries=GREAT_BRITAIN if row in gb_rows else None,
                             reference_url=ref,
                             forecast_vintage=vintage,
                         )
