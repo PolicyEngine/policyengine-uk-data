@@ -84,6 +84,8 @@ NON_ADVANCED_EDUCATION_LEVELS = (
 # FRS government-training question variants use 10 or 13 for "None of these".
 FRS_APPROVED_TRAINING_CODES = tuple(range(1, 10))
 UNKNOWN_QUALIFYING_EDUCATION_OR_TRAINING_ENTRY_AGE = 1000
+# FRS RENTPROF: whether ROYYR1 is a profit (1) or a loss (2).
+FRS_RENTPROF_LOSS = 2
 
 
 @lru_cache(maxsize=None)
@@ -226,11 +228,23 @@ def frs_property_income(person: pd.DataFrame, household: pd.DataFrame) -> np.nda
     Two FRS amounts, both weekly in the released data:
 
     - SUBRENT, rent the household received for letting part of its home to
-      someone outside the household. It goes to the household reference
-      person, and only in owner-occupied households (TENTYP2 5 or 6).
-      ``household`` must be indexed by ``household_id``.
+      someone outside the household. The FRS asks every household (SubLet),
+      whatever its tenure, so renting and rent-free households count too. It
+      goes to the household reference person. ``household`` must be indexed
+      by ``household_id``.
     - ROYYR1, the person's rent from other property, before tax and after
-      allowable expenses.
+      allowable expenses. The questionnaire cannot take a negative amount,
+      so a loss is entered as a positive amount with RENTPROF = 2 (question
+      RentProf, "Is that a profit or a loss from the property?"). A loss
+      counts as zero: it is not income, policyengine-uk has no property loss
+      input, and it is not set against the household's SUBRENT.
+
+    SUBRENT is used as reported. SUBALLOW records whether it is before (1)
+    or after (2) allowable expenses, but the FRS collects no expense amount
+    to take off the before-expenses answers.
+
+    Negative values are FRS missing-value codes (-1 to -9), not amounts, so
+    each amount is floored at zero before the two are added.
 
     CVPAY is not included. It is the rent that a boarder or lodger pays the
     householder, and it sits on the boarder's or lodger's own adult record.
@@ -238,13 +252,14 @@ def frs_property_income(person: pd.DataFrame, household: pd.DataFrame) -> np.nda
     lodging, after deducting any state benefits to help with rent.
     """
     is_head = person.hrpid == 1
-    household_property_income = household.tentyp2.isin((5, 6)) * household.subrent
-    persons_household_property_income = (
-        household_property_income.reindex(person.household_id).fillna(0).values
+    persons_household_subrent = (
+        household.subrent.clip(lower=0).reindex(person.household_id).fillna(0).values
+    )
+    rent_from_other_property = person.royyr1.clip(lower=0).where(
+        person.rentprof != FRS_RENTPROF_LOSS, 0
     )
     return (
-        np.maximum(0, is_head * persons_household_property_income + person.royyr1)
-        * WEEKS_IN_YEAR
+        (is_head * persons_household_subrent + rent_from_other_property) * WEEKS_IN_YEAR
     ).values
 
 
