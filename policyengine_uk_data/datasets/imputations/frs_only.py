@@ -44,8 +44,10 @@ from policyengine_uk_data.datasets.frs import (
     BENEFITS_IN_OWN_RIGHT_REPORTED_COLUMNS,
     REPORTED_TAKEUP_ANCHORS,
     assign_reported_takeup,
+    derive_all_claimants_over_state_pension_age,
     derive_receives_benefits_in_own_right,
 )
+from policyengine_uk_data.utils.benefit_units import claimant_or_partner_variable
 
 logger = logging.getLogger(__name__)
 
@@ -168,12 +170,31 @@ SPI_DONOR_RESTORED_PERSON_VARIABLES = [
 
 # Take-up flags redrawn on SPI-donor rows. Whether a synthetic family claims
 # a means-tested benefit at its imputed income is unobserved, so these units
-# draw at the take-up rate. The Child Benefit flag keeps the donor's value:
-# the award doesn't depend on the replaced incomes, and the donor's claim is
-# for the same children.
+# draw at the take-up rate. As in create_frs, a unit whose claimant and any
+# partner have all reached State Pension age never gets would_claim_uc. The
+# Child Benefit flag keeps the donor's value: the award doesn't depend on the
+# replaced incomes, and the donor's claim is for the same children.
 SPI_DONOR_REDRAWN_TAKEUP_FLAGS = ("would_claim_uc", "would_claim_pc")
 # Seed for those draws; create_frs uses 100.
 SPI_DONOR_TAKEUP_SEED = 101
+
+
+def _all_claimants_over_state_pension_age(
+    dataset: UKSingleYearDataset, year: int
+) -> np.ndarray:
+    """``create_frs``'s pension-age Universal Credit exclusion for each of
+    ``dataset``'s benefit units, read through policyengine-uk the same way."""
+    from policyengine_uk import Microsimulation
+
+    sim = Microsimulation(dataset=dataset.copy())
+    return derive_all_claimants_over_state_pension_age(
+        person_benunit_ids=sim.calculate("person_benunit_id", year).values,
+        is_claimant_or_partner=sim.calculate(
+            claimant_or_partner_variable(sim.tax_benefit_system.variables), year
+        ).values,
+        is_over_state_pension_age=sim.calculate("is_SP_age", year).values,
+        benunit_ids=dataset.benunit.benunit_id,
+    )
 
 
 def apply_spi_donor_benefit_rules(
@@ -213,6 +234,8 @@ def apply_spi_donor_benefit_rules(
         report_column = REPORTED_TAKEUP_ANCHORS[flag][1]
         if flag in benunit.columns and report_column in person.columns:
             benunit[flag] = assign_reported_takeup(person, benunit, flag, year, draws)
+            if flag == "would_claim_uc":
+                benunit[flag] &= ~_all_claimants_over_state_pension_age(dataset, year)
     return dataset
 
 

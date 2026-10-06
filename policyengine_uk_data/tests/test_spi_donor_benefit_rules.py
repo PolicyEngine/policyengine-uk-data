@@ -7,11 +7,15 @@ Properties of ``apply_spi_donor_benefit_rules`` for any input:
    donor's value.
 2. Nothing else changes except ``receives_benefits_in_own_right`` and the
    redrawn take-up flags, and the input is not mutated.
-3. A benefit unit with a member reporting UC or Pension Credit claims it.
+3. A benefit unit with a member reporting UC or Pension Credit claims it,
+   unless 6 applies.
 4. ``receives_benefits_in_own_right`` holds exactly when the person reports
    one of ``BENEFITS_IN_OWN_RIGHT_REPORTED_COLUMNS``.
 5. The rules are deterministic and idempotent, and no flag's draws depend on
    which other columns are present.
+6. A benefit unit whose claimant and any partner have all reached State
+   Pension age never gets ``would_claim_uc``, even if it reports UC, as in
+   ``create_frs``.
 
 The fixtures are synthetic, not survey records.
 """
@@ -254,6 +258,104 @@ def test_take_up_rates_are_read_for_the_dataset_year(monkeypatch):
     )
     apply_spi_donor_benefit_rules(dataset)
     assert years == [2031] * len(SPI_DONOR_REDRAWN_TAKEUP_FLAGS)
+
+
+def _people_dataset(people, seed=None) -> UKSingleYearDataset:
+    """One person per (benefit unit, age, claimant or partner) triple, every
+    unit reporting UC and entering with the donor's would_claim_uc. With a
+    ``seed``, both tables are shuffled."""
+    units, ages, claimants = (np.asarray(column) for column in zip(*people))
+    person = pd.DataFrame(
+        {
+            "person_id": np.arange(len(people)) * 5 + 11,
+            "person_benunit_id": units,
+            "person_household_id": units,
+            "age": ages,
+            "is_claimant_or_partner": claimants,
+            "universal_credit_reported": 1_000.0,
+            "pension_credit_reported": 0.0,
+        }
+    )
+    benunit_ids = np.unique(units)
+    benunit = pd.DataFrame(
+        {"benunit_id": benunit_ids, "would_claim_uc": True, "would_claim_pc": False}
+    )
+    if seed is not None:
+        rng = np.random.default_rng(seed)
+        person = person.iloc[rng.permutation(len(person))].reset_index(drop=True)
+        benunit = benunit.iloc[rng.permutation(len(benunit))].reset_index(drop=True)
+    household = pd.DataFrame({"household_id": benunit_ids, "household_weight": 0.0})
+    return UKSingleYearDataset(
+        person=person, benunit=benunit, household=household, fiscal_year=YEAR
+    )
+
+
+def _everyone_takes_up(monkeypatch):
+    monkeypatch.setattr(
+        "policyengine_uk_data.datasets.frs.load_take_up_rate", lambda name, year: 1.0
+    )
+
+
+def test_pension_age_units_never_get_would_claim_uc(monkeypatch):
+    """With every unit drawn to claim, exactly the units whose claimant and any
+    partner have all reached State Pension age lose would_claim_uc, judged by
+    the dataset's is_claimant_or_partner. Pension Credit is not affected."""
+    _everyone_takes_up(monkeypatch)
+    # (benefit unit, age, claimant or partner): a pensioner couple, a mixed-age
+    # couple, a single pensioner, a working-age single, a pensioner living with
+    # a younger adult who is neither, and a pensioner with a child.
+    people = [
+        (3, 70, True),
+        (3, 72, True),
+        (10, 70, True),
+        (10, 50, True),
+        (17, 80, True),
+        (24, 40, True),
+        (31, 75, True),
+        (31, 30, False),
+        (38, 68, True),
+        (38, 10, False),
+    ]
+    after = apply_spi_donor_benefit_rules(_people_dataset(people)).benunit
+    assert dict(zip(after.benunit_id, after.would_claim_uc)) == {
+        3: False,
+        10: True,
+        17: False,
+        24: True,
+        31: False,
+        38: False,
+    }
+    assert after.would_claim_pc.all()
+
+
+@st.composite
+def units_clear_of_pension_age(draw):
+    """Units of one or two claimants, each clearly under (20 to 59) or over
+    (67 and up) State Pension age in 2024, plus up to two other members."""
+    clear_age = st.one_of(st.integers(20, 59), st.integers(67, 95))
+    people = []
+    for unit in range(draw(st.integers(1, 8))):
+        for _ in range(draw(st.integers(1, 2))):
+            people.append((unit * 7 + 3, draw(clear_age), True))
+        for _ in range(draw(st.integers(0, 2))):
+            people.append((unit * 7 + 3, draw(st.integers(0, 95)), False))
+    return people
+
+
+@settings(
+    max_examples=20,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+@given(people=units_clear_of_pension_age(), seed=st.integers(0, 10**6))
+def test_uc_is_excluded_exactly_when_all_claimants_are_over_pension_age(
+    people, seed, monkeypatch
+):
+    _everyone_takes_up(monkeypatch)
+    after = apply_spi_donor_benefit_rules(_people_dataset(people, seed)).benunit
+    for unit, claims in zip(after.benunit_id, after.would_claim_uc):
+        ages = [age for u, age, claimant in people if u == unit and claimant]
+        assert claims == (min(ages) < 67), (unit, ages)
 
 
 def test_stage_two_applies_the_rules_and_keeps_drawn_values(monkeypatch):
