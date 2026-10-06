@@ -167,7 +167,12 @@ def _rent_cells(
     if rents is None:
         rents = pd.read_csv(BRMA_RENTS_PATH)
     bands = pd.Series(list(BEDROOM_BAND_CATEGORY), name="bedrooms")
-    any_band = households[households.bedrooms == "all"].drop(columns="bedrooms")
+    unbanded = households.bedrooms == "all"
+    mixed = set(households.region[unbanded]) & set(households.region[~unbanded])
+    if mixed:
+        # Adding an `all` row to a banded one would count those homes twice.
+        raise ValueError(f"Regions with both `all` and banded rows: {sorted(mixed)}.")
+    any_band = households[unbanded].drop(columns="bedrooms")
     counts = pd.concat(
         [households[households.bedrooms != "all"], any_band.merge(bands, how="cross")]
     ).pivot_table(
@@ -182,6 +187,8 @@ def _rent_cells(
     region = np.asarray(region).astype(str)
     band = bedroom_band(bedrooms)
     cell = counts.index.get_indexer(pd.MultiIndex.from_arrays([region, band]))
+    # A cell whose rows all hold zero households has no BRMA to draw.
+    cell = np.where((cell >= 0) & (counts.sum(axis=1).to_numpy()[cell] > 0), cell, -1)
     if (cell < 0).any():
         missing = sorted(set(zip(region[cell < 0], band[cell < 0])))
         raise ValueError(f"No BRMA weights for region × bedrooms cells {missing}.")
@@ -288,6 +295,57 @@ def brma_probabilities(
     return brmas, p / p.sum(axis=1, keepdims=True)
 
 
+def _fit_inputs(region, bedrooms, weekly_rent, weight, households, rents, compact=True):
+    """Arrays the reported-rent likelihood needs, for ``fit_reported_rent_model``.
+
+    With ``compact``, each household keeps only its supported BRMAs (at most
+    the widest region × bedrooms cell, rather than all 200 columns); the
+    likelihood is the same either way.
+    """
+    if hasattr(region, "decode_to_str"):
+        region = region.decode_to_str()
+    region = np.asarray(region).astype(str)
+    weight = np.asarray(weight, dtype=float)
+    weekly_rent = np.asarray(weekly_rent, dtype=float)
+    positive = np.isfinite(weekly_rent) & (weekly_rent > 0)
+    if not (positive.all() and (weight >= 0).all() and weight.sum() > 0):
+        raise ValueError("Rents must be positive and weights non-negative.")
+    _, prior, log_median, log_sd = _rent_cells(region, bedrooms, households, rents)
+    if compact:
+        widest = (prior > 0).sum(axis=1).max()
+        keep = np.argsort(-prior, axis=1, kind="stable")[:, :widest]
+        prior, log_median, log_sd = (
+            np.take_along_axis(a, keep, axis=1) for a in (prior, log_median, log_sd)
+        )
+    names, index = np.unique(region, return_inverse=True)
+    with np.errstate(divide="ignore"):
+        log_prior = np.log(prior)
+    return names, dict(
+        log_rent=np.log(weekly_rent),
+        index=index,
+        weight=weight,
+        prior=prior,
+        log_prior=log_prior,
+        log_median=log_median,
+        log_sd=log_sd,
+    )
+
+
+def _negative_log_likelihood(
+    x, log_rent, index, weight, log_prior, log_median, log_sd, **_
+):
+    """Weighted mean negative log likelihood of the reported rents.
+
+    ``x`` holds one shift per region, then noise, below-market share,
+    below-market discount and the excess of the below-market noise over noise.
+    """
+    shape = (x[-4], x[-3], x[-2], x[-4] + x[-1])
+    log_p = log_prior + _log_rent_density(log_rent, x[index], log_median, log_sd, shape)
+    peak = log_p.max(axis=1)
+    likelihood = peak + np.log(np.exp(log_p - peak[:, None]).sum(axis=1))
+    return -(weight * likelihood).sum() / weight.sum()
+
+
 def fit_reported_rent_model(
     region: np.ndarray,
     bedrooms: np.ndarray,
@@ -304,44 +362,17 @@ def fit_reported_rent_model(
     that the BRMA probabilities do not depend on the optimiser's last digits.
 
     Raises:
+        ValueError: If a rent is not positive or a weight is negative.
         RuntimeError: If the optimiser does not converge.
     """
     from scipy.optimize import minimize
 
-    if hasattr(region, "decode_to_str"):
-        region = region.decode_to_str()
-    region = np.asarray(region).astype(str)
-    weight = np.asarray(weight, dtype=float)
-    weekly_rent = np.asarray(weekly_rent, dtype=float)
-    positive = np.isfinite(weekly_rent) & (weekly_rent > 0)
-    if not (positive.all() and (weight >= 0).all() and weight.sum() > 0):
-        raise ValueError("Rents must be positive and weights non-negative.")
-    log_rent = np.log(weekly_rent)
-    _, prior, log_median, log_sd = _rent_cells(region, bedrooms, households, rents)
-    # Keep each household's supported BRMAs only: far fewer than all 200.
-    widest = (prior > 0).sum(axis=1).max()
-    keep = np.argsort(-prior, axis=1, kind="stable")[:, :widest]
-    prior, log_median, log_sd = (
-        np.take_along_axis(a, keep, axis=1) for a in (prior, log_median, log_sd)
-    )
-    names, index = np.unique(region, return_inverse=True)
-    with np.errstate(divide="ignore"):
-        log_prior = np.log(prior)
-
-    def loss(x):
-        shape = (x[-4], x[-3], x[-2], x[-4] + x[-1])
-        log_p = log_prior + _log_rent_density(
-            log_rent, x[index], log_median, log_sd, shape
-        )
-        peak = log_p.max(axis=1)
-        likelihood = peak + np.log(np.exp(log_p - peak[:, None]).sum(axis=1))
-        return -(weight * likelihood).sum() / weight.sum()
-
+    names, data = _fit_inputs(region, bedrooms, weekly_rent, weight, households, rents)
     # Start each region's shift at its median gap to the prior-mean list median.
-    gap = log_rent - (prior * log_median).sum(axis=1)
-    start = [np.median(gap[index == i]) for i in range(len(names))]
+    gap = data["log_rent"] - (data["prior"] * data["log_median"]).sum(axis=1)
+    start = [np.median(gap[data["index"] == i]) for i in range(len(names))]
     result = minimize(
-        loss,
+        lambda x: _negative_log_likelihood(x, **data),
         np.array(start + [0.2, 0.15, 0.5, 0.5]),
         method="L-BFGS-B",
         bounds=[(-3, 3)] * len(names) + [(0.01, 2), (0.001, 0.5), (0, 3), (0.05, 3)],
@@ -361,7 +392,16 @@ def fit_reported_rent_model(
 def draw_brmas(
     brmas: np.ndarray, probabilities: np.ndarray, rng: np.random.Generator
 ) -> np.ndarray:
-    """Draw one BRMA per row of ``probabilities``; never one with probability 0."""
+    """Draw one BRMA per row of ``probabilities``; never one with probability 0.
+
+    Raises:
+        ValueError: If a row has no positive probability.
+    """
+    probabilities = np.asarray(probabilities, dtype=float)
+    if not (probabilities >= 0).all() or not (probabilities.sum(axis=1) > 0).all():
+        raise ValueError(
+            "Every row needs non-negative probabilities with a positive sum."
+        )
     cumulative = np.cumsum(probabilities, axis=1)
     cumulative /= cumulative[:, -1:]
     drawn = (cumulative <= rng.random(len(probabilities))[:, None]).sum(axis=1)

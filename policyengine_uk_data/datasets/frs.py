@@ -1429,10 +1429,11 @@ def create_frs(
     )
     pe_household["brma"] = household_brma[sim.calculate("household_id")].values
 
-    # Private renters who report a rent are redrawn given that rent and their
-    # home's bedrooms, so that dearer rents fall in dearer BRMAs. Everyone
-    # else keeps the draw above.
-    reports_rent = (pe_household.tenure_type.values == "RENT_PRIVATELY") & (
+    # Private renters (furnished or unfurnished) who report a rent are redrawn
+    # given that rent and their home's bedrooms, so that dearer rents fall in
+    # dearer BRMAs. Everyone else keeps the draw above. The tenure code is read
+    # directly, because `tenure_type` maps a missing code to private renting.
+    reports_rent = household.ptentyp2.isin([3, 4]).values & (
         household.hhrent.values > 0
     )
     if reports_rent.any():
