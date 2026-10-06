@@ -19,6 +19,7 @@ from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk.variables.household.income.employment_status import (
     EmploymentStatus,
 )
+from policyengine_uk_data.datasets.brma import assign_brmas, pick_household_brmas
 from policyengine_uk_data.datasets.disability_benefits import (
     add_disability_benefit_categories_from_reported_amounts,
     add_disability_benefit_flags_from_reported_amounts,
@@ -1467,43 +1468,20 @@ def create_frs(
 
     sim = Microsimulation(dataset=dataset)
     region = sim.populations["benunit"].household("region", dataset.time_period)
-    lha_category = sim.calculate("LHA_category", year)
-    brma = np.empty(len(region), dtype=object)
+    lha_category = np.asarray(sim.calculate("LHA_category", year))
 
-    # Sample from a random BRMA in the region, weighted by the number of observations in each BRMA.
-    # Use a seeded generator so the assignment is reproducible across builds;
-    # pandas .sample() otherwise draws from the unseeded global numpy RNG.
-    lha_list_of_rents = pd.read_csv(STORAGE_FOLDER / "lha_list_of_rents.csv.gz")
-    lha_list_of_rents = lha_list_of_rents.copy()
+    # Draw each benefit unit's BRMA in proportion to the private-rented
+    # households in each of its region's BRMAs with the matching number of
+    # bedrooms. Use a seeded generator so the assignment is reproducible.
     brma_rng = np.random.default_rng(0)
+    brma = assign_brmas(region, lha_category, brma_rng)
 
-    for possible_region in lha_list_of_rents.region.unique():
-        for possible_lha_category in lha_list_of_rents.lha_category.unique():
-            lor_mask = (lha_list_of_rents.region == possible_region) & (
-                lha_list_of_rents.lha_category == possible_lha_category
-            )
-            mask = (region == possible_region) & (lha_category == possible_lha_category)
-            brma[mask] = lha_list_of_rents[lor_mask].brma.sample(
-                n=len(region[mask]), replace=True, random_state=brma_rng
-            )
-
-    # Convert benunit-level BRMAs to household-level BRMAs (pick a random one)
-
-    df = pd.DataFrame(
-        {
-            "brma": brma,
-            "household_id": sim.populations["benunit"].household(
-                "household_id", sim.dataset.time_period
-            ),
-        }
+    household_brma = pick_household_brmas(
+        brma,
+        sim.populations["benunit"].household("household_id", dataset.time_period),
+        brma_rng,
     )
-
-    df = df.groupby("household_id").brma.aggregate(
-        lambda x: x.sample(n=1, random_state=brma_rng).iloc[0]
-    )
-    brmas = df[sim.calculate("household_id")].values
-
-    pe_household["brma"] = brmas
+    pe_household["brma"] = household_brma[sim.calculate("household_id")].values
 
     pe_person = add_disability_benefit_flags_from_reported_amounts(
         pe_person,

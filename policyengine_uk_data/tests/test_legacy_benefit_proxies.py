@@ -381,17 +381,7 @@ class FakeMicrosimulation:
 
 
 def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
-    original_read_csv = frs_module.pd.read_csv
-
-    def fake_read_csv(path, *args, **kwargs):
-        if str(path).endswith("lha_list_of_rents.csv.gz"):
-            return pd.DataFrame(
-                {"region": ["LONDON"], "lha_category": ["A"], "brma": ["BRMA1"]}
-            )
-        return original_read_csv(path, *args, **kwargs)
-
     monkeypatch.setattr(policyengine_uk, "Microsimulation", FakeMicrosimulation)
-    monkeypatch.setattr(frs_module.pd, "read_csv", fake_read_csv)
     monkeypatch.setattr(frs_module, "load_take_up_rate", lambda *args, **kwargs: 0.0)
     monkeypatch.setattr(frs_module, "load_parameter", lambda *args, **kwargs: 0.0)
     monkeypatch.setattr(

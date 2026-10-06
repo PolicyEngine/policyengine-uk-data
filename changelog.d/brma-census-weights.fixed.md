@@ -1,0 +1,1 @@
+- Draw FRS households' Broad Rental Market Areas in proportion to census private-rented households by BRMA and bedrooms, instead of the row counts of the 2019-20 LHA list of rents, whose Scottish, Welsh and Northern Ireland lists were copies of English BRMAs' lists (uk-data#515). Remove `lha_list_of_rents.csv.gz`.

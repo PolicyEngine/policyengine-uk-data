@@ -211,6 +211,19 @@ Assigns student loan plan type based on age and reported repayments.
 
 ---
 
+## Broad Rental Market Area Assignment
+
+**Source:** Census private-rented households by BRMA and bedrooms (not QRF; applied when the base FRS dataset is built)
+
+The FRS identifies only the region, but Local Housing Allowance rates vary by Broad Rental Market Area (BRMA). `datasets/brma.py` draws each benefit unit's BRMA within its region, in proportion to the private-rented households in each BRMA:
+- shared-accommodation and one-bedroom LHA categories use one-bedroom homes;
+- the two-, three- and four-or-more-bedroom categories use homes with that many bedrooms;
+- Northern Ireland's census has no bedrooms, so its weights are the same for every category.
+
+A household takes one of its benefit units' BRMAs, chosen at random. Sources, method and validation are in `storage/BRMA_DATA_SOURCES.md`.
+
+---
+
 ## Calibration Targets
 
 After imputation, household weights are calibrated to match aggregate statistics from:
