@@ -23,3 +23,6 @@
 policyengine_uk_data/storage/local_geography_weights.csv.gz
 
 .brma-cache/
+
+# Hypothesis example database (property-based tests)
+.hypothesis/

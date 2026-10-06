@@ -40,6 +40,12 @@ from policyengine_uk_data.datasets.disability_benefits import (
     add_disability_benefit_categories_from_reported_amounts,
     add_disability_benefit_flags_from_reported_amounts,
 )
+from policyengine_uk_data.datasets.frs import (
+    BENEFITS_IN_OWN_RIGHT_REPORTED_COLUMNS,
+    REPORTED_TAKEUP_ANCHORS,
+    assign_reported_takeup,
+    derive_receives_benefits_in_own_right,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +107,113 @@ FRS_ONLY_PERSON_VARIABLES = [
     "esa_contrib_reported",
     "esa_income_reported",
 ]
+
+# The QRF draws each person's benefit reports from their age, gender, region
+# and incomes. It sees nothing of their benefit unit (partner, children,
+# rent, capital), their health or their history, and policyengine-uk reads a
+# positive report as an existing claim. On SPI-donor rows, after the draw:
+#
+# Zeroed (SPI_DONOR_ZEROED_PERSON_VARIABLES):
+# - Income-related awards. Entitlement turns on the unit's joint means and
+#   make-up, which here come from the imputed incomes. UC and Pension Credit
+#   keep a route: their take-up flags are redrawn below. In
+#   policyengine-uk 2.93.0 the others (housing benefit, income support, tax
+#   credits, income-related ESA and JSA) can only be claimed with a report,
+#   so these rows no longer receive them. Sure Start Maternity Grant needs
+#   one of these awards. Council tax reduction is kept (below).
+# - Benefits paid only to people out of work or incapable of it: ESA and JSA
+#   (contributory), incapacity benefit and severe disablement allowance. On
+#   the 2024-25 build, 41% of SPI-row ESA (contributory) reporters by weight
+#   earned more than ESA's permitted-work limit.
+# - Child Benefit, which the model reads only through the take-up flag. The
+#   draw ignores the children: 34% of SPI-row reports by weight were in
+#   benefit units with no child or qualifying young person (FRS rows: 0%).
+#
+# Restored to the donor's own value (SPI_DONOR_RESTORED_PERSON_VARIABLES):
+# industrial injuries, armed forces compensation and bereavement support.
+# These follow from an injury, service or a death, not income, and the QRF
+# drew them at 6.2, 2.4 and 4.6 times the FRS rate by weight.
+#
+# Kept as drawn: state pension (paid as reported once over pension age),
+# winter fuel payment (not read by the model), the disability benefits and
+# carer's allowance, whose drawn rates sit below the FRS rates as the income
+# gradient implies. Council tax reduction is also kept as drawn for now. In
+# 2.93.0 it too can only be claimed with a report, and zeroing it cut 2025
+# CTR by 21% on the 2024-25 build. It will be zeroed together with a
+# household-level CTR imputation (#499).
+#
+# Every column stays in the QRF chain above, so the values kept do not
+# change. They were drawn alongside the values later zeroed or restored.
+SPI_DONOR_ZEROED_PERSON_VARIABLES = [
+    "universal_credit_reported",
+    "pension_credit_reported",
+    "housing_benefit_reported",
+    "income_support_reported",
+    "working_tax_credit_reported",
+    "child_tax_credit_reported",
+    "jsa_income_reported",
+    "esa_income_reported",
+    "ssmg_reported",
+    "jsa_contrib_reported",
+    "esa_contrib_reported",
+    "incapacity_benefit_reported",
+    "sda_reported",
+    "child_benefit_reported",
+]
+SPI_DONOR_RESTORED_PERSON_VARIABLES = [
+    "iidb_reported",
+    "afcs_reported",
+    "bsp_reported",
+]
+
+# Take-up flags redrawn on SPI-donor rows. Whether a synthetic family claims
+# a means-tested benefit at its imputed income is unobserved, so these units
+# draw at the take-up rate. The Child Benefit flag keeps the donor's value:
+# the award doesn't depend on the replaced incomes, and the donor's claim is
+# for the same children.
+SPI_DONOR_REDRAWN_TAKEUP_FLAGS = ("would_claim_uc", "would_claim_pc")
+# Seed for those draws; create_frs uses 100.
+SPI_DONOR_TAKEUP_SEED = 101
+
+
+def apply_spi_donor_benefit_rules(
+    dataset: UKSingleYearDataset,
+    donor_person: pd.DataFrame | None = None,
+) -> UKSingleYearDataset:
+    """Apply the SPI-donor benefit rules above to ``dataset``.
+
+    ``donor_person`` is the person table before the QRF draw, holding the
+    donor's own reports; without it the restored columns are left alone.
+    ``receives_benefits_in_own_right`` and the redrawn take-up flags, which
+    ``create_frs`` built from the donor's reports, are rebuilt from the rows'
+    own reports.
+    """
+    dataset = dataset.copy()
+    person, benunit = dataset.person, dataset.benunit
+    for column in SPI_DONOR_ZEROED_PERSON_VARIABLES:
+        if column in person.columns:
+            person[column] = 0.0
+    if donor_person is not None:
+        for column in SPI_DONOR_RESTORED_PERSON_VARIABLES:
+            if column in person.columns and column in donor_person.columns:
+                person[column] = donor_person[column].values
+
+    if "receives_benefits_in_own_right" in person.columns:
+        own_right = person.reindex(
+            columns=list(BENEFITS_IN_OWN_RIGHT_REPORTED_COLUMNS), fill_value=0.0
+        )
+        person["receives_benefits_in_own_right"] = (
+            derive_receives_benefits_in_own_right(own_right).values
+        )
+
+    year = int(str(dataset.time_period)[:4])
+    generator = np.random.default_rng(seed=SPI_DONOR_TAKEUP_SEED)
+    for flag in SPI_DONOR_REDRAWN_TAKEUP_FLAGS:
+        draws = generator.random(len(benunit))
+        report_column = REPORTED_TAKEUP_ANCHORS[flag][1]
+        if flag in benunit.columns and report_column in person.columns:
+            benunit[flag] = assign_reported_takeup(person, benunit, flag, year, draws)
+    return dataset
 
 
 def _one_hot_encode(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
@@ -177,11 +290,13 @@ def impute_frs_only_variables(
     to predict values for every row of ``target_dataset``; predictions
     replace the existing (donor-leaked) values in
     ``FRS_ONLY_PERSON_VARIABLES`` only. Variables absent from either
-    frame are skipped silently.
+    frame are skipped silently. ``apply_spi_donor_benefit_rules`` then
+    zeroes or restores some reports and rebuilds the flags derived from
+    them, before the disability categories and flags are derived from the
+    final reports.
     """
-    from policyengine_uk_data.utils.qrf import QRF
-
     target_dataset = target_dataset.copy()
+    donor_person = target_dataset.person.copy()
 
     train_person = train_dataset.person
     target_person = target_dataset.person
@@ -200,13 +315,32 @@ def impute_frs_only_variables(
             len(missing),
             sorted(missing),
         )
-    if not outputs:
+    if outputs:
+        target_dataset = _impute_outputs(train_dataset, target_dataset, outputs)
+    else:
         logger.warning(
             "Stage-2 FRS-only imputation: no output variables available; "
-            "returning target_dataset unchanged."
+            "applying only the SPI-donor benefit rules."
         )
-        return target_dataset
 
+    target_dataset = apply_spi_donor_benefit_rules(target_dataset, donor_person)
+    target_dataset.person = add_disability_benefit_categories_from_reported_amounts(
+        target_dataset.person,
+        int(str(target_dataset.time_period)[:4]),
+    )
+    target_dataset.person = add_disability_benefit_flags_from_reported_amounts(
+        target_dataset.person,
+        int(str(target_dataset.time_period)[:4]),
+    )
+
+    return target_dataset
+
+
+def _impute_outputs(train_dataset, target_dataset, outputs):
+    """Fit the stage-2 QRF and write its draws of ``outputs`` to the target."""
+    from policyengine_uk_data.utils.qrf import QRF
+
+    train_person = train_dataset.person
     train_inputs_raw = _build_predictor_frame(train_dataset)
     target_inputs_raw = _build_predictor_frame(target_dataset)
 
@@ -240,14 +374,4 @@ def impute_frs_only_variables(
         # amounts or contributions and are non-negative by construction.
         values = np.maximum(predictions[column].values, 0.0)
         target_dataset.person[column] = values
-
-    target_dataset.person = add_disability_benefit_categories_from_reported_amounts(
-        target_dataset.person,
-        int(str(target_dataset.time_period)[:4]),
-    )
-    target_dataset.person = add_disability_benefit_flags_from_reported_amounts(
-        target_dataset.person,
-        int(str(target_dataset.time_period)[:4]),
-    )
-
     return target_dataset

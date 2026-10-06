@@ -35,6 +35,7 @@ from policyengine_uk_data.utils.datasets import (
     STORAGE_FOLDER,
 )
 from policyengine_uk_data.parameters import load_take_up_rate, load_parameter
+from policyengine_uk_data.utils.takeup import assign_takeup_with_reported_anchors
 from policyengine_uk_data.datasets.childcare.assumptions import (
     EXTENDED_HOURS_MEAN,
     EXTENDED_HOURS_SD,
@@ -76,6 +77,14 @@ BENEFITS_IN_OWN_RIGHT_REPORTED_COLUMNS = (
     "esa_contrib_reported",
     "esa_income_reported",
 )
+# Take-up flags anchored on reported receipt: flag -> (take-up rate
+# parameter, person-level report column). A benefit unit with any member
+# reporting receipt claims with certainty; the rest are filled at random.
+REPORTED_TAKEUP_ANCHORS = {
+    "would_claim_child_benefit": ("child_benefit", "child_benefit_reported"),
+    "would_claim_pc": ("pension_credit", "pension_credit_reported"),
+    "would_claim_uc": ("universal_credit", "universal_credit_reported"),
+}
 NON_ADVANCED_EDUCATION_LEVELS = (
     "PRE_PRIMARY",
     "PRIMARY",
@@ -212,6 +221,34 @@ def derive_esa_support_group_proxy(
         & (age < state_pension_age)
         & esa_health_condition_proxy
         & severe_health_evidence
+    )
+
+
+def reported_benunit_mask(
+    person: pd.DataFrame, benunit: pd.DataFrame, person_column: str
+) -> np.ndarray:
+    """Benefit units with any member reporting a positive ``person_column``."""
+    reporter_benunits = set(
+        person.loc[person[person_column] > 0, "person_benunit_id"].values
+    )
+    return benunit["benunit_id"].isin(reporter_benunits).values
+
+
+def assign_reported_takeup(
+    person: pd.DataFrame,
+    benunit: pd.DataFrame,
+    flag: str,
+    year: int,
+    draws: np.ndarray,
+) -> np.ndarray:
+    """Take-up for one ``REPORTED_TAKEUP_ANCHORS`` flag: benefit units
+    reporting receipt claim, and the rest are filled at random so the share
+    claiming matches the take-up rate (see ``utils/takeup.py``)."""
+    rate_name, report_column = REPORTED_TAKEUP_ANCHORS[flag]
+    return assign_takeup_with_reported_anchors(
+        draws,
+        load_take_up_rate(rate_name, year),
+        reported_mask=reported_benunit_mask(person, benunit, report_column),
     )
 
 
@@ -1558,9 +1595,6 @@ def create_frs(
     generator = np.random.default_rng(seed=100)
 
     # Load take-up rates from parameter files
-    child_benefit_rate = load_take_up_rate("child_benefit", year)
-    pension_credit_rate = load_take_up_rate("pension_credit", year)
-    universal_credit_rate = load_take_up_rate("universal_credit", year)
     marriage_allowance_rate = load_take_up_rate("marriage_allowance", year)
     child_benefit_opts_out_rate = load_take_up_rate("child_benefit_opts_out_rate", year)
     tfc_rate = load_take_up_rate("tax_free_childcare", year)
@@ -1578,16 +1612,6 @@ def create_frs(
     # who report positive receipt of a benefit are assigned takeup=True with
     # certainty; the remaining non-reporters are filled probabilistically to
     # hit the aggregate target rate. See policyengine_uk_data/utils/takeup.py.
-    from policyengine_uk_data.utils.takeup import (
-        assign_takeup_with_reported_anchors,
-    )
-
-    def _reported_benunit_mask(person_column: str) -> np.ndarray:
-        reporter_benunits = set(
-            pe_person.loc[pe_person[person_column] > 0, "person_benunit_id"].values
-        )
-        return pe_benunit["benunit_id"].isin(reporter_benunits).values
-
     # Person-level
     pe_person["would_claim_marriage_allowance"] = (
         generator.random(len(pe_person)) < marriage_allowance_rate
@@ -1595,20 +1619,20 @@ def create_frs(
 
     # Benefit unit-level — anchor on any adult in the benefit unit having
     # reported positive receipt in the FRS benefits table.
-    pe_benunit["would_claim_child_benefit"] = assign_takeup_with_reported_anchors(
+    pe_benunit["would_claim_child_benefit"] = assign_reported_takeup(
+        pe_person,
+        pe_benunit,
+        "would_claim_child_benefit",
+        year,
         generator.random(len(pe_benunit)),
-        child_benefit_rate,
-        reported_mask=_reported_benunit_mask("child_benefit_reported"),
     )
     pe_benunit["child_benefit_opts_out"] = (
         generator.random(len(pe_benunit)) < child_benefit_opts_out_rate
     )
     # The enhanced dataset redraws this once entitlement can be computed
     # (datasets/pension_credit_takeup.py).
-    pe_benunit["would_claim_pc"] = assign_takeup_with_reported_anchors(
-        generator.random(len(pe_benunit)),
-        pension_credit_rate,
-        reported_mask=_reported_benunit_mask("pension_credit_reported"),
+    pe_benunit["would_claim_pc"] = assign_reported_takeup(
+        pe_person, pe_benunit, "would_claim_pc", year, generator.random(len(pe_benunit))
     )
     # A benefit unit whose claimant and any partner have all reached State
     # Pension age cannot claim Universal Credit, so it never gets
@@ -1616,10 +1640,8 @@ def create_frs(
     # so the random stream and every other unit's value are unchanged. Ages
     # are not rolled forward, so if State Pension age rises above a claimant's
     # survey age in a later year, that unit stays without would_claim_uc there.
-    pe_benunit["would_claim_uc"] = assign_takeup_with_reported_anchors(
-        generator.random(len(pe_benunit)),
-        universal_credit_rate,
-        reported_mask=_reported_benunit_mask("universal_credit_reported"),
+    pe_benunit["would_claim_uc"] = assign_reported_takeup(
+        pe_person, pe_benunit, "would_claim_uc", year, generator.random(len(pe_benunit))
     ) & ~derive_all_claimants_over_state_pension_age(
         person_benunit_ids=sim.calculate("person_benunit_id", year).values,
         is_claimant_or_partner=sim.calculate(
