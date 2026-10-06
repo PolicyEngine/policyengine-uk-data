@@ -482,11 +482,10 @@ def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
                 result[fy[col]] = float(val) * 1e9
         return result
 
+    # "Housing benefit (not on JSA)" is not targeted: it is DWP-funded GB
+    # spending only, and dwp_housing_benefit.py targets total GB Housing
+    # Benefit split by age instead.
     benefit_rows = {
-        "housing_benefit": (
-            "Housing benefit (not on JSA)",
-            "housing_benefit",
-        ),
         "pip": (
             "Disability living allowance and personal independence p",
             "pip",

@@ -21,7 +21,7 @@ dependencies = [
     "policyengine",
     "google-cloud-storage",
     "google-auth",
-    "policyengine-uk>=2.93.0",
+    "policyengine-uk>=2.102.5",
     "microcalibrate>=0.18.0",
     "microimpute>=1.0.1",
     "ruff>=0.9.0",
@@ -38,6 +38,7 @@ dependencies = [
 dev = [
     "ruff>=0.9.0",
     "pytest",
+    "hypothesis",
     "torch",
     "l0-python>=0.4.0",
     "tables",

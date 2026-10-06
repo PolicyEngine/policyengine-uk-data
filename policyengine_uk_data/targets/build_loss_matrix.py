@@ -113,7 +113,7 @@ def create_target_matrix(
             col = _compute_column(target, ctx, year)
             if col is None:
                 continue
-            df[target.name] = col
+            df[target.name] = restrict_to_countries(col, ctx.country, target.countries)
             target_names.append(target.name)
             target_values.append(val)
         except Exception as e:
@@ -122,14 +122,30 @@ def create_target_matrix(
     return df, pd.Series(target_values, index=target_names)
 
 
+def restrict_to_countries(column, household_country, countries):
+    """Zero a household column outside the countries a target covers.
+
+    ``countries`` of None means the target covers the whole UK, and the
+    column is returned unchanged.
+    """
+    if countries is None:
+        return column
+    in_scope = np.isin(np.asarray(household_country), countries)
+    return np.asarray(column, dtype=float) * in_scope
+
+
 def _resolve_value(target: Target, year: int) -> float | None:
     """Get the target value for a year, falling back to nearest year.
 
-    VOA council tax targets are population-uprated when extrapolating
-    from their base year (2024).
+    A missing year takes the value of the nearest listed year (the earlier
+    on a tie) if that year is earlier and at most three years away, unless
+    the target sets ``carry_forward=False``; otherwise there is no value. VOA council tax targets are
+    population-uprated when extrapolating from their base year (2024).
     """
     if year in target.values:
         return target.values[year]
+    if not target.carry_forward:
+        return None
     available = sorted(target.values.keys())
     if not available:
         return None

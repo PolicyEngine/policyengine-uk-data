@@ -299,6 +299,7 @@ class FakeMicrosimulation:
             "FakeTaxBenefitSystem",
             (),
             {
+                "variables": {"is_adult": None},
                 "parameters": lambda self, year: type(
                     "FakeParametersRoot",
                     (),
@@ -349,7 +350,7 @@ class FakeMicrosimulation:
                             },
                         )()
                     },
-                )()
+                )(),
             },
         )()
 
@@ -360,6 +361,12 @@ class FakeMicrosimulation:
             return np.array([100])
         if variable == "state_pension_age":
             return pd.Series([66])
+        if variable == "person_benunit_id":
+            return pd.Series(self.dataset.person.person_benunit_id.values)
+        if variable == "is_adult":
+            return pd.Series(self.dataset.person.age.values >= 18)
+        if variable == "is_SP_age":
+            return pd.Series(self.dataset.person.age.values >= 66)
         if variable in (
             "childcare_grant",
             "parents_learning_allowance",
