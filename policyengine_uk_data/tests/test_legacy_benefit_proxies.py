@@ -546,8 +546,10 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
         "age_started_or_accepted_current_education_or_training",
         "is_before_universal_credit_qualifying_young_person_terminal_date",
         "is_parent",
+        "is_claimant_or_partner",
     }.issubset(dataset.person.columns)
     assert not dataset.person["is_parent"].iloc[0]
+    assert dataset.person["is_claimant_or_partner"].iloc[0]
     assert not dataset.person["is_in_non_advanced_education"].iloc[0]
     assert not dataset.person["is_in_approved_training"].iloc[0]
     assert (

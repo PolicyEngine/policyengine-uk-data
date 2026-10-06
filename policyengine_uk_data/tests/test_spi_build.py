@@ -467,3 +467,15 @@ def test_income_model_cache_accepts_current_spi_release(tmp_path, monkeypatch):
     )
 
     assert income_module.create_income_model().metadata == current_metadata
+
+
+def test_create_spi_marks_every_taxpayer_as_their_benefit_units_claimant(tmp_path):
+    from policyengine_uk_data.datasets.spi import create_spi
+
+    tab = tmp_path / "spi.tab"
+    _write_fake_spi(tab)
+
+    person = create_spi(tab, 2020, seed=0).person
+    assert person["is_claimant_or_partner"].dtype == bool
+    assert person["is_claimant_or_partner"].all()
+    assert person["person_benunit_id"].is_unique

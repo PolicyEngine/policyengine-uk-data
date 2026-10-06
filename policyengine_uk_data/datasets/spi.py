@@ -112,6 +112,8 @@ def create_spi(
     person["person_id"] = df.SREF
     person["person_household_id"] = df.SREF
     person["person_benunit_id"] = df.SREF
+    # Each SPI taxpayer is their own one-person benefit unit, so its claimant.
+    person["is_claimant_or_partner"] = np.ones(len(df), dtype=bool)
     benunit["benunit_id"] = df.SREF
     household["household_id"] = df.SREF
 

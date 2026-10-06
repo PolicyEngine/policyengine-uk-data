@@ -26,6 +26,10 @@ ALLOWED_COMPATIBILITY_INPUTS = {
     "pip_dl_category",
     "pip_m_category",
 }
+# Benefit-unit roles the source records, which policyengine-uk infers by
+# formula when a dataset leaves them out (is_claimant_or_partner from
+# policyengine-uk#1896). Releases that predate a role ignore its column.
+DATASET_SUPPLIED_ROLES = {"is_claimant_or_partner"}
 
 
 def _subset_source(tmp_path: Path, rows: int) -> Path:
@@ -81,11 +85,15 @@ def test_policybench_transfer_writes_only_valid_leaf_inputs(tmp_path: Path):
         invalid_columns = [
             column
             for column in frame.columns
-            if column not in system.variables
-            or system.variables[column].entity.key != entity
+            if (column not in system.variables and column not in DATASET_SUPPLIED_ROLES)
             or (
-                not system.variables[column].is_input_variable()
-                and column not in ALLOWED_COMPATIBILITY_INPUTS
+                column in system.variables
+                and system.variables[column].entity.key != entity
+            )
+            or (
+                column in system.variables
+                and not system.variables[column].is_input_variable()
+                and column not in ALLOWED_COMPATIBILITY_INPUTS | DATASET_SUPPLIED_ROLES
             )
         ]
         assert invalid_columns == []
@@ -234,6 +242,38 @@ def test_policybench_transfer_family_structure_matches_person_membership(
 
         observed = family.name if hasattr(family, "name") else str(family)
         assert observed == expected
+
+
+def test_policybench_transfer_marks_head_and_joint_spouse_as_claimant_or_partner(
+    tmp_path: Path,
+):
+    source_file_path = _subset_source(tmp_path, 200)
+    source = pd.read_csv(source_file_path)
+    dataset = create_enhanced_cps(source_file_path=source_file_path, calibrate=False)
+    person = dataset.person
+
+    counts = person.groupby("person_benunit_id").is_claimant_or_partner.sum()
+    expected = np.where(source.filing_status == "joint", 2, 1)
+    np.testing.assert_array_equal(counts.sort_index().to_numpy(), expected)
+    # The head and any spouse are listed before every other member.
+    first = person.groupby(
+        "person_benunit_id"
+    ).cumcount() < person.person_benunit_id.map(counts)
+    assert (person.is_claimant_or_partner == first).all()
+
+
+def test_checked_in_enhanced_cps_h5_roles_match_the_builder(tmp_path: Path):
+    checked_in = UKSingleYearDataset(file_path=str(ENHANCED_CPS_FILE)).person
+    built = create_enhanced_cps(
+        source_file_path=_subset_source(tmp_path, 500),
+        calibrate=False,
+    ).person
+    head = checked_in.iloc[: len(built)]
+
+    for column in ("person_id", "person_benunit_id", "age", "is_claimant_or_partner"):
+        np.testing.assert_array_equal(head[column].to_numpy(), built[column].to_numpy())
+    counts = checked_in.groupby("person_benunit_id").is_claimant_or_partner.sum()
+    assert counts.between(1, 2).all()
 
 
 def test_assign_council_tax_bands_handles_upper_percentile_edge():
