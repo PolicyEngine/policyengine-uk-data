@@ -46,26 +46,18 @@ REGION_MAP = {
 }
 
 
-@cache
-def model_simulates_unknown_region() -> bool:
-    """Whether the imported policyengine-uk can simulate Region.UNKNOWN.
-
-    Releases before 2.104.5 have no rent index for it
-    (PolicyEngine/policyengine-uk#1985). This simulates one household rather
-    than reading the installed version, which need not be the imported code
-    (``make data-local`` puts a checkout on PYTHONPATH).
-    """
-    from policyengine_core.errors import ParameterNotFoundError
-    from policyengine_uk import Microsimulation
-
+def _spi_shaped_household(region: str) -> UKSingleYearDataset:
+    # The fixture policyengine-uk's own test_rent_uprating.py simulates with
+    # Region.UNKNOWN, so the model keeps supporting this shape.
     ids = [1]
-    household = UKSingleYearDataset(
+    return UKSingleYearDataset(
         person=pd.DataFrame(
             {
                 "person_id": ids,
                 "person_benunit_id": ids,
                 "person_household_id": ids,
                 "age": [40],
+                "employment_income": [60_000.0],
             }
         ),
         benunit=pd.DataFrame({"benunit_id": ids}),
@@ -73,7 +65,7 @@ def model_simulates_unknown_region() -> bool:
             {
                 "household_id": ids,
                 "household_weight": [1.0],
-                "region": ["UNKNOWN"],
+                "region": [region],
                 "rent": [0.0],
                 "tenure_type": ["OWNED_OUTRIGHT"],
                 "council_tax": [0.0],
@@ -81,11 +73,25 @@ def model_simulates_unknown_region() -> bool:
         ),
         fiscal_year=SPI_FISCAL_YEAR,
     )
+
+
+@cache
+def model_simulates_unknown_region() -> bool:
+    """Whether the imported policyengine-uk can simulate Region.UNKNOWN.
+
+    Releases before 2.104.5 have no rent index for it
+    (PolicyEngine/policyengine-uk#1985). This simulates one household rather
+    than reading the installed version, which need not be the imported code
+    (``make data-local`` puts a checkout on PYTHONPATH). A failure counts as
+    "no" only if the same household labelled SOUTH_EAST simulates; otherwise
+    that error is raised, since relabelling would not help.
+    """
+    from policyengine_uk import Microsimulation
+
     try:
-        Microsimulation(dataset=household)
-    except ParameterNotFoundError as error:
-        if ".UNKNOWN'" not in str(error):
-            raise
+        Microsimulation(dataset=_spi_shaped_household("UNKNOWN"))
+    except Exception:
+        Microsimulation(dataset=_spi_shaped_household("SOUTH_EAST"))
         return False
     return True
 

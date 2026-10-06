@@ -596,60 +596,101 @@ def test_create_spi_scottish_taxpayer_status_survives_h5_round_trip(tmp_path):
     assert loaded.household["region"].tolist() == ["UNKNOWN", "SCOTLAND", "LONDON"]
 
 
-UNKNOWN_RENT_INDEX = (
+def _missing(name):
+    return ParameterNotFoundError(name, "2023-01-01", "rent")
+
+
+UNKNOWN_RENT_INDEX = _missing(
     "gov.economic_assumptions.yoy_growth.ons.private_rental_prices.UNKNOWN"
 )
 
 
 @pytest.mark.parametrize(
-    "missing, expected", [(None, True), (UNKNOWN_RENT_INDEX, False)]
+    "errors, expected",
+    [
+        ({}, True),
+        ({"UNKNOWN": UNKNOWN_RENT_INDEX}, False),
+        # Any failure that relabelling to SOUTH_EAST cures.
+        ({"UNKNOWN": KeyError("UNKNOWN")}, False),
+    ],
 )
-def test_unknown_region_probe_reads_the_simulation(monkeypatch, missing, expected):
+def test_unknown_region_probe_reads_the_simulation(monkeypatch, errors, expected):
     import policyengine_uk
 
+    regions = []
+
     def simulate(dataset):
-        assert dataset.household["region"].tolist() == ["UNKNOWN"]
-        if missing:
-            raise ParameterNotFoundError(missing, "2023-01-01")
+        (region,) = dataset.household["region"]
+        regions.append(region)
+        if region in errors:
+            raise errors[region]
 
     monkeypatch.setattr(policyengine_uk, "Microsimulation", simulate)
 
     assert model_simulates_unknown_region.__wrapped__() is expected
+    assert regions == (["UNKNOWN"] if expected else ["UNKNOWN", "SOUTH_EAST"])
 
 
-def test_unknown_region_probe_raises_other_missing_parameters(monkeypatch):
+@pytest.mark.parametrize(
+    "error",
+    [
+        _missing("gov.hmrc.unrelated.UNKNOWN"),
+        _missing("gov.hmrc.income_tax.rates.uk"),
+        KeyError("employment_income"),
+    ],
+)
+def test_unknown_region_probe_raises_failures_relabelling_would_not_cure(
+    monkeypatch, error
+):
+    """A failure that the SOUTH_EAST household shares is raised, not read as
+    a missing UNKNOWN index."""
     import policyengine_uk
 
     def simulate(dataset):
-        raise ParameterNotFoundError("gov.hmrc.income_tax.rates.uk", "2023-01-01")
+        raise error
 
     monkeypatch.setattr(policyengine_uk, "Microsimulation", simulate)
 
-    with pytest.raises(ParameterNotFoundError, match=r"rates\.uk'"):
+    with pytest.raises(type(error)) as raised:
         model_simulates_unknown_region.__wrapped__()
+    assert raised.value is error
 
 
 def test_unknown_region_probe_agrees_with_policyengine_uk_release():
     """2.104.5 is the first policyengine-uk release with
-    PolicyEngine/policyengine-uk#1985. Where the imported model is the
-    installed release, the probe agrees with its version."""
+    PolicyEngine/policyengine-uk#1985. For an unmodified final release from a
+    package index that is also the imported code, the probe agrees with the
+    release number."""
+    import base64
+    import hashlib
     from importlib.metadata import PackageNotFoundError, distribution
     from pathlib import Path
 
-    import policyengine_uk
     from packaging.version import Version
+    from policyengine_uk.data import economic_assumptions
 
     try:
         release = distribution("policyengine-uk")
     except PackageNotFoundError:
         pytest.skip("policyengine-uk is not installed as a distribution")
-    installed = Path(release.locate_file("policyengine_uk/__init__.py"))
-    if not installed.exists() or not installed.samefile(policyengine_uk.__file__):
+    version = Version(release.version)
+    if version.is_prerelease or version.is_devrelease or version.local:
+        pytest.skip(f"policyengine-uk {version} is not a final release")
+    if release.read_text("direct_url.json") is not None:
+        pytest.skip("policyengine-uk was not installed from a package index")
+    # #1985 changed this module, so it must be the installed file, unmodified.
+    path = "policyengine_uk/data/economic_assumptions.py"
+    installed = Path(release.locate_file(path))
+    if not installed.exists() or not installed.samefile(economic_assumptions.__file__):
         pytest.skip("the imported policyengine-uk is not the installed release")
+    record = {file.as_posix(): file.hash for file in release.files or []}.get(path)
+    if record is None:
+        pytest.skip("policyengine-uk's RECORD does not list the module")
+    digest = hashlib.new(record.mode, installed.read_bytes()).digest()
+    if base64.urlsafe_b64encode(digest).rstrip(b"=").decode() != record.value:
+        pytest.skip("the installed policyengine-uk has been modified")
 
-    assert model_simulates_unknown_region() == (
-        Version(release.version) >= Version("2.104.5")
-    )
+    assert model_simulates_unknown_region() == (version >= Version("2.104.5"))
 
 
 # GORCODE, SCOT_TXP: abroad, unknown, composite, London, Scotland, abroad and
