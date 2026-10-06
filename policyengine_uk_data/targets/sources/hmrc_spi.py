@@ -53,8 +53,10 @@ _BAND_LOWER = [
 ]
 _BAND_UPPER = _BAND_LOWER[1:] + [float("inf")]
 
-# SPI year: the ODS is for tax year 2023-24, mapped to calendar 2024
-_SPI_YEAR = 2024
+# SPI year: the ODS is for tax year 2023-24. PolicyEngine UK's year N is
+# tax year N to N+1 (parameters take their 6 April N value), so the
+# outturn belongs to 2023. Later years come from incomes_projection.csv.
+_SPI_YEAR = 2023
 
 # HMRC Property Rental Income Statistics show ~1.9x more property income
 # than the SPI (£46.68bn vs £24.5bn for 2020-21), because SPI only covers
