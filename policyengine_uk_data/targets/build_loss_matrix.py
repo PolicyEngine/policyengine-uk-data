@@ -401,9 +401,7 @@ def _compute_column(target: Target, ctx: _SimContext, year: int) -> np.ndarray |
     # Salary sacrifice NI relief
     if name in (
         "hmrc/salary_sacrifice_employee_nics_relief",
-        "obr/salary_sacrifice_employee_ni_relief",
         "hmrc/salary_sacrifice_employer_nics_relief",
-        "obr/salary_sacrifice_employer_ni_relief",
     ):
         return compute_ss_ni_relief(target, ctx)
 
