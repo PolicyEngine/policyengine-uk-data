@@ -23,10 +23,11 @@ AGE_RANGES = {
     7: (74, 90),
 }
 
-# SPI GORCODE → policyengine-uk region enum.
-# NB the SPI codebook does not include a "region unknown" code; we surface
-# unknown codes explicitly rather than silently mapping them to SOUTH_EAST
-# (which the previous implementation did, distorting regional income totals).
+# SPI GORCODE → policyengine-uk region enum. GORCODE also takes 13 ("Address
+# abroad"), 14 ("Address unknown or not available") and -1 (composite
+# records). None of those is a UK region, so they become "UNKNOWN" rather
+# than SOUTH_EAST (which the previous implementation used, distorting
+# regional income totals).
 REGION_MAP = {
     1: "NORTH_EAST",
     2: "NORTH_WEST",
@@ -98,10 +99,10 @@ def create_spi(
             existing call sites don't break.
         seed: Seed for the random age imputation. Fixed by default so builds
             are deterministic.
-        unknown_region: Fallback region label for SPI GORCODE values outside
-            the documented 1-12 range. Defaults to ``"UNKNOWN"`` so regional
-            totals are not silently distorted; pass ``"SOUTH_EAST"`` to
-            reproduce legacy behaviour if needed.
+        unknown_region: Region label for SPI GORCODE values outside 1-12
+            (address abroad, address unknown, composite records). Defaults to
+            ``"UNKNOWN"`` so regional totals are not silently distorted; pass
+            ``"SOUTH_EAST"`` to reproduce legacy behaviour if needed.
     """
     df = pd.read_csv(spi_data_file_path, delimiter="\t")
     rng = np.random.default_rng(seed)
@@ -119,6 +120,14 @@ def create_spi(
     person["dividend_income"] = df.DIVIDENDS
     person["gift_aid"] = df.GIFTAID
     household["region"] = df.GORCODE.map(REGION_MAP).fillna(unknown_region)
+    # GORCODE comes from the postcode at the end of the tax year. SCOT_TXP
+    # marks records HMRC taxed under the Scottish system for the year, which
+    # differs for some records and is also set where GORCODE is not a UK
+    # region, so it decides the rates. WELSH_TXP is not used: policyengine-uk
+    # has no separate Welsh rates.
+    person["pays_scottish_income_tax"] = (
+        pd.to_numeric(df.SCOT_TXP, errors="coerce") == 1
+    )
     household["rent"] = 0
     household["tenure_type"] = "OWNED_OUTRIGHT"
     household["council_tax"] = 0

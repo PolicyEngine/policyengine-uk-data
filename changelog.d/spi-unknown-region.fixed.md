@@ -1,0 +1,1 @@
+Take Scottish taxpayer status in the SPI dataset from HMRC's `SCOT_TXP` flag rather than the region code, and document that `GORCODE` 13, 14 and -1 (address abroad, address unknown, composite records) stay `UNKNOWN`; policyengine-uk 2.104.1 can simulate them.

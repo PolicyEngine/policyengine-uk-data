@@ -64,6 +64,8 @@ def ensure_spi_dataset() -> str:
 
 def load_spi_dataset() -> UKSingleYearDataset:
     dataset = UKSingleYearDataset(ensure_spi_dataset())
+    # policyengine-uk before 2.104.1 cannot simulate an unknown region
+    # (PolicyEngine/policyengine-uk#1985). Remove once the lock is past it.
     dataset.household["region"] = dataset.household["region"].replace(
         {"UNKNOWN": "SOUTH_EAST"}
     )
