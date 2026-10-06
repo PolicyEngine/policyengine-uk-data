@@ -78,7 +78,8 @@ def _download_workbook(url: str) -> openpyxl.Workbook:
     Retries transient HTTP errors (429/5xx) and connection failures with
     exponential backoff, honouring a numeric Retry-After header when
     present. Falls back to the committed workbook in storage/obr_efo/ when
-    the download ultimately fails (obr.uk 403s CI runner IPs).
+    the download ultimately fails: obr.uk 403s CI runner IPs, and can answer
+    200 with an HTML page that is not a workbook. Neither is retried.
     """
     last_error: Exception | None = None
     for attempt in range(_DOWNLOAD_MAX_ATTEMPTS):
@@ -89,7 +90,24 @@ def _download_workbook(url: str) -> openpyxl.Workbook:
             last_error = e  # connection/timeout — retryable
         else:
             if r.status_code < 400:
-                return openpyxl.load_workbook(io.BytesIO(r.content), data_only=False)
+                # obr.uk can answer 200 with an HTML "No Access" page instead
+                # of the workbook (observed 2026-10-04). A body openpyxl cannot
+                # read will not become a workbook on retry, so it is permanent,
+                # like a 403. An openpyxl break on every workbook still
+                # surfaces, as the fallback goes through the same load_workbook.
+                try:
+                    return openpyxl.load_workbook(
+                        io.BytesIO(r.content), data_only=False
+                    )
+                except Exception as e:
+                    last_error = ValueError(
+                        f"{r.status_code} for url: {url}, but the body "
+                        f"({r.headers.get('Content-Type', 'no Content-Type')}) "
+                        "could not be read as an xlsx workbook "
+                        f"({type(e).__name__}: {e})"
+                    )
+                    last_error.__cause__ = e
+                    break
             last_error = requests.HTTPError(
                 f"{r.status_code} for url: {url}", response=r
             )
