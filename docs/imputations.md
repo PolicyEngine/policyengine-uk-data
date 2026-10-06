@@ -42,7 +42,7 @@ Imputes household wealth components using demographic and income predictors.
 | Variable | Description |
 |----------|-------------|
 | `owned_land` | Value of owned land |
-| `property_wealth` | Total property wealth |
+| `property_wealth` | Total property wealth (conditions the later outputs; not saved, as policyengine-uk sums the three property components) |
 | `corporate_wealth` | Shares, pensions, investment ISAs |
 | `gross_financial_wealth` | Total financial assets |
 | `net_financial_wealth` | Financial assets minus liabilities |
