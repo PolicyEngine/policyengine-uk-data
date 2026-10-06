@@ -52,6 +52,22 @@ WEEKS_IN_YEAR = 365.25 / 7
 LEGACY_JOBSEEKER_MIN_AGE = 18
 HOURS_WORKED_WEEKS_PER_YEAR = 52
 ESA_MIN_AGE = 16
+# Adult-table EMPSTATI ("Adult - Employment Status - ILO definition") value
+# labels from the UKDS FRS 2024-25 data dictionary, mapped to PolicyEngine
+# statuses. Children have no EMPSTATI and are CHILD.
+FRS_EMPSTATI_EMPLOYMENT_STATUS = {
+    1: EmploymentStatus.FT_EMPLOYED.name,  # Full-time employee
+    2: EmploymentStatus.PT_EMPLOYED.name,  # Part-time employee
+    3: EmploymentStatus.FT_SELF_EMPLOYED.name,  # Full-time self-employed
+    4: EmploymentStatus.PT_SELF_EMPLOYED.name,  # Part-time self-employed
+    5: EmploymentStatus.UNEMPLOYED.name,  # Unemployed
+    6: EmploymentStatus.RETIRED.name,  # Retired
+    7: EmploymentStatus.STUDENT.name,  # Student
+    8: EmploymentStatus.CARER.name,  # Looking after family/home
+    9: EmploymentStatus.LONG_TERM_DISABLED.name,  # Permanently sick/disabled
+    10: EmploymentStatus.SHORT_TERM_DISABLED.name,  # Temporarily sick/injured
+    11: EmploymentStatus.OTHER_INACTIVE.name,  # Other inactive
+}
 ESA_HEALTH_EMPLOYMENT_STATUSES = (
     EmploymentStatus.LONG_TERM_DISABLED.name,
     EmploymentStatus.SHORT_TERM_DISABLED.name,
@@ -127,6 +143,33 @@ def require_variable(name: str, description: str) -> None:
             "the dataset is loaded. Upgrade policyengine-uk to a release that "
             "defines it."
         )
+
+
+def derive_employment_status_from_frs(empstati, is_adult_record) -> np.ndarray:
+    """Map FRS EMPSTATI codes to ``employment_status``.
+
+    Rows from the child table are CHILD. Every adult must carry a code in
+    ``FRS_EMPSTATI_EMPLOYMENT_STATUS``: a missing or unknown adult code fails
+    the build rather than falling back to a guessed status, as the old
+    fallback silently made code 11 (Other inactive) LONG_TERM_DISABLED.
+    """
+
+    codes = pd.Series(np.asarray(empstati, dtype=float))
+    is_adult_record = np.asarray(is_adult_record, dtype=bool)
+    adult_status = codes.map(FRS_EMPSTATI_EMPLOYMENT_STATUS).to_numpy()
+    unknown = is_adult_record & pd.isna(adult_status)
+    if unknown.any():
+        # Build logs are public, and adults are not survey households, so
+        # name the codes and never a count.
+        bad = codes[unknown]
+        listed = [f"{code:g}" for code in sorted(bad.dropna().unique())]
+        listed += ["blank"] if bad.isna().any() else []
+        raise ValueError(
+            "FRS adults have EMPSTATI codes missing from "
+            f"FRS_EMPSTATI_EMPLOYMENT_STATUS: {', '.join(listed)}. Map them "
+            "from the release's data dictionary."
+        )
+    return np.where(is_adult_record, adult_status, EmploymentStatus.CHILD.name)
 
 
 def derive_legacy_jobseeker_proxy(
@@ -1073,23 +1116,9 @@ def create_frs(
         "UPPER_SECONDARY"
     )
 
-    # Add employment status
-    EMPLOYMENTS = [
-        "CHILD",
-        "FT_EMPLOYED",
-        "PT_EMPLOYED",
-        "FT_SELF_EMPLOYED",
-        "PT_SELF_EMPLOYED",
-        "UNEMPLOYED",
-        "RETIRED",
-        "STUDENT",
-        "CARER",
-        "LONG_TERM_DISABLED",
-        "SHORT_TERM_DISABLED",
-    ]
-    pe_person["employment_status"] = categorical(
-        person.empstati, 1, range(12), EMPLOYMENTS
-    ).fillna("LONG_TERM_DISABLED")
+    pe_person["employment_status"] = derive_employment_status_from_frs(
+        person.empstati, person.person_id.isin(frs["adult"].person_id)
+    )
 
     # Add employer sector of the main job from FRS `mjobsect`
     # (1 = private, 2 = public; missing/blank = not in paid work).
