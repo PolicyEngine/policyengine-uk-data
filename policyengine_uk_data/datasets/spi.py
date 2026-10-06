@@ -77,13 +77,14 @@ def _spi_shaped_household(region: str) -> UKSingleYearDataset:
 
 @cache
 def model_simulates_unknown_region() -> bool:
-    """Whether the imported policyengine-uk can simulate Region.UNKNOWN.
+    """Whether the imported policyengine-uk can build a simulation of an
+    SPI-shaped household in Region.UNKNOWN.
 
     Releases before 2.104.5 have no rent index for it
-    (PolicyEngine/policyengine-uk#1985). This simulates one household rather
-    than reading the installed version, which need not be the imported code
+    (PolicyEngine/policyengine-uk#1985). This builds one household rather than
+    reading the installed version, which need not be the imported code
     (``make data-local`` puts a checkout on PYTHONPATH). A failure counts as
-    "no" only if the same household labelled SOUTH_EAST simulates; otherwise
+    "no" only if the same household labelled SOUTH_EAST builds; otherwise
     that error is raised, since relabelling would not help.
     """
     from policyengine_uk import Microsimulation

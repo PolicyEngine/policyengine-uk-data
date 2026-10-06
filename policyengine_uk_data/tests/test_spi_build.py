@@ -642,25 +642,29 @@ def test_unknown_region_probe_reads_the_simulation(monkeypatch, errors, expected
 def test_unknown_region_probe_raises_failures_relabelling_would_not_cure(
     monkeypatch, error
 ):
-    """A failure that the SOUTH_EAST household shares is raised, not read as
-    a missing UNKNOWN index."""
+    """When the SOUTH_EAST household fails too, its error is raised, not read
+    as a missing UNKNOWN index."""
     import policyengine_uk
 
+    original = RuntimeError("the UNKNOWN household failed")
+
     def simulate(dataset):
-        raise error
+        (region,) = dataset.household["region"]
+        raise original if region == "UNKNOWN" else error
 
     monkeypatch.setattr(policyengine_uk, "Microsimulation", simulate)
 
     with pytest.raises(type(error)) as raised:
         model_simulates_unknown_region.__wrapped__()
     assert raised.value is error
+    assert raised.value.__context__ is original
 
 
 def test_unknown_region_probe_agrees_with_policyengine_uk_release():
     """2.104.5 is the first policyengine-uk release with
-    PolicyEngine/policyengine-uk#1985. For an unmodified final release from a
-    package index that is also the imported code, the probe agrees with the
-    release number."""
+    PolicyEngine/policyengine-uk#1985. For a final release not installed from
+    a direct URL, whose imported economic_assumptions.py is the installed file
+    and matches its RECORD, the probe agrees with the release number."""
     import base64
     import hashlib
     from importlib.metadata import PackageNotFoundError, distribution
@@ -677,7 +681,7 @@ def test_unknown_region_probe_agrees_with_policyengine_uk_release():
     if version.is_prerelease or version.is_devrelease or version.local:
         pytest.skip(f"policyengine-uk {version} is not a final release")
     if release.read_text("direct_url.json") is not None:
-        pytest.skip("policyengine-uk was not installed from a package index")
+        pytest.skip("policyengine-uk was installed from a direct URL")
     # #1985 changed this module, so it must be the installed file, unmodified.
     path = "policyengine_uk/data/economic_assumptions.py"
     installed = Path(release.locate_file(path))
@@ -688,7 +692,7 @@ def test_unknown_region_probe_agrees_with_policyengine_uk_release():
         pytest.skip("policyengine-uk's RECORD does not list the module")
     digest = hashlib.new(record.mode, installed.read_bytes()).digest()
     if base64.urlsafe_b64encode(digest).rstrip(b"=").decode() != record.value:
-        pytest.skip("the installed policyengine-uk has been modified")
+        pytest.skip("the installed economic_assumptions.py has been modified")
 
     assert model_simulates_unknown_region() == (version >= Version("2.104.5"))
 
