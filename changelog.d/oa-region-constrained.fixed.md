@@ -1,1 +1,0 @@
-Draw each cloned household's Output Area from its own FRS region rather than from anywhere in its country, so `region_code_oa`, `la_code_oa` and `constituency_code_oa` no longer contradict `region` (88.5% of English households in release 1.57.4 carried an OA from another region).

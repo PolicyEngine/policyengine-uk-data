@@ -1,1 +1,0 @@
-SPI-synthetic rows no longer report income-related (except council tax reduction, which keeps its imputed value for now), out-of-work or Child Benefit receipt, take their industrial injuries, armed forces compensation and bereavement support from the FRS donor, and get UC, Pension Credit and `receives_benefits_in_own_right` flags from their own reports instead of the donor's.
