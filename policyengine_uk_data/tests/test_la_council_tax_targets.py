@@ -294,12 +294,12 @@ def test_every_band_count_target_value_within_sensible_range():
 
 # -- Per-band amounts (MHCLG Table 9, 2026-27, England only) ---------------
 
-_BAND_AMOUNT_COLUMNS = [f"band_{band}_amount" for band in "ABCDEFGH"]
+# Band D is ``band_d_amount``; there is deliberately no ``band_D_amount``.
+_BAND_AMOUNT_COLUMNS = [f"band_{band}_amount" for band in "ABCEFGH"]
 _BAND_RATIOS = {
     "A": 6 / 9,
     "B": 7 / 9,
     "C": 8 / 9,
-    "D": 1.0,
     "E": 11 / 9,
     "F": 13 / 9,
     "G": 15 / 9,
@@ -324,12 +324,16 @@ def test_csv_codes_are_unique(la_ct_df):
 def test_band_amount_columns_present(la_ct_df):
     missing = set(_BAND_AMOUNT_COLUMNS) - set(la_ct_df.columns)
     assert not missing, f"Missing per-band amount columns: {sorted(missing)}"
+    assert "band_D_amount" not in la_ct_df.columns, (
+        "Band D belongs in band_d_amount only; a second column can desync"
+    )
 
 
 def test_every_english_la_has_all_eight_band_amounts(la_ct_df):
     eng = la_ct_df[la_ct_df["country"] == "ENGLAND"]
     assert len(eng) == 296
-    incomplete = eng[eng[_BAND_AMOUNT_COLUMNS].isna().any(axis=1)]
+    columns = _BAND_AMOUNT_COLUMNS + ["band_d_amount"]
+    incomplete = eng[eng[columns].isna().any(axis=1)]
     assert incomplete.empty, (
         "English LAs missing a band amount: "
         f"{incomplete[['code', 'name']].to_dict('records')}"
@@ -352,20 +356,10 @@ def test_band_amounts_obey_statutory_ratios(la_ct_df):
     """Bands A-H are fixed fractions of Band D (6/9 to 18/9) in law."""
     eng = la_ct_df[la_ct_df["country"] == "ENGLAND"]
     for band, ratio in _BAND_RATIOS.items():
-        deviation = (eng[f"band_{band}_amount"] - eng["band_D_amount"] * ratio).abs()
+        deviation = (eng[f"band_{band}_amount"] - eng["band_d_amount"] * ratio).abs()
         worst = deviation.max()
         assert worst <= _RATIO_TOLERANCE, (
             f"Band {band} deviates from {ratio:.4f} x Band D by up to "
             f"£{worst:.4f}; worst rows: "
             f"{eng.loc[deviation == worst, ['code', 'name']].head(3).to_dict('records')}"
         )
-
-
-def test_band_d_amount_matches_band_d_column(la_ct_df):
-    """``band_d_amount`` and ``band_D_amount`` are the same MHCLG figure."""
-    eng = la_ct_df[la_ct_df["country"] == "ENGLAND"]
-    diff = (eng["band_D_amount"] - eng["band_d_amount"]).abs()
-    assert diff.max() == 0, (
-        "band_d_amount disagrees with band_D_amount for "
-        f"{eng.loc[diff > 0, ['code', 'name']].to_dict('records')}"
-    )

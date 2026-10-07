@@ -8,8 +8,10 @@ tax inclusive of all precepts.
 
 The script is additive and England-only:
 
-- It fills ``band_A_amount``..``band_H_amount`` for English rows and
-  refreshes ``band_d_amount`` for those rows from Table 9 Band D.
+- It fills ``band_A_amount``..``band_H_amount`` (except Band D) for
+  English rows and refreshes ``band_d_amount`` for those rows from Table 9
+  Band D. Band D lives only in ``band_d_amount``, so the two can never
+  disagree; the count of rewritten Band D cells is printed.
 - It leaves the new columns **blank for Wales and Scotland**. Table 9
   covers England only; the Welsh Government and Scottish Government
   publications are separate sources and Wales additionally has a Band I.
@@ -62,7 +64,8 @@ HEADERS = {
 
 SHEET = "Table_9"
 BANDS = ["A", "B", "C", "D", "E", "F", "G", "H"]
-BAND_AMOUNT_COLUMNS = [f"band_{band}_amount" for band in BANDS]
+# Band D is stored in ``band_d_amount`` only, not a second column.
+BAND_AMOUNT_COLUMNS = [f"band_{band}_amount" for band in BANDS if band != "D"]
 
 # Statutory England and Wales band ratios relative to Band D.
 BAND_RATIOS = {
@@ -187,6 +190,7 @@ def build(ods_bytes: bytes | None = None) -> None:
             fieldnames.append(column)
 
     matched = 0
+    band_d_rewritten = 0
     for row in rows:
         bands = table.get(row["code"]) if row["country"] == "ENGLAND" else None
         if bands is None:
@@ -195,12 +199,14 @@ def build(ods_bytes: bytes | None = None) -> None:
             continue
         matched += 1
         for band in BANDS:
-            row[f"band_{band}_amount"] = f"{bands[band]:.2f}"
+            if band != "D":
+                row[f"band_{band}_amount"] = f"{bands[band]:.2f}"
         # Keep the existing literal when it already matches Table 9, so a
         # re-run never churns unrelated formatting.
         existing = row["band_d_amount"]
         if not existing or abs(float(existing) - bands["D"]) > 5e-3:
             row["band_d_amount"] = f"{bands['D']:.2f}"
+            band_d_rewritten += 1
 
     with open(CSV_PATH, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator="\n")
@@ -210,6 +216,10 @@ def build(ods_bytes: bytes | None = None) -> None:
     breaches = check_band_ratios(table)
     print(f"Table 9 authorities parsed: {len(table)}")
     print(f"CSV England rows populated: {matched} of {len(rows)} rows")
+    print(
+        f"band_d_amount cells rewritten from Table 9: {band_d_rewritten} "
+        "(each moves that cell's source to Table 9)"
+    )
     print(f"Band-ratio breaches above £0.01: {len(breaches)}")
     for code, band, deviation in breaches[:20]:
         print(f"  {code} band {band}: off by £{deviation:.4f}")
