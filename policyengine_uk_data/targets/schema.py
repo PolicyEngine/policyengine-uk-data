@@ -54,6 +54,11 @@ class Target(BaseModel):
     # values of the model's `country` variable. The loss matrix column only
     # counts households in these countries. None means the whole UK.
     countries: tuple[str, ...] | None = None
+    # Whether the loss matrix may fill a year the target does not list with
+    # the nearest listed year's value (the earlier on a tie), used only when
+    # that year is earlier and at most three years away (see _resolve_value).
+    # False for a figure that exists only in the years it lists.
+    carry_forward: bool = True
 
     # For targets needing custom simulation logic (UC splits,
     # counterfactuals). Excluded from serialisation.
