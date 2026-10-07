@@ -1,9 +1,9 @@
 """Clone-and-assign: duplicate FRS households and assign OA geography.
 
 Each FRS household is cloned N times. Each clone gets a different
-Output Area (population-weighted, country-constrained, with
-constituency collision avoidance). Weights are divided by N so
-population totals are preserved.
+Output Area (population-weighted, drawn from the household's FRS
+region, with constituency collision avoidance). Weights are divided
+by N so population totals are preserved.
 
 This is the UK equivalent of policyengine-us-data's clone-and-assign
 approach (PRs #457, #531).
@@ -19,37 +19,35 @@ import pandas as pd
 from policyengine_uk.data import UKSingleYearDataset
 
 from policyengine_uk_data.calibration.oa_assignment import (
+    FRS_COUNTRY_MAP,
+    _REGION_CODE_PREFIX_TO_COUNTRY,
+    _normalise_region,
     assign_random_geography,
 )
 
 logger = logging.getLogger(__name__)
 
-# FRS region values that map to each country
-_REGION_TO_COUNTRY_CODE = {
-    "NORTH_EAST": 1,
-    "NORTH_WEST": 1,
-    "YORKSHIRE": 1,
-    "EAST_MIDLANDS": 1,
-    "WEST_MIDLANDS": 1,
-    "EAST_OF_ENGLAND": 1,
-    "LONDON": 1,
-    "SOUTH_EAST": 1,
-    "SOUTH_WEST": 1,
-    "WALES": 2,
-    "SCOTLAND": 3,
-    "NORTHERN_IRELAND": 4,
-    "UNKNOWN": 1,  # Default to England
-}
+_COUNTRY_TO_FRS_CODE = {name: code for code, name in FRS_COUNTRY_MAP.items()}
 
 
 def _household_country_codes(dataset: UKSingleYearDataset) -> np.ndarray:
-    """Extract FRS country codes (1-4) from household region."""
-    regions = dataset.household["region"].values
-    codes = np.array(
-        [_REGION_TO_COUNTRY_CODE.get(str(r), 1) for r in regions],
-        dtype=np.int32,
-    )
-    return codes
+    """Extract FRS country codes (1-4) from household region.
+
+    Uses the same region normalisation as the OA sampler, so both read
+    a region the same way. A region with nothing below the country
+    (missing or ``UNKNOWN``) counts as England; an unrecognised value
+    raises.
+    """
+    codes = []
+    for region in dataset.household["region"].values:
+        region_code = _normalise_region(region)
+        country = (
+            "England"
+            if region_code is None
+            else _REGION_CODE_PREFIX_TO_COUNTRY[region_code[0]]
+        )
+        codes.append(_COUNTRY_TO_FRS_CODE[country])
+    return np.array(codes, dtype=np.int32)
 
 
 def _remap_ids(
@@ -76,9 +74,11 @@ def clone_and_assign(
 ) -> UKSingleYearDataset:
     """Clone each FRS household N times and assign OA geography.
 
-    Each clone gets a population-weighted random Output Area,
-    constrained to its country, with constituency collision
-    avoidance across clones.
+    Each clone gets a population-weighted random Output Area in
+    its household's FRS region (Wales and Scotland are one region
+    each), with constituency collision avoidance across clones.
+    The OA's region, LA and constituency therefore never
+    contradict the household's ``region``.
 
     Household weights are divided by n_clones so aggregate
     population totals are preserved.
@@ -112,7 +112,6 @@ def clone_and_assign(
     # NI is excluded until NISRA updates their download URLs.
     from policyengine_uk_data.calibration.oa_assignment import (
         _load_country_distributions,
-        FRS_COUNTRY_MAP,
     )
 
     available_distributions = _load_country_distributions(
@@ -145,6 +144,7 @@ def clone_and_assign(
             n_clones=n_clones,
             seed=seed,
             crosswalk_path=crosswalk_path,
+            household_regions=hh["region"].values[has_oa],
         )
     else:
         geography = None
