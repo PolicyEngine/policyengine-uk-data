@@ -261,6 +261,7 @@ def test_no_band_d_amount_target_is_emitted():
 def test_band_d_amount_column_still_loadable(la_ct_df):
     """The data column must survive; only the target emission is gone."""
     assert "band_d_amount" in la_ct_df.columns
+    # Deliberate tripwire: update this pin on each la_council_tax.csv refresh.
     assert int(la_ct_df["band_d_amount"].notna().sum()) == 350
 
 
@@ -271,6 +272,7 @@ def test_band_count_target_count_matches_csv(la_ct_df):
     assert len(bc_targets) == expected
     # Pinned: dropping the Band D emission (#483) must not disturb the
     # band-count family, which Microcosm binds as ported_local_declared.
+    # Deliberate tripwire: update this pin on each la_council_tax.csv refresh.
     assert len(bc_targets) == 2563
 
 
