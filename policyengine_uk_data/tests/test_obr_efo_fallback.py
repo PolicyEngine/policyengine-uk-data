@@ -157,18 +157,43 @@ def test_unknown_url_with_failed_download_still_raises(kind, error, cause):
     assert isinstance(raised.value.__cause__, cause)
 
 
-def test_full_target_set_available_offline():
-    """All 34 OBR targets must build from the committed workbooks alone."""
-
-    def get(*args, **kwargs):
-        raise requests.ConnectionError("offline")
-
+def _target_names(get):
     with (
         patch.object(obr.requests, "get", side_effect=get),
         patch.object(obr.time, "sleep", lambda s: None),
     ):
-        targets = obr.get_targets()
-    names = {t.name for t in targets}
+        return {t.name for t in obr.get_targets()}
+
+
+def test_full_target_set_available_offline():
+    """Offline, the committed workbooks yield every OBR target that the same
+    workbooks yield when obr.uk serves them.
+
+    This compares against the served set rather than a fixed count, because
+    other target sources replace OBR targets over time (the 10/8 release swaps
+    OBR's Housing Benefit, Pension Credit and salary-sacrifice NI relief
+    targets for DWP and HMRC ones, and merges its two UC targets into one).
+    """
+    config = load_config()["obr"]
+    bodies = {
+        config["efo_receipts"]: (
+            STORAGE_FOLDER / "obr_efo" / "efo_receipts.xlsx"
+        ).read_bytes(),
+        config["efo_expenditure"]: (
+            STORAGE_FOLDER / "obr_efo" / "efo_expenditure.xlsx"
+        ).read_bytes(),
+    }
+
+    def served(url, *args, **kwargs):
+        return _response(200, bodies[url])
+
+    def offline(*args, **kwargs):
+        raise requests.ConnectionError("offline")
+
+    served_names = _target_names(served)
+    obr._download_workbook.cache_clear()
+    offline_names = _target_names(offline)
+    assert offline_names == served_names
     assert {
         "obr/income_tax",
         "obr/ni_employee",
@@ -176,8 +201,7 @@ def test_full_target_set_available_offline():
         "obr/ni_self_employed",
         "obr/capital_gains_tax",
         "obr/vat",
-    } <= names
-    assert len(names) >= 30
+    } <= offline_names
 
 
 @pytest.mark.parametrize("url_key", _EFO_URL_KEYS)
