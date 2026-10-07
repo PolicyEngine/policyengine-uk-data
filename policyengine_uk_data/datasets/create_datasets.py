@@ -7,6 +7,15 @@ from policyengine_uk_data.utils.build_environment import (
 
 logging.basicConfig(level=logging.INFO)
 
+# Local targets the calibration logs but does not train on. HMRC's counts of
+# income-tax payers with employment income by area (SPI table 3.15) are annual:
+# they include people with pay for part of the year whose FRS status at
+# interview is out of work, and who therefore have no pay in the FRS. Training
+# on them moves weight from people out of work to employees, away from the LFS
+# employee count (targets/sources/ons_labour_market.py). The area amounts of
+# employment income, and the national counts by income band, still train.
+VALIDATION_ONLY_LOCAL_TARGETS = ["hmrc/employment_income/count"]
+
 
 def _get_positive_int_env(name: str, default: int) -> int:
     raw_value = os.environ.get(name)
@@ -100,6 +109,7 @@ def main():
             "Impute capital gains",
             "Impute salary sacrifice",
             "Impute student loan plan",
+            "Assign Pension Credit take-up",
             "Clone and assign OA geography",
             "Calibrate constituency weights",
             "Calibrate local authority weights",
@@ -202,6 +212,18 @@ def main():
             )
             update_dataset("Impute student loan plan", "completed")
 
+            # Pension Credit entitlement needs the imputed capital, so its
+            # take-up is solved here rather than in the FRS build.
+            update_dataset("Assign Pension Credit take-up", "processing")
+            from policyengine_uk_data.datasets.pension_credit_takeup import (
+                assign_pension_credit_takeup,
+            )
+
+            frs, pension_credit_takeup = assign_pension_credit_takeup(
+                frs, year=frs_release.calibration_year
+            )
+            update_dataset("Assign Pension Credit take-up", "completed")
+
             # Clone households and assign OA geography
             update_dataset("Clone and assign OA geography", "processing")
             from policyengine_uk_data.calibration.clone_and_assign import (
@@ -252,7 +274,7 @@ def main():
                 area_count=650,
                 weight_file="parliamentary_constituency_weights.h5",
                 dataset_key=str(frs_release.calibration_year),
-                excluded_training_targets=[],
+                excluded_training_targets=VALIDATION_ONLY_LOCAL_TARGETS,
                 log_csv="constituency_calibration_log.csv",
                 verbose=True,  # Enable nested progress display
                 area_name="Constituency",
@@ -279,7 +301,7 @@ def main():
                 area_count=360,
                 weight_file="local_authority_weights.h5",
                 dataset_key=str(frs_release.calibration_year),
-                excluded_training_targets=[],
+                excluded_training_targets=VALIDATION_ONLY_LOCAL_TARGETS,
                 log_csv="la_calibration_log.csv",
                 verbose=True,  # Enable nested progress display
                 area_name="Local Authority",
@@ -399,6 +421,7 @@ def main():
                 "long_geography_weights": "local_geography_weights.csv.gz",
                 "imputations_applied": "consumption, wealth, VAT, services, income, capital_gains, cgt_band_donors, salary_sacrifice, student_loan_plan",
                 "calibration": "national, LA and  constituency targets",
+                "pension_credit_take_up": pension_credit_takeup,
             },
         )
 

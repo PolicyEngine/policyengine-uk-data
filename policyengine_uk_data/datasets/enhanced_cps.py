@@ -559,6 +559,15 @@ def _build_base_dataset(
         adults = scenario["adults"]
         children = scenario["children"]
         people = adults + children
+        # Each source household is one tax unit with its head listed first and,
+        # for joint filers, the spouse second: the benefit unit's claimant and
+        # partner.
+        claimants_or_partners = 2 if row["filing_status"] == "joint" else 1
+        if len(adults) < claimants_or_partners:
+            raise ValueError(
+                f"Source household {source_household_id} files "
+                f"{row['filing_status']} but lists {len(adults)} adult(s)."
+            )
 
         has_mortgage = any(
             "deductible_mortgage_interest" in person.get("inputs", {})
@@ -663,6 +672,7 @@ def _build_base_dataset(
                     "person_id": person_id,
                     "person_household_id": household_id,
                     "person_benunit_id": benunit_id,
+                    "is_claimant_or_partner": person_index <= claimants_or_partners,
                     "age": int(person["age"]),
                     "gender": "MALE" if (household_id + person_index) % 2 else "FEMALE",
                     "employment_income_before_lsr": _gbp(
