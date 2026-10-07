@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import openpyxl
+import pandas as pd
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -26,7 +27,14 @@ from policyengine_uk_data.targets.schema import (
     Target,
     Unit,
 )
-from policyengine_uk_data.targets.sources import dwp, obr
+from policyengine_uk_data.targets.sources import (
+    dwp,
+    dwp_housing_benefit,
+    dwp_pension_credit,
+    hmrc_salary_sacrifice,
+    obr,
+    ons_labour_market,
+)
 
 COUNTRIES = tuple(country.name for country in Country)
 YEAR_COLUMNS = dict(zip("CDEFGHI", range(2024, 2031)))
@@ -289,3 +297,125 @@ def test_pip_claimant_targets_cover_england_and_wales():
     pip = [t for t in dwp.get_targets() if t.name.startswith("dwp/pip_")]
     assert len(pip) == 2
     assert all(t.countries == ENGLAND_AND_WALES for t in pip)
+
+
+# ── Targets introduced or replaced in the 1.58.0 batch ──────────────────
+
+
+@pytest.mark.parametrize(
+    "get_targets, names",
+    [
+        (
+            dwp_housing_benefit.get_targets,
+            {
+                "dwp/housing_benefit/over_pension_credit_age",
+                "dwp/housing_benefit/over_pension_credit_age_claims",
+                "dwp/housing_benefit/under_pension_credit_age_general_needs",
+                "dwp/housing_benefit/under_pension_credit_age_general_needs_claims",
+            },
+        ),
+        (
+            dwp_housing_benefit.build_targets,
+            {
+                "dwp/housing_benefit/over_pension_credit_age",
+                "dwp/housing_benefit/over_pension_credit_age_claims",
+                "dwp/housing_benefit/under_pension_credit_age",
+                "dwp/housing_benefit/under_pension_credit_age_claims",
+                "dwp/housing_benefit/under_pension_credit_age_general_needs",
+                "dwp/housing_benefit/under_pension_credit_age_general_needs_claims",
+            },
+        ),
+        (
+            dwp_pension_credit.get_targets,
+            {"dwp/pension_credit", "dwp/pension_credit_claims"},
+        ),
+    ],
+    ids=[
+        "housing-benefit-calibration",
+        "housing-benefit-diagnostics",
+        "pension-credit",
+    ],
+)
+def test_batch_dwp_replacement_targets_cover_exactly_great_britain(get_targets, names):
+    """#490 Housing Benefit and #510 Pension Credit use DWP's GB tables.
+
+    Equality catches losing Scotland or Wales as well as adding Northern
+    Ireland; a GB-subset check would miss the former.
+    """
+    targets = get_targets()
+    assert len(targets) == len(names)
+    assert {t.name: t.countries for t in targets} == dict.fromkeys(names, GREAT_BRITAIN)
+
+
+def test_batch_obr_replacements_preserve_one_gb_universal_credit_target(monkeypatch):
+    """#530 combines both DWP GB UC rows; #490, #510 and #533 replace
+    obsolete OBR targets with DWP or HMRC targets rather than duplicating them.
+    """
+    monkeypatch.setattr(obr, "_download_workbook", obr._fallback_workbook)
+    targets = obr.get_targets()
+    names = [t.name for t in targets]
+    assert len(names) == len(set(names))
+    uc = [t for t in targets if t.variable == "universal_credit"]
+    assert [(t.name, t.countries) for t in uc] == [
+        ("obr/universal_credit", GREAT_BRITAIN)
+    ]
+    assert not {
+        "obr/housing_benefit",
+        "obr/pension_credit",
+        "obr/universal_credit_in_cap",
+        "obr/universal_credit_outside_cap",
+        "obr/salary_sacrifice_employee_ni_relief",
+        "obr/salary_sacrifice_employer_ni_relief",
+    } & set(names)
+
+
+def test_lfs_employment_targets_keep_the_whole_uk_in_scope():
+    """#529's MGRN and MGRQ source series explicitly cover the UK."""
+    targets = ons_labour_market.get_targets()
+    assert len(targets) == 2
+    assert {t.name: t.countries for t in targets} == {
+        "ons/lfs_employees": None,
+        "ons/lfs_self_employed": None,
+    }
+
+
+def test_hmrc_salary_sacrifice_replacements_preserve_mains_country_scope(monkeypatch):
+    """#533's HMRC targets keep main's unrestricted country scope.
+
+    The committed table does not give a country field, so this refresh
+    leaves main's scope intact. It must not inherit a DWP GB restriction.
+    """
+    monkeypatch.setattr(
+        hmrc_salary_sacrifice,
+        "_read_table",
+        lambda url: pd.read_csv(
+            hmrc_salary_sacrifice.FALLBACK_CSV, dtype=str, encoding="utf-8-sig"
+        ),
+    )
+    targets = hmrc_salary_sacrifice.get_targets()
+    names = {
+        "hmrc/salary_sacrifice_it_relief_basic_rate",
+        "hmrc/salary_sacrifice_it_relief_higher_rate",
+        "hmrc/salary_sacrifice_it_relief_additional_rate",
+        "hmrc/salary_sacrifice_employee_nics_relief",
+        "hmrc/salary_sacrifice_employer_nics_relief",
+        "hmrc/salary_sacrifice_contributions",
+    }
+    assert len(targets) == len(names)
+    assert {t.name: t.countries for t in targets} == dict.fromkeys(names)
+
+
+def test_uc_payment_distribution_targets_all_cover_great_britain():
+    """The batch's repaired open top bands share the extract's GB scope."""
+    targets = dwp._uc_payment_distribution_targets()
+    assert targets
+    assert all(t.countries == GREAT_BRITAIN for t in targets)
+    assert {t.name for t in targets if not np.isfinite(t.upper_bound)} == {
+        f"dwp/uc_payment_dist/{family_type}_annual_payment_30_000_to_inf"
+        for family_type in (
+            "SINGLE",
+            "LONE_PARENT",
+            "COUPLE_NO_CHILDREN",
+            "COUPLE_WITH_CHILDREN",
+        )
+    }
