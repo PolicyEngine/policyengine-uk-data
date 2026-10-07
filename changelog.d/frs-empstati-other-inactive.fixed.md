@@ -1,0 +1,1 @@
+Map FRS EMPSTATI code 11 ("Other inactive") to `employment_status` OTHER_INACTIVE; it had fallen through to LONG_TERM_DISABLED, which also put other-inactive adults into the ESA health-condition and support-group proxies. An adult EMPSTATI code the mapping does not know now fails the build instead of defaulting.

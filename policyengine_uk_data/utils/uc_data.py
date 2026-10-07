@@ -1,5 +1,47 @@
+import numpy as np
 import pandas as pd
 from pathlib import Path
+
+
+def parse_monthly_award_band(band: str) -> tuple[float, float]:
+    """Annual (lower, upper] payment bounds of a Stat-Xplore monthly award band.
+
+    Awards are whole pence, so the band '£100.01 to £200.00' holds monthly
+    awards over £100.00 and up to £200.00: annual bounds (1,200, 2,400]. The
+    lower bound is the previous band's top, so consecutive bands meet with no
+    gap. The open top band '£2500.01 or over' is (30,000, inf).
+    """
+    text = band.replace("£", "").replace(",", "").strip()
+    if text.endswith(" or over"):
+        lower, upper = float(text.removesuffix(" or over")), np.inf
+    else:
+        parts = text.split(" to ")
+        if len(parts) != 2:
+            raise ValueError(f"Unrecognised UC monthly award band: {band!r}")
+        lower, upper = float(parts[0]), float(parts[1]) * 12
+    lower = round((lower - 0.01) * 12, 2)
+    if not (np.isfinite(lower) and lower >= 0 and upper > lower):
+        raise ValueError(f"Invalid UC monthly award band: {band!r}")
+    return lower, upper
+
+
+def _check_bands_disjoint(bands: pd.DataFrame) -> None:
+    """Fail if any family type's payment bands overlap.
+
+    Stat-Xplore's '£1500.01 or over' band is its top band for months up to
+    August 2022 and spans the finer bands added from September 2022. It is
+    suppressed ('..') in the committed extract; if a new extract filled it
+    in, counting it as well would double count those households.
+    """
+    for family_type, group in bands.groupby("family_type"):
+        group = group.sort_values("uc_annual_payment_min")
+        lower = group.uc_annual_payment_min.to_numpy()
+        upper = group.uc_annual_payment_max.to_numpy()
+        if (lower[1:] < upper[:-1]).any():
+            raise ValueError(
+                f"UC payment bands for {family_type} overlap: check for "
+                "summary bands spanning finer ones"
+            )
 
 
 def _parse_uc_national_payment_dist():
@@ -44,17 +86,10 @@ def _parse_uc_national_payment_dist():
 
     result_df = pd.DataFrame(data_rows)
 
-    # Parse monthly band into min and max, then convert to annual
-    def parse_band(band):
-        """Parse band like '£100.01 to £200.00' into (min, max)."""
-        parts = band.replace("£", "").replace(",", "").split(" to ")
-        if len(parts) == 2:
-            return float(parts[0]) * 12, float(parts[1]) * 12
-        return None, None
-
-    result_df[["uc_annual_payment_min", "uc_annual_payment_max"]] = result_df[
-        "monthly_award_band"
-    ].apply(lambda x: pd.Series(parse_band(x)))
+    result_df[["uc_annual_payment_min", "uc_annual_payment_max"]] = [
+        parse_monthly_award_band(band) for band in result_df["monthly_award_band"]
+    ]
+    _check_bands_disjoint(result_df)
 
     # Map family types to constant names
     family_type_mapping = {
