@@ -128,6 +128,29 @@ def load_legacy_jobseeker_max_annual_hours(year: int) -> int:
     return max_weekly_hours * HOURS_WORKED_WEEKS_PER_YEAR
 
 
+INFANT_AGE_MONTHS_SEED = 9
+
+
+def impute_infant_age_in_months(age, rng) -> np.ndarray:
+    """Give each child recorded as aged 0 an age in months.
+
+    FRS records age in whole years, so every child under 1 is 0 and none
+    reaches a threshold inside the first year, such as the nine months from
+    which the working parent childcare entitlement applies (SI 2022/1134 reg
+    13(2)(a), as amended by SI 2023/1330 reg 2(5)). FRS has no date or month
+    of birth, so the month is drawn uniformly: (m + 0.5) / 12 years for m in
+    0-11, a quarter of them at 9-11 months. Everyone else keeps their age, and
+    the whole year is unchanged for everyone, so every whole-year threshold
+    gives the same result. A dedicated generator leaves every other random
+    draw in the build as it was.
+    """
+    age = np.asarray(age, dtype=float).copy()
+    infant = age == 0
+    months = rng.integers(0, 12, infant.sum())
+    age[infant] = (months + 0.5) / 12
+    return age
+
+
 def require_variable(name: str, description: str) -> None:
     """Fail the build if the installed policyengine-uk lacks ``name``.
 
@@ -958,7 +981,9 @@ def create_frs(
 
     # Add basic personal variables
     age = person.age80 + person.age
-    pe_person["age"] = age
+    pe_person["age"] = impute_infant_age_in_months(
+        age.values, np.random.default_rng(INFANT_AGE_MONTHS_SEED)
+    )
     # birth_year should be calculated from age and period in the model,
     # not stored as static data (see PolicyEngine/policyengine-uk#1352)
     # Age fields are AGE80 (top-coded) and AGE in the adult and child tables, respectively.
