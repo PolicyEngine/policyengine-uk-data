@@ -1,0 +1,1 @@
+import{a}from"/policyengine-uk-data/build/_shared/chunk-F5KHXAAU.js";import"/policyengine-uk-data/build/_shared/chunk-DOYQ5WN6.js";import"/policyengine-uk-data/build/_shared/chunk-FWIMYXAP.js";import"/policyengine-uk-data/build/_shared/chunk-RAQ24GF6.js";export default a();
