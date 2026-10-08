@@ -790,22 +790,25 @@ def validate_frs_survey_year(raw_frs_folder, year: int) -> None:
         )
 
 
-def derive_pension_credit_reported_capital(benunit: pd.DataFrame) -> np.ndarray:
-    """Each benefit unit's capital as the FRS records it, for Pension Credit.
+def derive_benunit_reported_capital(benunit: pd.DataFrame) -> np.ndarray:
+    """Each benefit unit's capital as the FRS records it.
 
     Uses ``TOTCAPB4``, DWP's derived benefit-unit total of the adults' savings
     and investments, which its below-average-resources statistics use in place
     of ``TOTCAPB3`` since it became available in 2019/20; ``TOTCAPB3`` is the
-    fallback for earlier survey years. Pension Credit counts the claimant's
-    capital and, under the State Pension Credit Act 2002 s. 5, the partner's,
-    and this is a benefit-unit measure. It is an approximation of Pension
-    Credit capital, not the assessed figure: it covers financial assets only
-    (second homes and land, which Pension Credit also counts, are not in it),
-    and no Schedule V disregard or reg. 19 valuation is applied to it. The
-    household wealth imputation instead draws a household's wealth from Wealth
-    and Assets Survey households with similar income, composition, tenure and
-    region, with no information on means-tested receipt, and policyengine-uk
-    spreads it over the household's pension-age adults.
+    fallback for earlier survey years. This fills policyengine-uk's
+    ``benunit_reported_capital``, an input that records the observed figure
+    only. Each means test derives its own capital from it: Universal Credit
+    (Welfare Reform Act 2012 s. 5) and Pension Credit (State Pension Credit
+    Act 2002 s. 5) both assess the claimant's and partner's capital together,
+    which this benefit-unit measure covers. As a means-test figure it is an
+    approximation, not the assessed amount: it covers financial assets only
+    (second homes and land, which both tests also count, are not in it), and
+    no disregard or valuation rule is applied to it. The household wealth
+    imputation instead draws a household's wealth from Wealth and Assets
+    Survey households with similar income, composition, tenure and region,
+    with no information on means-tested receipt, and policyengine-uk shares
+    it out between the household's benefit units.
 
     A missing or negative value gives -1, so policyengine-uk falls back to the
     household proxy.
@@ -1843,12 +1846,11 @@ def create_frs(
 
     pe_benunit["is_married"] = benunit.famtypb2.isin([5, 7])
 
-    # Pension Credit capital as the FRS records it for the benefit unit, in
-    # place of the household wealth proxy (policyengine-uk
-    # `pension_credit_reported_capital`).
-    pe_benunit["pension_credit_reported_capital"] = (
-        derive_pension_credit_reported_capital(benunit)
-    )
+    # The benefit unit's capital as the FRS records it. policyengine-uk's
+    # Universal Credit and Pension Credit capital (`uc_reported_capital`,
+    # `pension_credit_reported_capital`) default to it in place of the
+    # household wealth proxy.
+    pe_benunit["benunit_reported_capital"] = derive_benunit_reported_capital(benunit)
 
     # Assign property_purchased to a share of households matching the UK
     # housing transaction rate, so only genuine purchasers are charged SDLT.
