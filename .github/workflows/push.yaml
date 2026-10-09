@@ -10,13 +10,6 @@ on:
       - pyproject.toml
   workflow_dispatch:
 
-# One Push run at a time. A data build that has started always finishes
-# (cancel-in-progress off). If two more pushes arrive while one builds, GitHub
-# keeps only the newest pending run, whose version includes the other's.
-concurrency:
-  group: ${{ github.workflow }}
-  cancel-in-progress: false
-
 jobs:
   # A merge that touches pyproject.toml and also adds changelog fragments is
   # followed by versioning's "Update package version" commit, whose own Push
