@@ -191,8 +191,9 @@ def test_the_optimiser_fits_take_up_rates_only():
 
     Without an extended spending target the objective cannot identify the
     hours mean and sd — (15, 5) and (30, 10) give the same clipped mask and
-    so the same loss — so they are fixed assumptions shared by both draw
-    sites. Re-adding them to the optimiser must fail here.
+    so the same loss — so they are fixed assumptions, set from DfE's
+    registered hours and shared by both draw sites. Re-adding them to the
+    optimiser must fail here.
     """
     import inspect
 
@@ -216,4 +217,53 @@ def test_the_optimiser_fits_take_up_rates_only():
     for module_source in (source, frs_source):
         assert "EXTENDED_HOURS_MEAN" in module_source
         assert "EXTENDED_HOURS_SD" in module_source
-    assert (EXTENDED_HOURS_MEAN, EXTENDED_HOURS_SD) == (15.019, 4.972)
+    assert (EXTENDED_HOURS_MEAN, EXTENDED_HOURS_SD) == (36.026, 14.111)
+
+
+def _mean_capped_hours(mean: float, sd: float, cap: float) -> float:
+    """E[min(X, cap)] for X ~ Normal(mean, sd) clipped to 0-30, cap <= 30."""
+    from math import erf, exp, pi, sqrt
+
+    def normal_cdf(z):
+        return 0.5 * (1 + erf(z / sqrt(2)))
+
+    def normal_pdf(z):
+        return exp(-z * z / 2) / sqrt(2 * pi)
+
+    low, high = (0 - mean) / sd, (cap - mean) / sd
+    return (
+        cap * (1 - normal_cdf(high))
+        + mean * (normal_cdf(high) - normal_cdf(low))
+        - sd * (normal_pdf(high) - normal_pdf(low))
+    )
+
+
+def test_the_hours_distribution_reproduces_dfe_registered_hours():
+    """DfE, Funded early education and childcare 2026: average weekly
+    registered hours per child aged 9 months to 2 years on the working parent
+    entitlement were 14.6 in January 2025 (entitlement 15 hours) and 26.9 in
+    January 2026 (entitlement 30 hours). The clipped draw must reproduce both.
+    """
+    from policyengine_uk_data.datasets.childcare.assumptions import (
+        EXTENDED_HOURS_MEAN,
+        EXTENDED_HOURS_SD,
+    )
+
+    assert _mean_capped_hours(
+        EXTENDED_HOURS_MEAN, EXTENDED_HOURS_SD, 15
+    ) == pytest.approx(14.6, abs=0.01)
+    assert _mean_capped_hours(
+        EXTENDED_HOURS_MEAN, EXTENDED_HOURS_SD, 30
+    ) == pytest.approx(26.9, abs=0.01)
+
+
+def test_the_closed_form_matches_a_simulated_clipped_draw():
+    """Checks the formula above against the draw the build actually makes."""
+    import numpy as np
+
+    rng = np.random.default_rng(0)
+    draws = np.clip(rng.normal(36.026, 14.111, 2_000_000), 0, 30)
+    for cap in (15, 30):
+        assert np.minimum(draws, cap).mean() == pytest.approx(
+            _mean_capped_hours(36.026, 14.111, cap), abs=0.02
+        )
