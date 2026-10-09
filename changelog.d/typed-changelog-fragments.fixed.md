@@ -1,0 +1,1 @@
+Remove 32 changelog fragments that had no type, so towncrier never compiled them. Their changes shipped in 1.57.3 or earlier, but their entries never reached this changelog. The changelog check now rejects a fragment without a type and requires one from each pull request that changes a file a release ships.

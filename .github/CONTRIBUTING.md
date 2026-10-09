@@ -39,6 +39,13 @@ The enhanced FRS dataset is licensed under strict UK Data Service terms. Violati
 
 If your change is a non-bugfix update to a cloud-hosted dataset (FRS, enhanced FRS), bump both the filename and URL in the class definition and in `storage/upload_completed_datasets.py`. That lets us store historical dataset versions separately and reproducibly.
 
+## Changelog fragments
+
+- A pull request that changes a file a release ships adds its own fragment, `changelog.d/<name>.<type>.md`. The type sets the version bump: `breaking` is major, `added` and `removed` are minor, and `changed` and `fixed` are patch.
+- Towncrier ignores a fragment without a type, so the `Changelog entry` check rejects any other name. It also fails a pull request that changes shipped files without adding a fragment.
+- A pull request that changes only `docs/`, `.github/`, `.claude/`, `tools/`, `changelog.d/`, root Markdown files or `.gitignore` needs no fragment.
+- Merging a fragment into `main` releases data: the versioning workflow bumps the version, then the Push workflow builds, tests, uploads and tags it.
+
 ## Repo-specific anti-patterns
 
 - **Don't** hardcode dataset years in variable transforms; use `dataset.time_period` and the uprating pipeline.
