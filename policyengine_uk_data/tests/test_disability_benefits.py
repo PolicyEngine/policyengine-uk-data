@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from itertools import product
+
 import pandas as pd
 from policyengine_uk import CountryTaxBenefitSystem
 from policyengine_uk.data import UKSingleYearDataset
@@ -163,7 +165,144 @@ def test_attendance_allowance_feeds_stronger_disability_flags():
 
     assert result["is_disabled_for_benefits"].tolist() == [True, True]
     assert result["is_enhanced_disabled_for_benefits"].tolist() == [False, True]
-    assert result["is_severely_disabled_for_benefits"].tolist() == [True, True]
+    # WTC Regs 2002 reg 17(2): only the higher rate is a severe disability.
+    assert result["is_severely_disabled_for_benefits"].tolist() == [False, True]
+
+
+def test_armed_forces_compensation_scheme_is_not_a_severe_disability():
+    # FRS code 8 covers every Armed Forces Compensation Scheme payment
+    # (including war disablement pensions and guaranteed income payments);
+    # only armed forces independence payment is a severe disability under CTC
+    # Regs 2002 reg 8(5) and WTC Regs 2002 reg 17(4), and the FRS has no code
+    # for it.
+    person = pd.DataFrame({"afcs_reported": [1_000.0]})
+
+    result = add_disability_benefit_flags_from_reported_amounts(person, 2025)
+
+    assert result["is_disabled_for_benefits"].tolist() == [True]
+    assert result["is_severely_disabled_for_benefits"].tolist() == [False]
+
+
+SEVERE_GRID_YEARS = range(2019, 2027)
+# Offsets in GBP a week around each rate, including the GBP 1 tolerance edge.
+SEVERE_GRID_OFFSETS = (0.0, 0.5, -0.5, -0.99, -1.0, -1.01, -1.5)
+
+
+def _severe_grid(year):
+    dwp = CountryTaxBenefitSystem().parameters(year).gov.dwp
+    weeks = SURVEY_REPORTED_AMOUNT_WEEKS_IN_YEAR
+
+    def amounts(rates):
+        return sorted(
+            {0.0}
+            | {
+                max(0.0, (float(rate) + offset) * weeks)
+                for rate in rates
+                for offset in SEVERE_GRID_OFFSETS
+            }
+        )
+
+    return pd.DataFrame(
+        list(
+            product(
+                amounts(
+                    [dwp.attendance_allowance.lower, dwp.attendance_allowance.higher]
+                ),
+                amounts(
+                    [
+                        dwp.dla.self_care.lower,
+                        dwp.dla.self_care.middle,
+                        dwp.dla.self_care.higher,
+                    ]
+                ),
+                amounts([dwp.pip.daily_living.standard, dwp.pip.daily_living.enhanced]),
+            )
+        ),
+        columns=[
+            "attendance_allowance_reported",
+            "dla_sc_reported",
+            "pip_dl_reported",
+        ],
+    )
+
+
+def _tax_credit_severe_condition(categories):
+    return (
+        (categories["aa_category"] == "HIGHER")
+        | (categories["dla_sc_category"] == "HIGHER")
+        | (categories["pip_dl_category"] == "ENHANCED")
+    )
+
+
+def test_severe_flag_is_the_tax_credit_condition_on_the_categories():
+    # The stored flag must equal the tax credit severe disability condition
+    # (DLA care highest, PIP daily living enhanced, Attendance Allowance
+    # higher) read off the categories the same amounts map to, for every
+    # combination of rates and amounts around each rate, including the
+    # GBP 1/week tolerance edge, in every survey year. DLA care at the middle
+    # rate and PIP daily living at the standard rate are not severe for tax
+    # credits; the legacy severe disability premium reads them from the
+    # categories in policyengine-uk.
+    for year in SEVERE_GRID_YEARS:
+        person = _severe_grid(year)
+        categories = add_disability_benefit_categories_from_reported_amounts(
+            person, year
+        )
+        flags = add_disability_benefit_flags_from_reported_amounts(person, year)
+
+        expected = _tax_credit_severe_condition(categories)
+        assert (flags["is_severely_disabled_for_benefits"] == expected).all(), year
+        assert (categories["dla_sc_category"] == "MIDDLE").any()
+        assert (categories["pip_dl_category"] == "STANDARD").any()
+        assert expected.any() and not expected.all()
+
+
+def test_severe_flag_matches_the_policyengine_uk_formula():
+    # Differential: the stored flag and policyengine-uk's formula for
+    # is_severely_disabled_for_benefits, given the same categories, must agree.
+    # policyengine-uk releases before PolicyEngine/policyengine-uk#1946 count
+    # any AFCS payment and omit higher-rate Attendance Allowance, so this test
+    # fails until the lock includes that release; that failure is what keeps
+    # the new flag from shipping with an older model.
+    from policyengine_uk import Simulation
+
+    year = 2025
+
+    def model_flags(combos):
+        people = {
+            f"p{i}": {
+                "aa_category": {year: aa},
+                "dla_sc_category": {year: dla},
+                "pip_dl_category": {year: pip},
+            }
+            for i, (aa, dla, pip) in enumerate(combos)
+        }
+        simulation = Simulation(situation={"people": people})
+        return simulation.calculate("is_severely_disabled_for_benefits", year)
+
+    person = _severe_grid(year)
+    categories = add_disability_benefit_categories_from_reported_amounts(person, year)
+    flags = add_disability_benefit_flags_from_reported_amounts(person, year)
+    combos = sorted(
+        set(
+            zip(
+                categories["aa_category"],
+                categories["dla_sc_category"],
+                categories["pip_dl_category"],
+            )
+        )
+    )
+    model = dict(zip(combos, model_flags(combos)))
+    stored = flags["is_severely_disabled_for_benefits"]
+    for combo, value in zip(
+        zip(
+            categories["aa_category"],
+            categories["dla_sc_category"],
+            categories["pip_dl_category"],
+        ),
+        stored,
+    ):
+        assert bool(model[combo]) == bool(value), combo
 
 
 def test_categories_and_flags_share_the_survey_fiscal_year_rates():
