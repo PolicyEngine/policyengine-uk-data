@@ -16,7 +16,7 @@ on:
 # it is the older version. A plain group lets a newer run replace one that is
 # still pending, which could discard a version commit's release; #553 dropped
 # the group for that reason. `queue: max` keeps every waiting run (up to 100)
-# instead. A build that has started always finishes.
+# instead, and concurrency never cancels a build that has started.
 concurrency:
   group: release
   cancel-in-progress: false
@@ -29,10 +29,12 @@ jobs:
   # well spent about 1.5 hours on a version that was never released (run
   # 37642619160 on 2026-10-07 was cancelled by hand). This job decides whether
   # to build: never for a push that changed changelog.d (other than the version
-  # commit), and never when pyproject.toml's version already has a git tag.
-  # publish-git-tag.sh pushes that tag only after the data uploaded, and
-  # data_upload.py refuses to change a finished release, so such a build would
-  # spend about 1.5 hours and publish nothing new. Otherwise it builds as before.
+  # commit), and never for a push whose pyproject.toml version already has a
+  # git tag. publish-git-tag.sh pushes that tag only after the data uploaded,
+  # and data_upload.py raises rather than change a release that is final on
+  # Hugging Face unless the rebuilt manifest equals the published one. Building
+  # such a push would spend about 1.5 hours and release nothing new. Otherwise
+  # it builds as before, and a manual run always builds.
   gate:
     name: Decide whether to build
     runs-on: ubuntu-latest
@@ -62,7 +64,7 @@ jobs:
               echo "::notice title=Build deferred to versioning::This push adds changelog fragments, so the versioning workflow bumps the version and the Push run on its 'Update package version' commit builds and publishes."
             fi
           fi
-          if [ "$build" = true ]; then
+          if [ "$build" = true ] && [ "$EVENT" = "push" ]; then
             version=$(python3 .github/fetch_version.py) || version=
             if [ -z "$version" ] || [ "$version" = None ]; then
               echo "::warning::Could not read the version from pyproject.toml; building as before."
@@ -71,7 +73,7 @@ jobs:
               git ls-remote --exit-code --tags origin "refs/tags/${version}" > /dev/null || status=$?
               if [ "$status" -eq 0 ]; then
                 build=false
-                echo "::notice title=Already released::Version ${version} already has a git tag, so its data is already published. Bump the version with a changelog fragment to release again."
+                echo "::notice title=Already released::Version ${version} already has a git tag, so its data is already published. Add a changelog fragment to release a new version, or run this workflow manually to rebuild this one."
               elif [ "$status" -ne 2 ]; then
                 echo "::warning::Could not check for tag ${version}; building as before."
               fi
