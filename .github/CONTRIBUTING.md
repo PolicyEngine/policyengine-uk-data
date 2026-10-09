@@ -41,9 +41,9 @@ If your change is a non-bugfix update to a cloud-hosted dataset (FRS, enhanced F
 
 ## Changelog fragments
 
-- A pull request that changes a file a release ships adds its own fragment, `changelog.d/<name>.<type>.md`. The type sets the version bump: `breaking` is major, `added` and `removed` are minor, and `changed` and `fixed` are patch.
-- Towncrier ignores a fragment without a type, so the `Changelog entry` check rejects any other name. It also fails a pull request that changes shipped files without adding a fragment.
-- A pull request that changes only `docs/`, `.github/`, `.claude/`, `tools/`, `changelog.d/`, root Markdown files or `.gitignore` needs no fragment.
+- A pull request adds its own fragment, `changelog.d/<name>.<type>.md`, unless it changes only the exempt paths below. `<name>` uses ASCII letters, digits, `.`, `_` and `-`. The type sets the version bump: `breaking` is major, `added` and `removed` are minor, and `changed` and `fixed` are patch.
+- Towncrier ignores a fragment without a type, so the `Changelog entry` check rejects any other name. It also rejects two fragments that towncrier would file as the same entry, such as `1.fixed.md` and `01.fixed.md`.
+- Exempt paths: `docs/`, `.github/`, `.claude/`, `tools/`, `changelog.d/`, root Markdown files and `.gitignore`. This is a policy choice, so that docs and CI changes can merge without a data release; a change under `.github/` can still change how the next release is built.
 - Merging a fragment into `main` releases data: the versioning workflow bumps the version, then the Push workflow builds, tests, uploads and tags it.
 
 ## Repo-specific anti-patterns
