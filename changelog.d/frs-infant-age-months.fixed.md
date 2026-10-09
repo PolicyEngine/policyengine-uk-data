@@ -1,0 +1,1 @@
+- Give each child the FRS records as aged 0 an age in months, drawn uniformly, so that 9 to 11-month-olds reach the working parent childcare entitlement's nine-month minimum age. Whole-year ages are unchanged, and a dedicated random generator leaves every other draw in the build as it was.
