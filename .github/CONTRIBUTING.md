@@ -8,10 +8,12 @@ See the [shared PolicyEngine contribution guide](https://github.com/PolicyEngine
 make install            # install deps (uv)
 make format             # format (required)
 make download           # download raw FRS + SPI inputs from HF (needs HUGGING_FACE_TOKEN)
-make data               # full dataset build (impute, calibrate, upload)
+make data               # full dataset build into policyengine_uk_data/storage/ (impute, calibrate); uploads nothing
 make test               # test suite
 uv run pytest policyengine_uk_data/tests/path/to/test.py -v
 ```
+
+Releases are published by the Push workflow (`.github/workflows/push.yaml`), which runs `make upload` only after `make data` and `make test` pass.
 
 Python 3.13+. Default branch: `main`. Raw FRS / SPI microdata live on HuggingFace; set `HUGGING_FACE_TOKEN` before running anything that touches the dataset build.
 
@@ -43,4 +45,4 @@ If your change is a non-bugfix update to a cloud-hosted dataset (FRS, enhanced F
 
 - **Don't** hardcode dataset years in variable transforms; use `dataset.time_period` and the uprating pipeline.
 - **Don't** commit large binary artefacts — use HuggingFace storage.
-- **Don't** skip `make test` when touching the imputation or calibration pipeline; full CI rebuilds the dataset and takes ~25 minutes.
+- **Don't** skip `make test` when touching the imputation or calibration pipeline. PR CI's Test job rebuilds the datasets at reduced fidelity (`TESTING=1`) and runs the tests, which takes about 25–50 minutes; the full build on `main` takes about 75–110 minutes.
