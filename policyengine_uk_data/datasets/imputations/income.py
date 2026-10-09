@@ -12,9 +12,13 @@ agree with the employment status the FRS donor row keeps.
 Within that cell a person does not draw at a random quantile: each income is
 drawn at the person's rank of the same income among FRS people in the same
 cell (``draw_quantiles``). A part-time employee with low FRS pay draws low
-SPI pay, a donor at the top of their cell draws from the top of the SPI, and
-the SPI's distribution within each cell is kept, because the ranks are
-uniform within every cell.
+SPI pay, and a donor at the top of their cell draws from the top of the SPI.
+The ranks are uniform within every cell, so each group's first output keeps
+the forest's distribution for the cell, in expectation over the forest's
+within-band age noise. Later outputs are conditioned on those drawn before
+at correlated FRS ranks, so they carry more dependence between incomes than
+the SPI does, though less than microimpute's single random quantile per
+person did.
 """
 
 import pandas as pd
@@ -77,15 +81,18 @@ def _spi_age_bounds(age_code) -> tuple[int, int]:
 # (EMPSTATI) and any second-job earnings.
 #
 # People with both pay and a trade are split by which is their main source.
-# The SPI's MAINSRCE is the self-assessment "main source of income" HMRC
-# stratifies its sample by (1 pay, 3 sole trader, 4 partnership), not the
-# larger income: in 2022-23, 57% (weighted) of those whose main source is a
-# trade had more pay than profit. The FRS equivalent is the main job's
-# status. Where neither says (MAINSRCE -1 not classified, 2 occupational
-# pension, 5 other; an FRS main job that is neither), the larger of pay and
-# profit decides. FRS people with both are too few (about 300) for their rank
-# within a cell to say much, so the main source is most of what links their
-# draw to their own jobs.
+# The SPI's MAINSRCE is the main source indicator (1 pay, 2 occupational
+# pension, 3 sole trader, 4 partnership, 5 other, 6 claims case), and the
+# main source of income is one of the variables HMRC stratifies the
+# self-assessment part of the sample by (HMRC, "Survey of Personal Incomes
+# 2022-23: public use tape documentation", sample design, p. 3, and variable
+# list, p. 15). It is not the larger income: in 2022-23, 57% (weighted) of
+# those whose main source is a trade had more pay than profit. The FRS
+# equivalent is the main job's status. Where neither names pay or a trade
+# (any other MAINSRCE code, including -1 not classified; an FRS main job that
+# is neither), the larger of pay and profit decides. FRS people with both are
+# too few (about 300) for their rank within a cell to say much, so the main
+# source is most of what links their draw to their own jobs.
 NO_EARNINGS = "NO_EARNINGS"
 EMPLOYEE = "EMPLOYEE"
 SELF_EMPLOYED = "SELF_EMPLOYED"
@@ -311,7 +318,7 @@ def rank_quantiles(values, cells, weights, ids, seed: int = 0) -> np.ndarray:
     gets a lower quantile than a higher one in the same cell. A cell of one
     row gets a uniform random quantile. A cell with no weight is ranked with
     equal weights. Random numbers are drawn in (cell, value, id) order, so
-    the result does not depend on the order of the rows.
+    the result does not depend on the order of the rows; ids must be unique.
     """
     values = np.asarray(values, dtype=float)
     weights = np.asarray(weights, dtype=float)
@@ -321,6 +328,8 @@ def rank_quantiles(values, cells, weights, ids, seed: int = 0) -> np.ndarray:
         raise ValueError("Ranked values and weights must not be missing")
     if (weights < 0).any():
         raise ValueError("Rank weights must not be negative")
+    if pd.Series(ids).duplicated().any():
+        raise ValueError("Ranked ids must be unique")
     n = len(values)
     rng = np.random.default_rng(seed)
     canonical = np.lexsort((ids, values, cells))
@@ -370,7 +379,8 @@ IMPUTATIONS = INCOME_COMPONENTS + ["gift_aid", "charitable_investment_gifts"]
 # Each output is drawn at the forest's conditional quantile nearest the
 # person's rank, on this grid of 1,000 midpoints (0.0005 to 0.9995). The
 # draw used to be microimpute 1.8's: a random pick from ten quantiles between
-# 1/11 and 10/11, so no one drew from the top or bottom 9% of their cell.
+# 1/11 and 10/11, so no one drew from the top or bottom 9% of the forest's
+# conditional distribution at their predictors.
 DRAW_QUANTILE_GRID = (np.arange(1_000) + 0.5) / 1_000
 # Seed for the rank tie-breaks (and for the random quantiles of a draw made
 # without ranks).
@@ -392,7 +402,11 @@ def draw_at_quantiles(results, X: pd.DataFrame, quantiles: dict, grid) -> pd.Dat
     ``predict`` exactly (tested).
     """
     from microimpute.models.imputer import _ConstantValueModel
-    from microimpute.models.qrf import _get_sequential_predictors, _QRFModel
+    from microimpute.models.qrf import (
+        _get_sequential_predictors,
+        _QRFModel,
+        _RandomForestClassifierModel,
+    )
 
     grid = np.asarray(grid, dtype=float)
     k = len(grid)
@@ -417,8 +431,13 @@ def draw_at_quantiles(results, X: pd.DataFrame, quantiles: dict, grid) -> pd.Dat
                 (np.asarray(quantiles[variable], dtype=float) * k).astype(int), 0, k - 1
             )
             values = pred[np.arange(len(pred)), index]
-        else:
+        elif isinstance(model, _RandomForestClassifierModel):
             values = np.asarray(model.predict(augmented[columns], return_probs=False))
+        else:
+            raise TypeError(
+                f"Cannot draw {variable} at given quantiles from a "
+                f"{type(model).__name__}"
+            )
         output[variable] = values
         augmented[variable] = values
         augmented = results._encode_imputed_variable(augmented, variable)

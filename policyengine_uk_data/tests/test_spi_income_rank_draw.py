@@ -13,19 +13,29 @@ Invariants (Hypothesis properties unless noted):
 3. The quantiles do not depend on row order, on any strictly increasing
    transform of the values, on the values in other cells, or on the scale of
    a cell's weights; equal seeds give equal results; a row whose value is
-   unique in its cell stays in its own interval whatever the seed.
-4. Missing values or weights, and negative weights, are rejected.
+   unique in its cell stays in its own interval whatever the seed. Across
+   seeds, a row's quantile is uniform on its interval (not a fixed point in
+   it).
+4. Missing values or weights, negative weights and duplicate ids are
+   rejected.
 5. ``draw_at_quantiles`` reproduces microimpute 1.8's ``predict`` exactly
    at microimpute's own random draws and grid (differential test).
 6. The first output drawn is non-decreasing in the quantile for a fixed
-   person, and every draw lies within the range of the training data.
+   person, and every draw lies within the range of the training data. Each
+   output is drawn at its own quantile: raising one output's quantile never
+   lowers it and never changes an output drawn before it. A model type the
+   draw does not know is an error.
 7. ``EarningsGroupIncomeModel.predict`` draws each group at the quantiles in
    the inputs, gives no draw to ``NOT_IMPUTED`` rows, and without quantiles
    is deterministic.
 8. ``impute_over_incomes`` passes each person's quantiles through by person
    ID, so a subsample drawn with the full data's quantiles gets exactly
    those quantiles, and a higher FRS income never draws lower than a lower
-   one in the same cell.
+   one in the same cell. ``draw_quantiles`` ranks within ``rank_cells`` at
+   household weights: in every cell each person's quantile lies in their
+   slice of the cell's household weight. Outputs everyone ties on get
+   independent quantiles. (``impute_income`` uses one set of full-FRS
+   quantiles for both of its draws: test_imputation_source_flags.py.)
 9. On a built enhanced FRS, SPI-synthetic employees' pay rises with their
    hours as it does in the FRS (skipped when no build is present).
 """
@@ -203,17 +213,33 @@ def test_rank_quantiles_seeds(rows, seed_a, seed_b):
     assert (np.abs(a - b)[unique_in_cell] <= width[unique_in_cell] + 1e-12).all()
 
 
+def test_rank_quantiles_are_uniform_within_each_slice():
+    """Across seeds a row takes a uniform point in its slice, not a fixed
+    one: a lone donor does not always draw its cell's median."""
+    from scipy.stats import kstest
+
+    seeds = range(2_000)
+    lone = [rank_quantiles([5.0], [0], [1.0], [7], seed)[0] for seed in seeds]
+    assert kstest(lone, "uniform").pvalue > 1e-3
+    pair = np.array(
+        [rank_quantiles([1.0, 2.0], [0, 0], [1.0, 3.0], [1, 2], seed) for seed in seeds]
+    )
+    assert kstest(pair[:, 0], "uniform", args=(0, 0.25)).pvalue > 1e-3
+    assert kstest(pair[:, 1], "uniform", args=(0.25, 0.75)).pvalue > 1e-3
+
+
 @pytest.mark.parametrize(
-    "values, weights",
+    "values, weights, ids",
     [
-        ([1.0, np.nan], [1.0, 1.0]),
-        ([1.0, 2.0], [1.0, np.nan]),
-        ([1.0, 2.0], [1.0, -1.0]),
+        ([1.0, np.nan], [1.0, 1.0], [1, 2]),
+        ([1.0, 2.0], [1.0, np.nan], [1, 2]),
+        ([1.0, 2.0], [1.0, -1.0], [1, 2]),
+        ([1.0, 2.0], [1.0, 1.0], [1, 1]),
     ],
 )
-def test_rank_quantiles_reject_bad_inputs(values, weights):
+def test_rank_quantiles_reject_bad_inputs(values, weights, ids):
     with pytest.raises(ValueError):
-        rank_quantiles(values, [0, 0], weights, [1, 2])
+        rank_quantiles(values, [0, 0], weights, ids)
 
 
 def test_spi_age_bands_match_spi_codes():
@@ -338,6 +364,33 @@ def test_draw_reaches_the_tails(fitted_results):
         )
     )[0]
     np.testing.assert_array_equal(drawn[OUTPUTS[0]].to_numpy(), ends)
+
+
+@pytest.mark.parametrize("j", range(len(OUTPUTS)))
+def test_each_output_is_drawn_at_its_own_quantile(fitted_results, j):
+    """Raising one output's quantile raises that output and leaves every
+    output drawn before it unchanged."""
+    results, X, _ = fitted_results
+    X = X.iloc[:50].reset_index(drop=True)
+    low = {v: np.zeros(len(X)) for v in OUTPUTS}
+    high = {**low, OUTPUTS[j]: np.full(len(X), np.nextafter(1.0, 0.0))}
+    a = draw_at_quantiles(results, X, low, DRAW_QUANTILE_GRID)
+    b = draw_at_quantiles(results, X, high, DRAW_QUANTILE_GRID)
+    for v in OUTPUTS[:j]:
+        np.testing.assert_array_equal(a[v].to_numpy(), b[v].to_numpy())
+    assert (b[OUTPUTS[j]] >= a[OUTPUTS[j]]).all()
+    assert (b[OUTPUTS[j]] > a[OUTPUTS[j]]).mean() > 0.5
+
+
+def test_draw_rejects_unknown_model_types(fitted_results):
+    import copy
+
+    results, X, _ = fitted_results
+    results = copy.copy(results)
+    results.models = {**results.models, OUTPUTS[1]: object()}
+    u = {v: np.zeros(3) for v in OUTPUTS}
+    with pytest.raises(TypeError):
+        draw_at_quantiles(results, X.iloc[:3], u, DRAW_QUANTILE_GRID)
 
 
 # ---- the group model and the wiring ------------------------------------------
@@ -523,6 +576,56 @@ def test_impute_over_incomes_passes_quantiles_by_person(dataset, data):
     u = quantiles[draw_quantile_column("employment_income")].to_numpy()
     same = cells[:, None] == cells[None, :]
     assert (u[:, None] < u[None, :])[same & (pay[:, None] < pay[None, :])].all()
+
+
+@settings(deadline=None, max_examples=60, suppress_health_check=[HealthCheck.too_slow])
+@given(frs_datasets())
+def test_draw_quantiles_tile_each_cell_at_household_weights(dataset):
+    """Ranks are taken within ``rank_cells`` at household weights, so in
+    every cell each person's quantile lies in their slice of the cell's
+    household weight, for every output."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(income_module, "income_model_inputs", _inputs_from_columns)
+        quantiles = income_module.draw_quantiles(dataset)
+    cells = rank_cells(_inputs_from_columns(dataset))
+    weight = dataset.person.person_household_id.map(
+        dataset.household.set_index("household_id").household_weight
+    ).to_numpy()
+    for v in IMPUTATIONS:
+        q = quantiles[draw_quantile_column(v)].to_numpy()
+        for cell in np.unique(cells):
+            order = np.argsort(q[cells == cell], kind="stable")
+            w = weight[cells == cell][order]
+            before = np.cumsum(w) - w
+            u = q[cells == cell][order]
+            assert (u >= before / w.sum() - 1e-12).all()
+            assert (u <= (before + w) / w.sum() + 1e-12).all()
+
+
+def test_tied_outputs_get_independent_quantiles():
+    """Outputs everyone ties on (gift aid, which the FRS does not record)
+    are ranked in independent random orders, so they do not share one
+    quantile per person, as microimpute 1.8's draw did."""
+    n = 2_000
+    person = pd.DataFrame(
+        {
+            "person_id": np.arange(n),
+            "person_household_id": np.arange(n),
+            "age": 70,
+            "gender": "FEMALE",
+            "employment_status": "RETIRED",
+        }
+    )
+    for v in IMPUTATIONS[:6]:
+        person[v] = 0.0
+    household = pd.DataFrame(
+        {"household_id": np.arange(n), "household_weight": 1.0, "region": "WALES"}
+    )
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(income_module, "income_model_inputs", _inputs_from_columns)
+        quantiles = income_module.draw_quantiles(_Dataset(person, household))
+    rho = quantiles.corr(method="spearman").to_numpy()
+    assert np.abs(rho[~np.eye(len(rho), dtype=bool)]).max() < 0.1
 
 
 def test_built_enhanced_frs_spi_pay_rises_with_hours(enhanced_frs):

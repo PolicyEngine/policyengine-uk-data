@@ -108,6 +108,55 @@ def test_impute_income_marks_spi_synthetic_households(monkeypatch):
     assert result.household.loc[2:, "household_weight"].eq(0).all()
 
 
+def test_impute_income_draws_both_halves_at_full_frs_ranks(monkeypatch):
+    """Ranks are computed once, on the full, weighted FRS, and both draws use
+    them: the SPI copy is an unweighted subsample, so ranks taken within it
+    would be wrong."""
+    from policyengine_uk_data.datasets.imputations import income as income_module
+    from policyengine_uk_data.datasets import disability_benefits
+    from policyengine_uk_data.datasets.imputations import frs_only
+
+    full_frs_quantiles = pd.DataFrame({"q": [0.25, 0.75]}, index=[1, 2])
+    ranked_weights, calls = [], []
+
+    def draw_quantiles(dataset):
+        ranked_weights.append(dataset.household.household_weight.tolist())
+        return full_frs_quantiles
+
+    def impute_over_incomes(dataset, _model, output_variables, quantiles=None):
+        calls.append((list(output_variables), quantiles))
+        return dataset
+
+    monkeypatch.setattr(income_module, "create_income_model", lambda: object())
+    monkeypatch.setattr(income_module, "draw_quantiles", draw_quantiles)
+    monkeypatch.setattr(
+        income_module,
+        "subsample_dataset",
+        lambda dataset, _sample_size: dataset.copy(),
+    )
+    monkeypatch.setattr(income_module, "impute_over_incomes", impute_over_incomes)
+    monkeypatch.setattr(
+        frs_only,
+        "impute_frs_only_variables",
+        lambda train_dataset, target_dataset: target_dataset,
+    )
+    monkeypatch.setattr(
+        disability_benefits,
+        "strip_internal_disability_reported_amounts",
+        lambda dataset: dataset,
+    )
+    monkeypatch.setattr(income_module, "stack_datasets", _stack_without_remapping)
+
+    income_module.impute_income(_fake_dataset())
+
+    assert ranked_weights == [[1.0, 2.0]]
+    assert [variables for variables, _ in calls] == [
+        income_module.IMPUTATIONS,
+        ["dividend_income"],
+    ]
+    assert all(quantiles is full_frs_quantiles for _, quantiles in calls)
+
+
 def test_impute_capital_gains_marks_capital_gains_clone_households(monkeypatch):
     cg_module = importlib.import_module(
         "policyengine_uk_data.datasets.imputations.capital_gains"
