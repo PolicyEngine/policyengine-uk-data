@@ -278,11 +278,15 @@ PREDICTORS = [
     "region",
 ]
 
-# The SPI gives age only as a band, so the forests learn nothing within a
-# band. A person's rank is taken within (earnings group, SPI age band,
-# gender, region): the cells the forests condition on. Ranking over a wider
-# pool would bias the draw: a London donor's national rank is higher than
-# their rank in London, and London's SPI distribution is already higher.
+# The SPI gives age only as a band, so the forests' training age is uniform
+# noise within it and they learn no real age pattern within a band. A
+# person's rank is taken within (earnings group, SPI age band, gender,
+# region): the finest cells the SPI can tell apart. The forests are queried
+# at the person's exact age and, after each group's first output, at the
+# outputs drawn before it, so these cells are the forests' conditioning only
+# up to that age noise and the chain. Ranking over a wider pool would bias
+# the draw: a London donor's national rank is higher than their rank in
+# London, and London's SPI distribution is already higher.
 SPI_AGE_BAND_STARTS = sorted({low for code, (low, _) in AGE_RANGES.items() if code > 0})
 
 
