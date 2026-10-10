@@ -1,0 +1,1 @@
+Map the HMRC Survey of Personal Incomes and capital gains tax 2023-24 outturns to PolicyEngine year 2023, the tax year they describe, instead of 2024. Income-band, local income and capital gains targets for 2024 onwards now carry one more year of uprating.

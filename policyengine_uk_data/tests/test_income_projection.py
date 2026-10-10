@@ -5,9 +5,12 @@ reasonable bounds after projection. They require incomes_projection.csv
 to have been generated and will be skipped otherwise.
 """
 
+import re
+
 import pytest
 import pandas as pd
 from policyengine_uk_data.storage import STORAGE_FOLDER
+from policyengine_uk_data.targets.sources._common import load_config
 from policyengine_uk_data.targets.sources.hmrc_spi import _SPI_YEAR
 
 PROJECTION_PATH = STORAGE_FOLDER / "incomes_projection.csv"
@@ -143,3 +146,29 @@ def test_projection_keeps_top_open_ended_band(projections):
     ]
     assert len(top_band) == 1
     assert top_band.iloc[0]["dividend_income_amount"] > 0
+
+
+def test_projection_is_the_spi_table_uprated_with_the_committed_table(
+    projections, base_targets
+):
+    """Regenerate incomes_projection.csv whenever uprating_factors.csv changes."""
+    from policyengine_uk_data.utils.incomes_projection import project_income_table
+
+    pd.testing.assert_frame_equal(project_income_table(base_targets), projections)
+
+
+def test_spi_year_is_the_start_of_the_configured_tax_year():
+    """The SPI ODS name ends with its tax year (..._2324.ods is 2023-24).
+
+    PolicyEngine UK's year N is tax year N to N+1 (each parameter takes its
+    value at 30 April N), so a 2023-24 outturn is the 2023 value. Mapping it
+    to the end year would treat it as 2024-25 and understate every later
+    year by a year's growth. A refreshed URL without a matching _SPI_YEAR
+    fails here.
+    """
+    url = load_config()["hmrc"]["spi_collated"]
+    match = re.search(r"_(\d{2})(\d{2})\.ods$", url)
+    assert match, url
+    start, end = int(match[1]), int(match[2])
+    assert end == (start + 1) % 100, url
+    assert _SPI_YEAR == 2000 + start

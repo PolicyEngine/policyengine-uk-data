@@ -29,17 +29,19 @@ The AEA is policy-dependent (£12,300 for 2022-23, £6,000 for 2023-24,
 for the simulation year, so the target's meaning tracks the policy in
 force. ``_AEA_FALLBACK`` is used only if the parameter lookup fails.
 
-Year handling: HMRC's figures are the 2023-24 outturn, mapped to
-calendar 2024 following ``hmrc_spi._SPI_YEAR``. The amount is projected
-to 2029 with PolicyEngine's ``capital_gains`` uprating factors so the
-target constrains the projection years the calibration actually runs
-for; the taxpayer count is held flat, as the repo has no administrative
-basis for forecasting CGT taxpayer numbers and count uprating factors
-would be a nominal-income index applied to a headcount.
+Year handling: HMRC's figures are the 2023-24 outturn. PolicyEngine
+UK's year N is tax year N to N+1, so the outturn is the 2023 value, the
+year whose £6,000 AEA it was realised under (``hmrc_spi._SPI_YEAR``
+follows the same convention). The amount is projected to 2029 with
+PolicyEngine's ``capital_gains`` uprating factors so the target
+constrains the projection years the calibration actually runs for; the
+taxpayer count is held flat, as the repo has no administrative basis for
+forecasting CGT taxpayer numbers and count uprating factors would be a
+nominal-income index applied to a headcount.
 
-Caveat: the 2023-24 outturn was realised under a £6,000 AEA, while the
-gate applied in later years uses the £3,000 AEA then in force. The
-targets are therefore approximate for the projection years; the
+Caveat: from 2024 the gate uses the £3,000 AEA then in force, while the
+projected values carry the 2023-24 outturn realised under a £6,000 AEA.
+The targets are therefore approximate for the projection years; the
 alternative (a fixed £6,000 gate) would be wrong in a different and less
 transparent way, because it would not describe any year's actual policy.
 
@@ -55,9 +57,9 @@ from policyengine_uk_data.targets.sources._common import load_config
 
 logger = logging.getLogger(__name__)
 
-# HMRC CGT statistics, tax year 2023-24 outturn, mapped to calendar 2024
-# following the hmrc_spi._SPI_YEAR convention.
-_CGT_BASE_YEAR = 2024
+# HMRC CGT statistics, tax year 2023-24 outturn. PolicyEngine UK's year N
+# is tax year N to N+1, so the outturn is the 2023 value.
+_CGT_BASE_YEAR = 2023
 _MAX_YEAR = 2029
 
 # Total chargeable gains of CGT taxpayers, 2023-24 (£65.9bn).

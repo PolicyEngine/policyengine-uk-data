@@ -89,6 +89,20 @@ def test_aea_tracks_the_year():
     assert compute_cgt_taxpayers(_dummy_ctx(**args), target, 2023)[0] == 0.0
 
 
+def test_base_year_is_the_tax_year_the_outturn_was_realised_in():
+    """PolicyEngine UK's year N is tax year N to N+1, so the 2023-24 outturn
+    is the 2023 value. The base-year gate must then be 2023-24's £6,000 AEA,
+    read from the real parameter tree; mapping the outturn to 2024 would gate
+    it at 2024-25's £3,000."""
+    from policyengine_uk.system import system
+
+    from policyengine_uk_data.targets.sources.hmrc_cgt import _annual_exempt_amount
+
+    ctx = SimpleNamespace(sim=SimpleNamespace(tax_benefit_system=system))
+    assert _annual_exempt_amount(ctx, _CGT_BASE_YEAR) == 6_000
+    assert _annual_exempt_amount(ctx, _CGT_BASE_YEAR + 1) == 3_000
+
+
 def test_targets_load_with_expected_base_year_values():
     targets = {t.name: t for t in get_targets()}
     # Aggregate targets plus the per-size-band targets (tested in
@@ -296,7 +310,7 @@ def test_registry_keeps_custom_compute_for_the_calibration_years():
 
 
 def test_registry_year_filter_excludes_years_before_the_outturn():
-    """The targets describe a 2023-24 outturn mapped to calendar 2024,
+    """The targets describe the 2023-24 outturn, PolicyEngine year 2023,
     so they must not appear for earlier years."""
     from policyengine_uk_data.targets import get_all_targets
 
