@@ -7,6 +7,7 @@ from policyengine_uk_data.datasets.spi import (
     SPI_RELEASE_NAME,
     SPI_TAB_FILENAME,
     create_spi,
+    model_simulates_unknown_region,
 )
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk_data.targets.sources.hmrc_spi import (
@@ -31,6 +32,12 @@ def _read_spi_dataset_year(dataset_path) -> int:
         return int(store["time_period"].iloc[0])
 
 
+def _has_scottish_taxpayer_flag(dataset_path) -> bool:
+    # SPI H5s built before create_spi read SCOT_TXP lack this column.
+    with pd.HDFStore(dataset_path, mode="r") as store:
+        return "pays_scottish_income_tax" in store.select("person", stop=0)
+
+
 def ensure_spi_dataset() -> str:
     """Create the SPI H5 projection input from the current TAB release if needed.
 
@@ -42,6 +49,7 @@ def ensure_spi_dataset() -> str:
     if (
         dataset_path.exists()
         and _read_spi_dataset_year(dataset_path) == SPI_FISCAL_YEAR
+        and _has_scottish_taxpayer_flag(dataset_path)
     ):
         return str(dataset_path)
 
@@ -64,9 +72,13 @@ def ensure_spi_dataset() -> str:
 
 def load_spi_dataset() -> UKSingleYearDataset:
     dataset = UKSingleYearDataset(ensure_spi_dataset())
-    dataset.household["region"] = dataset.household["region"].replace(
-        {"UNKNOWN": "SOUTH_EAST"}
-    )
+    # Older policyengine-uk releases cannot simulate an unknown region. The
+    # stand-in label does not move income tax, which follows the Scottish
+    # taxpayer flag.
+    if not model_simulates_unknown_region():
+        dataset.household["region"] = dataset.household["region"].replace(
+            {"UNKNOWN": "SOUTH_EAST"}
+        )
     return dataset
 
 
