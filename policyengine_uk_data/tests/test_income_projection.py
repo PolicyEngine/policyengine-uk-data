@@ -172,3 +172,45 @@ def test_spi_year_is_the_start_of_the_configured_tax_year():
     start, end = int(match[1]), int(match[2])
     assert end == (start + 1) % 100, url
     assert _SPI_YEAR == 2000 + start
+
+
+def test_calibration_reads_the_projected_spi_targets(projections):
+    """Calibration (build_loss_matrix) fetches targets without a year filter,
+    and the registry keeps only the first target of each name. Every SPI band
+    must therefore be one target carrying all its years; if the projected
+    years sit on a second target of the same name they are dropped, and the
+    base-year outturn is carried forward unuprated instead."""
+    from policyengine_uk_data.targets import get_all_targets
+    from policyengine_uk_data.targets.build_loss_matrix import _resolve_value
+    from policyengine_uk_data.targets.sources.hmrc_spi import (
+        _PROPERTY_INCOME_SCALE,
+        INCOME_VARIABLES,
+        _format_band_label,
+        get_targets,
+    )
+
+    names = [t.name for t in get_targets()]
+    assert len(names) == len(set(names))
+
+    spi = {t.name: t for t in get_all_targets() if t.source == "hmrc_spi"}
+    checked = 0
+    for row in _without_aggregate(projections).itertuples():
+        if row.year <= _SPI_YEAR:
+            continue
+        label = _format_band_label(
+            row.total_income_lower_bound, row.total_income_upper_bound
+        )
+        for variable in INCOME_VARIABLES:
+            amount = getattr(row, f"{variable}_amount")
+            if variable == "property_income":
+                amount *= _PROPERTY_INCOME_SCALE
+            amount_target = spi[f"hmrc/{variable}_income_band_{label}"]
+            count_target = spi[f"hmrc/{variable}_count_income_band_{label}"]
+            assert _resolve_value(amount_target, row.year) == pytest.approx(amount)
+            assert _resolve_value(count_target, row.year) == pytest.approx(
+                getattr(row, f"{variable}_count")
+            )
+            checked += 2
+    assert checked == 2 * len(INCOME_VARIABLES) * len(
+        _without_aggregate(projections[projections["year"] > _SPI_YEAR])
+    )
