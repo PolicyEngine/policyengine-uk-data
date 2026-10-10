@@ -135,9 +135,12 @@ def main(argv: list[str]) -> int:
     base, head = argv
     changes = changed_paths(base, head)
     types = fragment_types(Path("pyproject.toml"))
+    # Git keeps no empty directories, so changelog.d is absent once a pull
+    # request deletes every file in it.
+    fragment_dir = Path(FRAGMENT_DIR)
     fragments_at_head = [
         f"{FRAGMENT_DIR}{path.name}"
-        for path in Path(FRAGMENT_DIR).iterdir()
+        for path in (fragment_dir.iterdir() if fragment_dir.is_dir() else [])
         if path.is_file()
     ]
     problems = check(

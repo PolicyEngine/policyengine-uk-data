@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from hypothesis import HealthCheck, given, settings
+from hypothesis import HealthCheck, example, given, settings
 from hypothesis import strategies as st
 
 REPO = Path(__file__).resolve().parents[2]
@@ -160,9 +160,10 @@ def test_changes_only_to_exempt_paths_need_no_fragment(exempt):
 
 @relaxed
 @given(st.lists(st.one_of(needing_paths, exempt_paths)), any_names)
+@example(others=[], name=".gitkeep")
 def test_a_badly_named_fragment_is_always_rejected(others, name):
     path = f"changelog.d/{name}"
-    if PATTERN.fullmatch(path):
+    if PATTERN.fullmatch(path) or path == checker.GITKEEP:
         return
     problems = _check(_changes(others) + [("A", path)])
     assert any(p.startswith(f"{path}: name it") for p in problems)
@@ -283,6 +284,8 @@ def _git(repo, *args):
         ({"docs/a b.md": "Docs.", "docs/c\rd.md": "CR.", ".github/w.yaml": "x"}, 0),
         ({"policyengine_uk_data/x.py": "y = 2", "changelog.d/b.md": "B."}, 1),
         ({"changelog.d/1.fixed.md": "A.", "changelog.d/01.fixed.md": "B."}, 1),
+        # Deleting every file removes changelog.d itself, as in a real checkout.
+        ({"changelog.d/old.md": None, "changelog.d/.gitkeep": None}, 0),
         # Same content, so git would report a rename unless told not to.
         (
             {
@@ -312,6 +315,8 @@ def test_main_reads_the_pull_requests_own_diff(tmp_path, monkeypatch, edits, exp
         target = tmp_path / path
         if text is None:
             target.unlink()
+            if not any(target.parent.iterdir()):
+                target.parent.rmdir()
         else:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(text)
