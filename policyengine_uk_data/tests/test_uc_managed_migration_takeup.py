@@ -10,9 +10,13 @@ Universal Credit once a legacy benefit it reports closes (policyengine-uk
 2. Every benefit unit reporting Universal Credit is True.
 3. Every benefit unit reporting no legacy benefit is True, the model's
    default, so the column changes nothing outside the legacy cohorts.
-4. A legacy reporter not on Universal Credit is True exactly when its draw is
-   below its combination's rate ("all" for combinations DWP does not report).
-5. Each cohort's share lands within sampling error of its rate.
+4. A legacy reporter not on Universal Credit is True if it would claim
+   anyway (would_claim_uc), and otherwise exactly when its draw is below
+   (r - p) / (1 - p), where r is its combination's rate ("all" for
+   combinations DWP does not report) and p its combination's share claiming
+   anyway.
+5. Each cohort's share claiming at the closure (would_claim_uc or the flag)
+   lands within sampling error of its rate.
 6. The draw is deterministic, has its own generator and leaves NumPy's global
    random state alone.
 """
@@ -114,8 +118,11 @@ def test_anchors_and_draws(units, seed):
             assert flags[i] == (draws[i] < rate)
 
 
+@pytest.mark.parametrize("anyway_share", [0.0, 0.3])
 @pytest.mark.parametrize("combination", sorted(RATES))
-def test_cohort_shares_within_sampling_error(combination):
+def test_cohort_claim_shares_within_sampling_error(combination, anyway_share):
+    """The share claiming at the closure (would_claim_uc or the flag) is
+    DWP's rate, whatever share would claim anyway."""
     benefits = [] if combination == "all" else combination.split("+")
     if combination == "all":
         # A combination DWP does not report (income-related ESA with Income
@@ -124,11 +131,49 @@ def test_cohort_shares_within_sampling_error(combination):
     n = 20_000
     units = [[{f"{b}_reported": 100.0 for b in benefits}] for _ in range(n)]
     person, benunit = frames(units)
+    anyway = np.random.default_rng(5).random(n) < anyway_share
     flags = assign_uc_claim_at_legacy_closure(
-        person, benunit, RATES, seed=UC_MANAGED_MIGRATION_SEED
+        person, benunit, RATES, seed=UC_MANAGED_MIGRATION_SEED, would_claim_uc=anyway
     )
+    assert flags[anyway].all()
     rate = RATES[combination]
-    assert abs(flags.mean() - rate) <= 4 * np.sqrt(rate * (1 - rate) / n)
+    claims = anyway | flags
+    assert abs(claims.mean() - rate) <= 4 * np.sqrt(rate * (1 - rate) / n)
+
+
+@settings(max_examples=100, deadline=None, derandomize=True)
+@given(
+    st.lists(people, min_size=1, max_size=40),
+    st.integers(0, 2**32 - 1),
+    st.data(),
+)
+def test_conditional_draw(units, seed, data):
+    """Exact characterisation with would_claim_uc: units claiming anyway are
+    True, and the rest are True exactly when their draw is below
+    (rate - p) / (1 - p) for their combination."""
+    person, benunit = frames(units)
+    anyway = np.array(
+        data.draw(st.lists(st.booleans(), min_size=len(units), max_size=len(units)))
+    )
+    flags = assign_uc_claim_at_legacy_closure(
+        person, benunit, RATES, seed=seed, would_claim_uc=anyway
+    )
+    combination = legacy_benefit_combination(person, benunit)
+    on_uc = (
+        benunit["benunit_id"]
+        .isin(person.loc[person["universal_credit_reported"] > 0, "person_benunit_id"])
+        .values
+    )
+    draws = np.random.default_rng(seed).random(len(benunit))
+    drawn = ~on_uc & (combination != "")
+    assert flags[~drawn | anyway].all()
+    for c in set(combination[drawn]):
+        cohort = drawn & (combination == c)
+        p = anyway[cohort].mean()
+        rate = RATES.get(c, RATES["all"])
+        q = 0.0 if p >= 1 else min(max((rate - p) / (1 - p), 0.0), 1.0)
+        free = cohort & ~anyway
+        assert (flags[free] == (draws[free] < q)).all(), c
 
 
 def test_deterministic_and_isolated():
@@ -169,16 +214,21 @@ def test_built_dataset_anchors(fixture, request):
 
 def test_built_frs_cohort_shares(frs):
     # The FRS build, before SPI rows and geography clones, has one row per
-    # surveyed benefit unit, so its draws are independent.
+    # surveyed benefit unit, so its draws are independent. Among units not
+    # claiming anyway, the flag's share is the conditional rate.
     flags, combination, on_uc = _built_flags(frs)
+    anyway = frs.benunit["would_claim_uc"].values.astype(bool)
     drawn = ~on_uc & (combination != "")
     for c in set(combination[drawn]):
-        in_cohort = drawn & (combination == c)
-        n = in_cohort.sum()
+        cohort = drawn & (combination == c)
+        p = anyway[cohort].mean()
         rate = RATES.get(c, RATES["all"])
-        if n >= 30:
-            share = flags[in_cohort].mean()
-            assert abs(share - rate) <= 4 * np.sqrt(rate * (1 - rate) / n), c
+        q = 0.0 if p >= 1 else min(max((rate - p) / (1 - p), 0.0), 1.0)
+        free = cohort & ~anyway
+        m = free.sum()
+        if m >= 30:
+            share = flags[free].mean()
+            assert abs(share - q) <= 4 * np.sqrt(max(q * (1 - q), 1e-9) / m) + 1e-9, c
 
 
 def test_closure_draw_leaves_the_seed_100_sequence_alone(tmp_path, monkeypatch):

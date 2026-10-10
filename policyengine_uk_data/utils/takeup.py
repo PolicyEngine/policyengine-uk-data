@@ -136,16 +136,22 @@ def assign_uc_claim_at_legacy_closure(
     benunit: pd.DataFrame,
     rates: dict[str, float],
     seed: int,
+    would_claim_uc: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """Draw ``would_claim_uc_at_legacy_closure`` for each benefit unit.
 
     policyengine-uk reads it once a legacy benefit the unit reports has
-    closed: the unit then claims Universal Credit if this is True and loses
-    its legacy awards either way. A unit reporting legacy benefits but not
-    Universal Credit claims with DWP's Move to Universal Credit claim rate for
-    its combination of benefits (``rates``; "all" where DWP reports none).
-    Units reporting Universal Credit, and units reporting no legacy benefit,
-    are True, the model's default.
+    closed: the unit then claims Universal Credit if it would claim anyway
+    (``would_claim_uc``) or if this is True, and loses its legacy awards
+    either way. So that the share claiming at the closure in each combination
+    of legacy benefits is DWP's Move to Universal Credit claim rate ``r``
+    (``rates``; "all" where DWP reports none), a unit reporting legacy
+    benefits but not Universal Credit and not already claiming is drawn at
+    ``(r - p) / (1 - p)``, clipped to [0, 1], where ``p`` is the share of the
+    combination's such units with ``would_claim_uc`` True (unweighted: the
+    draw precedes calibration). Without ``would_claim_uc``, ``p`` is 0.
+    Units reporting Universal Credit, units already claiming, and units
+    reporting no legacy benefit are True, the model's default.
 
     Args:
         person: Person table with ``person_benunit_id`` and the
@@ -154,12 +160,25 @@ def assign_uc_claim_at_legacy_closure(
         rates: Claim rate by combination, from
             ``load_uc_managed_migration_claim_rates``.
         seed: Seed for this draw's own generator.
+        would_claim_uc: The units' ``would_claim_uc``, aligned with
+            ``benunit``.
 
     Returns:
         Boolean array aligned with ``benunit``.
     """
     combination = legacy_benefit_combination(person, benunit)
     on_uc = reported_benunit_mask(person, benunit, "universal_credit_reported")
-    rate = np.array([rates.get(c, rates["all"]) for c in combination])
+    claims_anyway = (
+        np.zeros(len(benunit), dtype=bool)
+        if would_claim_uc is None
+        else np.asarray(would_claim_uc, dtype=bool)
+    )
+    drawn = ~on_uc & (combination != "")
+    probability = np.zeros(len(benunit))
+    for c in set(combination[drawn]):
+        cohort = drawn & (combination == c)
+        rate = rates.get(c, rates["all"])
+        p = claims_anyway[cohort].mean()
+        probability[cohort] = 0.0 if p >= 1 else np.clip((rate - p) / (1 - p), 0, 1)
     draws = np.random.default_rng(seed).random(len(benunit))
-    return on_uc | (combination == "") | (draws < rate)
+    return ~drawn | claims_anyway | (draws < probability)

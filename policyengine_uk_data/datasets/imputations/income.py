@@ -550,6 +550,7 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
                 zero_weight_copy.benunit,
                 load_uc_managed_migration_claim_rates(),
                 seed=UC_MANAGED_MIGRATION_SPI_SEED,
+                would_claim_uc=zero_weight_copy.benunit.get("would_claim_uc"),
             )
         )
 

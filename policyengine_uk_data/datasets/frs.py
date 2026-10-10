@@ -1770,6 +1770,7 @@ def create_frs(
         pe_benunit,
         load_uc_managed_migration_claim_rates(),
         seed=UC_MANAGED_MIGRATION_SEED,
+        would_claim_uc=pe_benunit["would_claim_uc"].values,
     )
     pe_benunit["would_claim_tfc"] = generator.random(len(pe_benunit)) < tfc_rate
 
