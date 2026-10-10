@@ -15,12 +15,13 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
-      - name: Check for changelog fragment
-        run: |
-          FRAGMENTS=$(find changelog.d -type f ! -name '.gitkeep' | wc -l)
-          if [ "$FRAGMENTS" -eq 0 ]; then
-            echo "::error::No changelog fragment found in changelog.d/"
-            echo "Add one with: echo 'Description.' > changelog.d/\$(git branch --show-current).<type>.md"
-            echo "Types: added, changed, fixed, removed, breaking"
-            exit 1
-          fi
+        with:
+          # The pull request's merge commit and its first parent, the tip of
+          # main, so the check sees exactly what merging would change.
+          fetch-depth: 2
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.13
+      - name: Check for a typed changelog fragment
+        run: python .github/check_changelog_fragment.py HEAD^1 HEAD
