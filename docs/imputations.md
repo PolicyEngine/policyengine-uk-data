@@ -213,14 +213,25 @@ Assigns student loan plan type based on age and reported repayments.
 
 ## Broad Rental Market Area Assignment
 
-**Source:** Census private-rented households by BRMA and bedrooms (not QRF; applied when the base FRS dataset is built)
+**Source:** Census private-rented households by BRMA and bedrooms, and the LHA lists of rents (not QRF; applied when the base FRS dataset is built)
 
 The FRS identifies only the region, but Local Housing Allowance rates vary by Broad Rental Market Area (BRMA). `datasets/brma.py` draws each benefit unit's BRMA within its region, in proportion to the private-rented households in each BRMA:
 - shared-accommodation and one-bedroom LHA categories use one-bedroom homes;
 - the two-, three- and four-or-more-bedroom categories use homes with that many bedrooms;
 - Northern Ireland's census has no bedrooms, so its weights are the same for every category.
 
-A household takes one of its benefit units' BRMAs, chosen at random. Sources, method and validation are in `storage/BRMA_DATA_SOURCES.md`.
+A household takes one of its benefit units' BRMAs, chosen at random.
+
+Private renters who report a rent are then redrawn so that their rent and their BRMA's rents move together:
+
+P(BRMA | region, bedrooms, rent) ∝ census private-rented households(BRMA, bedrooms) × density of the rent on the BRMA's list of rents for homes with that many bedrooms.
+
+- The lists of rents are summarised in `storage/brma_private_rents.csv` as a median and a spread of log rents per BRMA and LHA category, in the prices of the survey year.
+- The home's bedrooms (FRS `bedroom6`) select both the census band and the list category, because both describe the home. The household's LHA category describes its entitlement, which can be smaller than its home.
+- Reported rents are not list rents. A model fitted to the survey's own private renters allows for a shift in each region, extra noise, and a share of households paying well below the market. A household with such a rent keeps roughly the census shares.
+- Other households keep the draw above, unchanged.
+
+Sources, method and validation are in `storage/BRMA_DATA_SOURCES.md`.
 
 ---
 
