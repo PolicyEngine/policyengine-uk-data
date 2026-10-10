@@ -34,8 +34,17 @@ from policyengine_uk_data.utils.datasets import (
     fill_with_mean,
     STORAGE_FOLDER,
 )
-from policyengine_uk_data.parameters import load_take_up_rate, load_parameter
-from policyengine_uk_data.utils.takeup import assign_takeup_with_reported_anchors
+from policyengine_uk_data.parameters import (
+    load_parameter,
+    load_take_up_rate,
+    load_uc_managed_migration_claim_rates,
+)
+from policyengine_uk_data.utils.takeup import (
+    UC_MANAGED_MIGRATION_SEED,
+    assign_takeup_with_reported_anchors,
+    assign_uc_claim_at_legacy_closure,
+    reported_benunit_mask,
+)
 from policyengine_uk_data.datasets.childcare.assumptions import (
     EXTENDED_HOURS_MEAN,
     EXTENDED_HOURS_SD,
@@ -269,16 +278,6 @@ def derive_esa_support_group_proxy(
         & esa_health_condition_proxy
         & severe_health_evidence
     )
-
-
-def reported_benunit_mask(
-    person: pd.DataFrame, benunit: pd.DataFrame, person_column: str
-) -> np.ndarray:
-    """Benefit units with any member reporting a positive ``person_column``."""
-    reporter_benunits = set(
-        person.loc[person[person_column] > 0, "person_benunit_id"].values
-    )
-    return benunit["benunit_id"].isin(reporter_benunits).values
 
 
 def assign_reported_takeup(
@@ -1757,6 +1756,21 @@ def create_frs(
         ).values,
         is_over_state_pension_age=sim.calculate("is_SP_age", year).values,
         benunit_ids=pe_benunit.benunit_id,
+    )
+    # Whether a legacy-benefit family claims Universal Credit once its legacy
+    # benefits close, at DWP's Move to Universal Credit claim rates. Its own
+    # generator keeps every other draw on the seed=100 sequence. Checked
+    # because the dataset loader drops columns the model does not define.
+    require_variable(
+        "would_claim_uc_at_legacy_closure",
+        "Move to Universal Credit claim flag",
+    )
+    pe_benunit["would_claim_uc_at_legacy_closure"] = assign_uc_claim_at_legacy_closure(
+        pe_person,
+        pe_benunit,
+        load_uc_managed_migration_claim_rates(),
+        seed=UC_MANAGED_MIGRATION_SEED,
+        would_claim_uc=pe_benunit["would_claim_uc"].values,
     )
     pe_benunit["would_claim_tfc"] = generator.random(len(pe_benunit)) < tfc_rate
 
