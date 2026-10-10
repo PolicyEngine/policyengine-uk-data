@@ -1,0 +1,14 @@
+description: Probability that a benefit unit with no Pension Credit entitlement in the calibration year claims it once a reform or a later year entitles it. Set to DWP's caseload take-up of Savings Credit-only awards (Great Britain), the group with the smallest awards, which is closest to what a reform gives the units it newly entitles.
+metadata:
+  label: Pension Credit take-up for newly entitled units
+  name: PC_takeup_newly_entitled
+  unit: /1
+  reference:
+    - title: "Income-related benefits: estimates of take-up: financial year ending 2024"
+      href: https://www.gov.uk/government/statistics/income-related-benefits-estimates-of-take-up-financial-year-ending-2024/income-related-benefits-estimates-of-take-up-financial-year-ending-2024
+values:
+  # Savings Credit-only caseload take-up, FYE 2023 and FYE 2024 (42% and
+  # 37%, table PC1). Mean award claimed in FYE 2024: £9 a week, against £87
+  # for Guarantee Credit, whose take-up was 69%.
+  2022-04-01: 0.42
+  2023-04-01: 0.37
