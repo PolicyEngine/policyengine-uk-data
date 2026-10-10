@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 import pytest
 import policyengine_uk
+from hypothesis import given
+from hypothesis import strategies as st
 import policyengine_uk_data.datasets.frs as frs_module
 
 from policyengine_uk_data.datasets.frs import (
@@ -160,20 +162,37 @@ def test_qualifying_young_person_education_inputs_use_current_education():
     assert result.tolist() == [False, True, True, True, False, False]
 
 
-def test_approved_training_uses_frs_government_training_codes():
-    person = pd.DataFrame({"train": [-1, 0, 1, 2, 9, 10, 13, np.nan]})
+def test_approved_training_reads_frs_trainee_flag():
+    person = pd.DataFrame({"trainee": [1, 2, -1, 0, np.nan, " "]})
 
     result = derive_is_in_approved_training_from_frs_person(person)
 
-    assert result.tolist() == [False, False, True, True, True, False, False, False]
+    assert result.tolist() == [True, False, False, False, False, False]
 
 
-def test_approved_training_defaults_false_when_frs_field_missing():
-    person = pd.DataFrame({"age": [16, 19]})
+@given(
+    st.lists(
+        st.one_of(st.integers(-9, 20), st.just(np.nan), st.just(" ")),
+        max_size=30,
+    )
+)
+def test_approved_training_is_exactly_trainee_yes(codes):
+    person = pd.DataFrame({"trainee": pd.Series(codes, dtype=object)})
 
     result = derive_is_in_approved_training_from_frs_person(person)
 
-    assert result.tolist() == [False, False]
+    assert result.dtype == bool
+    assert result.index.equals(person.index)
+    assert result.tolist() == [code == 1 for code in codes]
+
+
+def test_approved_training_requires_frs_trainee_column():
+    # FRS releases carry TRAIN2 and TRAINEE but no TRAIN; reading a missing
+    # column must fail the build, not code everyone as untrained.
+    person = pd.DataFrame({"age": [16, 19], "train2": [9, 9]})
+
+    with pytest.raises(KeyError, match="TRAINEE"):
+        derive_is_in_approved_training_from_frs_person(person)
 
 
 def test_qyp_entry_age_proxy_caps_current_education_or_training_at_18():
@@ -382,7 +401,9 @@ class FakeMicrosimulation:
         raise KeyError(variable)
 
 
-def create_single_adult_frs(tmp_path, monkeypatch, empstati=8, with_child=False):
+def create_single_adult_frs(
+    tmp_path, monkeypatch, empstati=8, with_child=False, child_overrides=None
+):
     monkeypatch.setattr(policyengine_uk, "Microsimulation", FakeMicrosimulation)
     monkeypatch.setattr(frs_module, "load_take_up_rate", lambda *args, **kwargs: 0.0)
     monkeypatch.setattr(frs_module, "load_parameter", lambda *args, **kwargs: 0.0)
@@ -451,6 +472,7 @@ def create_single_adult_frs(tmp_path, monkeypatch, empstati=8, with_child=False)
                 "tothours": 0,
                 "tuborr": 0,
                 "typeed2": 0,
+                "trainee": 2,
                 "uperson": 1,
                 "allpay2": 0,
                 "royyr2": 0,
@@ -474,7 +496,7 @@ def create_single_adult_frs(tmp_path, monkeypatch, empstati=8, with_child=False)
     if with_child:
         child = pd.DataFrame(
             [{**dict.fromkeys(child_columns, 0), "sernum": 100, "benunit": 1}]
-        ).assign(person=2, age=5, uperson=2)
+        ).assign(**{"person": 2, "age": 5, "uperson": 2, **(child_overrides or {})})
     benunit = pd.DataFrame([{"sernum": 100, "benunit": 1, "famtypb2": 1}])
     househol = pd.DataFrame(
         [
@@ -601,3 +623,29 @@ def test_create_frs_child_rows_are_child(tmp_path, monkeypatch):
 def test_create_frs_rejects_unknown_adult_empstati(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="EMPSTATI"):
         create_single_adult_frs(tmp_path, monkeypatch, empstati=12)
+
+
+@pytest.mark.parametrize("age", [16, 17, 18, 19])
+def test_create_frs_codes_child_table_trainees_as_approved_training(
+    tmp_path, monkeypatch, age
+):
+    # DWP's FRS counts a 16- to 19-year-old outside full-time education as a
+    # dependent child only when in unwaged government training (TRAINEE 1).
+    person = create_single_adult_frs(
+        tmp_path,
+        monkeypatch,
+        empstati=11,
+        with_child=True,
+        child_overrides={"age": age, "fted": 2, "educft": 2, "trainee": 1},
+    ).person.set_index("person_id")
+    trainee = person.loc[100_002]
+
+    assert trainee["current_education"] == "NOT_IN_EDUCATION"
+    assert trainee["is_in_approved_training"]
+    assert not person.loc[100_001, "is_in_approved_training"]
+    assert trainee["age_started_or_accepted_current_education_or_training"] == min(
+        age, 18
+    )
+    assert trainee[
+        "is_before_universal_credit_qualifying_young_person_terminal_date"
+    ] == (age == 19)
