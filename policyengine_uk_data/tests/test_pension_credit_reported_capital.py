@@ -9,6 +9,9 @@ Invariants:
    applies.
 3. Without either column every benefit unit gets -1.
 4. The output is always -1 or a non-negative number, one per benefit unit.
+
+Uprating is checked against the engine for every row, including this
+column, in test_uprating_factors_table.py.
 """
 
 import numpy as np
@@ -68,34 +71,6 @@ def test_output_is_sentinel_or_non_negative_for_random_inputs():
         keep = np.isfinite(values) & (values >= 0)
         np.testing.assert_array_equal(result[keep], values[keep])
         assert np.all(result[~keep] == -1)
-
-
-def test_uprating_rows_match_the_model():
-    """The build uprates the column with these rows (calibration materialises
-    the calibration year from them), and policyengine-uk projects the saved
-    dataset with the variable's own uprating index at runtime. The rows must
-    equal what ``create_policyengine_uprating_factors_table`` derives from the
-    locked policyengine-uk, or a unit near the 10,000 pound deemed-income
-    disregard can be assessed differently in calibration and at runtime."""
-    from policyengine_uk.system import system
-
-    from policyengine_uk_data.storage import STORAGE_FOLDER
-    from policyengine_uk_data.utils.uprating import END_YEAR, START_YEAR
-
-    variable = system.variables["pension_credit_reported_capital"]
-    index = system.parameters.get_child(variable.uprating)
-    years = range(START_YEAR, END_YEAR + 1)
-    expected = {y: round(index(y) / index(START_YEAR), 3) for y in years}
-    factors = pd.read_csv(STORAGE_FOLDER / "uprating_factors.csv").set_index("Variable")
-    growth = pd.read_csv(STORAGE_FOLDER / "uprating_growth_factors.csv").set_index(
-        "Variable"
-    )
-    for y in years:
-        assert factors.loc["pension_credit_reported_capital", str(y)] == expected[y]
-        expected_growth = (
-            0 if y == START_YEAR else round(expected[y] / expected[y - 1] - 1, 3)
-        )
-        assert growth.loc["pension_credit_reported_capital", str(y)] == expected_growth
 
 
 def test_spi_copy_records_no_capital():

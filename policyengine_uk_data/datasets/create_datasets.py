@@ -337,13 +337,15 @@ def main():
             # materialisation on purpose. Rail and bus (subsidy and fares) are
             # fitted by simulating the saved base-year file at the calibration
             # year, the configuration consumers actually run: policyengine-uk
-            # re-uprates rail_usage (gov.dft.rail.ridership_index) and
-            # bus_fare_spending (CPI) at load, so a factor fitted on a
-            # calibration-year file and then down-rated would be uprated a
-            # second time. rail_usage, rail_subsidy_spending,
-            # bus_subsidy_spending and bus_fare_spending are not in
+            # re-uprates bus_fare_spending (CPI) at load, so a factor fitted
+            # on a calibration-year file and then down-rated would be uprated
+            # a second time. (rail_usage declares gov.dft.rail.ridership_index,
+            # but policyengine-uk carries it forward unchanged at load because
+            # uprating_indices.yaml does not list it.) rail_usage,
+            # rail_subsidy_spending and bus_subsidy_spending are not in
             # uprating_factors.csv, so `uprate_dataset` leaves them untouched
-            # in either direction: uprating the saved file back to the
+            # in either direction, and bus_fare_spending moves by the same CPI
+            # factor both ways: uprating the saved file back to the
             # calibration year reproduces the calibrated weights and monetary
             # levels but keeps these post-calibration scalings, which the
             # weight solve never saw. The saved file is therefore not

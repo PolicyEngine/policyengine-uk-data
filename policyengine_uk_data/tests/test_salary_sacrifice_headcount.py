@@ -6,8 +6,14 @@ https://www.gov.uk/government/publications/salary-sacrifice-reform-for-pension-c
 """
 
 import os
+from types import SimpleNamespace
+
+import numpy as np
+import pandas as pd
 
 from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
+from policyengine_uk_data.storage import STORAGE_FOLDER
+from policyengine_uk_data.targets.compute.income import compute_ss_headcount
 
 REDUCED_BUILD = os.environ.get("TESTING") == "1"
 # The 32-epoch reduced build stops well short of the OBR salary-sacrifice
@@ -90,3 +96,53 @@ def test_salary_sacrifice_above_cap_users(baseline):
         f"Expected ~{TARGET / 1e6:.1f}mn above-cap SS users, "
         f"got {total_above_cap / 1e6:.1f}mn ({total_above_cap / TARGET * 100:.0f}% of target)"
     )
+
+
+def _headcount_masks(contributions):
+    """Run compute_ss_headcount for each target on one person per household."""
+    contributions = np.asarray(contributions, dtype=float)
+    ctx = SimpleNamespace(
+        sim=SimpleNamespace(calculate=lambda variable: contributions),
+        household_from_person=lambda values: np.asarray(values),
+        time_period=PERIOD,
+    )
+    return {
+        kind: compute_ss_headcount(
+            SimpleNamespace(name=f"obr/salary_sacrifice_users_{kind}"), ctx
+        )
+        for kind in ("total", "below_cap", "above_cap")
+    }
+
+
+def test_headcount_targets_split_users_at_the_cap_on_simulated_amounts():
+    """Calibration classifies the amounts the calibration-year simulation holds.
+
+    The same amounts the tests above classify, with no adjustment through the
+    uprating table (which has no salary sacrifice row, as policyengine-uk does
+    not uprate it at load). Below and above the cap partition the users.
+    """
+    edges = [0.0, 0.01, 1_999.99, 2_000.0, 2_000.01, 1e6]
+    rng = np.random.default_rng(0)
+    for contributions in (edges, rng.uniform(0, 5_000, 1_000)):
+        masks = _headcount_masks(contributions)
+        contributions = np.asarray(contributions)
+        np.testing.assert_array_equal(
+            masks["below_cap"], (contributions > 0) & (contributions <= 2_000)
+        )
+        np.testing.assert_array_equal(masks["above_cap"], contributions > 2_000)
+        np.testing.assert_array_equal(
+            masks["below_cap"].astype(int) + masks["above_cap"], masks["total"]
+        )
+
+
+def test_calibration_year_contributions_are_the_survey_amounts():
+    """The cap split classifies survey-year contributions only while
+    policyengine-uk carries them unchanged at load, so the table has no row.
+
+    If policyengine-uk starts uprating them (policyengine-uk#1863), the
+    regenerated table gains a row and the split moves to nominal
+    calibration-year amounts. Decide then which of the two the headcount
+    targets should classify (policyengine-uk-data#541).
+    """
+    table = pd.read_csv(STORAGE_FOLDER / "uprating_factors.csv", index_col="Variable")
+    assert "pension_contributions_via_salary_sacrifice" not in table.index
