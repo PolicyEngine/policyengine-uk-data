@@ -179,3 +179,104 @@ def test_built_frs_cohort_shares(frs):
         if n >= 30:
             share = flags[in_cohort].mean()
             assert abs(share - rate) <= 4 * np.sqrt(rate * (1 - rate) / n), c
+
+
+def test_closure_draw_leaves_the_seed_100_sequence_alone(tmp_path, monkeypatch):
+    """create_frs's closure draw has its own generator, so the seed=100 draws
+    after it are pinned. These are the synthetic one-parent fixture's values
+    on main; any draw that consumes the shared generator before them, at the
+    call site or inside, moves them."""
+    from policyengine_uk_data.tests.test_legacy_benefit_proxies import (
+        create_single_adult_frs,
+    )
+
+    dataset = create_single_adult_frs(tmp_path, monkeypatch, with_child=True)
+    np.testing.assert_allclose(
+        dataset.person["higher_earner_tie_break"],
+        [0.5352481053616507, 0.9957771042185515],
+    )
+    np.testing.assert_allclose(
+        dataset.person["attends_private_school_random_draw"],
+        [0.501946084696926, 0.7710225764025075],
+    )
+
+
+class _Dataset:
+    def __init__(self, person, benunit, household):
+        self.person, self.benunit, self.household = person, benunit, household
+        self.time_period = 2024
+
+    def copy(self):
+        return _Dataset(self.person.copy(), self.benunit.copy(), self.household.copy())
+
+    def validate(self):
+        return None
+
+
+def test_spi_rows_redraw_the_closure_flag_from_their_own_receipt(monkeypatch):
+    """impute_income redraws the flag on the SPI-synthetic copy after stage 2
+    rewrites its receipt; the FRS rows keep create_frs's draw."""
+    from policyengine_uk_data.datasets import disability_benefits
+    from policyengine_uk_data.datasets.imputations import frs_only
+    from policyengine_uk_data.datasets.imputations import income as income_module
+
+    n = 200
+    person = pd.DataFrame(
+        {
+            "person_id": range(1, n + 1),
+            "person_household_id": range(1, n + 1),
+            "person_benunit_id": range(1, n + 1),
+            **{c: 0.0 for c in REPORTED},
+            "housing_benefit_reported": 1_000.0,
+        }
+    )
+    for column in [
+        "employment_income",
+        "self_employment_income",
+        "savings_interest_income",
+        "dividend_income",
+        "private_pension_income",
+        "property_income",
+    ]:
+        person[column] = 0.0
+    benunit = pd.DataFrame(
+        {"benunit_id": range(1, n + 1), "would_claim_uc_at_legacy_closure": False}
+    )
+    household = pd.DataFrame(
+        {"household_id": range(1, n + 1), "household_weight": 1.0, "region": "LONDON"}
+    )
+
+    def stage_2(train_dataset, target_dataset):
+        # As main's SPI-donor rules do, the copy ends up reporting no legacy
+        # benefit.
+        target_dataset = target_dataset.copy()
+        target_dataset.person["housing_benefit_reported"] = 0.0
+        return target_dataset
+
+    def stack(left, right):
+        return _Dataset(
+            pd.concat([left.person, right.person], ignore_index=True),
+            pd.concat([left.benunit, right.benunit], ignore_index=True),
+            pd.concat([left.household, right.household], ignore_index=True),
+        )
+
+    monkeypatch.setattr(income_module, "create_income_model", lambda: object())
+    monkeypatch.setattr(
+        income_module, "subsample_dataset", lambda dataset, _size: dataset.copy()
+    )
+    monkeypatch.setattr(
+        income_module, "impute_over_incomes", lambda dataset, _model, _vars: dataset
+    )
+    monkeypatch.setattr(frs_only, "impute_frs_only_variables", stage_2)
+    monkeypatch.setattr(
+        disability_benefits,
+        "strip_internal_disability_reported_amounts",
+        lambda dataset: dataset,
+    )
+    monkeypatch.setattr(income_module, "stack_datasets", stack)
+
+    result = income_module.impute_income(_Dataset(person, benunit, household))
+    flags = result.benunit["would_claim_uc_at_legacy_closure"].values
+    # FRS rows keep their flag; SPI rows report no legacy benefit, so True.
+    assert not flags[:n].any()
+    assert flags[n:].all()

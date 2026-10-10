@@ -60,6 +60,33 @@ def assign_takeup_with_reported_anchors(
     return result
 
 
+def solve_fill_probability(
+    rate: float,
+    weights: np.ndarray,
+    eligible: np.ndarray,
+    reported: np.ndarray,
+) -> float:
+    """Claim probability for eligible non-reporters that makes weighted
+    take-up among eligible entities equal ``rate`` in expectation.
+
+    Reporters always claim. If they alone exceed ``rate`` the probability is
+    0; if every eligible non-reporter claiming still falls short it is 1.
+    """
+    weights = np.asarray(weights, dtype=np.float64)
+    eligible = np.asarray(eligible, dtype=bool)
+    reported = np.asarray(reported, dtype=bool)
+    eligible_weight = weights[eligible].sum()
+    reporting_weight = weights[eligible & reported].sum()
+    remaining_weight = weights[eligible & ~reported].sum()
+    if remaining_weight <= 0:
+        return 0.0
+    needed = float(rate) * eligible_weight - reporting_weight
+    # A vanishing remaining weight sends the ratio to infinity; clip handles it.
+    with np.errstate(over="ignore", divide="ignore"):
+        probability = needed / remaining_weight
+    return float(np.clip(probability, 0.0, 1.0))
+
+
 # Legacy means-tested benefits, in the order their names are joined into a
 # combination key in parameters/take_up/uc_managed_migration.yaml.
 LEGACY_BENEFITS = (

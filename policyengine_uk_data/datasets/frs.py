@@ -19,11 +19,13 @@ from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk.variables.household.income.employment_status import (
     EmploymentStatus,
 )
+from policyengine_uk_data.datasets.brma import assign_brmas, pick_household_brmas
 from policyengine_uk_data.datasets.disability_benefits import (
     add_disability_benefit_categories_from_reported_amounts,
     add_disability_benefit_flags_from_reported_amounts,
     drop_internal_disability_reported_amounts,
 )
+from policyengine_uk_data.utils.benefit_units import claimant_or_partner_variable
 from policyengine_uk_data.utils.datasets import (
     sum_to_entity,
     categorical,
@@ -36,6 +38,12 @@ from policyengine_uk_data.parameters import (
     load_parameter,
     load_take_up_rate,
     load_uc_managed_migration_claim_rates,
+)
+from policyengine_uk_data.utils.takeup import (
+    UC_MANAGED_MIGRATION_SEED,
+    assign_takeup_with_reported_anchors,
+    assign_uc_claim_at_legacy_closure,
+    reported_benunit_mask,
 )
 from policyengine_uk_data.datasets.childcare.assumptions import (
     EXTENDED_HOURS_MEAN,
@@ -53,9 +61,29 @@ WEEKS_IN_YEAR = 365.25 / 7
 LEGACY_JOBSEEKER_MIN_AGE = 18
 HOURS_WORKED_WEEKS_PER_YEAR = 52
 ESA_MIN_AGE = 16
+# Adult-table EMPSTATI ("Adult - Employment Status - ILO definition") value
+# labels from the UKDS FRS 2024-25 data dictionary, mapped to PolicyEngine
+# statuses. Children have no EMPSTATI and are CHILD.
+FRS_EMPSTATI_EMPLOYMENT_STATUS = {
+    1: EmploymentStatus.FT_EMPLOYED.name,  # Full-time employee
+    2: EmploymentStatus.PT_EMPLOYED.name,  # Part-time employee
+    3: EmploymentStatus.FT_SELF_EMPLOYED.name,  # Full-time self-employed
+    4: EmploymentStatus.PT_SELF_EMPLOYED.name,  # Part-time self-employed
+    5: EmploymentStatus.UNEMPLOYED.name,  # Unemployed
+    6: EmploymentStatus.RETIRED.name,  # Retired
+    7: EmploymentStatus.STUDENT.name,  # Student
+    8: EmploymentStatus.CARER.name,  # Looking after family/home
+    9: EmploymentStatus.LONG_TERM_DISABLED.name,  # Permanently sick/disabled
+    10: EmploymentStatus.SHORT_TERM_DISABLED.name,  # Temporarily sick/injured
+    11: EmploymentStatus.OTHER_INACTIVE.name,  # Other inactive
+}
 ESA_HEALTH_EMPLOYMENT_STATUSES = (
     EmploymentStatus.LONG_TERM_DISABLED.name,
     EmploymentStatus.SHORT_TERM_DISABLED.name,
+)
+SELF_EMPLOYED_STATUSES = (
+    EmploymentStatus.FT_SELF_EMPLOYED.name,
+    EmploymentStatus.PT_SELF_EMPLOYED.name,
 )
 FORMULA_MODELED_EDUCATION_GRANT_VARIABLES = (
     "childcare_grant",
@@ -78,6 +106,14 @@ BENEFITS_IN_OWN_RIGHT_REPORTED_COLUMNS = (
     "esa_contrib_reported",
     "esa_income_reported",
 )
+# Take-up flags anchored on reported receipt: flag -> (take-up rate
+# parameter, person-level report column). A benefit unit with any member
+# reporting receipt claims with certainty; the rest are filled at random.
+REPORTED_TAKEUP_ANCHORS = {
+    "would_claim_child_benefit": ("child_benefit", "child_benefit_reported"),
+    "would_claim_pc": ("pension_credit", "pension_credit_reported"),
+    "would_claim_uc": ("universal_credit", "universal_credit_reported"),
+}
 NON_ADVANCED_EDUCATION_LEVELS = (
     "PRE_PRIMARY",
     "PRIMARY",
@@ -88,6 +124,8 @@ NON_ADVANCED_EDUCATION_LEVELS = (
 # FRS government-training question variants use 10 or 13 for "None of these".
 FRS_APPROVED_TRAINING_CODES = tuple(range(1, 10))
 UNKNOWN_QUALIFYING_EDUCATION_OR_TRAINING_ENTRY_AGE = 1000
+# FRS RENTPROF: whether ROYYR1 is a profit (1) or a loss (2).
+FRS_RENTPROF_LOSS = 2
 
 
 @lru_cache(maxsize=None)
@@ -114,6 +152,33 @@ def require_variable(name: str, description: str) -> None:
             "the dataset is loaded. Upgrade policyengine-uk to a release that "
             "defines it."
         )
+
+
+def derive_employment_status_from_frs(empstati, is_adult_record) -> np.ndarray:
+    """Map FRS EMPSTATI codes to ``employment_status``.
+
+    Rows from the child table are CHILD. Every adult must carry a code in
+    ``FRS_EMPSTATI_EMPLOYMENT_STATUS``: a missing or unknown adult code fails
+    the build rather than falling back to a guessed status, as the old
+    fallback silently made code 11 (Other inactive) LONG_TERM_DISABLED.
+    """
+
+    codes = pd.Series(np.asarray(empstati, dtype=float))
+    is_adult_record = np.asarray(is_adult_record, dtype=bool)
+    adult_status = codes.map(FRS_EMPSTATI_EMPLOYMENT_STATUS).to_numpy()
+    unknown = is_adult_record & pd.isna(adult_status)
+    if unknown.any():
+        # Build logs are public, and adults are not survey households, so
+        # name the codes and never a count.
+        bad = codes[unknown]
+        listed = [f"{code:g}" for code in sorted(bad.dropna().unique())]
+        listed += ["blank"] if bad.isna().any() else []
+        raise ValueError(
+            "FRS adults have EMPSTATI codes missing from "
+            f"FRS_EMPSTATI_EMPLOYMENT_STATUS: {', '.join(listed)}. Map them "
+            "from the release's data dictionary."
+        )
+    return np.where(is_adult_record, adult_status, EmploymentStatus.CHILD.name)
 
 
 def derive_legacy_jobseeker_proxy(
@@ -215,6 +280,24 @@ def derive_esa_support_group_proxy(
     )
 
 
+def assign_reported_takeup(
+    person: pd.DataFrame,
+    benunit: pd.DataFrame,
+    flag: str,
+    year: int,
+    draws: np.ndarray,
+) -> np.ndarray:
+    """Take-up for one ``REPORTED_TAKEUP_ANCHORS`` flag: benefit units
+    reporting receipt claim, and the rest are filled at random so the share
+    claiming matches the take-up rate (see ``utils/takeup.py``)."""
+    rate_name, report_column = REPORTED_TAKEUP_ANCHORS[flag]
+    return assign_takeup_with_reported_anchors(
+        draws,
+        load_take_up_rate(rate_name, year),
+        reported_mask=reported_benunit_mask(person, benunit, report_column),
+    )
+
+
 def derive_receives_benefits_in_own_right(pe_person: pd.DataFrame) -> pd.Series:
     """Identify people reporting adult benefits that end QYP status."""
 
@@ -222,6 +305,47 @@ def derive_receives_benefits_in_own_right(pe_person: pd.DataFrame) -> pd.Series:
         pe_person[list(BENEFITS_IN_OWN_RIGHT_REPORTED_COLUMNS)].fillna(0).sum(axis=1)
         > 0
     )
+
+
+def frs_property_income(person: pd.DataFrame, household: pd.DataFrame) -> np.ndarray:
+    """Annual property income each person reports in the FRS.
+
+    Two FRS amounts, both weekly in the released data:
+
+    - SUBRENT, rent the household received for letting part of its home to
+      someone outside the household. The FRS asks every household (SubLet),
+      whatever its tenure, so renting and rent-free households count too. It
+      goes to the household reference person. ``household`` must be indexed
+      by ``household_id``.
+    - ROYYR1, the person's rent from other property, before tax and after
+      allowable expenses. The questionnaire cannot take a negative amount,
+      so a loss is entered as a positive amount with RENTPROF = 2 (question
+      RentProf, "Is that a profit or a loss from the property?"). A loss
+      counts as zero: it is not income, policyengine-uk has no property loss
+      input, and it is not set against the household's SUBRENT.
+
+    SUBRENT is used as reported. SUBALLOW records whether it is before (1)
+    or after (2) allowable expenses, but the FRS collects no expense amount
+    to take off the before-expenses answers.
+
+    Negative values are FRS missing-value codes (-1 to -9), not amounts, so
+    each amount is floored at zero before the two are added.
+
+    CVPAY is not included. It is the rent that a boarder or lodger pays the
+    householder, and it sits on the boarder's or lodger's own adult record.
+    The FRS question (CvPay) asks how much rent [name] paid for board and
+    lodging, after deducting any state benefits to help with rent.
+    """
+    is_head = person.hrpid == 1
+    persons_household_subrent = (
+        household.subrent.clip(lower=0).reindex(person.household_id).fillna(0).values
+    )
+    rent_from_other_property = person.royyr1.clip(lower=0).where(
+        person.rentprof != FRS_RENTPROF_LOSS, 0
+    )
+    return (
+        (is_head * persons_household_subrent + rent_from_other_property) * WEEKS_IN_YEAR
+    ).values
 
 
 def derive_is_in_non_advanced_education(
@@ -394,6 +518,97 @@ def derive_is_parent_from_frs_microdata(
     )
     is_adult_record = np.isin(np.asarray(person_ids), np.asarray(adult_person_ids))
     return is_adult_record & has_dependent_children
+
+
+def derive_all_claimants_over_state_pension_age(
+    person_benunit_ids,
+    is_claimant_or_partner,
+    is_over_state_pension_age,
+    benunit_ids,
+) -> np.ndarray:
+    """Identify benefit units whose claimant and any partner have all reached
+    State Pension age.
+
+    Such a unit cannot claim Universal Credit (Welfare Reform Act 2012
+    s.4(1)(b)). ``is_claimant_or_partner`` should be the variable that
+    ``claimant_or_partner_variable`` names, so the rule matches the
+    pension-age route of policyengine-uk's ``housing_benefit_eligible``.
+    """
+
+    claimant = np.asarray(is_claimant_or_partner, dtype=bool)
+    over = claimant & np.asarray(is_over_state_pension_age, dtype=bool)
+    counts = (
+        pd.DataFrame(
+            {
+                "benunit": np.asarray(person_benunit_ids),
+                "claimants": claimant.astype(int),
+                "over": over.astype(int),
+            }
+        )
+        .groupby("benunit")[["claimants", "over"]]
+        .sum()
+        .reindex(np.asarray(benunit_ids), fill_value=0)
+    )
+    return ((counts.claimants > 0) & (counts.over == counts.claimants)).to_numpy()
+
+
+def derive_is_claimant_or_partner_from_frs_microdata(
+    person_ids,
+    person_benunit_ids,
+    adult_person_ids,
+) -> np.ndarray:
+    """Identify each FRS benefit unit's single adult or couple.
+
+    An FRS benefit unit is one adult or a couple plus any dependent children.
+    The adult table holds the head (UPERSON 1) and any partner (UPERSON 2);
+    the child table holds the dependent children. Any other adult in the
+    household, such as a grown-up son or daughter, forms and heads their own
+    benefit unit. So adult-table membership is policyengine-uk's
+    `is_claimant_or_partner`, which the model otherwise infers from ages.
+    """
+
+    is_adult_record = np.isin(np.asarray(person_ids), np.asarray(adult_person_ids))
+    per_benunit = pd.Series(is_adult_record).groupby(np.asarray(person_benunit_ids))
+    counts = per_benunit.sum()
+    if not counts.between(1, 2).all():
+        raise ValueError(
+            "Every FRS benefit unit needs one or two adult-table records; "
+            f"{int((~counts.between(1, 2)).sum())} benefit units do not."
+        )
+    return is_adult_record
+
+
+def derive_uc_is_in_gainful_self_employment(
+    employment_status, self_employment_income, employment_income
+) -> np.ndarray:
+    """Whether each person is in gainful self-employment for Universal Credit.
+
+    UC Regs 2013 reg 64(a) asks whether the person carries on a trade as their
+    main employment. DWP's Advice for Decision Making starts from hours
+    (H4031) but lets earnings outweigh them: someone who works more hours as
+    an employee but earns more from self-employment is likely to be gainfully
+    self-employed (H4034). So the flag is true for:
+
+    - a self-employed main job (FRS EMPSTATI, the job the respondent names as
+      their dominant activity, else the one with more hours), whatever its
+      profit: a trade can make a loss or break even and still be carried on
+      in expectation of profit (ADM H4013, H4054, H4503);
+    - a side trade whose profit is above the person's employment income.
+
+    policyengine-uk's default reads any self-employment income other than
+    zero as gainful self-employment, and none as none.
+
+    The flag is fixed from survey-year (or SPI-imputed) incomes. Uprating
+    reprices the two incomes by different indices, so in a projected year a
+    flagged side trade can earn less than the job, and the reverse; the flag
+    does not follow.
+    """
+    self_employed_main_job = np.isin(
+        np.asarray(employment_status, dtype=object), SELF_EMPLOYED_STATUSES
+    )
+    profit = np.asarray(self_employment_income, dtype=float)
+    pay = np.asarray(employment_income, dtype=float)
+    return self_employed_main_job | ((profit > 0) & (profit > pay))
 
 
 def _as_non_negative_array(values) -> np.ndarray:
@@ -574,6 +789,41 @@ def validate_frs_survey_year(raw_frs_folder, year: int) -> None:
         )
 
 
+def derive_pension_credit_reported_capital(benunit: pd.DataFrame) -> np.ndarray:
+    """Each benefit unit's capital as the FRS records it, for Pension Credit.
+
+    Uses ``TOTCAPB4``, DWP's derived benefit-unit total of the adults' savings
+    and investments, which its below-average-resources statistics use in place
+    of ``TOTCAPB3`` since it became available in 2019/20; ``TOTCAPB3`` is the
+    fallback for earlier survey years. Pension Credit counts the claimant's
+    capital and, under the State Pension Credit Act 2002 s. 5, the partner's,
+    and this is a benefit-unit measure. It is an approximation of Pension
+    Credit capital, not the assessed figure: it covers financial assets only
+    (second homes and land, which Pension Credit also counts, are not in it),
+    and no Schedule V disregard or reg. 19 valuation is applied to it. The
+    household wealth imputation instead draws a household's wealth from Wealth
+    and Assets Survey households with similar income, composition, tenure and
+    region, with no information on means-tested receipt, and policyengine-uk
+    spreads it over the household's pension-age adults.
+
+    A missing or negative value gives -1, so policyengine-uk falls back to the
+    household proxy.
+    """
+    capital = np.full(len(benunit), np.nan)
+    for column in ("totcapb3", "totcapb4"):  # later columns take precedence
+        if column in benunit.columns:
+            # Plain float64, so nullable (pd.NA) inputs become NaN and the
+            # validity mask is a plain bool array with no missing entries.
+            values = (
+                pd.to_numeric(benunit[column], errors="coerce")
+                .astype("float64")
+                .to_numpy(dtype=float, na_value=np.nan)
+            )
+            valid = np.isfinite(values) & (values >= 0)
+            capital = np.where(valid, values, capital)
+    return np.where(np.isfinite(capital) & (capital >= 0), capital, -1.0)
+
+
 def create_frs(
     raw_frs_folder: str,
     year: int,
@@ -732,6 +982,13 @@ def create_frs(
         benunit_ids=pe_benunit.benunit_id,
         dependent_children=dependent_children,
     )
+    pe_person["is_claimant_or_partner"] = (
+        derive_is_claimant_or_partner_from_frs_microdata(
+            person_ids=pe_person.person_id,
+            person_benunit_ids=pe_person.person_benunit_id,
+            adult_person_ids=frs["adult"].person_id,
+        )
+    )
     MARITAL = [
         "MARRIED",
         "SINGLE",
@@ -858,23 +1115,9 @@ def create_frs(
         "UPPER_SECONDARY"
     )
 
-    # Add employment status
-    EMPLOYMENTS = [
-        "CHILD",
-        "FT_EMPLOYED",
-        "PT_EMPLOYED",
-        "FT_SELF_EMPLOYED",
-        "PT_SELF_EMPLOYED",
-        "UNEMPLOYED",
-        "RETIRED",
-        "STUDENT",
-        "CARER",
-        "LONG_TERM_DISABLED",
-        "SHORT_TERM_DISABLED",
-    ]
-    pe_person["employment_status"] = categorical(
-        person.empstati, 1, range(12), EMPLOYMENTS
-    ).fillna("LONG_TERM_DISABLED")
+    pe_person["employment_status"] = derive_employment_status_from_frs(
+        person.empstati, person.person_id.isin(frs["adult"].person_id)
+    )
 
     # Add employer sector of the main job from FRS `mjobsect`
     # (1 = private, 2 = public; missing/blank = not in paid work).
@@ -1049,6 +1292,15 @@ def create_frs(
     ) * WEEKS_IN_YEAR
 
     pe_person["self_employment_income"] = np.maximum(0, person.seincam2) * WEEKS_IN_YEAR
+    # policyengine-uk releases without this input skip the column and keep
+    # their formula.
+    pe_person["uc_is_in_gainful_self_employment"] = (
+        derive_uc_is_in_gainful_self_employment(
+            pe_person.employment_status,
+            pe_person.self_employment_income,
+            pe_person.employment_income,
+        )
+    )
 
     INVERTED_BASIC_RATE = 1.25
 
@@ -1087,25 +1339,7 @@ def create_frs(
         )
         * 52,
     )
-    is_head = person.hrpid == 1
-    household_property_income = (
-        household.tentyp2.isin((5, 6)) * household.subrent
-    )  # Owned and subletting
-    persons_household_property_income = (
-        pd.Series(
-            household_property_income[person.household_id].values,
-            index=person.person_id,
-        )
-        .fillna(0)
-        .values
-    )
-    pe_person["property_income"] = (
-        np.maximum(
-            0,
-            is_head * persons_household_property_income + person.cvpay + person.royyr1,
-        )
-        * WEEKS_IN_YEAR
-    )
+    pe_person["property_income"] = frs_property_income(person, household)
     maintenance_to_self = np.maximum(
         pd.Series(np.where(person.mntus1 == 2, person.mntusam1, person.mntamt1)).fillna(
             0
@@ -1413,43 +1647,20 @@ def create_frs(
 
     sim = Microsimulation(dataset=dataset)
     region = sim.populations["benunit"].household("region", dataset.time_period)
-    lha_category = sim.calculate("LHA_category", year)
-    brma = np.empty(len(region), dtype=object)
+    lha_category = np.asarray(sim.calculate("LHA_category", year))
 
-    # Sample from a random BRMA in the region, weighted by the number of observations in each BRMA.
-    # Use a seeded generator so the assignment is reproducible across builds;
-    # pandas .sample() otherwise draws from the unseeded global numpy RNG.
-    lha_list_of_rents = pd.read_csv(STORAGE_FOLDER / "lha_list_of_rents.csv.gz")
-    lha_list_of_rents = lha_list_of_rents.copy()
+    # Draw each benefit unit's BRMA in proportion to the private-rented
+    # households in each of its region's BRMAs with the matching number of
+    # bedrooms. Use a seeded generator so the assignment is reproducible.
     brma_rng = np.random.default_rng(0)
+    brma = assign_brmas(region, lha_category, brma_rng)
 
-    for possible_region in lha_list_of_rents.region.unique():
-        for possible_lha_category in lha_list_of_rents.lha_category.unique():
-            lor_mask = (lha_list_of_rents.region == possible_region) & (
-                lha_list_of_rents.lha_category == possible_lha_category
-            )
-            mask = (region == possible_region) & (lha_category == possible_lha_category)
-            brma[mask] = lha_list_of_rents[lor_mask].brma.sample(
-                n=len(region[mask]), replace=True, random_state=brma_rng
-            )
-
-    # Convert benunit-level BRMAs to household-level BRMAs (pick a random one)
-
-    df = pd.DataFrame(
-        {
-            "brma": brma,
-            "household_id": sim.populations["benunit"].household(
-                "household_id", sim.dataset.time_period
-            ),
-        }
+    household_brma = pick_household_brmas(
+        brma,
+        sim.populations["benunit"].household("household_id", dataset.time_period),
+        brma_rng,
     )
-
-    df = df.groupby("household_id").brma.aggregate(
-        lambda x: x.sample(n=1, random_state=brma_rng).iloc[0]
-    )
-    brmas = df[sim.calculate("household_id")].values
-
-    pe_household["brma"] = brmas
+    pe_household["brma"] = household_brma[sim.calculate("household_id")].values
 
     pe_person = add_disability_benefit_flags_from_reported_amounts(
         pe_person,
@@ -1491,9 +1702,6 @@ def create_frs(
     generator = np.random.default_rng(seed=100)
 
     # Load take-up rates from parameter files
-    child_benefit_rate = load_take_up_rate("child_benefit", year)
-    pension_credit_rate = load_take_up_rate("pension_credit", year)
-    universal_credit_rate = load_take_up_rate("universal_credit", year)
     marriage_allowance_rate = load_take_up_rate("marriage_allowance", year)
     child_benefit_opts_out_rate = load_take_up_rate("child_benefit_opts_out_rate", year)
     tfc_rate = load_take_up_rate("tax_free_childcare", year)
@@ -1511,18 +1719,6 @@ def create_frs(
     # who report positive receipt of a benefit are assigned takeup=True with
     # certainty; the remaining non-reporters are filled probabilistically to
     # hit the aggregate target rate. See policyengine_uk_data/utils/takeup.py.
-    from policyengine_uk_data.utils.takeup import (
-        UC_MANAGED_MIGRATION_SEED,
-        assign_takeup_with_reported_anchors,
-        assign_uc_claim_at_legacy_closure,
-    )
-
-    def _reported_benunit_mask(person_column: str) -> np.ndarray:
-        reporter_benunits = set(
-            pe_person.loc[pe_person[person_column] > 0, "person_benunit_id"].values
-        )
-        return pe_benunit["benunit_id"].isin(reporter_benunits).values
-
     # Person-level
     pe_person["would_claim_marriage_allowance"] = (
         generator.random(len(pe_person)) < marriage_allowance_rate
@@ -1530,23 +1726,36 @@ def create_frs(
 
     # Benefit unit-level — anchor on any adult in the benefit unit having
     # reported positive receipt in the FRS benefits table.
-    pe_benunit["would_claim_child_benefit"] = assign_takeup_with_reported_anchors(
+    pe_benunit["would_claim_child_benefit"] = assign_reported_takeup(
+        pe_person,
+        pe_benunit,
+        "would_claim_child_benefit",
+        year,
         generator.random(len(pe_benunit)),
-        child_benefit_rate,
-        reported_mask=_reported_benunit_mask("child_benefit_reported"),
     )
     pe_benunit["child_benefit_opts_out"] = (
         generator.random(len(pe_benunit)) < child_benefit_opts_out_rate
     )
-    pe_benunit["would_claim_pc"] = assign_takeup_with_reported_anchors(
-        generator.random(len(pe_benunit)),
-        pension_credit_rate,
-        reported_mask=_reported_benunit_mask("pension_credit_reported"),
+    # The enhanced dataset redraws this once entitlement can be computed
+    # (datasets/pension_credit_takeup.py).
+    pe_benunit["would_claim_pc"] = assign_reported_takeup(
+        pe_person, pe_benunit, "would_claim_pc", year, generator.random(len(pe_benunit))
     )
-    pe_benunit["would_claim_uc"] = assign_takeup_with_reported_anchors(
-        generator.random(len(pe_benunit)),
-        universal_credit_rate,
-        reported_mask=_reported_benunit_mask("universal_credit_reported"),
+    # A benefit unit whose claimant and any partner have all reached State
+    # Pension age cannot claim Universal Credit, so it never gets
+    # would_claim_uc, even if it reports UC. The draw still covers every unit,
+    # so the random stream and every other unit's value are unchanged. Ages
+    # are not rolled forward, so if State Pension age rises above a claimant's
+    # survey age in a later year, that unit stays without would_claim_uc there.
+    pe_benunit["would_claim_uc"] = assign_reported_takeup(
+        pe_person, pe_benunit, "would_claim_uc", year, generator.random(len(pe_benunit))
+    ) & ~derive_all_claimants_over_state_pension_age(
+        person_benunit_ids=sim.calculate("person_benunit_id", year).values,
+        is_claimant_or_partner=sim.calculate(
+            claimant_or_partner_variable(sim.tax_benefit_system.variables), year
+        ).values,
+        is_over_state_pension_age=sim.calculate("is_SP_age", year).values,
+        benunit_ids=pe_benunit.benunit_id,
     )
     # Whether a legacy-benefit family claims Universal Credit once its legacy
     # benefits close, at DWP's Move to Universal Credit claim rates. Its own
@@ -1646,6 +1855,13 @@ def create_frs(
     # Add marital status at the benefit unit level
 
     pe_benunit["is_married"] = benunit.famtypb2.isin([5, 7])
+
+    # Pension Credit capital as the FRS records it for the benefit unit, in
+    # place of the household wealth proxy (policyengine-uk
+    # `pension_credit_reported_capital`).
+    pe_benunit["pension_credit_reported_capital"] = (
+        derive_pension_credit_reported_capital(benunit)
+    )
 
     # Assign property_purchased to a share of households matching the UK
     # housing transaction rate, so only genuine purchasers are charged SDLT.
