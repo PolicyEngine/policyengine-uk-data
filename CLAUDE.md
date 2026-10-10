@@ -12,6 +12,7 @@ The purpose of this repo is to build the .h5 files that feed as input into the p
 2. **NEVER modify `upload_completed_datasets.py` or `data_upload.py` to change upload destinations** without explicit confirmation from the data controller (currently Nikhil Woodruff).
 3. **NEVER print, log, or output individual-level records** from the dataset. Aggregates (sums, means, counts, weighted totals) are fine; individual rows are not.
 4. **If you see a private/public repo split, assume it is intentional** — ask why before changing it.
+5. **CI reaches Hugging Face only through short-lived tokens.** `push.yaml` wraps each Hugging Face step in `.github/with-hf-token.sh`, which exchanges the job's GitHub OIDC token for a one-hour token scoped to `policyengine/policyengine-uk-data-private` (a Trusted Publisher on that repo matches this repository, `main` and `push.yaml`). NEVER add a Hugging Face token secret back to a workflow; `tests/test_ci_hf_auth.py` enforces this.
 
 ## General principles
 
