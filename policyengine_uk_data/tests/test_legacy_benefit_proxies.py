@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 import pytest
 import policyengine_uk
+from hypothesis import given
+from hypothesis import strategies as st
 import policyengine_uk_data.datasets.frs as frs_module
 
 from policyengine_uk_data.datasets.frs import (
@@ -160,20 +162,71 @@ def test_qualifying_young_person_education_inputs_use_current_education():
     assert result.tolist() == [False, True, True, True, False, False]
 
 
-def test_approved_training_uses_frs_government_training_codes():
-    person = pd.DataFrame({"train": [-1, 0, 1, 2, 9, 10, 13, np.nan]})
+def test_approved_training_reads_frs_trainee_flag_for_dependants():
+    # Rows as create_frs passes them: numeric after to_numeric and fillna(0).
+    person = pd.DataFrame(
+        {
+            "person_id": [1, 2, 3, 4, 5, 6],
+            "trainee": [1.0, 2.0, 0.0, -1.0, 1.0, 2.0],
+        }
+    )
 
-    result = derive_is_in_approved_training_from_frs_person(person)
+    result = derive_is_in_approved_training_from_frs_person(
+        person, adult_person_ids=[5, 6]
+    )
 
-    assert result.tolist() == [False, False, True, True, True, False, False, False]
+    # Person 5 is an adult-table trainee: not an FRS dependant, so not flagged.
+    assert result.tolist() == [True, False, False, False, False, False]
 
 
-def test_approved_training_defaults_false_when_frs_field_missing():
-    person = pd.DataFrame({"age": [16, 19]})
+def _is_one(code) -> bool:
+    try:
+        return float(code) == 1.0
+    except (TypeError, ValueError):
+        return False
 
-    result = derive_is_in_approved_training_from_frs_person(person)
 
-    assert result.tolist() == [False, False]
+@given(
+    st.lists(
+        st.tuples(
+            st.one_of(
+                st.integers(-9, 20),
+                st.sampled_from([1.0, 2.0, 0.0, np.nan, " ", "1", "2", ""]),
+            ),
+            st.booleans(),
+        ),
+        max_size=30,
+    )
+)
+def test_approved_training_is_exactly_a_dependant_answering_yes(rows):
+    codes = [code for code, _ in rows]
+    is_adult = [adult for _, adult in rows]
+    person = pd.DataFrame(
+        {
+            "person_id": range(len(rows)),
+            "trainee": pd.Series(codes, dtype=object),
+        }
+    )
+    adult_person_ids = [i for i, adult in enumerate(is_adult) if adult]
+
+    result = derive_is_in_approved_training_from_frs_person(person, adult_person_ids)
+
+    assert result.dtype == bool
+    assert result.index.equals(person.index)
+    assert result.tolist() == [
+        _is_one(code) and not adult for code, adult in zip(codes, is_adult)
+    ]
+    # No adult-table record is ever flagged, whatever it answers.
+    assert not result[person.person_id.isin(adult_person_ids)].any()
+
+
+def test_approved_training_requires_frs_trainee_column():
+    # FRS releases carry TRAIN2 and TRAINEE but no TRAIN; reading a missing
+    # column must fail the build, not code everyone as untrained.
+    person = pd.DataFrame({"person_id": [1, 2], "age": [16, 19], "train2": [9, 9]})
+
+    with pytest.raises(KeyError, match="TRAINEE"):
+        derive_is_in_approved_training_from_frs_person(person, adult_person_ids=[])
 
 
 def test_qyp_entry_age_proxy_caps_current_education_or_training_at_18():
@@ -382,7 +435,14 @@ class FakeMicrosimulation:
         raise KeyError(variable)
 
 
-def create_single_adult_frs(tmp_path, monkeypatch, empstati=8, with_child=False):
+def create_single_adult_frs(
+    tmp_path,
+    monkeypatch,
+    empstati=8,
+    with_child=False,
+    child_overrides=None,
+    adult_overrides=None,
+):
     monkeypatch.setattr(policyengine_uk, "Microsimulation", FakeMicrosimulation)
     monkeypatch.setattr(frs_module, "load_take_up_rate", lambda *args, **kwargs: 0.0)
     monkeypatch.setattr(frs_module, "load_parameter", lambda *args, **kwargs: 0.0)
@@ -451,6 +511,7 @@ def create_single_adult_frs(tmp_path, monkeypatch, empstati=8, with_child=False)
                 "tothours": 0,
                 "tuborr": 0,
                 "typeed2": 0,
+                "trainee": 2,
                 "uperson": 1,
                 "allpay2": 0,
                 "royyr2": 0,
@@ -468,13 +529,14 @@ def create_single_adult_frs(tmp_path, monkeypatch, empstati=8, with_child=False)
             }
         ]
     )
+    adult = adult.assign(**(adult_overrides or {}))
     # The FRS child table has no EMPSTATI column.
     child_columns = adult.columns.drop("empstati")
     child = pd.DataFrame(columns=child_columns)
     if with_child:
         child = pd.DataFrame(
             [{**dict.fromkeys(child_columns, 0), "sernum": 100, "benunit": 1}]
-        ).assign(person=2, age=5, uperson=2)
+        ).assign(**{"person": 2, "age": 5, "uperson": 2, **(child_overrides or {})})
     benunit = pd.DataFrame([{"sernum": 100, "benunit": 1, "famtypb2": 1}])
     househol = pd.DataFrame(
         [
@@ -601,3 +663,49 @@ def test_create_frs_child_rows_are_child(tmp_path, monkeypatch):
 def test_create_frs_rejects_unknown_adult_empstati(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="EMPSTATI"):
         create_single_adult_frs(tmp_path, monkeypatch, empstati=12)
+
+
+@pytest.mark.parametrize("age", [16, 17, 18, 19])
+def test_create_frs_codes_child_table_trainees_as_approved_training(
+    tmp_path, monkeypatch, age
+):
+    # DWP's FRS counts a 16- to 19-year-old outside full-time education as a
+    # dependent child only when in unwaged government training (TRAINEE 1).
+    person = create_single_adult_frs(
+        tmp_path,
+        monkeypatch,
+        empstati=11,
+        with_child=True,
+        child_overrides={"age": age, "fted": 2, "educft": 2, "trainee": 1},
+    ).person.set_index("person_id")
+    trainee = person.loc[100_002]
+
+    assert trainee["current_education"] == "NOT_IN_EDUCATION"
+    assert trainee["is_in_approved_training"]
+    assert not person.loc[100_001, "is_in_approved_training"]
+    assert trainee["age_started_or_accepted_current_education_or_training"] == min(
+        age, 18
+    )
+    assert trainee[
+        "is_before_universal_credit_qualifying_young_person_terminal_date"
+    ] == (age == 19)
+
+
+@pytest.mark.parametrize("child_trainee", [1, 2])
+def test_create_frs_leaves_adult_table_trainees_out_of_approved_training(
+    tmp_path, monkeypatch, child_trainee
+):
+    # An adult-table trainee is not an FRS dependant, and their training may be
+    # waged, so only the child-table record can be in approved training.
+    person = create_single_adult_frs(
+        tmp_path,
+        monkeypatch,
+        empstati=11,
+        with_child=True,
+        child_overrides={"age": 17, "fted": 2, "educft": 2, "trainee": child_trainee},
+        adult_overrides={"age": 0, "age80": 18, "trainee": 1},
+    ).person.set_index("person_id")
+
+    assert person.loc[100_001, "age"] == 18
+    assert not person.loc[100_001, "is_in_approved_training"]
+    assert person.loc[100_002, "is_in_approved_training"] == (child_trainee == 1)
