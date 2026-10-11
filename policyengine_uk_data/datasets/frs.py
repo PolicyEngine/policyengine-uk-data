@@ -374,15 +374,15 @@ def derive_is_in_approved_training_from_frs_person(
     """Identify FRS dependants in unwaged government training.
 
     The FRS counts a 16- to 19-year-old as a dependent child when they are in
-    full-time non-advanced education or unwaged government training, so a
-    child-table record aged 16 to 19 outside full-time education is a trainee
-    and carries TRAINEE = 1.
+    full-time non-advanced education or unwaged government training. In each
+    of FRS 2020-21, 2022-23, 2023-24 and 2024-25, every child-table record
+    aged 16 to 19 outside full-time education carries TRAINEE = 1.
 
-    Adult-table records are left out. The FRS has already decided they are not
-    dependants, and their TRAINEE answer does not say the training is unwaged,
-    so it may be training under a contract of employment, which is not approved
-    training (UC Regulations 2013, reg. 5(3)). TRAIN2 names the scheme but only
-    the adult table has it.
+    Leaving adult-table records out is a proxy. The FRS has already decided
+    they are not dependants, and their TRAINEE answer does not say the training
+    is unwaged, so it may be training under a contract of employment, which is
+    not approved training (UC Regulations 2013, reg. 5(3)). TRAIN2 names the
+    scheme but only the adult table has it.
 
     The build fails when TRAINEE is missing rather than marking nobody as in
     training: an earlier version read TRAIN2's question name, ``train``, which

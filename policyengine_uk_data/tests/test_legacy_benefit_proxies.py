@@ -703,8 +703,9 @@ def test_create_frs_leaves_adult_table_trainees_out_of_approved_training(
         empstati=11,
         with_child=True,
         child_overrides={"age": 17, "fted": 2, "educft": 2, "trainee": child_trainee},
-        adult_overrides={"age80": 18, "trainee": 1},
+        adult_overrides={"age": 0, "age80": 18, "trainee": 1},
     ).person.set_index("person_id")
 
+    assert person.loc[100_001, "age"] == 18
     assert not person.loc[100_001, "is_in_approved_training"]
     assert person.loc[100_002, "is_in_approved_training"] == (child_trainee == 1)
