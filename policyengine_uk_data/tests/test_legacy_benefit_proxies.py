@@ -1,9 +1,11 @@
 import numpy as np
 import pandas as pd
+import pytest
 import policyengine_uk
 import policyengine_uk_data.datasets.frs as frs_module
 
 from policyengine_uk_data.datasets.frs import (
+    FRS_EMPSTATI_EMPLOYMENT_STATUS,
     add_legacy_benefit_proxies,
     attach_legacy_benefit_proxies_from_frs_person,
     apply_legacy_benefit_proxies,
@@ -299,6 +301,7 @@ class FakeMicrosimulation:
             "FakeTaxBenefitSystem",
             (),
             {
+                "variables": {"is_adult": None},
                 "parameters": lambda self, year: type(
                     "FakeParametersRoot",
                     (),
@@ -349,7 +352,7 @@ class FakeMicrosimulation:
                             },
                         )()
                     },
-                )()
+                )(),
             },
         )()
 
@@ -359,7 +362,13 @@ class FakeMicrosimulation:
         if variable == "household_id":
             return np.array([100])
         if variable == "state_pension_age":
-            return pd.Series([66])
+            return pd.Series([66] * len(self.dataset.person))
+        if variable == "person_benunit_id":
+            return pd.Series(self.dataset.person.person_benunit_id.values)
+        if variable == "is_adult":
+            return pd.Series(self.dataset.person.age.values >= 18)
+        if variable == "is_SP_age":
+            return pd.Series(self.dataset.person.age.values >= 66)
         if variable in (
             "childcare_grant",
             "parents_learning_allowance",
@@ -373,18 +382,8 @@ class FakeMicrosimulation:
         raise KeyError(variable)
 
 
-def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
-    original_read_csv = frs_module.pd.read_csv
-
-    def fake_read_csv(path, *args, **kwargs):
-        if str(path).endswith("lha_list_of_rents.csv.gz"):
-            return pd.DataFrame(
-                {"region": ["LONDON"], "lha_category": ["A"], "brma": ["BRMA1"]}
-            )
-        return original_read_csv(path, *args, **kwargs)
-
+def create_single_adult_frs(tmp_path, monkeypatch, empstati=8, with_child=False):
     monkeypatch.setattr(policyengine_uk, "Microsimulation", FakeMicrosimulation)
-    monkeypatch.setattr(frs_module.pd, "read_csv", fake_read_csv)
     monkeypatch.setattr(frs_module, "load_take_up_rate", lambda *args, **kwargs: 0.0)
     monkeypatch.setattr(frs_module, "load_parameter", lambda *args, **kwargs: 0.0)
     monkeypatch.setattr(
@@ -426,7 +425,7 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
                 "educqual": 0,
                 "eduma": 0,
                 "edumaamt": 0,
-                "empstati": 8,
+                "empstati": empstati,
                 "mjobsect": 0,
                 "sic": 0,
                 "fsbval": 0,
@@ -442,6 +441,7 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
                 "mntus1": 0,
                 "mntusam1": 0,
                 "redamt": 0,
+                "rentprof": 0,
                 "royyr1": 0,
                 "seincam2": 0,
                 "sex": 1,
@@ -468,7 +468,13 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
             }
         ]
     )
-    child = pd.DataFrame(columns=adult.columns)
+    # The FRS child table has no EMPSTATI column.
+    child_columns = adult.columns.drop("empstati")
+    child = pd.DataFrame(columns=child_columns)
+    if with_child:
+        child = pd.DataFrame(
+            [{**dict.fromkeys(child_columns, 0), "sernum": 100, "benunit": 1}]
+        ).assign(person=2, age=5, uperson=2)
     benunit = pd.DataFrame([{"sernum": 100, "benunit": 1, "famtypb2": 1}])
     househol = pd.DataFrame(
         [
@@ -536,7 +542,11 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
     for name, table in raw_tables.items():
         table.to_csv(tmp_path / f"{name}.tab", sep="\t", index=False)
 
-    dataset = create_frs(tmp_path, 2025)
+    return create_frs(tmp_path, 2025)
+
+
+def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
+    dataset = create_single_adult_frs(tmp_path, monkeypatch)
 
     assert {
         "legacy_jobseeker_proxy",
@@ -548,8 +558,10 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
         "age_started_or_accepted_current_education_or_training",
         "is_before_universal_credit_qualifying_young_person_terminal_date",
         "is_parent",
+        "is_claimant_or_partner",
     }.issubset(dataset.person.columns)
     assert not dataset.person["is_parent"].iloc[0]
+    assert dataset.person["is_claimant_or_partner"].iloc[0]
     assert not dataset.person["is_in_non_advanced_education"].iloc[0]
     assert not dataset.person["is_in_approved_training"].iloc[0]
     assert (
@@ -561,3 +573,31 @@ def test_create_frs_smoke_includes_legacy_proxy_columns(tmp_path, monkeypatch):
     ].iloc[0]
     assert dataset.person["education_grants"].iloc[0] == 100
     assert dataset.person["disabled_students_allowance_eligible_expenses"].iloc[0] == 0
+
+
+@pytest.mark.parametrize("empstati", sorted(FRS_EMPSTATI_EMPLOYMENT_STATUS))
+def test_create_frs_maps_every_empstati_code(tmp_path, monkeypatch, empstati):
+    person = create_single_adult_frs(tmp_path, monkeypatch, empstati).person
+
+    status = person["employment_status"].iloc[0]
+    assert status == FRS_EMPSTATI_EMPLOYMENT_STATUS[empstati]
+    # A working-age adult reporting no hours: only the sick/disabled codes
+    # (9 permanently, 10 temporarily) are ESA health states.
+    assert person["esa_health_condition_proxy"].iloc[0] == (empstati in (9, 10))
+    assert person["esa_support_group_proxy"].iloc[0] == (empstati == 9)
+
+
+def test_create_frs_child_rows_are_child(tmp_path, monkeypatch):
+    person = create_single_adult_frs(
+        tmp_path, monkeypatch, empstati=11, with_child=True
+    ).person.set_index("person_id")
+
+    assert person["employment_status"].to_dict() == {
+        100_001: "OTHER_INACTIVE",
+        100_002: "CHILD",
+    }
+
+
+def test_create_frs_rejects_unknown_adult_empstati(tmp_path, monkeypatch):
+    with pytest.raises(ValueError, match="EMPSTATI"):
+        create_single_adult_frs(tmp_path, monkeypatch, empstati=12)
