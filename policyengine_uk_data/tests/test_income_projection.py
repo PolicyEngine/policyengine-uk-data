@@ -174,36 +174,43 @@ def test_spi_year_is_the_start_of_the_configured_tax_year():
     assert _SPI_YEAR == 2000 + start
 
 
-def test_calibration_reads_the_projected_spi_targets(projections):
+def test_calibration_reads_the_projected_spi_targets(
+    projections, base_targets, monkeypatch
+):
     """Calibration (build_loss_matrix) fetches targets without a year filter,
     and the registry keeps only the first target of each name. Every SPI band
-    must therefore be one target carrying all its years; if the projected
-    years sit on a second target of the same name they are dropped, and the
-    base-year outturn is carried forward unuprated instead."""
+    must therefore be one target carrying its outturn and every projected
+    year; if the projected years sit on a second target of the same name they
+    are dropped, and the outturn is carried forward unuprated instead.
+
+    The official table is served from the committed incomes.csv, so the
+    outturn targets are always present and the test needs no download.
+    """
     from policyengine_uk_data.targets import get_all_targets
     from policyengine_uk_data.targets.build_loss_matrix import _resolve_value
-    from policyengine_uk_data.targets.sources.hmrc_spi import (
-        _PROPERTY_INCOME_SCALE,
-        INCOME_VARIABLES,
-        _format_band_label,
-        get_targets,
-    )
+    from policyengine_uk_data.targets.sources import hmrc_spi
 
-    names = [t.name for t in get_targets()]
+    def committed_table(include_aggregate: bool = True) -> pd.DataFrame:
+        if include_aggregate:
+            return base_targets
+        return _without_aggregate(base_targets).reset_index(drop=True)
+
+    monkeypatch.setattr(hmrc_spi, "get_income_band_table", committed_table)
+
+    names = [t.name for t in hmrc_spi.get_targets()]
     assert len(names) == len(set(names))
 
     spi = {t.name: t for t in get_all_targets() if t.source == "hmrc_spi"}
+    expected = _without_aggregate(projections[projections["year"] >= _SPI_YEAR])
     checked = 0
-    for row in _without_aggregate(projections).itertuples():
-        if row.year <= _SPI_YEAR:
-            continue
-        label = _format_band_label(
+    for row in expected.itertuples():
+        label = hmrc_spi._format_band_label(
             row.total_income_lower_bound, row.total_income_upper_bound
         )
-        for variable in INCOME_VARIABLES:
+        for variable in hmrc_spi.INCOME_VARIABLES:
             amount = getattr(row, f"{variable}_amount")
             if variable == "property_income":
-                amount *= _PROPERTY_INCOME_SCALE
+                amount *= hmrc_spi._PROPERTY_INCOME_SCALE
             amount_target = spi[f"hmrc/{variable}_income_band_{label}"]
             count_target = spi[f"hmrc/{variable}_count_income_band_{label}"]
             assert _resolve_value(amount_target, row.year) == pytest.approx(amount)
@@ -211,6 +218,9 @@ def test_calibration_reads_the_projected_spi_targets(projections):
                 getattr(row, f"{variable}_count")
             )
             checked += 2
-    assert checked == 2 * len(INCOME_VARIABLES) * len(
-        _without_aggregate(projections[projections["year"] > _SPI_YEAR])
-    )
+    assert checked == 2 * len(hmrc_spi.INCOME_VARIABLES) * len(expected)
+
+    years = set(projections["year"])
+    assert _SPI_YEAR in years
+    for target in spi.values():
+        assert set(target.values) == years, target.name
