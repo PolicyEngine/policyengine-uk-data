@@ -111,6 +111,7 @@ def main():
             "Impute student loan plan",
             "Assign Pension Credit take-up",
             "Clone and assign OA geography",
+            "Impute property purchases",
             "Calibrate constituency weights",
             "Calibrate local authority weights",
             "Export long local geography weights",
@@ -163,6 +164,7 @@ def main():
                 impute_salary_sacrifice,
                 impute_student_loan_plan,
                 uprate_property_by_region,
+                impute_property_purchases,
             )
 
             # Apply imputations with progress tracking
@@ -246,6 +248,12 @@ def main():
                     uprate_dataset,
                 )
                 update_dataset(materialize_calibration_step, "completed")
+
+            # Stocks and final household geography now exist at the calibration
+            # year. Supply independent purchase inputs before fitting SDLT.
+            update_dataset("Impute property purchases", "processing")
+            frs = impute_property_purchases(frs)
+            update_dataset("Impute property purchases", "completed")
 
             # Calibrate constituency weights with nested progress
 
@@ -417,7 +425,7 @@ def main():
                 "tiny_base_dataset": frs_release.tiny_base_dataset_file,
                 "tiny_enhanced_dataset": frs_release.tiny_enhanced_dataset_file,
                 "long_geography_weights": "local_geography_weights.csv.gz",
-                "imputations_applied": "consumption, wealth, VAT, services, income, capital_gains, cgt_band_donors, salary_sacrifice, student_loan_plan",
+                "imputations_applied": "consumption, wealth, VAT, services, income, capital_gains, cgt_band_donors, salary_sacrifice, student_loan_plan, property_purchases",
                 "calibration": "national, LA and  constituency targets",
                 "pension_credit_take_up": pension_credit_takeup,
             },

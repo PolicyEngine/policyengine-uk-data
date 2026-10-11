@@ -1,0 +1,82 @@
+description: Household additional-dwelling and non-residential purchase assumptions
+metadata:
+  label: Additional property purchases
+  reference:
+    - title: HMRC Annual Stamp Tax Statistics 2024 to 2025, Tables 6b, 8a and 8b
+      href: https://www.gov.uk/government/statistics/uk-stamp-tax-statistics
+    - title: HMRC Annual Stamp Tax Statistics 2024 to 2025, corrected tables
+      href: https://assets.publishing.service.gov.uk/media/69aef72fc78869bf8eb8a589/Annual_Stamps_2024_25_correction.ods
+
+# HMRC SDLT tables cover England and Northern Ireland (E+NI), transactions
+# of at least GBP 40,000, and financial years ending in the following March.
+# Transaction counts are rounded to 100; values and receipts to GBP 5 million.
+# All values below are pounds. Imputation fits E+NI weighted counts and values.
+# The purchase rate is target transactions / eligible E+NI weighted owners of
+# property stock of at least GBP 40,000; a seeded uniform threshold is selected
+# to give the closest attainable weighted count. The same threshold applies to
+# owners elsewhere in the UK, an explicit extrapolation without devolved targets.
+# Prices start from a seeded draw among band means (band value / transactions).
+# A common scale then fits the weighted purchase value with price equal to
+# min(stock, max(40,000, scale * draw)), so prices stay within HMRC's
+# transaction coverage and never exceed the owner's stock.
+# This is a capped, calibrated band-mean method, not an exact draw from the
+# price-band distribution conditional on stock. Rounded band counts are
+# normalised by their sum rather than by the headline count.
+#
+# Household HRAD is not separately published. The modelling choice is neutral
+# allocation using individuals' shares of all residential buyers in Table 8a:
+# transactions = 211,700 * 925,100 / (925,100 + 124,500) = 186,588.8624;
+# value = 77,970,000,000 * 335,515 / (335,515 + 44,690) = 68,805,261,766.6785.
+# Revenue is a reference benchmark, not fitted by imputation:
+# 5,435,000,000 * 9,145 / (9,145 + 1,230) = 4,790,657,831.3253.
+# This allocation is an assumption, not an observed household HRAD series.
+# Table 6b reports all-buyer gross HRAD SDLT before replacement-home refunds;
+# its surcharge-only receipts are GBP 2.790bn. The independent household lower
+# bounds implied by Tables 6b/8a are 87,200 transactions, GBP 33.280bn value,
+# and GBP 4.205bn gross receipts. They are bounds, not the selected targets.
+# For review, 2024-25 household HRAD targets and price bands are held flat across
+# survey/calibration years: there is no annual official household HRAD series
+# and this assumption is not a forecast. Non-residential targets use the
+# directly observed Table 8b individuals rows for 2023-24 and 2024-25, replacing
+# the older household rows in policyengine-uk's stamp_duty/statistics.yaml.
+values:
+  2013-01-01:
+    additional_residential: &additional_residential
+      transactions: 186588.8624237805
+      value: 68805261766.6785
+      revenue: 4790657831.325301
+      minimum_price: 40000
+      purchase_seed: 55601
+      price_seed: 55602
+      # Table 6b 2024-25: last band combines all five published bands over GBP 2m.
+      # Band sums differ slightly from headline totals because of rounding.
+      price_bands:
+        - {transactions: 113500, value: 16635000000} # Up to GBP 250,000
+        - {transactions: 60700, value: 21510000000} # GBP 250,001-500,000
+        - {transactions: 27500, value: 18770000000} # GBP 500,001-1,000,000
+        - {transactions: 5300, value: 6545000000} # GBP 1,000,001-1,500,000
+        - {transactions: 2000, value: 3515000000} # GBP 1,500,001-2,000,000
+        - {transactions: 2600, value: 10990000000} # Over GBP 2,000,000
+    non_residential:
+      # 2023-24 Table 8b individuals: 24,800 / GBP 6.955bn / GBP 230m.
+      # One representative mean price is used before stock-capped scaling.
+      transactions: 24800
+      value: 6955000000
+      revenue: 230000000
+      minimum_price: 40000
+      purchase_seed: 55603
+      price_seed: 55604
+      price_bands:
+        - {transactions: 24800, value: 6955000000}
+  2024-01-01:
+    additional_residential: *additional_residential
+    non_residential:
+      # 2024-25 Table 8b individuals: 25,000 / GBP 7.640bn / GBP 245m.
+      transactions: 25000
+      value: 7640000000
+      revenue: 245000000
+      minimum_price: 40000
+      purchase_seed: 55603
+      price_seed: 55604
+      price_bands:
+        - {transactions: 25000, value: 7640000000}
