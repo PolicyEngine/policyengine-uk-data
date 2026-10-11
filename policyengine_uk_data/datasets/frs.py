@@ -112,8 +112,10 @@ NON_ADVANCED_EDUCATION_LEVELS = (
     "UPPER_SECONDARY",
     "POST_SECONDARY",
 )
-# FRS TRAINEE, "Whether on a government scheme for employment training": 1 yes,
-# 2 no (the yes/no value format the FRS also uses for EDUCFT).
+# FRS TRAINEE, "Whether on a government scheme for employment training". It
+# shares the FRS dictionary's value format with EDUCFT, where 1 is yes; in each
+# of FRS 2020-21, 2022-23, 2023-24 and 2024-25 the child-table records aged 16
+# to 19 outside full-time education are exactly the child-table records with 1.
 FRS_TRAINEE_YES = 1
 UNKNOWN_QUALIFYING_EDUCATION_OR_TRAINING_ENTRY_AGE = 1000
 # FRS RENTPROF: whether ROYYR1 is a profit (1) or a loss (2).
@@ -367,16 +369,24 @@ def derive_is_in_non_advanced_education(
 
 def derive_is_in_approved_training_from_frs_person(
     person: pd.DataFrame,
+    adult_person_ids,
 ) -> pd.Series:
-    """Identify government employment training from the FRS TRAINEE flag.
+    """Identify FRS dependants in unwaged government training.
 
     The FRS counts a 16- to 19-year-old as a dependent child when they are in
     full-time non-advanced education or unwaged government training, so a
-    child-table record aged 16 to 19 outside full-time education is a trainee.
-    Both the adult and child tables carry TRAINEE. The build fails when it is
-    missing rather than silently marking nobody as in training: an earlier
-    version read a ``train`` column that no FRS release has, so every record
-    was coded as not in training.
+    child-table record aged 16 to 19 outside full-time education is a trainee
+    and carries TRAINEE = 1.
+
+    Adult-table records are left out. The FRS has already decided they are not
+    dependants, and their TRAINEE answer does not say the training is unwaged,
+    so it may be training under a contract of employment, which is not approved
+    training (UC Regulations 2013, reg. 5(3)). TRAIN2 names the scheme but only
+    the adult table has it.
+
+    The build fails when TRAINEE is missing rather than marking nobody as in
+    training: an earlier version read TRAIN2's question name, ``train``, which
+    is not a column, so every record was coded as not in training.
     """
 
     if "trainee" not in person.columns:
@@ -384,7 +394,9 @@ def derive_is_in_approved_training_from_frs_person(
             "The FRS person table has no TRAINEE column, so approved training "
             "cannot be derived."
         )
-    return pd.to_numeric(person.trainee, errors="coerce").eq(FRS_TRAINEE_YES)
+    is_trainee = pd.to_numeric(person.trainee, errors="coerce").eq(FRS_TRAINEE_YES)
+    is_adult_record = person.person_id.isin(np.asarray(adult_person_ids))
+    return is_trainee & ~is_adult_record
 
 
 def derive_age_started_or_accepted_current_education_or_training(
@@ -1066,7 +1078,7 @@ def create_frs(
         pe_person.current_education
     )
     pe_person["is_in_approved_training"] = (
-        derive_is_in_approved_training_from_frs_person(person)
+        derive_is_in_approved_training_from_frs_person(person, frs["adult"].person_id)
     )
     pe_person["age_started_or_accepted_current_education_or_training"] = (
         derive_age_started_or_accepted_current_education_or_training(
