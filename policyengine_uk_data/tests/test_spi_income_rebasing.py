@@ -47,8 +47,10 @@ years = st.integers(START_YEAR, END_YEAR)
 # 1e-12 relative tolerance through two multiplications: Hypothesis found
 # 2.2250738585e-313 rebased 2022 -> 2020 -> 2021 off by 2.4e-11 relative.
 # No amount of money is subnormal, so they are excluded rather than loosening
-# the bound for real amounts (normal floats stay within 6e-16 relative over
-# every pair of rebasings between 2020 and 2034).
+# the bound for real amounts. For normal floats each path is a few correctly
+# rounded operations (about 6.7e-16 relative at worst, to first order); the
+# largest difference observed over every pair of rebasings between 2020 and
+# 2034 was 5.3e-16.
 money = st.floats(
     -1e10, 1e10, allow_nan=False, allow_infinity=False, allow_subnormal=False
 )
@@ -265,6 +267,7 @@ def test_second_stage_and_frs_dividends_see_rebased_draws(monkeypatch):
         def __init__(self, person, household, time_period):
             super().__init__(person, time_period)
             self.household = household
+            self.benunit = pd.DataFrame({"benunit_id": person.person_benunit_id})
 
         def copy(self):
             return _FullDataset(
