@@ -11,10 +11,16 @@ metadata:
 # of at least GBP 40,000, and financial years ending in the following March.
 # Transaction counts are rounded to 100; values and receipts to GBP 5 million.
 # All values below are pounds. Imputation fits E+NI weighted counts and values.
-# The purchase rate is target transactions / eligible E+NI weighted owners of
-# property stock of at least GBP 40,000; a seeded uniform threshold is selected
-# to give the closest attainable weighted count. The same threshold applies to
-# owners elsewhere in the UK, an explicit extrapolation without devolved targets.
+# Mean annual purchase rate is target transactions / eligible E+NI weighted
+# owners of stock of at least GBP 40,000. Stock-proportional purchase hazard
+# (exponent 1) assumes larger portfolios are more likely to trade each year;
+# it is a modelling choice, not an observed household transaction propensity.
+# Independent seeded exponential event scores divided by relative stock
+# select the closest attainable weighted count. The same hazard and threshold
+# apply elsewhere in the UK, an extrapolation without devolved targets.
+# Uniform owner selection on the local enhanced FRS 2023-24 selected too little
+# stock to support the assumed HRAD value. Stock weighting addresses that
+# feasibility issue without tuning seeds to a particular dataset.
 # Prices start from a seeded draw among band means (band value / transactions).
 # A common scale then fits the weighted purchase value with price equal to
 # min(stock, max(40,000, scale * draw)), so prices stay within HMRC's
@@ -46,6 +52,7 @@ values:
       value: 68805261766.6785
       revenue: 4790657831.325301
       minimum_price: 40000
+      purchase_stock_exponent: 1
       purchase_seed: 55601
       price_seed: 55602
       # Table 6b 2024-25: last band combines all five published bands over GBP 2m.
@@ -64,6 +71,7 @@ values:
       value: 6955000000
       revenue: 230000000
       minimum_price: 40000
+      purchase_stock_exponent: 1
       purchase_seed: 55603
       price_seed: 55604
       price_bands:
@@ -76,6 +84,7 @@ values:
       value: 7640000000
       revenue: 245000000
       minimum_price: 40000
+      purchase_stock_exponent: 1
       purchase_seed: 55603
       price_seed: 55604
       price_bands:

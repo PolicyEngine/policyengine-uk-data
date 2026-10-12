@@ -10,6 +10,19 @@ import numpy as np
 
 from policyengine_uk_data.parameters import load_parameter
 
+SDLT_REGIONS = (
+    "NORTH_EAST",
+    "NORTH_WEST",
+    "YORKSHIRE",
+    "EAST_MIDLANDS",
+    "WEST_MIDLANDS",
+    "EAST_OF_ENGLAND",
+    "LONDON",
+    "SOUTH_EAST",
+    "SOUTH_WEST",
+    "NORTHERN_IRELAND",
+)
+
 
 def impute_property_purchase_values(
     stock: np.ndarray,
@@ -20,7 +33,8 @@ def impute_property_purchase_values(
 ) -> np.ndarray:
     """Return seeded purchase prices, fitting weighted events and capped value.
 
-    The closest attainable weighted count determines the Bernoulli threshold.
+    Purchase hazard is proportional to stock, an explicit portfolio-turnover
+    assumption. The closest weighted count determines the event threshold.
     The value target is fitted by multiplying sampled band-average prices,
     with the stock cap applied throughout. Zero-weight donors never purchase.
     """
@@ -54,12 +68,17 @@ def impute_property_purchase_values(
     if weights[eligible].sum() < target_count:
         raise ValueError("Insufficient weighted property owners for purchase target")
 
-    events = np.random.default_rng(assumptions["purchase_seed"]).random(len(stock))
+    reference_stock = np.average(stock[eligible], weights=weights[eligible])
+    hazard = (np.maximum(stock, minimum_price) / reference_stock) ** assumptions[
+        "purchase_stock_exponent"
+    ]
+    uniform = np.random.default_rng(assumptions["purchase_seed"]).random(len(stock))
+    events = -np.log1p(-uniform) / hazard
     ranked = eligible[np.argsort(events[eligible], kind="stable")]
     counts = np.concatenate(([0.0], np.cumsum(weights[ranked])))
     n_purchases = int(np.argmin(np.abs(counts - target_count)))
     if n_purchases == len(ranked):
-        threshold = 1.0
+        threshold = np.inf
     elif n_purchases == 0:
         threshold = 0.0
     else:
@@ -105,7 +124,7 @@ def impute_property_purchases(dataset, year=None):
     dataset = dataset.copy()
     year = int(dataset.time_period) if year is None else year
     household = dataset.household
-    sdlt_mask = ~household["region"].astype(str).isin(["SCOTLAND", "WALES"]).values
+    sdlt_mask = household["region"].astype(str).isin(SDLT_REGIONS).values
     for property_type, stock_name, purchase_name in (
         (
             "additional_residential",
