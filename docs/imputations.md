@@ -11,9 +11,9 @@ The imputations are applied in this order (dependencies noted):
 3. **VAT** (from ETB)
 4. **Public Services** (from ETB)
 5. **Income** (from SPI)
-6. **Capital Gains** (from Advani-Summers data)
-7. **Salary Sacrifice** (from FRS subsample)
-8. **Student Loan Plan** (rule-based, from age)
+6. **Salary Sacrifice** (from FRS subsample)
+7. **Student Loan Plan** (rule-based, from age)
+8. **Capital Gains** (from Advani-Summers data and HMRC statistics) — last, after Pension Credit take-up is assigned, because it stacks a second record for each household with gains
 
 ---
 
