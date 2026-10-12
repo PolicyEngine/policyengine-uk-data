@@ -86,11 +86,13 @@ def create_policyengine_uprating_factors_table():
     # population indices would inflate final calibrated population above the
     # existing fidelity guard.
     df = _apply_household_weight_uprating_override(df)
+    df = _apply_property_purchase_uprating_override(df)
 
     # Ensure petrol/diesel use sourced road-fuel clearances and model pump
     # prices. This keeps litres aligned after PolicyEngine divides by price.
     df = _apply_road_fuel_litre_proxy_override(df)
 
+    df = df.sort_index()
     df.to_csv(STORAGE_FOLDER / "uprating_factors.csv")
 
     # Create a table with growth factors by year
@@ -101,6 +103,24 @@ def create_policyengine_uprating_factors_table():
     df_growth[START_YEAR] = 0
 
     df_growth.to_csv(STORAGE_FOLDER / "uprating_growth_factors.csv")
+    return df
+
+
+def _apply_property_purchase_uprating_override(df: pd.DataFrame) -> pd.DataFrame:
+    """Keep annual purchase prices on the same index as their stock caps.
+
+    Also supplies these rows when building with policyengine-uk versions
+    predating #2241, whose purchase inputs had no uprating index.
+    """
+    for purchase, stock in (
+        (
+            "additional_residential_property_purchased",
+            "other_residential_property_value",
+        ),
+        ("non_residential_property_purchased", "non_residential_property_value"),
+    ):
+        if stock in df.index:
+            df.loc[purchase] = df.loc[stock]
     return df
 
 
