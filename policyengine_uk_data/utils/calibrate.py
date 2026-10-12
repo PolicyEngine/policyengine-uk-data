@@ -349,8 +349,11 @@ def calibrate_local_areas(
                 mask = validation_targets_national
             else:
                 mask = ~validation_targets_national
-            pred_national = pred_national[mask]
-            mse_national = torch.mean(sre(pred_national, y_national[mask]))
+            if mask.any():
+                mse_national = torch.mean(sre(pred_national[mask], y_national[mask]))
+            else:
+                # Validation targets can all be local; an empty mean is NaN.
+                mse_national = pred_national.sum() * 0
         else:
             mse_national = torch.mean(sre(pred_national, y_national))
 
