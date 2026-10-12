@@ -257,3 +257,25 @@ def test_recipients_do_not_move_the_imputed_bill(rows):
         derive_council_tax(households, 2024)[~recipient],
         derive_council_tax(changed, 2024)[~recipient],
     )
+
+
+@pytest.mark.parametrize("bill", [np.nan, -1.0])
+def test_missing_gross_bill_covers_known_reported_reduction(bill):
+    households = _households([_cell(LONDON, bill, RECIPIENT, 30.0)])
+    assert derive_council_tax(households, 2024)[0] == pytest.approx(
+        30.0 * WEEKS_IN_YEAR
+    )
+
+
+@settings(max_examples=150, deadline=None)
+@given(rows=st.lists(_household, min_size=1, max_size=12), year=st.integers(2022, 2025))
+def test_gross_bill_is_at_least_the_reported_ctr_received(rows, year):
+    households = _households(rows)
+    gross = derive_council_tax(households, year)
+    gb_recipient = (households.ctreb == RECIPIENT) & (
+        households.gvtregno != NORTHERN_IRELAND
+    )
+    received = np.where(
+        gb_recipient, households.ctrebamt.fillna(0).clip(lower=0) * WEEKS_IN_YEAR, 0
+    )
+    assert (gross >= received - 1e-9).all()

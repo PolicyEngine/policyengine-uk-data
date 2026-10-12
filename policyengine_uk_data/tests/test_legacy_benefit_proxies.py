@@ -610,3 +610,31 @@ def test_create_frs_child_rows_are_child(tmp_path, monkeypatch):
 def test_create_frs_rejects_unknown_adult_empstati(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="EMPSTATI"):
         create_single_adult_frs(tmp_path, monkeypatch, empstati=12)
+
+
+def test_create_frs_builds_gross_council_tax_before_policy_calculations(
+    tmp_path, monkeypatch
+):
+    events = []
+    derive = frs_module.derive_council_tax
+    initialise_simulation = FakeMicrosimulation.__init__
+
+    def observe_gross_bill(household, year):
+        events.append("gross_bill")
+        return derive(household, year)
+
+    def observe_simulation(self, dataset):
+        # Every policy calculation must see the gross bill and the separate
+        # reported reduction, including this full-reduction household.
+        assert events[0] == "gross_bill"
+        gross = dataset.household.council_tax.iloc[0]
+        report = dataset.person.council_tax_benefit_reported.sum()
+        assert gross == report == 10 * frs_module.WEEKS_IN_YEAR
+        events.append("policy_calculation")
+        initialise_simulation(self, dataset)
+
+    monkeypatch.setattr(frs_module, "derive_council_tax", observe_gross_bill)
+    monkeypatch.setattr(FakeMicrosimulation, "__init__", observe_simulation)
+    create_single_adult_frs(tmp_path, monkeypatch)
+    assert events[0] == "gross_bill"
+    assert "policy_calculation" in events[1:]

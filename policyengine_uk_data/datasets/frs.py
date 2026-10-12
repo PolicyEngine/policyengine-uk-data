@@ -119,6 +119,7 @@ UNKNOWN_QUALIFYING_EDUCATION_OR_TRAINING_ENTRY_AGE = 1000
 FRS_RENTPROF_LOSS = 2
 
 SCOTLAND_GVTREGNO = 12
+NORTHERN_IRELAND_GVTREGNO = 13
 # From FRS 2024-25, CWATAMT1 and CSEWAMT1 are DWP derived variables, the
 # "Weeklyised gross annual dom. water/sew. charge on bill" (DV summary
 # 2024-25). Earlier releases carry interview answers under the same names,
@@ -775,7 +776,8 @@ def derive_council_tax(household: pd.DataFrame, year: int) -> np.ndarray:
     - A missing or negative CTANNUAL is imputed as the mean bill of
       non-recipients with a positive bill in the same (region, band,
       single-adult) cell, or 0 if the cell has none (Northern Ireland, which
-      has no council tax, always has none).
+      has no council tax, always has none). A known reported reduction is
+      a lower bound on a missing gross bill in Great Britain.
     - Other households keep CTANNUAL.
 
     In Scotland CTANNUAL also includes water and sewerage charges, which are
@@ -867,7 +869,14 @@ def derive_council_tax(household: pd.DataFrame, year: int) -> np.ndarray:
         ],
         default=council_tax_only,
     )
-    return np.nan_to_num(council_tax, nan=0.0)
+    # A missing bill must still cover a known reported award; otherwise
+    # unsupported schemes can pay more reported CTR than the gross bill.
+    reported_floor = np.where(
+        reduction_known & (region != NORTHERN_IRELAND_GVTREGNO),
+        weekly_reduction * WEEKS_IN_YEAR,
+        0.0,
+    )
+    return np.maximum(np.nan_to_num(council_tax, nan=0.0), reported_floor)
 
 
 def survey_year_from_frs_folder_name(raw_frs_folder) -> int | None:

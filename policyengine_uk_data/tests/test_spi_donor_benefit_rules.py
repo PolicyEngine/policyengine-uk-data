@@ -74,6 +74,7 @@ def test_rule_sets_are_pinned():
         "incapacity_benefit_reported",
         "sda_reported",
         "child_benefit_reported",
+        "council_tax_benefit_reported",
     }
     assert set(SPI_DONOR_RESTORED_PERSON_VARIABLES) == {
         "iidb_reported",
@@ -92,7 +93,6 @@ def test_rule_sets_are_pinned():
         "pip_dl_reported",
         "carers_allowance_reported",
         "maternity_allowance_reported",
-        "council_tax_benefit_reported",
     }
     assert set(SPI_DONOR_REDRAWN_TAKEUP_FLAGS) == {"would_claim_uc", "would_claim_pc"}
     assert not set(SPI_DONOR_ZEROED_PERSON_VARIABLES) & set(
@@ -433,9 +433,8 @@ def test_stage_two_applies_the_rules_and_keeps_drawn_values(monkeypatch):
     pd.testing.assert_frame_equal(ruled.person[flags], recomputed[flags])
 
 
-def test_council_tax_reduction_keeps_the_stage_two_draw():
-    """SPI rows carry the QRF's CTR draw through unchanged, as before the
-    rules: not zeroed, not the donor's. Zeroing waits for #499."""
+def test_council_tax_reduction_draw_is_zeroed_after_stage_two():
+    """Preserve the person QRF chain, then clear its synthetic CTR reports."""
     from policyengine_uk_data.tests.test_frs_only_imputation import _fake_dataset
 
     train = _fake_dataset(person_rows=400, seed=0)
@@ -451,8 +450,15 @@ def test_council_tax_reduction_keeps_the_stage_two_draw():
     drawn = frs_only._impute_outputs(train, target.copy(), outputs).person
     ruled = frs_only.impute_frs_only_variables(train, target).person
 
-    np.testing.assert_array_equal(
-        ruled.council_tax_benefit_reported, drawn.council_tax_benefit_reported
-    )
+    assert (ruled.council_tax_benefit_reported == 0).all()
     assert (drawn.council_tax_benefit_reported > 0).any()
     assert (drawn.council_tax_benefit_reported != 999.0).any()
+
+
+@settings(max_examples=80, deadline=None)
+@given(dataset=datasets())
+def test_no_spi_person_carries_reported_ctr(dataset):
+    # These are SPI-only target rows, with arbitrary positive donor reports.
+    result = apply_spi_donor_benefit_rules(dataset)
+    assert (result.person.council_tax_benefit_reported == 0).all()
+    pd.testing.assert_frame_equal(result.household, dataset.household)
