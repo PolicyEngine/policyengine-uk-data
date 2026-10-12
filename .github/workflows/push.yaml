@@ -158,3 +158,29 @@ jobs:
           HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
       - name: Publish a git tag
         run: ".github/publish-git-tag.sh"
+      # policyengine.py qualifies every new data release against the latest
+      # model before it can be promoted (certify-uk-release.yaml). Tell it now
+      # rather than leave it to its two-hourly schedule. This runs only after
+      # the data uploaded and the tag was published; a duplicate dispatch for
+      # a version already qualified is a no-op there.
+      - name: Generate a token for policyengine.py
+        id: qualification-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: PolicyEngine
+          repositories: policyengine.py
+      - name: Ask policyengine.py to qualify this release
+        env:
+          GH_TOKEN: ${{ steps.qualification-token.outputs.token }}
+        run: |
+          version=$(python3 .github/fetch_version.py)
+          if [ -z "$version" ] || [ "$version" = None ]; then
+            echo "::error::Could not read the released version from pyproject.toml."
+            exit 1
+          fi
+          gh api --method POST repos/PolicyEngine/policyengine.py/dispatches \
+            -f event_type=policyengine-uk-data-release \
+            -f "client_payload[version]=${version}"
+          echo "Asked policyengine.py to qualify policyengine-uk-data ${version}."
