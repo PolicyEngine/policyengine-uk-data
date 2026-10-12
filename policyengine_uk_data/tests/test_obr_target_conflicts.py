@@ -14,6 +14,7 @@ the plain-variable fallbacks get a column key.
 """
 
 import math
+from itertools import combinations
 from unittest.mock import patch
 
 import pytest
@@ -47,9 +48,11 @@ def column_of(monkeypatch):
         key = blm._compute_column(target, None, None)
         if key is None:
             return None
-        # create_target_matrix zeroes a column outside the target's countries,
-        # so targets restricted to different countries get different columns.
-        return key + (target.countries,)
+        # create_target_matrix zeroes a column outside the target's countries
+        # (np.isin, so their order does not matter), so targets restricted to
+        # different countries get different columns.
+        countries = target.countries
+        return key + (frozenset(countries) if countries is not None else None,)
 
     return column
 
@@ -68,8 +71,10 @@ def conflicts(targets, column) -> set[tuple]:
                 for t in group
                 if (v := blm._resolve_value(t, year)) is not None
             }
-            first = next(iter(values.values()), None)
-            if any(not math.isclose(v, first, rel_tol=1e-9) for v in values.values()):
+            if any(
+                not math.isclose(a, b, rel_tol=1e-9)
+                for a, b in combinations(values.values(), 2)
+            ):
                 names = frozenset(values)
                 if names not in INTENDED_SHARED_COLUMNS:
                     found.add((key, year, names))
@@ -114,7 +119,12 @@ def test_total_nics_on_ni_employee_is_flagged(obr_targets, column_of):
 
 def test_calibration_targets_agree_on_shared_columns(column_of):
     """Every national, regional and country target the national matrix uses."""
-    assert conflicts(blm.calibration_targets(), column_of) == set()
+    targets = blm.calibration_targets()
+    # Guard against passing on a registry whose sources failed silently.
+    assert {"obr/ni_employee", "obr/ni_employer", "obr/vat"} <= {
+        t.name for t in targets
+    }
+    assert conflicts(targets, column_of) == set()
 
 
 def _brute_force(targets, column) -> set[tuple]:
@@ -146,7 +156,18 @@ def synthetic_targets(draw) -> list[Target]:
                 source="synthetic",
                 unit=Unit.COUNT if is_count else Unit.GBP,
                 is_count=is_count,
-                countries=draw(st.sampled_from([None, ("ENGLAND",), ("WALES",)])),
+                countries=draw(
+                    st.sampled_from(
+                        [
+                            None,
+                            ("ENGLAND",),
+                            ("WALES",),
+                            ("ENGLAND", "WALES"),
+                            ("WALES", "ENGLAND"),
+                        ]
+                    )
+                ),
+                carry_forward=draw(st.booleans()),
                 values={y: draw(st.sampled_from([1.0, 2.0])) for y in years},
                 custom_compute=(lambda *a: None)
                 if draw(st.integers(0, 4)) == 0
@@ -165,6 +186,24 @@ def synthetic_targets(draw) -> list[Target]:
 def test_conflict_check_matches_pairwise_definition(column_of, targets):
     """The grouped check flags exactly the (column, year) pairs a pairwise
     comparison does. Covers custom columns, counts against sums, country
-    restrictions and the nearest-earlier-year fallback."""
+    restrictions in either order, ``carry_forward=False`` and the
+    nearest-earlier-year fallback. The VOA population uprating in
+    ``_resolve_value`` is not drawn: it looks population totals up."""
     grouped = {(key, year) for key, year, _ in conflicts(targets, column_of)}
     assert grouped == _brute_force(targets, column_of)
+
+
+def test_conflict_check_compares_every_pair(column_of):
+    """isclose is not transitive: with the middle value first, comparing each
+    value to the first passes, but the outer pair is more than 1e-9 apart."""
+    targets = [
+        Target(
+            name=f"synthetic/{i}",
+            variable="a",
+            source="synthetic",
+            unit=Unit.GBP,
+            values={2025: value},
+        )
+        for i, value in enumerate([1 + 0.9e-9, 1.0, 1 + 1.8e-9])
+    ]
+    assert {year for _, year, _ in conflicts(targets, column_of)} == {2025}

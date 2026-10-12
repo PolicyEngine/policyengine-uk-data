@@ -263,9 +263,10 @@ def _parse_receipts(wb: openpyxl.Workbook) -> list[Target]:
     # £50bn on one variable in 2025-26). Retargeting it on
     # total_national_insurance would still conflict: the total also counts
     # statutory payment recoveries and "Other NIC" (Class 1A, 1B and 3,
-    # settlements, unallocated). PE-UK has no variable for the first three, and
-    # no dataset fills Class 3 (#378). The class targets already cover every
-    # NIC class the data populates.
+    # settlements, unallocated). PE-UK has no variable for statutory payment
+    # recoveries, Class 1A, Class 1B, settlements or unallocated NICs, and
+    # ni_class_3 exists but no dataset fills it (#378). The class targets
+    # already cover every NIC class the data populates.
     ws39 = _find_receipts_sheet(wb)
     cash_rows = {
         "vat": ("Value added tax", "vat"),
@@ -376,8 +377,9 @@ def _parse_council_tax(wb: openpyxl.Workbook) -> list[Target]:
 def _parse_nics(wb: openpyxl.Workbook) -> list[Target]:
     """Parse Table 3.4 (income tax and NICs detail) for all NIC classes.
 
-    Covers Class 1 employee and employer (PAYE), plus Classes 2, 3 and 4
-    (self-employed flat-rate, voluntary, and self-employed profit-based).
+    Covers Class 1 employee and employer (PAYE), plus Classes 2 and 4
+    (self-employed flat-rate and profit-based). Class 3 (voluntary) is
+    skipped: no dataset fills ``ni_class_3`` (#378).
     Omitting Classes 2/3/4 biased calibration by ~£2-5B/yr of NIC receipts
     — the omission pushed self-employment income downward to compensate,
     distorting reforms that touch SE income.
