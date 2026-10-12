@@ -189,18 +189,18 @@ _amount = st.one_of(
 )
 _weekly = st.one_of(st.none(), st.just(0.0), st.floats(min_value=0.0, max_value=100.0))
 _household = st.fixed_dictionaries(
-    dict(
-        gvtregno=st.sampled_from([1, LONDON, WALES, SCOTLAND_GVTREGNO, 13]),
-        ctband=st.one_of(st.none(), st.integers(1, 9)),
-        adulth=st.integers(1, 4),
-        ctannual=_amount,
-        ctreb=st.one_of(st.none(), st.sampled_from([RECIPIENT, NON_RECIPIENT])),
-        ctrebamt=_weekly,
-        cwatamt1=_weekly,
-        csewamt1=_weekly,
-        cwatamtd=_weekly,
-        csewamt=_weekly,
-    )
+    {
+        "gvtregno": st.sampled_from([1, LONDON, WALES, SCOTLAND_GVTREGNO, 13]),
+        "ctband": st.one_of(st.none(), st.integers(1, 9)),
+        "adulth": st.integers(1, 4),
+        "ctannual": _amount,
+        "ctreb": st.one_of(st.none(), st.sampled_from([RECIPIENT, NON_RECIPIENT])),
+        "ctrebamt": _weekly,
+        "cwatamt1": _weekly,
+        "csewamt1": _weekly,
+        "cwatamtd": _weekly,
+        "csewamt": _weekly,
+    }
 )
 
 
