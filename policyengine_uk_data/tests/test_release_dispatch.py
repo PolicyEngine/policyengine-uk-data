@@ -58,10 +58,12 @@ def test_the_token_reaches_policyengine_py_only():
     assert "${{" not in dispatch["run"]
 
 
-def _run_dispatch(tmp_path, pyproject_version, *, tag_on_origin=True):
+def _run_dispatch(tmp_path, pyproject_version, *, tag_on_origin=True, gh_fails=False):
     """Run the dispatch step's script with a fake gh that records its arguments.
 
-    A fake git answers ``ls-remote`` for the release tag as origin would.
+    A fake git answers ``ls-remote`` as git does: a missing ref exits 2 only
+    under ``--exit-code`` and otherwise exits 0 with no output, so the step
+    must ask for it. Its arguments are recorded in ``git.log``.
     """
 
     _, by_name = _steps()
@@ -78,13 +80,20 @@ def _run_dispatch(tmp_path, pyproject_version, *, tag_on_origin=True):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     log = tmp_path / "gh.log"
-    (bin_dir / "gh").write_text(f'#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "{log}"\n')
+    (bin_dir / "gh").write_text(
+        f'#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "{log}"\n'
+        + ("echo 'HTTP 403' >&2\nexit 1\n" if gh_fails else "")
+    )
     (bin_dir / "gh").chmod(0o755)
     (bin_dir / "git").write_text(
         "#!/usr/bin/env bash\n"
-        'if [ "$1" = ls-remote ]; then exit '
-        + ("0" if tag_on_origin else "2")
-        + "; fi\nexit 1\n"
+        f'printf "%s\\n" "$@" > "{tmp_path / "git.log"}"\n'
+        'if [ "$1" != ls-remote ]; then exit 1; fi\n'
+        + (
+            'printf "%s\\trefs/tags/%s\\n" 0123abcd "${@: -1}"\nexit 0\n'
+            if tag_on_origin
+            else 'for arg in "$@"; do [ "$arg" = --exit-code ] && exit 2; done\nexit 0\n'
+        )
     )
     (bin_dir / "git").chmod(0o755)
     result = subprocess.run(
@@ -125,3 +134,26 @@ def test_no_dispatch_when_the_tag_did_not_reach_origin(tmp_path):
     assert result.returncode != 0
     assert "not on origin" in result.stdout + result.stderr
     assert arguments is None
+
+
+def test_the_tag_lookup_asks_origin_for_exactly_the_release_tag(tmp_path):
+    """Without --exit-code, git ls-remote succeeds when the tag is missing."""
+
+    result, _ = _run_dispatch(tmp_path, "1.59.0")
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "git.log").read_text().splitlines() == [
+        "ls-remote",
+        "--exit-code",
+        "--tags",
+        "origin",
+        "refs/tags/1.59.0",
+    ]
+
+
+def test_a_failed_dispatch_fails_the_step(tmp_path):
+    """A rejected dispatch must not pass silently, or no qualification runs."""
+
+    result, arguments = _run_dispatch(tmp_path, "1.59.0", gh_fails=True)
+    assert result.returncode != 0
+    assert arguments is not None
+    assert "Asked policyengine.py" not in result.stdout
