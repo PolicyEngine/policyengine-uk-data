@@ -128,13 +128,19 @@ def test_calibration_targets_agree_on_shared_columns(column_of):
 
 
 def _brute_force(targets, column) -> set[tuple]:
-    """Reference: compare every pair of targets directly."""
+    """Reference: compare every pair of targets directly, in every year listed
+    by any target on their column (a carried-forward pair can disagree in a
+    year only a third target lists)."""
+    years_by_column: dict[tuple, set[int]] = {}
+    for t in targets:
+        if (key := column(t)) is not None:
+            years_by_column.setdefault(key, set()).update(t.values)
     found = set()
     for i, a in enumerate(targets):
         for b in targets[i + 1 :]:
             if column(a) is None or column(a) != column(b):
                 continue
-            for year in set(a.values) | set(b.values):
+            for year in years_by_column[column(a)]:
                 va, vb = blm._resolve_value(a, year), blm._resolve_value(b, year)
                 if None not in (va, vb) and not math.isclose(va, vb, rel_tol=1e-9):
                     found.add((column(a), year))
@@ -207,3 +213,25 @@ def test_conflict_check_compares_every_pair(column_of):
         for i, value in enumerate([1 + 0.9e-9, 1.0, 1 + 1.8e-9])
     ]
     assert {year for _, year, _ in conflicts(targets, column_of)} == {2025}
+
+
+def test_carried_values_are_compared_in_every_listed_year(column_of):
+    """a and b disagree in 2024 and, carried forward, in 2025, a year only c
+    lists; both checks must report both years (Sol review r2)."""
+    targets = [
+        Target(
+            name=name,
+            variable="a",
+            source="synthetic",
+            unit=Unit.GBP,
+            values=values,
+        )
+        for name, values in [
+            ("synthetic/a", {2024: 1.0}),
+            ("synthetic/b", {2024: 1 + 1.8e-9}),
+            ("synthetic/c", {2025: 1 + 0.9e-9}),
+        ]
+    ]
+    expected = {(("sum", "a", None), 2024), (("sum", "a", None), 2025)}
+    assert {(k, y) for k, y, _ in conflicts(targets, column_of)} == expected
+    assert _brute_force(targets, column_of) == expected
