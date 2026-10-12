@@ -61,9 +61,9 @@ def validate(household, source_year, year, parameters):
     stamp_duty = parameters(str(year)).gov.hmrc.stamp_duty
     rows = []
     for property_type, stock_name in PROPERTY_STOCKS.items():
-        assumptions = load_parameter("stochastic", "additional_property_purchases", year)[
-            property_type
-        ]
+        assumptions = load_parameter(
+            "stochastic", "additional_property_purchases", year
+        )[property_type]
         stock = household[stock_name].to_numpy(dtype=float) * stock_factor
         prices = impute_property_purchase_values(
             stock, weights, sdlt_mask, year, property_type
@@ -121,7 +121,9 @@ def validate(household, source_year, year, parameters):
                 "two_percentage_point_hrad_exposure": (
                     0.02 * value if property_type == "additional_residential" else None
                 ),
-                "eligible_weighted_owners": float(np.dot(eligible, weights * sdlt_mask)),
+                "eligible_weighted_owners": float(
+                    np.dot(eligible, weights * sdlt_mask)
+                ),
                 "eligible_mean_stock": float(
                     np.dot(stock, weights * (eligible & sdlt_mask))
                     / np.dot(eligible, weights * sdlt_mask)
@@ -130,6 +132,7 @@ def validate(household, source_year, year, parameters):
                 "weighted_purchase_rate": float(
                     transactions / np.dot(eligible, weights * sdlt_mask)
                 ),
+                "price_band_count": len(bands),
                 "price_scale": price_scale,
                 "weighted_stock_capped_share": float(
                     np.dot(purchased & (prices == stock), weights * sdlt_mask)

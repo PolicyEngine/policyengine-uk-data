@@ -1,6 +1,13 @@
-from policyengine_uk_data.storage import STORAGE_FOLDER
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pandas as pd
-from policyengine_uk.data import UKSingleYearDataset
+
+from policyengine_uk_data.storage import STORAGE_FOLDER
+
+if TYPE_CHECKING:
+    from policyengine_uk.data import UKSingleYearDataset
 
 START_YEAR = 2020
 END_YEAR = 2034

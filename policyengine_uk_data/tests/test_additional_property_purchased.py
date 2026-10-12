@@ -18,7 +18,6 @@ from policyengine_uk_data.datasets.imputations.property_purchases import (
 )
 from policyengine_uk_data.parameters import load_parameter
 
-
 PROPERTY_TYPES = (
     (
         "additional_residential",
