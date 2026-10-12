@@ -191,9 +191,9 @@ def main():
 
             update_dataset("Impute capital gains", "processing")
             frs = impute_capital_gains(frs)
-            # Zero-weight donors for the HMRC size-of-gain bands the spline
-            # cannot reach; weighted (or not) by calibration via the
-            # per-band targets in targets/sources/hmrc_cgt.py.
+            # Donors for the HMRC size-of-gain bands the spline cannot
+            # reach; weighted by calibration via the per-band targets in
+            # targets/sources/hmrc_cgt.py.
             from policyengine_uk_data.datasets.imputations.capital_gains import (
                 stack_cgt_band_donors,
             )
@@ -264,6 +264,9 @@ def main():
             from policyengine_uk_data.datasets.local_areas.constituencies.calibrate import (
                 get_performance,
             )
+            from policyengine_uk_data.targets.sources.hmrc_cgt import (
+                band_count_target_names,
+            )
 
             # Run calibration with verbose progress
             frs_calibrated_constituencies = calibrate_local_areas(
@@ -281,6 +284,7 @@ def main():
                 get_performance=get_performance,
                 nested_progress=nested_progress,  # Pass the nested progress manager
                 time_period=frs_release.calibration_year,
+                prior_rake_targets=band_count_target_names(),
             )
             update_dataset("Calibrate constituency weights", "completed")
 
@@ -308,6 +312,7 @@ def main():
                 get_performance=get_la_performance,
                 nested_progress=nested_progress,  # Pass the nested progress manager
                 time_period=frs_release.calibration_year,
+                prior_rake_targets=band_count_target_names(),
             )
             update_dataset("Calibrate local authority weights", "completed")
 

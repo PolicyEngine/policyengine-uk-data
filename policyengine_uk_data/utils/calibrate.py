@@ -145,6 +145,62 @@ def initialize_weight_priors(
     return priors
 
 
+def prior_equivalent_weights(
+    original_weights: np.ndarray,
+    zero_weight_total_share: float = DEFAULT_ZERO_WEIGHT_PRIOR_TOTAL_SHARE,
+) -> np.ndarray:
+    """Express each household's calibration prior as a household weight.
+
+    A positive row returns its own weight. A zero-weight row returns the
+    weight a positive row would need to receive the same prior. A build step
+    that splits a household's mass between two records before calibration
+    (the capital gains imputation) uses this to treat survey rows and
+    zero-weight rows alike.
+    """
+    weights = np.asarray(original_weights, dtype=np.float64)
+    priors = initialize_weight_priors(weights, zero_weight_total_share)
+    positive_mask = weights > 0
+    if positive_mask.all() or not positive_mask.any():
+        return priors
+    return priors / (1 - zero_weight_total_share)
+
+
+def rake_priors_to_targets(
+    priors: np.ndarray,
+    matrix: pd.DataFrame,
+    targets: pd.Series,
+    names,
+) -> np.ndarray:
+    """Scale household priors so they reproduce each named national target.
+
+    For each named target, the priors of the households that contribute to
+    it are multiplied by one factor, so the calibration starts with that
+    target met. The named targets must count disjoint sets of households:
+    then no factor disturbs another target, and one pass meets them all.
+    A name the matrix lacks, or a target no household contributes to, is
+    skipped, because no factor can meet it.
+
+    Calibration moves weights only gradually from their priors, so a target
+    that starts many times over or under can still be far off when the
+    epochs run out, and can drag the targets that share its records with it.
+    """
+    priors = np.asarray(priors, dtype=np.float64).copy()
+    names = [name for name in names if name in matrix.columns]
+    columns = matrix[names].to_numpy(dtype=np.float64)
+    if (np.count_nonzero(columns, axis=1) > 1).any():
+        raise ValueError(
+            "Targets raked at the prior must count disjoint sets of households"
+        )
+    for name, column in zip(names, columns.T):
+        target = float(targets[name])
+        if target <= 0:
+            raise ValueError(f"Cannot rake priors to a non-positive target: {name}")
+        estimate = float((priors * column).sum())
+        if estimate > 0:
+            priors[column != 0] *= target / estimate
+    return priors
+
+
 def _as_bool_mask(series: pd.Series) -> np.ndarray:
     if pd.api.types.is_bool_dtype(series):
         return series.fillna(False).to_numpy(dtype=bool)
@@ -221,6 +277,7 @@ def calibrate_local_areas(
     nested_progress=None,
     time_period: int | str | None = None,
     zero_weight_prior_total_share: float = DEFAULT_ZERO_WEIGHT_PRIOR_TOTAL_SHARE,
+    prior_rake_targets=(),
 ):
     """
     Generic calibration function for local areas (constituencies, local authorities, etc.)
@@ -239,6 +296,9 @@ def calibrate_local_areas(
         area_name: Name of the area type for logging
         zero_weight_prior_total_share: Share of prior household mass to reserve for
             rows whose incoming household_weight is zero.
+        prior_rake_targets: Names of national targets, counting disjoint sets of
+            households, that the starting weights are scaled to meet (see
+            rake_priors_to_targets).
     """
     if dataset_key is None:
         dataset_key = default_weight_dataset_key()
@@ -281,6 +341,10 @@ def calibrate_local_areas(
             dataset.household.household_weight.values,
             zero_weight_total_share=zero_weight_prior_total_share,
         )
+        if prior_rake_targets:
+            household_prior_weights = rake_priors_to_targets(
+                household_prior_weights, m_n, y_n, prior_rake_targets
+            )
         area_prior_weights = household_prior_weights / areas_per_household
         original_weights = np.log(np.clip(area_prior_weights, 1e-12, None))
         weights = torch.tensor(

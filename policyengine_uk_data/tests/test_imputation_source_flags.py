@@ -4,6 +4,7 @@ import importlib
 
 import numpy as np
 import pandas as pd
+import pytest
 
 
 class _FakeDataset:
@@ -41,6 +42,17 @@ def _stack_without_remapping(left: _FakeDataset, right: _FakeDataset) -> _FakeDa
         household=pd.concat([left.household, right.household], ignore_index=True),
         benunit=pd.concat([left.benunit, right.benunit], ignore_index=True),
         fiscal_year=left.time_period,
+    )
+
+
+def _fake_households(dataset: _FakeDataset, household_ids) -> _FakeDataset:
+    person = dataset.person[dataset.person.person_household_id.isin(household_ids)]
+    return _FakeDataset(
+        person=person.reset_index(drop=True).copy(),
+        household=dataset.household[dataset.household.household_id.isin(household_ids)]
+        .reset_index(drop=True)
+        .copy(),
+        fiscal_year=dataset.time_period,
     )
 
 
@@ -113,21 +125,33 @@ def test_impute_capital_gains_marks_capital_gains_clone_households(monkeypatch):
     )
 
     monkeypatch.setattr(cg_module, "stack_datasets", _stack_without_remapping)
+    monkeypatch.setattr(cg_module, "_households", _fake_households)
+    # Both people are first adults at the top of the income distribution;
+    # only the second draws a gain HMRC's statistics describe.
+    top_band = len(cg_module.capital_gains) - 1
     monkeypatch.setattr(
         cg_module,
-        "impute_cg_to_doubled_dataset",
+        "_first_adult_incomes",
         lambda dataset: (
-            np.zeros(len(dataset.person), dtype=float),
-            dataset.household["household_weight"].to_numpy(dtype=float),
+            np.full(len(dataset.person), 1e6),
+            np.ones(len(dataset.person), dtype=bool),
         ),
+    )
+    monkeypatch.setattr(
+        cg_module, "draw_gains", lambda income_band, gainer: np.array([0.0, 50_000.0])
     )
 
     result = cg_module.impute_capital_gains(_fake_dataset())
 
+    # Each household is kept, and the one with a gain is stacked again as
+    # its has-gains twin.
     assert result.household["household_is_capital_gains_clone"].tolist() == [
         False,
         False,
         True,
-        True,
     ]
-    assert result.household.loc[2:, "household_weight"].eq(1).all()
+    share = cg_module.capital_gains.percent_with_gains.iloc[top_band]
+    assert result.household["household_weight"].tolist() == pytest.approx(
+        [1.0, 2.0 * (1 - share), 2.0 * share]
+    )
+    assert result.person["capital_gains"].tolist() == [0.0, 0.0, 50_000.0]
