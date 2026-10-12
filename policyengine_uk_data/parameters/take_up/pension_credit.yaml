@@ -1,4 +1,4 @@
-description: Share of eligible Pension Credit recipients that participate.
+description: Share of benefit units entitled to Pension Credit that receive it (caseload take-up, Great Britain).
 metadata:
   label: Pension Credit take-up rate
   name: PC_takeup
@@ -6,5 +6,11 @@ metadata:
   reference:
     - title: "Income-related benefits: estimates of take-up: financial year 2019 to 2020"
       href: https://www.gov.uk/government/statistics/income-related-benefits-estimates-of-take-up-financial-year-2019-to-2020/income-related-benefits-estimates-of-take-up-financial-year-2019-to-2020#pension-credit-2
+    - title: "Income-related benefits: estimates of take-up: financial year ending 2024"
+      href: https://www.gov.uk/government/statistics/income-related-benefits-estimates-of-take-up-financial-year-ending-2024/income-related-benefits-estimates-of-take-up-financial-year-ending-2024
 values:
   2015-01-01: 0.7
+  # FYE 2023 and FYE 2024 caseload take-up (65% and 62%) from the FYE 2024
+  # edition; expenditure take-up was 71% in FYE 2024.
+  2022-04-01: 0.65
+  2023-04-01: 0.62
