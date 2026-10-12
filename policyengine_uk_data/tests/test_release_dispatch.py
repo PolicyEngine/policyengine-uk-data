@@ -48,6 +48,9 @@ def test_the_token_reaches_policyengine_py_only():
     assert token["uses"].startswith("actions/create-github-app-token@")
     assert token["with"]["owner"] == "PolicyEngine"
     assert token["with"]["repositories"] == "policyengine.py"
+    # Only the permission a dispatch needs, not all the App's permissions.
+    assert token["with"]["permission-contents"] == "write"
+    assert not [key for key in token["with"] if key.startswith("permission-")][1:]
     dispatch = by_name[DISPATCH_STEP]
     assert dispatch["env"] == {
         "GH_TOKEN": "${{ steps.qualification-token.outputs.token }}"
@@ -55,8 +58,11 @@ def test_the_token_reaches_policyengine_py_only():
     assert "${{" not in dispatch["run"]
 
 
-def _run_dispatch(tmp_path, pyproject_version):
-    """Run the dispatch step's script with a fake gh that records its arguments."""
+def _run_dispatch(tmp_path, pyproject_version, *, tag_on_origin=True):
+    """Run the dispatch step's script with a fake gh that records its arguments.
+
+    A fake git answers ``ls-remote`` for the release tag as origin would.
+    """
 
     _, by_name = _steps()
     repo = tmp_path / "repo"
@@ -74,6 +80,13 @@ def _run_dispatch(tmp_path, pyproject_version):
     log = tmp_path / "gh.log"
     (bin_dir / "gh").write_text(f'#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "{log}"\n')
     (bin_dir / "gh").chmod(0o755)
+    (bin_dir / "git").write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "$1" = ls-remote ]; then exit '
+        + ("0" if tag_on_origin else "2")
+        + "; fi\nexit 1\n"
+    )
+    (bin_dir / "git").chmod(0o755)
     result = subprocess.run(
         ["bash", "-e", "-c", by_name[DISPATCH_STEP]["run"]],
         cwd=repo,
@@ -102,4 +115,13 @@ def test_the_dispatch_names_the_released_version(tmp_path):
 def test_no_dispatch_without_a_version(tmp_path):
     result, arguments = _run_dispatch(tmp_path, None)
     assert result.returncode != 0
+    assert arguments is None
+
+
+def test_no_dispatch_when_the_tag_did_not_reach_origin(tmp_path):
+    """publish-git-tag.sh swallows a failed push; the dispatch must not."""
+
+    result, arguments = _run_dispatch(tmp_path, "1.59.0", tag_on_origin=False)
+    assert result.returncode != 0
+    assert "not on origin" in result.stdout + result.stderr
     assert arguments is None

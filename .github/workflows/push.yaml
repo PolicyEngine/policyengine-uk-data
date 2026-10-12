@@ -171,6 +171,8 @@ jobs:
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
           owner: PolicyEngine
           repositories: policyengine.py
+          # A repository dispatch needs contents: write and nothing else.
+          permission-contents: write
       - name: Ask policyengine.py to qualify this release
         env:
           GH_TOKEN: ${{ steps.qualification-token.outputs.token }}
@@ -178,6 +180,12 @@ jobs:
           version=$(python3 .github/fetch_version.py)
           if [ -z "$version" ] || [ "$version" = None ]; then
             echo "::error::Could not read the released version from pyproject.toml."
+            exit 1
+          fi
+          # publish-git-tag.sh ignores a failed tag push, so check the tag is
+          # really on origin before announcing the release.
+          if ! git ls-remote --exit-code --tags origin "refs/tags/${version}" > /dev/null; then
+            echo "::error::Tag ${version} is not on origin, so the release is not published; not asking policyengine.py to qualify it."
             exit 1
           fi
           gh api --method POST repos/PolicyEngine/policyengine.py/dispatches \
