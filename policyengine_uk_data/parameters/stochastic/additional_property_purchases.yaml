@@ -45,6 +45,9 @@ metadata:
 # and this assumption is not a forecast. Non-residential targets use the
 # directly observed Table 8b individuals rows for 2023-24 and 2024-25, replacing
 # the older household rows in policyengine-uk's stamp_duty/statistics.yaml.
+# Their price bands also use individuals only. The 2024-25 band counts sum to
+# 25,100 rather than the 25,000 headline because of rounding; probabilities
+# use that band sum. Stock caps and the fitted scale modify the band distribution.
 values:
   2013-01-01:
     additional_residential: &additional_residential
@@ -66,7 +69,7 @@ values:
         - {transactions: 2600, value: 10990000000} # Over GBP 2,000,000
     non_residential:
       # 2023-24 Table 8b individuals: 24,800 / GBP 6.955bn / GBP 230m.
-      # One representative mean price is used before stock-capped scaling.
+      # Table 8b individuals' price-band means, before stock-capped scaling.
       transactions: 24800
       value: 6955000000
       revenue: 230000000
@@ -75,7 +78,12 @@ values:
       purchase_seed: 55603
       price_seed: 55604
       price_bands:
-        - {transactions: 24800, value: 6955000000}
+        - {transactions: 18800, value: 1545000000} # Up to GBP 250,000
+        - {transactions: 3300, value: 1150000000} # GBP 250,001-500,000
+        - {transactions: 1500, value: 1085000000} # GBP 500,001-1,000,000
+        - {transactions: 500, value: 640000000} # GBP 1,000,001-1,500,000
+        - {transactions: 200, value: 415000000} # GBP 1,500,001-2,000,000
+        - {transactions: 500, value: 2120000000} # Over GBP 2,000,000
   2024-01-01:
     additional_residential: *additional_residential
     non_residential:
@@ -88,4 +96,9 @@ values:
       purchase_seed: 55603
       price_seed: 55604
       price_bands:
-        - {transactions: 25000, value: 7640000000}
+        - {transactions: 18800, value: 1560000000} # Up to GBP 250,000
+        - {transactions: 3400, value: 1210000000} # GBP 250,001-500,000
+        - {transactions: 1600, value: 1100000000} # GBP 500,001-1,000,000
+        - {transactions: 500, value: 650000000} # GBP 1,000,001-1,500,000
+        - {transactions: 300, value: 445000000} # GBP 1,500,001-2,000,000
+        - {transactions: 500, value: 2675000000} # Over GBP 2,000,000
