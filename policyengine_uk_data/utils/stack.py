@@ -1,10 +1,17 @@
 from policyengine_uk.data import UKSingleYearDataset
 import pandas as pd
 
+# Benefit-unit roles taken from the survey, which policyengine-uk otherwise
+# infers from ages. A stacked table without them would leave missing roles.
+SURVEY_ROLE_COLUMNS = ("is_claimant_or_partner",)
+
 
 def stack_datasets(
     data_1: UKSingleYearDataset, data_2: UKSingleYearDataset
 ) -> UKSingleYearDataset:
+    for column in SURVEY_ROLE_COLUMNS:
+        if (column in data_1.person.columns) != (column in data_2.person.columns):
+            raise ValueError(f"Only one of the stacked datasets has {column}.")
     person_id_offset = data_1.person.person_id.max() + 1
     benunit_id_offset = data_1.benunit.benunit_id.max() + 1
     household_id_offset = data_1.household.household_id.max() + 1
