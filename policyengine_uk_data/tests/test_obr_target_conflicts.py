@@ -14,11 +14,12 @@ the plain-variable fallbacks get a column key.
 """
 
 import math
-import random
 from unittest.mock import patch
 
 import pytest
 import requests
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
 from policyengine_uk_data.targets import build_loss_matrix as blm
 from policyengine_uk_data.targets.schema import Target, Unit
@@ -46,10 +47,9 @@ def column_of(monkeypatch):
         key = blm._compute_column(target, None, None)
         if key is None:
             return None
-        # Targets restricted to different countries get different columns
-        # (the ``countries`` field proposed in #490 and #530).
-        countries = getattr(target, "countries", None)
-        return key + (tuple(countries) if countries else None,)
+        # create_target_matrix zeroes a column outside the target's countries,
+        # so targets restricted to different countries get different columns.
+        return key + (target.countries,)
 
     return column
 
@@ -131,26 +131,40 @@ def _brute_force(targets, column) -> set[tuple]:
     return found
 
 
-def test_conflict_check_matches_pairwise_definition(column_of):
-    """Seeded random target sets: the grouped check flags exactly the
-    (column, year) pairs a pairwise comparison does. Covers custom columns,
-    counts against sums, and the nearest-earlier-year fallback."""
-    rng = random.Random(0)
-    for _ in range(300):
-        targets = []
-        for i in range(rng.randint(0, 8)):
-            is_count = rng.random() < 0.3
-            years = rng.sample(range(2020, 2027), rng.randint(1, 3))
-            targets.append(
-                Target(
-                    name=f"synthetic/{i}",
-                    variable=rng.choice(["a", "b", "c"]),
-                    source="synthetic",
-                    unit=Unit.COUNT if is_count else Unit.GBP,
-                    is_count=is_count,
-                    values={y: rng.choice([1.0, 2.0]) for y in years},
-                    custom_compute=(lambda *a: None) if rng.random() < 0.2 else None,
-                )
+@st.composite
+def synthetic_targets(draw) -> list[Target]:
+    targets = []
+    for i in range(draw(st.integers(0, 8))):
+        is_count = draw(st.booleans())
+        years = draw(
+            st.lists(st.integers(2020, 2026), min_size=1, max_size=3, unique=True)
+        )
+        targets.append(
+            Target(
+                name=f"synthetic/{i}",
+                variable=draw(st.sampled_from(["a", "b", "c"])),
+                source="synthetic",
+                unit=Unit.COUNT if is_count else Unit.GBP,
+                is_count=is_count,
+                countries=draw(st.sampled_from([None, ("ENGLAND",), ("WALES",)])),
+                values={y: draw(st.sampled_from([1.0, 2.0])) for y in years},
+                custom_compute=(lambda *a: None)
+                if draw(st.integers(0, 4)) == 0
+                else None,
             )
-        grouped = {(key, year) for key, year, _ in conflicts(targets, column_of)}
-        assert grouped == _brute_force(targets, column_of)
+        )
+    return targets
+
+
+@settings(
+    max_examples=300,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+@given(targets=synthetic_targets())
+def test_conflict_check_matches_pairwise_definition(column_of, targets):
+    """The grouped check flags exactly the (column, year) pairs a pairwise
+    comparison does. Covers custom columns, counts against sums, country
+    restrictions and the nearest-earlier-year fallback."""
+    grouped = {(key, year) for key, year, _ in conflicts(targets, column_of)}
+    assert grouped == _brute_force(targets, column_of)
