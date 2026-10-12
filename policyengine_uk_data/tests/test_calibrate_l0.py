@@ -7,12 +7,15 @@ match targets within reasonable tolerances.
 import sys
 import types
 
+import h5py
 import numpy as np
 import pandas as pd
 import pytest
+import torch
 from scipy import sparse as sp
 
 from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
+from policyengine_uk_data.utils.calibrate import DEFAULT_CALIBRATION_SEED
 from policyengine_uk_data.utils.calibrate_l0 import (
     _build_sparse_calibration_matrix,
     calibrate_l0,
@@ -147,8 +150,6 @@ class TestL0CalibrationSmoke:
         )
 
         # Check predictions
-        import torch
-
         with torch.no_grad():
             y_pred = model.forward(M, deterministic=True).numpy()
 
@@ -184,6 +185,67 @@ class TestL0CalibrationSmoke:
 
         sparsity = model.get_sparsity()
         assert sparsity > 0.1, f"Sparsity {sparsity:.1%} too low with strong L0 penalty"
+
+
+def test_l0_seeded_weights_are_byte_identical_and_preserve_rng(monkeypatch, tmp_path):
+    """Exercise real gate initialization, sampling, optimization and persistence."""
+    monkeypatch.setattr(
+        "policyengine_uk_data.utils.calibrate_l0.STORAGE_FOLDER", tmp_path
+    )
+
+    class Dataset:
+        def __init__(self):
+            self.household = pd.DataFrame({"household_weight": np.arange(1.0, 9.0)})
+
+        def copy(self):
+            clone = Dataset()
+            clone.household = self.household.copy()
+            return clone
+
+    def matrix_fn(_dataset, time_period=None):
+        return (
+            pd.DataFrame(
+                {
+                    "households": np.ones(8),
+                    "income": np.array([1.0, 3.0, 5.0, 7.0, 2.0, 4.0, 6.0, 8.0]),
+                }
+            ),
+            pd.DataFrame({"households": [40.0], "income": [200.0]}),
+            np.ones((1, 8)),
+        )
+
+    def national_matrix_fn(_dataset, time_period=None):
+        return pd.DataFrame({"households": np.ones(8)}), pd.Series({"households": 40.0})
+
+    def run_calibration(name, **kwargs):
+        state_before = torch.random.get_rng_state().clone()
+        calibrated = calibrate_l0(
+            dataset=Dataset(),
+            matrix_fn=matrix_fn,
+            national_matrix_fn=national_matrix_fn,
+            area_count=1,
+            weight_file=name,
+            dataset_key="2025",
+            epochs=16,
+            **kwargs,
+        )
+        assert torch.equal(torch.random.get_rng_state(), state_before)
+        returned_weights = calibrated.household.household_weight.to_numpy()
+        with h5py.File(tmp_path / name, "r") as weights_file:
+            saved_weights = weights_file["2025"][:]
+        assert saved_weights.tobytes() == returned_weights.tobytes()
+        return saved_weights.tobytes()
+
+    # Different ambient CPU RNG states must not alter either calibration.
+    with torch.random.fork_rng(devices=[]):
+        torch.default_generator.manual_seed(1234)
+        first = run_calibration("first.h5")
+        torch.rand(64)
+        repeat = run_calibration("repeat.h5", seed=DEFAULT_CALIBRATION_SEED)
+        different = run_calibration("different.h5", seed=DEFAULT_CALIBRATION_SEED + 1)
+
+    assert first == repeat
+    assert first != different
 
 
 class TestL0CalibrationPeriods:

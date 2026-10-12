@@ -14,6 +14,8 @@ from policyengine_uk_data.utils.progress import ProcessingProgress
 
 
 DEFAULT_ZERO_WEIGHT_PRIOR_TOTAL_SHARE = 0.5
+# Shared default for calibration randomness. Each call starts a fresh RNG;
+# reproducibility also requires fixed inputs, targets, torch threads and platform.
 DEFAULT_CALIBRATION_SEED = 0
 
 
@@ -241,8 +243,9 @@ def calibrate_local_areas(
         area_name: Name of the area type for logging
         zero_weight_prior_total_share: Share of prior household mass to reserve for
             rows whose incoming household_weight is zero.
-        seed: Seed for the dropout masks. The same inputs and seed give the same
-            weights in every process.
+        seed: Seed for the dropout masks (default DEFAULT_CALIBRATION_SEED).
+            Fixed inputs, targets, torch thread count and platform give
+            byte-identical weights in every process, without using the global RNG.
     """
     if dataset_key is None:
         dataset_key = default_weight_dataset_key()

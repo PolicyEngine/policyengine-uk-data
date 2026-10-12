@@ -2,8 +2,8 @@
 
 Invariants of ``calibrate_local_areas``:
 
-- the saved weights are a function of the inputs and ``seed`` alone: not of
-  the process, and not of whatever has consumed torch's global generator;
+- with fixed inputs, targets, thread count and platform, saved weight bytes
+  depend on ``seed``: not on the process or torch's global generator;
 - calibration does not consume the global generator;
 - ``seed`` is used: different seeds draw different dropout masks.
 
@@ -84,7 +84,9 @@ def test_weights_depend_on_seed_not_on_the_global_generator(
     torch.manual_seed(other_global_state)
     torch.rand(7)
     second = _toy_weights(seed=seed)
-    assert np.array_equal(first, second)
+    assert first.shape == second.shape
+    assert first.dtype == second.dtype
+    assert first.tobytes() == second.tobytes()
 
 
 def test_calibration_does_not_consume_the_global_generator():
@@ -96,7 +98,7 @@ def test_calibration_does_not_consume_the_global_generator():
 
 
 def test_different_seeds_give_different_weights():
-    assert not np.array_equal(_toy_weights(seed=0), _toy_weights(seed=1))
+    assert _toy_weights(seed=0).tobytes() != _toy_weights(seed=1).tobytes()
 
 
 def test_fresh_processes_give_identical_weights():

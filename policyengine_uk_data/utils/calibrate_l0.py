@@ -20,6 +20,7 @@ import torch
 from scipy import sparse as sp
 
 from policyengine_uk_data.storage import STORAGE_FOLDER
+from policyengine_uk_data.utils.calibrate import DEFAULT_CALIBRATION_SEED
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +164,7 @@ def calibrate_l0(
     get_performance=None,
     nested_progress=None,
     time_period: int | str | None = None,
+    seed: int = DEFAULT_CALIBRATION_SEED,
 ):
     """Calibrate local area weights using L0-regularised optimisation.
 
@@ -190,6 +192,10 @@ def calibrate_l0(
         nested_progress: Progress tracker for nested display.
         time_period: Target period to pass to matrix functions. Defaults to
             dataset_key when the key is a year.
+        seed: Seed for gate initialization and training samples. Shares the
+            dense calibrator's default. Identical inputs and seed give identical
+            weight bytes on CPU with fixed dependency versions, thread count
+            and platform.
 
     Returns:
         dataset with calibrated household_weight.
@@ -239,26 +245,31 @@ def calibrate_l0(
         epochs,
     )
 
-    # Create and fit the L0 model
-    model = SparseCalibrationWeights(
-        n_features=n_records,
-        init_weights=init_weights,
-        init_keep_prob=init_keep_prob,
-        device="cpu",
-    )
+    # l0-python draws initialization jitter and HardConcrete gates from the
+    # global CPU generator and does not accept a generator or seed. Isolate
+    # those draws so earlier random consumers cannot affect calibration and
+    # calibration does not change the caller's random stream.
+    with torch.random.fork_rng(devices=[]):
+        torch.default_generator.manual_seed(seed)
+        model = SparseCalibrationWeights(
+            n_features=n_records,
+            init_weights=init_weights,
+            init_keep_prob=init_keep_prob,
+            device="cpu",
+        )
 
-    model.fit(
-        M=M,
-        y=y,
-        lambda_l0=lambda_l0,
-        lambda_l2=lambda_l2,
-        lr=lr,
-        epochs=epochs,
-        loss_type="relative",
-        verbose=verbose,
-        verbose_freq=50,
-        target_groups=target_groups,
-    )
+        model.fit(
+            M=M,
+            y=y,
+            lambda_l0=lambda_l0,
+            lambda_l2=lambda_l2,
+            lr=lr,
+            epochs=epochs,
+            loss_type="relative",
+            verbose=verbose,
+            verbose_freq=50,
+            target_groups=target_groups,
+        )
 
     # Extract final weights
     with torch.no_grad():
