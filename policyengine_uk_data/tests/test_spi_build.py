@@ -66,6 +66,7 @@ SPI_COLUMNS = [
     "MCAS",
     "BPADUE",
     "MAIND",
+    "SEINC_NUM",
 ]
 
 
@@ -386,6 +387,24 @@ def test_income_projection_loads_local_h5_dataset(monkeypatch):
     ]
 
 
+def _write_income_model_cache(path, income_module, metadata):
+    """A cache in the per-earnings-group format, with stub fitted models."""
+    with path.open("wb") as f:
+        pickle.dump(
+            {
+                "models": {
+                    group: SimpleNamespace(
+                        imputed_variables=list(income_module.IMPUTATIONS)
+                    )
+                    for group in income_module.EARNINGS_GROUPS
+                },
+                "input_columns": income_module.PREDICTORS,
+                "metadata": metadata,
+            },
+            f,
+        )
+
+
 def test_income_model_cache_rejects_stale_spi_release(tmp_path, monkeypatch):
     from policyengine_uk_data.datasets.imputations import income as income_module
 
@@ -395,17 +414,7 @@ def test_income_model_cache_rejects_stale_spi_release(tmp_path, monkeypatch):
         "spi_release_name": "spi_2020_21",
         "spi_tab_filename": "put2021uk.tab",
     }
-    with cache.open("wb") as f:
-        pickle.dump(
-            {
-                "model": SimpleNamespace(
-                    imputed_variables=list(income_module.IMPUTATIONS)
-                ),
-                "input_columns": income_module.PREDICTORS,
-                "metadata": stale_metadata,
-            },
-            f,
-        )
+    _write_income_model_cache(cache, income_module, stale_metadata)
 
     sentinel = object()
     monkeypatch.setattr(income_module, "INCOME_MODEL_PATH", cache)
@@ -423,17 +432,7 @@ def test_income_model_cache_rejects_stale_sample_size(tmp_path, monkeypatch):
         **income_module.get_income_model_metadata(),
         "sample_size": income_module.TESTING_INCOME_MODEL_SAMPLE_SIZE,
     }
-    with cache.open("wb") as f:
-        pickle.dump(
-            {
-                "model": SimpleNamespace(
-                    imputed_variables=list(income_module.IMPUTATIONS)
-                ),
-                "input_columns": income_module.PREDICTORS,
-                "metadata": stale_metadata,
-            },
-            f,
-        )
+    _write_income_model_cache(cache, income_module, stale_metadata)
 
     sentinel = object()
     monkeypatch.setattr(income_module, "INCOME_MODEL_PATH", cache)
@@ -447,17 +446,7 @@ def test_income_model_cache_accepts_current_spi_release(tmp_path, monkeypatch):
 
     cache = tmp_path / "income_spi_2022_23.pkl"
     current_metadata = income_module.get_income_model_metadata()
-    with cache.open("wb") as f:
-        pickle.dump(
-            {
-                "model": SimpleNamespace(
-                    imputed_variables=list(income_module.IMPUTATIONS)
-                ),
-                "input_columns": income_module.PREDICTORS,
-                "metadata": current_metadata,
-            },
-            f,
-        )
+    _write_income_model_cache(cache, income_module, current_metadata)
 
     monkeypatch.setattr(income_module, "INCOME_MODEL_PATH", cache)
     monkeypatch.setattr(
@@ -467,3 +456,15 @@ def test_income_model_cache_accepts_current_spi_release(tmp_path, monkeypatch):
     )
 
     assert income_module.create_income_model().metadata == current_metadata
+
+
+def test_create_spi_marks_every_taxpayer_as_their_benefit_units_claimant(tmp_path):
+    from policyengine_uk_data.datasets.spi import create_spi
+
+    tab = tmp_path / "spi.tab"
+    _write_fake_spi(tab)
+
+    person = create_spi(tab, 2020, seed=0).person
+    assert person["is_claimant_or_partner"].dtype == bool
+    assert person["is_claimant_or_partner"].all()
+    assert person["person_benunit_id"].is_unique

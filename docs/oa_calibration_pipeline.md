@@ -23,7 +23,7 @@ Build the OA crosswalk and population-weighted assignment function.
 **Deliverables:**
 - `policyengine_uk_data/calibration/oa_crosswalk.py` — downloads/builds the OA → LSOA → MSOA → LA → constituency → region → country crosswalk
 - `policyengine_uk_data/storage/oa_crosswalk.csv.gz` — compressed crosswalk file
-- `policyengine_uk_data/calibration/oa_assignment.py` — assigns cloned records to OAs (population-weighted, country-constrained)
+- `policyengine_uk_data/calibration/oa_assignment.py` — assigns cloned records to OAs (population-weighted within the household's FRS region)
 - Tests validating crosswalk completeness and assignment correctness
 
 **Data sources:**
@@ -42,13 +42,14 @@ Clone each FRS household N times and assign each clone a different OA.
 
 **Deliverables:**
 - `policyengine_uk_data/calibration/clone_and_assign.py` — clones all three entity tables (household, person, benunit), remaps IDs, divides weights by N, attaches OA geography columns
-- `datasets/create_datasets.py` — clone step inserted after imputations, before uprating/calibration (N=10 production, N=2 testing)
+- `datasets/create_datasets.py` — clone step inserted after imputations, before uprating/calibration (N defaults to 10, or 2 with `TESTING=1`; `PE_UK_DATA_OA_CLONES` overrides it)
 - `tests/test_clone_and_assign.py` — 14 tests covering dimensions, weight preservation, ID uniqueness, FK integrity, country constraints, data preservation
 
 **Key design:**
-- N=10 clones in production, N=2 in testing mode
+- N defaults to 10 clones (2 with `TESTING=1`); the `PE_UK_DATA_OA_CLONES` environment variable overrides it, and the release (`push.yaml`) and pull request workflows set it to 1
 - Constituency collision avoidance: each clone gets a different constituency where possible
-- Country constraint preserved: English households → English OAs only
+- Region constraint: each clone's OA is drawn from the household's own FRS region (Wales and Scotland are one region each), so `region_code_oa`, `la_code_oa` and `constituency_code_oa` never contradict `region`. A household with no region below the country falls back to its country. No LA or constituency straddles a region, so every OA stays reachable
+- Collision avoidance draws from the same region; the smallest (North East) has 27 constituencies, more than the default 10 clones
 - Weights divided by N so population totals are preserved
 - Pure pandas/numpy operations — no simulation required, fast execution
 
@@ -133,7 +134,7 @@ Generate per-area H5 files from sparse L0-calibrated weights.
 **Deliverables:**
 - `policyengine_uk_data/calibration/publish_local_h5s.py` — extracts per-area H5 subsets from the sparse weight vector; each H5 contains only active households (non-zero weight) with their calibrated weights, plus the linked person and benunit rows
 - `policyengine_uk_data/calibration/long_geography.py` — exports matrix-free local geography weights as an OA-first long table, with constituency and LA rows derived from assigned OA geography
-- `datasets/create_datasets.py` — publish step wired in after calibration, before downrating
+- `datasets/create_datasets.py` — exports `local_geography_weights.csv.gz` after calibration; `publish_local_h5s()` is not called by the build
 - `tests/test_publish_local_h5s.py` — 13 tests covering area-household mapping, H5 structure, pruned-household exclusion, weight correctness, person/benunit FK integrity, full publish cycle, summary statistics, and validation
 
 **Key design:**
