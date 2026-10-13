@@ -158,7 +158,7 @@ def _receipt_probabilities(fitted_model, inputs: pd.DataFrame) -> pd.Series:
                 "Household CTR classifier returned invalid probability dimensions"
             )
         probabilities = pd.Series(
-            class_probabilities[:, classes == True].sum(axis=1),
+            class_probabilities[:, np.equal(classes, True)].sum(axis=1),
             index=inputs.index,
         )
     if (
