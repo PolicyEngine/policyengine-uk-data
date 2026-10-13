@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 import policyengine_uk
 import policyengine_uk_data.datasets.frs as frs_module
+from policyengine_uk_data.utils.datasets import sum_to_entity as real_sum_to_entity
 
 from policyengine_uk_data.datasets.frs import (
     FRS_EMPSTATI_EMPLOYMENT_STATUS,
@@ -382,12 +383,21 @@ class FakeMicrosimulation:
         raise KeyError(variable)
 
 
-def create_single_adult_frs(tmp_path, monkeypatch, empstati=8, with_child=False):
+def create_single_adult_frs(
+    tmp_path, monkeypatch, empstati=8, with_child=False, accounts=None
+):
     monkeypatch.setattr(policyengine_uk, "Microsimulation", FakeMicrosimulation)
     monkeypatch.setattr(frs_module, "load_take_up_rate", lambda *args, **kwargs: 0.0)
     monkeypatch.setattr(frs_module, "load_parameter", lambda *args, **kwargs: 0.0)
+    # The real join for any table with rows; empty tables give zeros.
     monkeypatch.setattr(
-        frs_module, "sum_to_entity", lambda values, ids, index: np.zeros(len(index))
+        frs_module,
+        "sum_to_entity",
+        lambda values, ids, index: (
+            real_sum_to_entity(values, ids, index)
+            if len(values)
+            else np.zeros(len(index))
+        ),
     )
     monkeypatch.setattr(
         frs_module,
@@ -521,8 +531,12 @@ def create_single_adult_frs(tmp_path, monkeypatch, empstati=8, with_child=False)
             ]
         ),
         "oddjob": pd.DataFrame(columns=["person", "sernum", "ojamt", "ojnow"]),
-        "accounts": pd.DataFrame(
-            columns=["person", "sernum", "accint", "acctax", "invtax", "account"]
+        "accounts": (
+            accounts
+            if accounts is not None
+            else pd.DataFrame(
+                columns=["person", "sernum", "accint", "acctax", "invtax", "account"]
+            )
         ),
         "job": pd.DataFrame(columns=["person", "sernum", "deduc1", "spnamt", "salsac"]),
         "benefits": pd.DataFrame(
@@ -596,6 +610,32 @@ def test_create_frs_child_rows_are_child(tmp_path, monkeypatch):
         100_001: "OTHER_INACTIVE",
         100_002: "CHILD",
     }
+
+
+def test_create_frs_keys_account_dividends_on_person_id(tmp_path, monkeypatch):
+    # One stocks-and-shares account (type 8) held by the adult. create_frs
+    # must join it on person_id (household_id * 1000 + person), not on the
+    # person table's row position, which matches no account id.
+    accounts = pd.DataFrame(
+        [
+            {
+                "person": 1,
+                "sernum": 100,
+                "accint": 10.0,
+                "acctax": 0,
+                "invtax": 0,
+                "account": 8,
+            }
+        ]
+    )
+    person = create_single_adult_frs(
+        tmp_path, monkeypatch, with_child=True, accounts=accounts
+    ).person.set_index("person_id")
+
+    assert person.loc[100_001, "dividend_income"] == pytest.approx(
+        10.0 * frs_module.WEEKS_IN_YEAR
+    )
+    assert person.loc[100_002, "dividend_income"] == 0
 
 
 def test_create_frs_rejects_unknown_adult_empstati(tmp_path, monkeypatch):

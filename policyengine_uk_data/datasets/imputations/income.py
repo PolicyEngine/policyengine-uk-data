@@ -489,7 +489,6 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     Returns:
         Combined dataset with original data plus synthetic high-income individuals.
     """
-    # Impute wealth, assuming same time period as trained data
     dataset = dataset.copy()
     # gift_aid and charitable_investment_gifts are in IMPUTATIONS but are not
     # columns on the raw FRS build, so initialise them to zero everywhere
@@ -551,12 +550,13 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         )
 
     # The FRS half keeps its reported dividends. Replacing them with a draw
-    # from the SPI model, whose only predictors are age, gender and region,
-    # gave dividends to FRS respondents without regard to their investments,
-    # earnings or benefits, so Universal Credit claimants received them as
-    # often as anyone else (policyengine-uk#1948). The SPI-donor half carries
-    # the SPI dividend distribution, and calibration to the HMRC dividend
-    # targets reweights between the two.
+    # from the SPI model, which predicts from age, gender and region within
+    # earnings groups (whether the person has pay or a trade), gave
+    # dividends to FRS respondents without regard to their investments or
+    # benefits, so Universal Credit claimants received them
+    # (policyengine-uk#1948). The SPI-donor half carries the SPI dividend
+    # distribution, and calibration to the HMRC dividend targets reweights
+    # between the two.
 
     zero_weight_copy.validate()
     dataset.validate()

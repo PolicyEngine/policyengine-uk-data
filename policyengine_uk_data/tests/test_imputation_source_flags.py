@@ -139,15 +139,17 @@ def test_impute_capital_gains_marks_capital_gains_clone_households(monkeypatch):
 def test_impute_income_keeps_reported_dividends_on_the_frs_half(monkeypatch):
     """SPI draws replace incomes only on the SPI-donor copy (policyengine-uk#1948).
 
-    The SPI income model predicts from age, gender and region alone, so using
-    it to overwrite the FRS half's dividends gave Universal Credit claimants
-    dividends unrelated to anything they reported.
+    The SPI income model predicts from age, gender and region within earnings
+    groups, so using it to overwrite the FRS half's dividends gave Universal
+    Credit claimants dividends unrelated to any investments they reported.
+    The stage-2 model then trains on the FRS half's reported dividends.
     """
     from policyengine_uk_data.datasets.imputations import income as income_module
     from policyengine_uk_data.datasets import disability_benefits
     from policyengine_uk_data.datasets.imputations import frs_only
 
     imputed_halves = []
+    stage_2_training = []
 
     def fake_impute_over_incomes(dataset, _model, output_variables):
         imputed_halves.append(
@@ -168,10 +170,13 @@ def test_impute_income_keeps_reported_dividends_on_the_frs_half(monkeypatch):
         lambda dataset, _sample_size: dataset.copy(),
     )
     monkeypatch.setattr(income_module, "impute_over_incomes", fake_impute_over_incomes)
+
+    def fake_impute_frs_only_variables(train_dataset, target_dataset):
+        stage_2_training.append(train_dataset.person["dividend_income"].tolist())
+        return target_dataset
+
     monkeypatch.setattr(
-        frs_only,
-        "impute_frs_only_variables",
-        lambda train_dataset, target_dataset: target_dataset,
+        frs_only, "impute_frs_only_variables", fake_impute_frs_only_variables
     )
     monkeypatch.setattr(
         disability_benefits,
@@ -190,6 +195,8 @@ def test_impute_income_keeps_reported_dividends_on_the_frs_half(monkeypatch):
     assert frs_half["dividend_income"].tolist() == [150.0, 0.0]
     assert frs_half["employment_income"].tolist() == [20_000.0, 80_000.0]
     assert result.person.iloc[2:]["dividend_income"].eq(123_456.0).all()
+    # Stage 2 learns from the FRS half's reported dividends, not SPI draws.
+    assert stage_2_training == [[150.0, 0.0]]
 
 
 def _reported_dividend_dataset(dividends_by_person) -> UKSingleYearDataset:

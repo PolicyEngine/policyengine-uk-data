@@ -48,6 +48,8 @@ from policyengine_uk_data.datasets.childcare.assumptions import (
 # loaders (e.g. LCFS/ETB in `datasets/imputations/consumption.py`) can import
 # the same value rather than re-defining `* 52` locally and drifting.
 WEEKS_IN_YEAR = 365.25 / 7
+# Grosses up an amount taxed at source at the basic rate (1 / 0.8).
+INVERTED_BASIC_RATE = 1.25
 
 LEGACY_JOBSEEKER_MIN_AGE = 18
 HOURS_WORKED_WEEKS_PER_YEAR = 52
@@ -800,7 +802,6 @@ def frs_dividend_income(account: pd.DataFrame, person_ids) -> np.ndarray:
     the positional index instead matched almost no accounts, leaving the FRS
     with about £40m of dividends rather than about £8bn in 2024-25.
     """
-    INVERTED_BASIC_RATE = 1.25
     dividends = (
         account.accint * np.where(account.invtax == 1, INVERTED_BASIC_RATE, 1)
     ) * (
@@ -1290,8 +1291,6 @@ def create_frs(
         * 52
     ).astype(float)
 
-    WEEKS_IN_YEAR = 365.25 / 7
-
     pe_person["employment_income"] = np.maximum(0, person.inearns) * WEEKS_IN_YEAR
 
     pension_payment = sum_to_entity(
@@ -1325,8 +1324,6 @@ def create_frs(
             pe_person.employment_income,
         )
     )
-
-    INVERTED_BASIC_RATE = 1.25
 
     pe_person["tax_free_savings_income"] = np.maximum(
         0,

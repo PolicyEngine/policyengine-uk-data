@@ -16,10 +16,12 @@ def sum_to_entity(values: pd.Series, foreign_key: pd.Series, primary_key) -> np.
     Args:
         values (pd.Series): The values in the non-entity table.
         foreign_key (pd.Series): E.g. pension.person_id.
-        primary_key ([type]): E.g. person.index.
+        primary_key ([type]): The entity's own ids in the same key space as
+            ``foreign_key``, e.g. person.person_id. A positional index such as
+            person.index matches the wrong rows or none.
 
     Returns:
-        pd.Series: A value for each person.
+        np.ndarray: A value for each entry of ``primary_key``.
     """
     return values.groupby(foreign_key).sum().reindex(primary_key).fillna(0).values
 
