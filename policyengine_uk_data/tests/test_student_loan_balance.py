@@ -170,13 +170,12 @@ def test_impute_wealth_routes_student_loan_balance_to_people(monkeypatch):
 
         @staticmethod
         def predict(_input_df):
-            return pd.DataFrame(
-                {
-                    "owned_land": [10.0, 20.0],
-                    "student_loan_balance": [900.0, 300.0],
-                },
-                index=[1, 2],
+            output = pd.DataFrame(
+                0.0, index=[1, 2], columns=list(wealth.IMPUTE_VARIABLES)
             )
+            output["owned_land"] = [10.0, 20.0]
+            output["student_loan_balance"] = [900.0, 300.0]
+            return output
 
     class DummyMicrosimulation:
         def __init__(self, dataset):
