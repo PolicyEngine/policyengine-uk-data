@@ -19,9 +19,9 @@ The imputations are applied in this order (dependencies noted):
 
 ## Wealth Imputation
 
-**Source:** Wealth and Assets Survey (WAS) Round 7 (2018-2020)
+**Source:** Wealth and Assets Survey (WAS) Round 8 (April 2020 to March 2022), household file
 
-Imputes household wealth components using demographic and income predictors.
+Imputes household wealth components using demographic and income predictors. The targets are imputed as a chain: each is fitted on the predictors and every earlier target.
 
 ### Predictors
 | Variable | Description |
@@ -39,18 +39,33 @@ Imputes household wealth components using demographic and income predictors.
 | `region` | UK region |
 
 ### Outputs
-| Variable | Description |
-|----------|-------------|
-| `owned_land` | Value of owned land |
-| `property_wealth` | Total property wealth |
-| `corporate_wealth` | Shares, pensions, investment ISAs |
-| `gross_financial_wealth` | Total financial assets |
-| `net_financial_wealth` | Financial assets minus liabilities |
-| `main_residence_value` | Value of main home |
-| `other_residential_property_value` | Value of other properties |
-| `non_residential_property_value` | Value of non-residential property |
-| `savings` | Savings account balances |
-| `num_vehicles` | Number of vehicles owned |
+| Variable | WAS round 8 source | Description |
+|----------|--------------------|-------------|
+| `owned_land` | `DVLUKValR8_sum` | Value of land in the UK |
+| `property_wealth` | `DVPropertyR8` | Gross value of all property; sequential conditioning draw only, never saved |
+| `private_pension_wealth` | `totalpenr8_aggr` − `dvvaldbt_scaper8_aggr` | Private pension wealth other than current-employment defined benefit rights: defined contribution pots, retained rights, pensions in payment |
+| `directly_held_shares` | `DVFShUKVR8_aggr` + `DVFESHARESR8_aggr` | UK shares and employee shares and options, held outside ISAs and pooled funds |
+| `unit_and_investment_trusts` | `DVFCollVR8_aggr` | Unit trusts and investment trusts (one survey question) |
+| `stocks_and_shares_isa` | `DVIISAVR8_aggr` | Stocks and shares (investment) ISAs |
+| `corporate_wealth` | derived | `directly_held_shares` + `unit_and_investment_trusts` + `stocks_and_shares_isa`, summed after imputation |
+| `gross_financial_wealth` | `HFINWR8_SUM` | Total financial assets |
+| `net_financial_wealth` | `HFINWNTR8_Sum` | Financial assets minus liabilities |
+| `main_residence_value` | `DVHValueR8` | Value of main home |
+| `other_residential_property_value` | `DVHseValR8_sum` + `DVBltValR8_sum` | Second homes and buy-to-let property |
+| `non_residential_property_value` | `DVBlDValR8_sum` | Other buildings, such as shops and garages |
+| `overseas_property_value` | `DVLOSValR8_sum` | Overseas land and property |
+| `other_property_value` | `DVOprValR8_sum` | Other real estate, unspecified geography/type |
+| `savings` | `DVSaValR8_aggr` | Savings account balances (cash ISAs excluded) |
+| `num_vehicles` | `vcarnr8` | Number of vehicles owned |
+| `student_loan_balance` | `Tot_LosR8_aggr` − `Tot_los_exc_SLCR8_aggr` | Student Loans Company balance, allocated to people |
+| `cash_isa` | `DVCISAVR8_aggr` | Cash ISAs |
+| `other_residential_property_secured_debt` | `DVHseDebtR8_sum` + `DVBLtDebtR8_sum` | Mortgages and loans secured on second homes and buy-to-let property |
+| `non_residential_property_secured_debt` | `DVBldDebtR8_sum` | Mortgages and loans secured on other buildings |
+| `owned_land_secured_debt` | `DVLUKDebtR8_sum` | Loans secured on UK land |
+
+`corporate_wealth` is the exact sum of its three components on every household; private pension wealth is not part of it, because pension rights are disregarded capital in every means test. A secured debt is zero wherever the household holds none of the asset it is secured on. The seven gross WAS property terms are retained in six saved inputs: second homes and buy-to-let share one residential input. `property_wealth` remains a conditioning draw only; the companion model calculates the total from those six uprated inputs. Overseas shares (`DVFShOSVR8_aggr`) remain included only in the financial wealth totals.
+
+Each target draws its quantile with its own seed. microimpute otherwise uses one seed for every target, so a household drawn high for one asset is drawn high for every later target conditioned on it, which makes sparse targets such as the debt secured on land near-certain for the households that hold the asset.
 
 ---
 
