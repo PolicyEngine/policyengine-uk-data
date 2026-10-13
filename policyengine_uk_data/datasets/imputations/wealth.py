@@ -68,6 +68,9 @@ IMPUTE_VARIABLES = [
     "other_residential_property_secured_debt",
     "non_residential_property_secured_debt",
     "owned_land_secured_debt",
+    # Append new outputs: retain #501's chain order and quantile seeds.
+    "overseas_property_value",
+    "other_property_value",
 ]
 
 # corporate_wealth is not imputed: it is the sum of its imputed components,
@@ -108,6 +111,22 @@ DERIVED_TARGETS = {
     "student_loan_balance": ("Tot_LosR8_aggr", "-Tot_los_exc_SLCR8_aggr"),
 }
 
+# Seven WAS source terms become six model inputs: #501 combines second
+# homes and buy-to-let. Keep direct UK land and overseas property distinct.
+PROPERTY_COMPONENTS = (
+    "main_residence_value",
+    "other_residential_property_value",
+    "non_residential_property_value",
+    "owned_land",
+    "overseas_property_value",
+    "other_property_value",
+)
+
+# Keep the source total as a sequential predictor, but let the companion
+# model sum the six uprated inputs, covering all seven WAS source terms.
+# Independent predictions need not reconcile to the conditioning draw.
+CONDITIONING_ONLY_VARIABLES = ("property_wealth",)
+
 WAS_RENAMES = {
     "R8xshhwgt": "household_weight",
     # Components for estimating land holdings.
@@ -143,7 +162,8 @@ WAS_RENAMES = {
     "DVPriRntR8": "is_renter",  # {1, 2} TODO: Get codebook values.
     "CTAmtR8": "council_tax",
     # Other columns for reference.
-    "DVLOSValR8_sum": "non_uk_land",
+    # Overseas land AND property (including dwellings/time-shares), not land only.
+    "DVLOSValR8_sum": "overseas_property_value",
     "HFINWNTR8_Sum": "net_financial_wealth",
     "HFINWR8_SUM": "gross_financial_wealth",
     "TotalWlthR8": "wealth",
@@ -156,6 +176,7 @@ WAS_RENAMES = {
     "DVBLtDebtR8_sum": "buy_to_let_debt",
     "DVBlDValR8_sum": "non_residential_property_value",
     "DVBldDebtR8_sum": "non_residential_property_secured_debt",
+    "DVOprValR8_sum": "other_property_value",
     "DVTotinc_bhcR8": "household_net_income",
     "DVSaValR8_aggr": "savings",
     "vcarnr8": "num_vehicles",
@@ -202,6 +223,29 @@ def generate_was_table(was: pd.DataFrame):
 
     was = was.rename(columns=RENAMES).fillna(0)[list(RENAMES.values())]
 
+    # WAS gross property fields use -9 (not applicable) and -8 (unknown/refused).
+    # Treat these as missing, like NaN. Gross asset values cannot be negative;
+    # reject undocumented codes without exposing any household records.
+    # Validate the seven raw terms before combining residential values: a
+    # missing/negative buy-to-let value must not reduce or hide in second homes.
+    gross_columns = [
+        "property_wealth",
+        "main_residence_value",
+        "second_homes_value",
+        "buy_to_let_value",
+        "non_residential_property_value",
+        "owned_land",
+        "overseas_property_value",
+        "other_property_value",
+    ]
+    was[gross_columns] = was[gross_columns].replace({-9: 0, -8: 0})
+    negative = was[gross_columns].lt(0).sum()
+    if negative.any():
+        raise ValueError(
+            "Unexpected negative WAS gross property values (household counts): "
+            + ", ".join(f"{name}={count}" for name, count in negative.items() if count)
+        )
+
     was["is_renting"] = was["is_renter"] == 1
 
     # Private pension wealth other than current-employment defined benefit
@@ -228,6 +272,7 @@ WEALTH_MODEL_METADATA = {
     "impute_variables": tuple(IMPUTE_VARIABLES),
     "derived_targets": tuple(DERIVED_TARGETS.items()),
     "quantile_draw_seeds": tuple(QUANTILE_DRAW_SEEDS.items()),
+    "property_mapping_version": 2,
 }
 
 
@@ -361,6 +406,135 @@ def use_independent_quantile_draws(model: QRF) -> QRF:
     return model
 
 
+def store_wealth_predictions(
+    dataset: UKSingleYearDataset, predictions: pd.DataFrame
+) -> UKSingleYearDataset:
+    """Write imputed wealth to the dataset, skipping conditioning-only outputs.
+
+    `student_loan_balance` is allocated to people; every other saved output is
+    a household column.
+    """
+    # Also remove an inherited saved total when augmenting an existing dataset.
+    dataset.household.drop(
+        columns=list(CONDITIONING_ONLY_VARIABLES), errors="ignore", inplace=True
+    )
+    for column in predictions.columns:
+        if column in CONDITIONING_ONLY_VARIABLES:
+            continue
+        if column == "student_loan_balance":
+            dataset.person[column] = _allocate_student_loan_balance_to_people(
+                household_balances=predictions[column].clip(lower=0),
+                person=dataset.person,
+            )
+            continue
+        dataset.household[column] = predictions[column].values
+    return dataset
+
+
+def require_property_component_model():
+    """Reject a model that would silently omit the newly retained categories.
+
+    The companion model changes, including the UK-only land formula, are
+    specified in docs/property-wealth-model-changes.md. They must land before
+    building a release with this mapping.
+    """
+    from policyengine_uk.system import system
+
+    new_components = {
+        "overseas_property_value",
+        "other_property_value",
+    }
+    missing = new_components - system.variables.keys()
+    if missing:
+        raise ValueError(
+            "Property imputation requires the companion policyengine-uk change "
+            "in docs/property-wealth-model-changes.md; missing variables: "
+            + ", ".join(sorted(missing))
+        )
+    property_adds = sorted(system.variables["property_wealth"].adds or ())
+    residential_adds = sorted(system.variables["residential_property_value"].adds or ())
+    if property_adds != sorted(
+        [
+            "residential_property_value",
+            "non_residential_property_value",
+            "owned_land",
+            "overseas_property_value",
+            "other_property_value",
+        ]
+    ) or residential_adds != sorted(
+        [
+            "main_residence_value",
+            "other_residential_property_value",
+        ]
+    ):
+        raise ValueError(
+            "policyengine-uk property aggregates must include all seven WAS "
+            "categories; apply docs/property-wealth-model-changes.md"
+        )
+    required_index = "gov.economic_assumptions.indices.obr.per_capita.gdp"
+    if any(
+        system.variables[name].uprating != required_index
+        for name in PROPERTY_COMPONENTS
+    ):
+        raise ValueError(
+            "Every WAS property component requires the GDP-per-capita model uprating index"
+        )
+
+    # The UK dataset loader materialises yearly inputs using this registry;
+    # variable attributes alone do not uprate those explicitly supplied arrays.
+    from pathlib import Path
+    import yaml
+    from policyengine_uk.data import economic_assumptions
+
+    with open(
+        Path(economic_assumptions.__file__).parent / "uprating_indices.yaml"
+    ) as registry_file:
+        registry = yaml.safe_load(registry_file)
+    registered = [name for names in registry.values() for name in names]
+    gdp_registered = registry.get(
+        "gov.economic_assumptions.yoy_growth.obr.per_capita.gdp", ()
+    )
+    if any(
+        registered.count(name) != 1 or name not in gdp_registered
+        for name in PROPERTY_COMPONENTS
+    ):
+        raise ValueError(
+            "Every WAS property component requires UK dataset uprating registration"
+        )
+
+    # Exercise the installed formula directly: adding the inputs and aggregate
+    # without changing land estimation would still double-count UK land and
+    # tax overseas assets. These are synthetic formula probes, not survey data.
+    from policyengine_core.periods import period
+    from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
+
+    probe_period = period(CURRENT_FRS_RELEASE.base_year)
+    regions = system.variables["region"].possible_values
+    inputs = {
+        "region": regions.encode(np.array(["LONDON", "LONDON", "LONDON"])),
+        "property_wealth": np.array([100.0, 100.0, 150.0]),
+        "owned_land": np.array([100.0, 0.0, 20.0]),
+        "overseas_property_value": np.array([0.0, 100.0, 30.0]),
+        **{
+            name: np.zeros(3)
+            for name in PROPERTY_COMPONENTS
+            if name not in ("owned_land", "overseas_property_value")
+        },
+        "main_residence_value": np.array([0.0, 0.0, 100.0]),
+    }
+    formula = system.variables["household_land_value"].get_formula(probe_period)
+    land = formula(lambda name, _: inputs[name], probe_period, system.parameters)
+    regional = system.parameters(
+        probe_period
+    ).household.wealth.land.intensity.property_wealth_by_region
+    expected_land = [100.0, 0.0, 100.0 * regional.LONDON + 20.0]
+    if not np.allclose(land, expected_land):
+        raise ValueError(
+            "policyengine-uk land formula must count UK land once and exclude "
+            "overseas property; apply docs/property-wealth-model-changes.md"
+        )
+
+
 def save_imputation_models():
     """
     Train and save wealth imputation model.
@@ -422,6 +596,7 @@ def impute_wealth(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     """
     dataset = dataset.copy()
 
+    require_property_component_model()
     model = create_wealth_model()
     sim = Microsimulation(dataset=dataset)
     predictors = model.input_columns
@@ -432,16 +607,7 @@ def impute_wealth(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         "NORTHERN_IRELAND", "WALES"
     )  # WAS doesn't sample NI -> put NI households in Wales (closest aggregate)
     output_df = derive_wealth_outputs(model.predict(input_df))
-
-    for column in output_df.columns:
-        if column == "student_loan_balance":
-            dataset.person[column] = _allocate_student_loan_balance_to_people(
-                household_balances=output_df[column].clip(lower=0),
-                person=dataset.person,
-            )
-            continue
-        dataset.household[column] = output_df[column].values
-
+    dataset = store_wealth_predictions(dataset, output_df)
     dataset.validate()
 
     return dataset

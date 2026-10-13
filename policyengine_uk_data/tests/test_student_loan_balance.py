@@ -194,6 +194,7 @@ def test_impute_wealth_routes_student_loan_balance_to_people(monkeypatch):
 
     monkeypatch.setattr(wealth, "create_wealth_model", lambda: DummyModel())
     monkeypatch.setattr(wealth, "Microsimulation", DummyMicrosimulation)
+    monkeypatch.setattr(wealth, "require_property_component_model", lambda: None)
 
     imputed = wealth.impute_wealth(DummyDataset())
 
