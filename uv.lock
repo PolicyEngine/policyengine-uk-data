@@ -1480,7 +1480,6 @@ requires-dist = [
     { name = "google-auth" },
     { name = "google-cloud-storage" },
     { name = "huggingface-hub" },
-    { name = "hypothesis", marker = "extra == 'dev'" },
     { name = "hypothesis", marker = "extra == 'dev'", specifier = ">=6.168.3" },
     { name = "itables", marker = "extra == 'dev'" },
     { name = "l0-python", marker = "extra == 'dev'", specifier = ">=0.4.0" },
