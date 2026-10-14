@@ -48,6 +48,8 @@ from policyengine_uk_data.datasets.childcare.assumptions import (
 # loaders (e.g. LCFS/ETB in `datasets/imputations/consumption.py`) can import
 # the same value rather than re-defining `* 52` locally and drifting.
 WEEKS_IN_YEAR = 365.25 / 7
+# Grosses up an amount taxed at source at the basic rate (1 / 0.8).
+INVERTED_BASIC_RATE = 1.25
 
 LEGACY_JOBSEEKER_MIN_AGE = 18
 HOURS_WORKED_WEEKS_PER_YEAR = 52
@@ -790,6 +792,28 @@ def validate_frs_survey_year(raw_frs_folder, year: int) -> None:
         )
 
 
+def frs_dividend_income(account: pd.DataFrame, person_ids) -> np.ndarray:
+    """Annual dividends each person reports on FRS investment accounts.
+
+    Gilt-edged stock taxed at source (account type 6), unit and investment
+    trusts (7) and stocks and shares (8). Amounts taxed at source are grossed
+    up at the basic rate. Summed to ``person_ids``, which must be the same
+    ``household_id * 1e3 + person`` keys as ``account.person_id``: keying on
+    the positional index instead matched almost no accounts, leaving the FRS
+    with about £40m of dividends rather than about £8bn in 2024-25.
+    """
+    dividends = (
+        account.accint * np.where(account.invtax == 1, INVERTED_BASIC_RATE, 1)
+    ) * (
+        ((account.account == 6) & (account.invtax == 1))  # GGES
+        | account.account.isin((7, 8))  # Stocks/shares/UITs
+    )
+    return np.maximum(
+        0,
+        sum_to_entity(dividends, account.person_id, person_ids) * WEEKS_IN_YEAR,
+    )
+
+
 def derive_pension_credit_reported_capital(benunit: pd.DataFrame) -> np.ndarray:
     """Each benefit unit's capital as the FRS records it, for Pension Credit.
 
@@ -1267,8 +1291,6 @@ def create_frs(
         * 52
     ).astype(float)
 
-    WEEKS_IN_YEAR = 365.25 / 7
-
     pe_person["employment_income"] = np.maximum(0, person.inearns) * WEEKS_IN_YEAR
 
     pension_payment = sum_to_entity(
@@ -1303,8 +1325,6 @@ def create_frs(
         )
     )
 
-    INVERTED_BASIC_RATE = 1.25
-
     pe_person["tax_free_savings_income"] = np.maximum(
         0,
         sum_to_entity(
@@ -1327,19 +1347,7 @@ def create_frs(
         0,
         taxable_savings_interest + pe_person["tax_free_savings_income"].values,
     )
-    pe_person["dividend_income"] = np.maximum(
-        0,
-        sum_to_entity(
-            (account.accint * np.where(account.invtax == 1, INVERTED_BASIC_RATE, 1))
-            * (
-                ((account.account == 6) & (account.invtax == 1))  # GGES
-                | account.account.isin((7, 8))  # Stocks/shares/UITs
-            ),
-            account.person_id,
-            person.index,
-        )
-        * 52,
-    )
+    pe_person["dividend_income"] = frs_dividend_income(account, person.person_id)
     pe_person["property_income"] = frs_property_income(person, household)
     maintenance_to_self = np.maximum(
         pd.Series(np.where(person.mntus1 == 2, person.mntusam1, person.mntamt1)).fillna(

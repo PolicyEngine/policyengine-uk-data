@@ -450,8 +450,9 @@ def impute_over_incomes(
 
     # Housing costs (rent, mortgage interest, mortgage capital) used to be
     # rescaled here by new_income_total / original_income_total across
-    # INCOME_COMPONENTS. Because FRS dividend_income is near-zero and the
-    # SPI-trained QRF predicts materially larger dividends, the ratio
+    # INCOME_COMPONENTS. Because FRS dividend_income was then near-zero (a
+    # keying error in frs.py, since fixed) and the SPI-trained QRF predicts
+    # materially larger dividends, the ratio
     # inflated rent/mortgage by ~2.5× uniformly in the built enhanced FRS
     # — pushing AHC poverty rates 10–18 pp above HBAI for non-pensioners
     # (see issue #367). Housing costs now pass through unchanged; their
@@ -488,13 +489,11 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     Returns:
         Combined dataset with original data plus synthetic high-income individuals.
     """
-    # Impute wealth, assuming same time period as trained data
     dataset = dataset.copy()
     # gift_aid and charitable_investment_gifts are in IMPUTATIONS but are not
     # columns on the raw FRS build, so initialise them to zero everywhere
-    # before imputation. Without this, the full-FRS half stays NaN for these
-    # columns (they're never touched by the dividend-only impute_over_incomes
-    # call below), and the eventual stacked dataset fails validate().
+    # before imputation. The FRS half keeps its reported incomes, so these
+    # columns must already be populated when the stacked dataset is validated.
     for column in ("gift_aid", "charitable_investment_gifts"):
         if column not in dataset.person.columns:
             dataset.person[column] = 0.0
@@ -507,7 +506,7 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
 
     model = create_income_model()
 
-    # Impute just dividends on the original, full variable set on the copy
+    # Impute the full income set on the SPI-donor copy only.
 
     zero_weight_copy = impute_over_incomes(
         zero_weight_copy,
@@ -550,11 +549,14 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
             )
         )
 
-    dataset = impute_over_incomes(
-        dataset,
-        model,
-        ["dividend_income"],
-    )
+    # The FRS half keeps its reported dividends. Replacing them with a draw
+    # from the SPI model, which predicts from age, gender and region within
+    # earnings groups (whether the person has pay or a trade), gave
+    # dividends to FRS respondents without regard to their investments or
+    # benefits, so Universal Credit claimants received them
+    # (policyengine-uk#1948). The SPI-donor half carries the SPI dividend
+    # distribution, and calibration to the HMRC dividend targets reweights
+    # between the two.
 
     zero_weight_copy.validate()
     dataset.validate()
