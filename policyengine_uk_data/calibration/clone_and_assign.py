@@ -189,7 +189,13 @@ def clone_and_assign(
 
         # Clone household table
         hh_clone = hh.copy()
-        hh_clone["source_household_id"] = hh_id_col
+        # A record split from another household (datasets/brma.py) keeps that
+        # household as its source, so survey support is not overcounted.
+        hh_clone["source_household_id"] = (
+            hh["source_household_id"].to_numpy()
+            if "source_household_id" in hh.columns
+            else hh_id_col
+        )
         if "source_year" not in hh_clone.columns:
             hh_clone["source_year"] = dataset.time_period
         hh_clone["household_id"] = new_hh_ids

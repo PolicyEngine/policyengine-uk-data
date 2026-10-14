@@ -145,6 +145,62 @@ def initialize_weight_priors(
     return priors
 
 
+class RecordGroups:
+    """Records that split one household, calibrated as that household.
+
+    ``labels`` gives each record's group. The calibration optimises one
+    weight per group, on the mean of its records' target rows (the household's
+    expected contribution per unit of weight) with the group's total weight as
+    its prior; each record then gets an equal share of its group's weight.
+    """
+
+    def __init__(self, labels: np.ndarray | None, records: int):
+        """``labels=None``: every record is its own group (no work is done)."""
+        self.identity = labels is None
+        if self.identity:
+            labels = np.arange(records)
+        self.codes = pd.factorize(np.asarray(labels))[0]
+        self.sizes = np.bincount(self.codes)
+        self.first = np.zeros(len(self.sizes), dtype=int)
+        self.first[self.codes[::-1]] = np.arange(len(self.codes))[::-1]
+
+    def means(self, values):
+        """Per-group means of record rows (a DataFrame keeps its columns)."""
+        array = np.asarray(values, dtype=float)
+        sums = np.zeros((len(self.sizes),) + array.shape[1:])
+        np.add.at(sums, self.codes, array)
+        means = sums / self.sizes.reshape((-1,) + (1,) * (array.ndim - 1))
+        if isinstance(values, pd.DataFrame):
+            return pd.DataFrame(means, columns=values.columns)
+        return means
+
+    def totals(self, values: np.ndarray) -> np.ndarray:
+        if self.identity:
+            return values
+        return np.bincount(self.codes, weights=np.asarray(values, dtype=float))
+
+    def columns_agree(self, matrix: np.ndarray, chunk: int = 4096) -> bool:
+        """Whether every record's column (last axis) equals its group's first.
+
+        Compared exactly, a chunk of records at a time.
+        """
+        records = np.flatnonzero(self.first[self.codes] != np.arange(len(self.codes)))
+        for start in range(0, len(records), chunk):
+            columns = records[start : start + chunk]
+            firsts = self.first[self.codes[columns]]
+            if not np.array_equal(matrix[..., columns], matrix[..., firsts]):
+                return False
+        return True
+
+    def expand(self, weights: np.ndarray) -> np.ndarray:
+        """Group weights (last axis) to records, split equally."""
+        if self.identity:
+            return weights
+        weights = np.asarray(weights)
+        sizes = self.sizes[self.codes].astype(weights.dtype, copy=False)
+        return weights[..., self.codes] / sizes
+
+
 def _as_bool_mask(series: pd.Series) -> np.ndarray:
     if pd.api.types.is_bool_dtype(series):
         return series.fillna(False).to_numpy(dtype=bool)
@@ -221,6 +277,7 @@ def calibrate_local_areas(
     nested_progress=None,
     time_period: int | str | None = None,
     zero_weight_prior_total_share: float = DEFAULT_ZERO_WEIGHT_PRIOR_TOTAL_SHARE,
+    groups: np.ndarray | None = None,
 ):
     """
     Generic calibration function for local areas (constituencies, local authorities, etc.)
@@ -239,6 +296,10 @@ def calibrate_local_areas(
         area_name: Name of the area type for logging
         zero_weight_prior_total_share: Share of prior household mass to reserve for
             rows whose incoming household_weight is zero.
+        groups: Optional label per household marking records that split one
+            household (a private renter's BRMA records). Each group is
+            calibrated as one household (``RecordGroups``), so its records keep
+            equal weights.
     """
     if dataset_key is None:
         dataset_key = default_weight_dataset_key()
@@ -257,12 +318,23 @@ def calibrate_local_areas(
 
     with track_stage(f"{area_name}: build local target matrix"):
         matrix, y, r = _call_matrix_fn(matrix_fn, dataset, time_period)
+        record_groups = RecordGroups(
+            groups, len(dataset.household.household_weight.values)
+        )
+        if groups is not None:
+            r = np.asarray(r)
+            if not record_groups.columns_agree(r):
+                raise ValueError("A record group spans areas of different countries.")
+            matrix = record_groups.means(matrix)
+            r = r[:, record_groups.first]
     m_c, y_c = matrix.copy(), y.copy()
 
     with track_stage(f"{area_name}: build national target matrix"):
         m_national, y_national = _call_matrix_fn(
             national_matrix_fn, dataset, time_period
         )
+        if groups is not None:
+            m_national = record_groups.means(m_national)
     m_n, y_n = m_national.copy(), y_national.copy()
 
     with track_stage(f"{area_name}: prepare tensors and optimizer"):
@@ -278,7 +350,7 @@ def calibrate_local_areas(
             areas_per_household, 1
         )  # avoid division by zero
         household_prior_weights = initialize_weight_priors(
-            dataset.household.household_weight.values,
+            record_groups.totals(dataset.household.household_weight.values),
             zero_weight_total_share=zero_weight_prior_total_share,
         )
         area_prior_weights = household_prior_weights / areas_per_household
@@ -435,8 +507,8 @@ def calibrate_local_areas(
 
         diagnostics = _household_weight_diagnostics(
             dataset,
-            final_weights.sum(axis=0),
-            household_prior_weights,
+            record_groups.expand(final_weights.sum(axis=0)),
+            record_groups.expand(household_prior_weights),
         )
         for key, value in diagnostics.items():
             performance_step[key] = value
@@ -490,9 +562,13 @@ def calibrate_local_areas(
 
                     # Save weights
                     with h5py.File(STORAGE_FOLDER / weight_file, "w") as f:
-                        f.create_dataset(dataset_key, data=final_weights)
+                        f.create_dataset(
+                            dataset_key, data=record_groups.expand(final_weights)
+                        )
 
-                    dataset.household.household_weight = final_weights.sum(axis=0)
+                    dataset.household.household_weight = record_groups.expand(
+                        final_weights.sum(axis=0)
+                    )
     else:
         for epoch in range(epochs):
             optimizer.zero_grad()
@@ -530,8 +606,12 @@ def calibrate_local_areas(
 
                 # Save weights
                 with h5py.File(STORAGE_FOLDER / weight_file, "w") as f:
-                    f.create_dataset(dataset_key, data=final_weights)
+                    f.create_dataset(
+                        dataset_key, data=record_groups.expand(final_weights)
+                    )
 
-                dataset.household.household_weight = final_weights.sum(axis=0)
+                dataset.household.household_weight = record_groups.expand(
+                    final_weights.sum(axis=0)
+                )
 
     return dataset
