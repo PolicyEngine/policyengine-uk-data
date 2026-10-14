@@ -32,6 +32,7 @@ from policyengine_uk_data.utils.uprating import (
     END_YEAR,
     HOUSEHOLD_WEIGHT_UPRATING_INDEX,
     START_YEAR,
+    UPRATING_TABLE_DECIMALS,
     VOLUME_OVERRIDDEN_VARIABLES,
     _apply_household_weight_uprating_override,
     _apply_road_fuel_litre_proxy_override,
@@ -109,7 +110,9 @@ def test__given_uprating_table__then_only_fuel_rows_are_overridden():
             household_weight_index=df.loc["household_weight"],
         )
         for year in range(START_YEAR, END_YEAR + 1):
-            assert out.loc[variable, year] == round(expected[year], 3)
+            assert out.loc[variable, year] == round(
+                expected[year], UPRATING_TABLE_DECIMALS
+            )
 
 
 def test__given_generated_uprating_table__then_household_weight_row_is_restored():
@@ -144,7 +147,9 @@ def test__given_storage_csv__then_fuel_rows_reflect_litre_proxy_index():
         )
         assert variable in df.index
         for year in range(START_YEAR, END_YEAR + 1):
-            assert df.loc[variable, str(year)] == round(expected[year], 3)
+            assert df.loc[variable, str(year)] == round(
+                expected[year], UPRATING_TABLE_DECIMALS
+            )
 
 
 def test__given_storage_csv__then_household_weight_row_is_unchanged():
