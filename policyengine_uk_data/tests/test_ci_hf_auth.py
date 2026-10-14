@@ -117,6 +117,22 @@ def test_hugging_face_commands_run_only_in_the_listed_steps():
     assert found == set(HF_STEPS)
 
 
+def test_the_helper_runs_only_in_the_listed_steps():
+    """Every exchange is one of HF_STEPS, so its resource is checked above."""
+    found = set()
+    for workflow, job_name, _, step in _all_steps():
+        lines = [
+            line
+            for line in step.get("run", "").splitlines()
+            if not line.lstrip().startswith("#")
+        ]
+        if any("with-hf-token.sh" in line for line in lines):
+            found.add((workflow, job_name, step.get("name")))
+        # A resource set inline would bypass the env checks.
+        assert not any("HF_OIDC_RESOURCE=" in line for line in lines), step.get("name")
+    assert found == set(HF_STEPS)
+
+
 def test_jobs_that_exchange_can_request_an_oidc_token():
     for workflow, job_name, job, step in _all_steps():
         if HELPER in step.get("run", ""):
@@ -125,7 +141,14 @@ def test_jobs_that_exchange_can_request_an_oidc_token():
             )
 
 
-PR_EVENTS = {"pull_request", "pull_request_target", "merge_group"}
+# Events that run a pull request's code or ref (refs/pull/<n>/merge).
+PR_EVENTS = {
+    "pull_request",
+    "pull_request_target",
+    "pull_request_review",
+    "pull_request_review_comment",
+    "merge_group",
+}
 
 
 def _pull_request_reachable() -> set[str]:
