@@ -1,0 +1,1 @@
+Refresh the social rent calibration target to the English Housing Survey 2024-25 mean (GBP 129/week, from GBP 118/week in EHS 2023-24). The target is set for 2025 but was anchored to a 2023-24 vintage while the private rent target used ONS data from February 2026, understating the social basis by roughly 10% relative to its own target year.
