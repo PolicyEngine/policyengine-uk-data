@@ -1,3 +1,14 @@
+## [1.58.1] - 2026-10-14
+
+### Fixed
+
+- - Limit every salary sacrifice amount, reported or imputed, to the person's pay, and train the salary sacrifice QRF only on SALSAC respondents with pay. Stage 1 had drawn amounts for people without pay from the few SALSAC respondents who report a sacrifice but have no recorded pay, so about a million people with no pay carried salary sacrifice, and from 2029 policyengine-uk returned the excess over the £2,000 cap to their employment income.
+  - Stage 2 of the salary sacrifice imputation now takes the employee pension contribution it converts to salary sacrifice out of the donor's pay (at most half the pay). It had left pay unchanged, so converted donors lost the income tax relief on that contribution.
+- Take Scottish taxpayer status in the SPI dataset from HMRC's `SCOT_TXP` flag rather than the region code. `GORCODE` 13, 14 and -1 (address abroad, address unknown, composite records) stay `UNKNOWN`, which policyengine-uk 2.104.5 and later can simulate; `load_spi_dataset` relabels them `SOUTH_EAST` only when the imported model cannot simulate them, and rebuilds a cached SPI H5 that predates the flag.
+- Remove 32 changelog fragments that had no type, so towncrier never compiled them. Their changes shipped in 1.57.3 or earlier, but their entries never reached this changelog; #555 lists them. The changelog check now rejects a fragment without a type, and requires a typed fragment from each pull request unless it changes only docs, CI and the other exempt paths in CONTRIBUTING.md.
+- Regenerate `storage/uprating_factors.csv` (last built 2026-05-20) from the uprating policyengine-uk applies to a dataset at load (the year-on-year growth in its `uprating_indices.yaml`) rather than from each variable's `uprating` attribute, keeping the household-weight and road-fuel overrides and storing six decimal places. The stale table moved the FRS to the 2025 calibration year with 2024-25 growth of 3.7% for earnings (policyengine-uk 2.93.0: 5.3%), 4.7% for self-employment income (0.7%) and 2.8% for GDP-indexed incomes and wealth (4.4%), and uprated salary-sacrificed pension contributions, water charges and service charges, which policyengine-uk carries unchanged, so calibration now fits the values the model runs on. The SPI income projections are regenerated with the new table, and the salary sacrifice headcount targets compare contributions with the £2,000 cap as simulated instead of deflating them through a table row that no longer exists.
+
+
 ## [1.58.0] - 2026-10-07
 
 ### Added
