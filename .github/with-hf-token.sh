@@ -21,6 +21,10 @@
 # command then runs without a token (tests that need the data skip or fail as
 # they would with no credentials); otherwise the step fails.
 #
+# Never redirect this script's stdout: its ::add-mask:: line must reach the
+# runner, or the token is neither masked nor kept out of the file. Redirect
+# inside the command instead: with-hf-token.sh bash -c 'pytest ... > out.txt'
+#
 # Usage: HF_OIDC_RESOURCE=policyengine-auto .github/with-hf-token.sh make test
 set -euo pipefail
 : "${HF_OIDC_RESOURCE:?HF_OIDC_RESOURCE must name a Hugging Face user or repo}"

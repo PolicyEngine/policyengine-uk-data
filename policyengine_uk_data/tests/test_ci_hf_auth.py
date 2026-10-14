@@ -90,7 +90,9 @@ def test_no_workflow_sets_a_static_hugging_face_token():
 @pytest.mark.parametrize("workflow,job,step", sorted(HF_STEPS))
 def test_each_hugging_face_step_runs_exactly_its_wrapped_command(workflow, job, step):
     command, resource = HF_STEPS[(workflow, job, step)]
-    (match,) = [s for s in _load(workflow)["jobs"][job]["steps"] if s.get("name") == step]
+    (match,) = [
+        s for s in _load(workflow)["jobs"][job]["steps"] if s.get("name") == step
+    ]
     assert match["run"].strip() == command
     assert match["env"]["HF_OIDC_RESOURCE"] == resource
 
@@ -195,8 +197,14 @@ def _child_output(result):
 
 def test_helper_passes_the_token_arguments_stdin_and_exit_status(run_helper):
     result = run_helper(
-        sys.executable, "-c", CHILD, "two words", "it's", "$HOME",
-        stdin="line one\nline two\n", CHILD_EXIT="3",
+        sys.executable,
+        "-c",
+        CHILD,
+        "two words",
+        "it's",
+        "$HOME",
+        stdin="line one\nline two\n",
+        CHILD_EXIT="3",
     )
     assert result.returncode == 3
     out = _child_output(result)
@@ -213,7 +221,11 @@ def test_helper_exchanges_for_the_named_resource_with_a_pinned_cli(run_helper):
     assert result.returncode == 0, result.stderr
     calls = run_helper.calls
     assert (calls / "uvx").read_text().split() == [
-        "--from", "huggingface_hub==2.2.0", "hf", "auth", "token",
+        "--from",
+        "huggingface_hub==2.2.0",
+        "hf",
+        "auth",
+        "token",
     ]
     assert (calls / "uvx.resource").read_text() == PRIVATE_REPO
 
@@ -229,7 +241,12 @@ def test_helper_falls_back_to_pipx_without_uvx(run_helper):
     result = run_helper(exchange="pipx")
     assert result.returncode == 0, result.stderr
     assert (run_helper.calls / "pipx").read_text().split() == [
-        "run", "--spec", "huggingface_hub==2.2.0", "hf", "auth", "token",
+        "run",
+        "--spec",
+        "huggingface_hub==2.2.0",
+        "hf",
+        "auth",
+        "token",
     ]
     assert _child_output(result)["env"]["HUGGING_FACE_TOKEN"] == "hf_jwt_fake"
 
@@ -243,7 +260,13 @@ def test_helper_falls_back_to_pipx_without_uvx(run_helper):
         {"HF_OIDC_RESOURCE": None},
         {"HF_OIDC_RESOURCE": ""},
     ],
-    ids=["exchange-fails", "fails-after-output", "empty-token", "no-resource", "empty-resource"],
+    ids=[
+        "exchange-fails",
+        "fails-after-output",
+        "empty-token",
+        "no-resource",
+        "empty-resource",
+    ],
 )
 def test_helper_never_runs_the_command_without_a_token(run_helper, env):
     result = run_helper(**env)
