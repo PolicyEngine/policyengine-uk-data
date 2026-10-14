@@ -76,9 +76,19 @@ def _env_scopes():
 
 
 def test_no_workflow_reads_a_hugging_face_secret():
-    pattern = re.compile(r"secrets\.\w*(HF|HUGGING)\w*", re.IGNORECASE)
+    # Dotted (secrets.X) and bracket (secrets['X']) lookups alike.
+    pattern = re.compile(
+        r"secrets\s*(\.\s*\w*(HF|HUGGING)\w*|\[\s*['\"][^'\"]*(HF|HUGGING)[^'\"]*['\"]\s*\])",
+        re.IGNORECASE,
+    )
+    # Passing every secret on also reaches the org-wide token.
+    passes_all = re.compile(
+        r"secrets:\s*inherit|toJSON\(\s*secrets\s*\)", re.IGNORECASE
+    )
     for path in _workflow_files():
-        assert not pattern.search(path.read_text()), path.name
+        text = path.read_text()
+        assert not pattern.search(text), path.name
+        assert not passes_all.search(text), path.name
 
 
 def test_no_workflow_sets_a_static_hugging_face_token():
@@ -115,11 +125,41 @@ def test_jobs_that_exchange_can_request_an_oidc_token():
             )
 
 
+PR_EVENTS = {"pull_request", "pull_request_target", "merge_group"}
+
+
+def _pull_request_reachable() -> set[str]:
+    """Workflows a pull request can run: those it triggers, and any they call."""
+    workflows = {
+        path.name: yaml.safe_load(path.read_text()) for path in _workflow_files()
+    }
+
+    def events(workflow: dict) -> set:
+        on = workflow.get(True, workflow.get("on"))  # PyYAML reads `on` as True
+        return set(on) if isinstance(on, (dict, list)) else {on}
+
+    reachable = {name for name, w in workflows.items() if events(w) & PR_EVENTS}
+    frontier = set(reachable)
+    while frontier:
+        called = set()
+        for name in frontier:
+            for job in (workflows[name].get("jobs") or {}).values():
+                uses = job.get("uses") or ""
+                if uses.startswith("./.github/workflows/"):
+                    called.add(uses.rsplit("/", 1)[1])
+        frontier = called - reachable
+        reachable |= called
+    return reachable
+
+
 def test_pull_requests_only_get_the_read_only_identity():
     """A repo resource yields a write token; pull requests must never get one."""
+    reachable = _pull_request_reachable()
+    assert "pull_request.yaml" in reachable
+    assert "push.yaml" not in reachable
     for workflow, scope, env in _env_scopes():
-        if workflow == "pull_request.yaml" and "HF_OIDC_RESOURCE" in (env or {}):
-            assert env["HF_OIDC_RESOURCE"] == CI_IDENTITY, scope
+        if workflow in reachable and "HF_OIDC_RESOURCE" in (env or {}):
+            assert env["HF_OIDC_RESOURCE"] == CI_IDENTITY, f"{workflow} {scope}"
 
 
 def test_release_token_is_scoped_to_the_repo_the_upload_writes_to():
