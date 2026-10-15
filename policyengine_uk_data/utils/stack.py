@@ -12,6 +12,10 @@ def stack_datasets(
     for column in SURVEY_ROLE_COLUMNS:
         if (column in data_1.person.columns) != (column in data_2.person.columns):
             raise ValueError(f"Only one of the stacked datasets has {column}.")
+    # Copies share their survey household's provenance even after ID remapping.
+    for dataset in (data_1, data_2):
+        if "source_household_id" not in dataset.household.columns:
+            dataset.household["source_household_id"] = dataset.household["household_id"]
     person_id_offset = data_1.person.person_id.max() + 1
     benunit_id_offset = data_1.benunit.benunit_id.max() + 1
     household_id_offset = data_1.household.household_id.max() + 1

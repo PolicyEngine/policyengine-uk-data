@@ -35,15 +35,6 @@ class _FakeDataset:
         return None
 
 
-def _stack_without_remapping(left: _FakeDataset, right: _FakeDataset) -> _FakeDataset:
-    return _FakeDataset(
-        person=pd.concat([left.person, right.person], ignore_index=True),
-        household=pd.concat([left.household, right.household], ignore_index=True),
-        benunit=pd.concat([left.benunit, right.benunit], ignore_index=True),
-        fiscal_year=left.time_period,
-    )
-
-
 def _fake_dataset() -> _FakeDataset:
     person = pd.DataFrame(
         {
@@ -94,8 +85,6 @@ def test_impute_income_marks_spi_synthetic_households(monkeypatch):
         "strip_internal_disability_reported_amounts",
         lambda dataset: dataset,
     )
-    monkeypatch.setattr(income_module, "stack_datasets", _stack_without_remapping)
-
     result = income_module.impute_income(_fake_dataset())
 
     assert result.household["household_is_spi_synthetic"].tolist() == [
@@ -105,6 +94,7 @@ def test_impute_income_marks_spi_synthetic_households(monkeypatch):
         True,
     ]
     assert result.household.loc[2:, "household_weight"].eq(0).all()
+    assert result.household["source_household_id"].tolist() == [1, 2, 1, 2]
 
 
 def test_impute_capital_gains_marks_capital_gains_clone_households(monkeypatch):
@@ -112,7 +102,6 @@ def test_impute_capital_gains_marks_capital_gains_clone_households(monkeypatch):
         "policyengine_uk_data.datasets.imputations.capital_gains"
     )
 
-    monkeypatch.setattr(cg_module, "stack_datasets", _stack_without_remapping)
     monkeypatch.setattr(
         cg_module,
         "impute_cg_to_doubled_dataset",
@@ -131,3 +120,20 @@ def test_impute_capital_gains_marks_capital_gains_clone_households(monkeypatch):
         True,
     ]
     assert result.household.loc[2:, "household_weight"].eq(1).all()
+    assert result.household["source_household_id"].tolist() == [1, 2, 1, 2]
+
+
+def test_built_dataset_sources_are_original_survey_households(enhanced_frs):
+    """Issue #591: disclosure support must count each survey household once."""
+    household = enhanced_frs.household
+    original = ~(
+        household["household_is_spi_synthetic"]
+        | household["household_is_capital_gains_clone"]
+        | household["household_is_cgt_band_donor"]
+    ) & (household["clone_index"] == 0)
+    original_ids = household.loc[original, "household_id"]
+
+    assert household["source_household_id"].isin(original_ids).all()
+    np.testing.assert_array_equal(
+        household.loc[original, "source_household_id"], original_ids
+    )
