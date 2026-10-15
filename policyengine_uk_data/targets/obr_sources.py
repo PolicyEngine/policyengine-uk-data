@@ -19,15 +19,23 @@ Adopting a new vintage (for example on Budget day):
     python -m policyengine_uk_data.targets.obr_sources ingest \\
         --vintage october_2026 --label "October 2026" \\
         --receipts receipts.xlsx --expenditure expenditure.xlsx \\
-        --first-year 2025 --last-year 2031
+        --first-year 2025 --last-year 2031 --dry-run
 
 obr.uk refuses scripted downloads (HTTP 403 to GitHub Actions runners, as
-11e41f9d records, and to a developer machine on 2026-10-15), so download
-the two workbooks in a browser and pass their paths. ``ingest`` copies them under ``storage/obr_efo/<vintage>/``,
-checks that each workbook's title names the vintage, parses them with the
-build's own parsers, and requires the targets the current manifest
-requires. It then writes the manifest and prints each target's change from
-the current vintage. Point ``sources.yaml`` at the new manifest to adopt it.
+11e41f9d records, and to a developer machine on 2026-10-15), so a person
+downloads the two "detailed forecast tables" workbooks in a browser and
+passes their paths. ``--dry-run`` checks everything and prints each
+workbook's title, SHA-256, size and download time and every target's old
+and new value, writing nothing. It also says whether the bytes match the
+committed workbooks when the vintage is the active one, which makes a
+March 2026 download a rehearsal. Without ``--dry-run``, ``ingest`` parses
+the workbooks in a staging folder and then copies them under
+``storage/obr_efo/<vintage>/``. It requires each workbook's title to name
+the vintage, and requires the targets the current manifest requires. It
+writes the manifest with each file's SHA-256, size and download time (the
+file's modification time unless ``--downloaded-at`` is given) and never
+replaces an ingested vintage. Point ``sources.yaml`` at the new manifest to
+adopt it.
 """
 
 from __future__ import annotations
@@ -38,7 +46,7 @@ import io
 import re
 import sys
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
@@ -71,6 +79,8 @@ class SourceFile:
     title: str  # the workbook's own title, cell B2 of its Contents sheet
     url: str
     retrieved: str
+    # When the file was downloaded (ISO 8601 with a UTC offset), if known.
+    downloaded_at: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -120,6 +130,7 @@ def parse_manifest(raw: Mapping, path: Optional[Path] = None) -> ObrManifest:
             title=str(entry["title"]),
             url=str(entry["url"]),
             retrieved=str(entry["retrieved"]),
+            downloaded_at=_timestamp(entry.get("downloaded_at"), f"{where}: {kind}"),
         )
     required, alternatives = [], []
     for item in (raw.get("targets") or {}).get("required") or []:
@@ -146,6 +157,22 @@ def parse_manifest(raw: Mapping, path: Optional[Path] = None) -> ObrManifest:
         alternatives=tuple(alternatives),
         path=path,
     )
+
+
+def _timestamp(value, where: str) -> Optional[str]:
+    """An ISO 8601 time with a UTC offset, or None."""
+    if value is None:
+        return None
+    text = value.isoformat() if isinstance(value, datetime) else str(value)
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError as error:
+        raise SourceError(
+            f"{where}: downloaded_at {text!r} is not an ISO 8601 time"
+        ) from error
+    if parsed.tzinfo is None:
+        raise SourceError(f"{where}: downloaded_at {text!r} needs a UTC offset")
+    return parsed.isoformat()
 
 
 def check_names(vintage: str, label: str, titles: Mapping[str, str], where: str):
@@ -396,6 +423,7 @@ def _manifest_yaml(manifest: ObrManifest, alternatives_raw) -> str:
                 "title": f.title,
                 "url": f.url,
                 "retrieved": f.retrieved,
+                **({"downloaded_at": f.downloaded_at} if f.downloaded_at else {}),
             }
             for kind, f in manifest.files.items()
         },
@@ -424,8 +452,16 @@ def ingest(
     storage: Optional[Path] = None,
     manifest_dir: Optional[Path] = None,
     retrieved: Optional[str] = None,
+    downloaded_at: Optional[Mapping[str, str]] = None,
+    dry_run: bool = False,
 ):
     """Adopt a vintage's two workbooks. Returns (manifest, manifest path, diff).
+
+    Each workbook's SHA-256, size and download time go into the manifest.
+    The download time is ``downloaded_at[kind]`` if given, otherwise the
+    file's modification time, which a browser sets when it saves a download.
+    With ``dry_run`` everything is checked and the diff returned, but
+    nothing is written; the manifest returned is not on disk.
 
     Everything is checked in a staging folder first: both workbooks read
     and carry the vintage's titles, and the build's parsers yield every
@@ -440,10 +476,13 @@ def ingest(
     current = current or active_manifest()
     storage = Path(storage or _storage())
     manifest_dir = Path(manifest_dir or MANIFEST_DIR)
-    retrieved = retrieved or f"ingested {date.today().isoformat()}"
+    retrieved = retrieved or (
+        f"downloaded in a browser and ingested on {date.today().isoformat()}"
+    )
+    downloaded_at = dict(downloaded_at or {})
     destination = storage / "obr_efo" / vintage
     path = manifest_dir / f"obr_{vintage}.yaml"
-    if destination.exists() or path.exists():
+    if not dry_run and (destination.exists() or path.exists()):
         raise SourceError(
             f"{vintage} is already ingested ({destination} or {path} exists); "
             "remove it deliberately before ingesting again"
@@ -468,6 +507,13 @@ def ingest(
             title=titles[kind],
             url=urls.get(kind, ""),
             retrieved=retrieved,
+            downloaded_at=_timestamp(
+                downloaded_at.get(kind)
+                or datetime.fromtimestamp(
+                    Path(sources[kind]).stat().st_mtime, tz=timezone.utc
+                ),
+                f"ingest: {kind}",
+            ),
         )
     check_names(vintage, label, titles, "ingest")
     manifest = ObrManifest(
@@ -493,6 +539,8 @@ def ingest(
         manifest,
         [[sorted(group) for group in groups] for groups in current.alternatives],
     )
+    if dry_run:
+        return manifest, path, target_diff(old, new)
     destination.mkdir(parents=True)
     for kind in KINDS:
         (storage / files[kind].path).write_bytes(data[kind])
@@ -518,7 +566,17 @@ def main(argv=None) -> int:
     i.add_argument("--expenditure-url", default="")
     i.add_argument("--first-year", required=True, type=int)
     i.add_argument("--last-year", required=True, type=int)
-    i.add_argument("--retrieved", help="how and when the files were obtained")
+    i.add_argument("--retrieved", help="how the files were obtained")
+    i.add_argument(
+        "--downloaded-at",
+        help="when the workbooks were downloaded (ISO 8601 with offset); "
+        "default: each file's modification time",
+    )
+    i.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="check everything and print the change, but write nothing",
+    )
     v = sub.add_parser("verify", help="verify the active manifest's workbooks")
     v.add_argument("--manifest", help="manifest file (default: the active one)")
     args = parser.parse_args(argv)
@@ -538,12 +596,31 @@ def main(argv=None) -> int:
         first_year=args.first_year,
         last_year=args.last_year,
         retrieved=args.retrieved,
+        downloaded_at={kind: args.downloaded_at for kind in KINDS}
+        if args.downloaded_at
+        else None,
+        dry_run=args.dry_run,
     )
-    print(f"wrote {path}")
+    for kind, f in manifest.files.items():
+        print(
+            f"{kind}: {f.title}; sha256 {f.sha256}, {f.size_bytes:,} bytes, "
+            f"downloaded {f.downloaded_at}"
+        )
+    print(f"{'would write' if args.dry_run else 'wrote'} {path}")
     print("target,year,current £bn,new £bn")
     for row in diff:
         print(f"{row['target']},{row['year']},{_gbp(row['old'])},{_gbp(row['new'])}")
-    print(f"To adopt it, set obr.manifest in sources.yaml to {path.name}.")
+    if not args.dry_run:
+        print(f"To adopt it, set obr.manifest in sources.yaml to {path.name}.")
+    else:
+        current = active_manifest()
+        if manifest.vintage == current.vintage:
+            for kind, f in manifest.files.items():
+                same = f.sha256 == current.files[kind].sha256
+                print(
+                    f"{kind}: {'the same bytes as' if same else 'different bytes from'} "
+                    f"the committed {current.label} workbook"
+                )
     return 0
 
 

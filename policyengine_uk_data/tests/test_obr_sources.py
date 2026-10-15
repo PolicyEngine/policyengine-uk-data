@@ -452,3 +452,78 @@ def test_a_workbook_target_without_the_vintage_fails_coverage(march_targets):
     problems = coverage_problems(list(march_targets) + [extra], MANIFEST)
     assert "obr/unversioned carries vintage None, not 'march_2026'" in problems
     assert "obr/unversioned was built but is not in the manifest" in problems
+
+
+def test_ingest_records_each_download_time(tmp_path):
+    """A browser download is hash-bound and timed: the file's modification
+    time by default, or the time given."""
+    import os
+
+    sources = _sources(tmp_path)
+    from datetime import datetime, timezone
+
+    when = datetime(2026, 10, 18, 12, tzinfo=timezone.utc).timestamp()
+    for path in sources.values():
+        os.utime(path, (when, when))
+    manifest, path, _ = _ingest(tmp_path, sources=sources)
+    assert {f.downloaded_at for f in manifest.files.values()} == {
+        "2026-10-18T12:00:00+00:00"
+    }
+    assert "downloaded_at: '2026-10-18T12:00:00+00:00'" in path.read_text()
+    (tmp_path / "again").mkdir()
+    manifest, _, _ = _ingest(
+        tmp_path / "again",
+        downloaded_at={
+            "receipts": "2026-10-28T13:05:00+00:00",
+            "expenditure": "2026-10-28T13:06:00+00:00",
+        },
+    )
+    assert manifest.files["receipts"].downloaded_at == "2026-10-28T13:05:00+00:00"
+    with pytest.raises(SourceError, match="UTC offset"):
+        _ingest(
+            tmp_path / "again",
+            vintage="march_2026",
+            downloaded_at={
+                "receipts": "2026-10-28T13:05:00",
+                "expenditure": "2026-10-28T13:06:00+00:00",
+            },
+            dry_run=True,
+        )
+
+
+def test_a_dry_run_checks_everything_and_writes_nothing(tmp_path):
+    manifest, path, diff = _ingest(tmp_path, dry_run=True)
+    assert manifest.vintage == "march_2026"
+    assert diff and all(row["old"] == row["new"] for row in diff)
+    assert not path.exists()
+    assert not (tmp_path / "storage" / "obr_efo").exists()
+    # A dry run still refuses workbooks that do not carry the vintage.
+    with pytest.raises(SourceError, match="not the October 2026 EFO receipts"):
+        _ingest(tmp_path, vintage="october_2026", label="October 2026", dry_run=True)
+
+
+def test_the_rehearsal_command_runs_on_the_committed_march_workbooks(tmp_path, capsys):
+    """The Budget-day command, end to end, on downloads of the active vintage."""
+    sources = _sources(tmp_path)
+    code = obr_sources.main(
+        [
+            "ingest",
+            "--vintage",
+            "march_2026",
+            "--label",
+            "March 2026",
+            "--receipts",
+            str(sources["receipts"]),
+            "--expenditure",
+            str(sources["expenditure"]),
+            "--first-year",
+            "2024",
+            "--last-year",
+            "2030",
+            "--dry-run",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "the same bytes as the committed March 2026 workbook" in out
+    assert "would write" in out
