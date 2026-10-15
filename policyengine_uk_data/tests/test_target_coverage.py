@@ -50,9 +50,9 @@ def test_the_shipped_known_gaps_load_and_cite_issues():
     names = [n for gap in gaps for n in gap.targets]
     assert len(names) == len(set(names))
     # The 1.58.1 inventory: 15 two-child-limit targets with no 2025 value, 19
-    # targets without signal.
+    # targets without signal, and 3 more without signal in TESTING builds.
     assert sum(len(g.targets) for g in gaps if g.status == "no_value_for_year") == 15
-    assert sum(len(g.targets) for g in gaps if g.status == "zero_signal") == 19
+    assert sum(len(g.targets) for g in gaps if g.status == "zero_signal") == 22
 
 
 @pytest.mark.parametrize(

@@ -10,7 +10,10 @@
 # Measured on uk-data 1.58.1 (enhanced_frs_2024_25.h5, sha256 056e80fd) with
 # policyengine-uk 2.122.2 at the calibration year 2025: of 660 targets, 645
 # enter the matrix, 15 have no value for 2025 and 19 of those entering have
-# no signal.
+# no signal. Pull request (TESTING) builds hold fewer records: across the
+# final calibration logs of 12 recent ones (targets with a national estimate
+# of exactly zero), 22 targets have no signal in at least one, the 19 above
+# and 3 single-claimant UC payment bands.
 schema_version: 1
 gaps:
   - status: no_value_for_year
@@ -78,3 +81,14 @@ gaps:
       - dwp/uc_payment_dist/COUPLE_NO_CHILDREN_annual_payment_27_600_to_28_800
       - dwp/uc_payment_dist/COUPLE_NO_CHILDREN_annual_payment_28_800_to_30_000
       - dwp/uc_payment_dist/COUPLE_NO_CHILDREN_annual_payment_30_000_to_inf
+  - status: zero_signal
+    reason: >-
+      In pull request (TESTING) builds no single claimant's UC payments
+      fall in these bands: in all 12 recent builds for 27,600 to 28,800,
+      and in 11 of 12 for the other two. The released 1.58.1 build has
+      signal in all three.
+    issue: https://github.com/PolicyEngine/policyengine-uk-data/issues/593
+    targets:
+      - dwp/uc_payment_dist/SINGLE_annual_payment_24_000_to_25_200
+      - dwp/uc_payment_dist/SINGLE_annual_payment_25_200_to_26_400
+      - dwp/uc_payment_dist/SINGLE_annual_payment_27_600_to_28_800
