@@ -1,4 +1,3 @@
-import numpy as np
 import pandas as pd
 from policyengine_uk_data.utils.calibrate import calibrate_local_areas
 from policyengine_uk_data.datasets.local_areas.constituencies.loss import (
@@ -92,12 +91,6 @@ def get_performance(weights, m_c, y_c, m_n, y_n, excluded_targets):
         }
     )
     national_target_validation["target"] = national_actuals.values
-    # Households with a non-zero value for each national target: how many
-    # records support its estimate (utils/fit_report.py publishes a target's
-    # error only from 10 records up).
-    national_target_validation["records"] = (
-        np.asarray(national_target_matrix) != 0
-    ).sum(axis=0)
 
     national_target_validation["error"] = (
         national_target_validation["estimate"] - national_target_validation["target"]

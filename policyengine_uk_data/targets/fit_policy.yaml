@@ -20,12 +20,17 @@ share_within_10pct:
   allowed_drop: 0.02
 
 national_target:
-  # Flag, for review, each national target whose error |estimate / target -
-  # 1| rises by more than this. The five builds give 0 to 6 such rises per
-  # pair (mean 1.8), so a list stays short. 0.1 gives up to 11 from noise
-  # alone, and 0.3 would hide the largest same-code move on the OBR, ONS
-  # population and DWP targets (0.21). Per-target moves don't fail until
-  # #598 is fixed. Those counts used every national target's error; the fit
-  # summary now publishes an error only for targets supported by at least
-  # 10 households (fit_report.MIN_RECORDS), so fewer can flag.
-  flag_rise: 0.2
+  # Flag, for review, each national target within 10% of its value on the
+  # base build and not on the head. Across the 20 ordered pairs of the five
+  # builds above, 1 to 10 of the 644 national targets leave the band per
+  # pair (mean 4.5), so a list stays short.
+  #
+  # This replaces flagging an error rise of more than 0.2 (adopted under
+  # d1344 on 15 October), which needed each target's error in the uploaded
+  # summary. Sol's re-review of #599 found no safe way to publish them: the
+  # dataset repeats households (output-area clones, SPI and CGT donors), so
+  # a count of rows can't show how many respondents support an estimate, and
+  # one household can dominate a target. The within-10% booleans are bounds,
+  # not values. Same-code pairs gave 0 to 6 flags under the old rule.
+  # Per-target moves don't fail until #598 is fixed.
+  flag: left_band
