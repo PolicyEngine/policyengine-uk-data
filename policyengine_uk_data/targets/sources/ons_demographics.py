@@ -3,10 +3,9 @@
 Downloads the ONS 2024-based principal population projection for the
 UK to extract total population and gender × age band targets.
 
-For regional age breakdowns (12 regions × 9 age bands), reads the
-pre-existing demographics.csv which was extracted from ONS subnational
-projections. The subnational projections don't have a stable machine-
-readable download URL, so this is the pragmatic compromise.
+Regional age breakdowns use demographics.csv below age 80 and a committed
+ONS projection extract for 80+, including the terminal age group. See
+tools/ons_age_targets for the sources and extraction method.
 
 Household type and tenure targets are from ONS families & households
 datasets (also lacking stable machine-readable URLs).
@@ -52,7 +51,7 @@ _REF_NRS = (
 
 _YEARS = list(range(2022, 2030))
 
-# Age band boundaries
+# FRS ages are top-coded at 80, so the last band includes every older age.
 _AGE_BANDS = [
     (0, 9),
     (10, 19),
@@ -62,7 +61,7 @@ _AGE_BANDS = [
     (50, 59),
     (60, 69),
     (70, 79),
-    (80, 89),
+    (80, None),
 ]
 
 # Five-year bands. The previous 15-year bands (0-14, 15-29, ...) pinned only
@@ -89,8 +88,7 @@ _GENDER_BANDS = [
     (65, 69),
     (70, 74),
     (75, 79),
-    (80, 84),
-    (85, 90),
+    (80, None),
 ]
 
 
@@ -121,12 +119,19 @@ def _find_projection_member(names: list[str]) -> str:
 
 
 def _aggregate_ages(
-    df: pd.DataFrame, sex: str, low: int, high: int, years: list[int]
+    df: pd.DataFrame, sex: str, low: int, high: int | None, years: list[int]
 ) -> dict[int, float]:
-    """Sum population for a sex and age range across years."""
+    """Sum an inclusive age band; None includes the projection's terminal age."""
     sex_filter = "Females" if sex == "female" else "Males"
-    ages = pd.to_numeric(df["Age"], errors="coerce")
-    mask = (df["Sex"] == sex_filter) & ages.between(low, high)
+    # Use each group's lower age: the 2024-based workbook ends with
+    # "105 - 109" and "110 and over"; older vintages can use "90+".
+    ages = pd.to_numeric(
+        df["Age"].astype(str).str.extract(r"^(\d+)", expand=False), errors="coerce"
+    )
+    age_mask = ages >= low
+    if high is not None:
+        age_mask &= ages <= high
+    mask = (df["Sex"] == sex_filter) & age_mask
     subset = df[mask]
     result = {}
     for y in years:
@@ -176,7 +181,7 @@ def _parse_uk_totals(df: pd.DataFrame) -> list[Target]:
             if values:
                 targets.append(
                     Target(
-                        name=f"ons/{sex}_{low}_{high}",
+                        name=f"ons/{sex}_{low}_{'plus' if high is None else high}",
                         variable="age",
                         source="ons",
                         unit=Unit.COUNT,
@@ -190,17 +195,19 @@ def _parse_uk_totals(df: pd.DataFrame) -> list[Target]:
 
 
 def _parse_regional_from_csv() -> list[Target]:
-    """Read regional age band targets from demographics.csv.
-
-    This CSV was extracted from ONS subnational projections which
-    lack a stable machine-readable download URL.
-    """
+    """Read regional bands, replacing the legacy bounded top band with 80+."""
     csv_path = STORAGE / "demographics.csv"
     if not csv_path.exists():
         logger.warning("demographics.csv not found, skipping regional")
         return []
 
     demographics = pd.read_csv(csv_path)
+    # Replace the legacy bounded 80-89 targets with direct ONS 80+ sums,
+    # including 90+, instead of relabelling totals with a different scope.
+    demographics = demographics[~demographics["name"].str.endswith("_age_80_89")]
+    top_bands = pd.read_csv(STORAGE / "regional_age_80_plus.csv")
+    top_bands["unit"] = "person"
+    demographics = pd.concat([demographics, top_bands], ignore_index=True)
     targets = []
 
     # Skip rows now handled by dedicated modules (ons_households.py,
@@ -231,8 +238,8 @@ def _parse_regional_from_csv() -> list[Target]:
         for y in _YEARS:
             col = str(y)
             if col in row.index and pd.notna(row[col]):
-                # Values in CSV are in thousands
-                values[y] = float(row[col]) * 1e3
+                scale = 1 if row["unit"] == "person" else 1e3
+                values[y] = float(row[col]) * scale
         if values:
             targets.append(
                 Target(
@@ -243,7 +250,11 @@ def _parse_regional_from_csv() -> list[Target]:
                     geographic_level=GeographicLevel.REGION,
                     values=values,
                     is_count=True,
-                    reference_url=_REF_REGION,
+                    reference_url=(
+                        row["reference_url"]
+                        if pd.notna(row.get("reference_url"))
+                        else _REF_REGION
+                    ),
                 )
             )
 
