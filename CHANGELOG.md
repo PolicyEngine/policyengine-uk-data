@@ -1,3 +1,10 @@
+## [1.58.2] - 2026-10-15
+
+### Fixed
+
+- Preserve original FRS household IDs through imputation stacks and geographic cloning so disclosure checks count each survey household once.
+
+
 ## [1.58.1] - 2026-10-14
 
 ### Fixed
