@@ -93,6 +93,31 @@ jobs:
         with:
           name: distribution_report.json
           path: distribution_report.json
+      - name: Check out the aggregate-impact tool
+        uses: actions/checkout@v6
+        with:
+          repository: PolicyEngine/policyengine-uk
+          ref: f642d6668ea6984ddbbbc98734dbec743c9295cc
+          path: pe-uk-tool
+          sparse-checkout: |
+            policyengine_uk/utils/aggregate_impact
+            policyengine_uk/data/fiscal_partition.yaml
+      - name: Measure national aggregates with the model fixed
+        run: |
+          tool="$RUNNER_TEMP/tool"
+          mkdir -p "$tool"
+          cp -R pe-uk-tool/policyengine_uk/utils/aggregate_impact "$tool/pe_uk_aggregate_impact"
+          model="policyengine-uk==$(uv run --frozen python -c 'import importlib.metadata as m; print(m.version("policyengine-uk"))')"
+          PYTHONPATH="$tool" uv run --frozen python -m pe_uk_aggregate_impact measure \
+            --label head --dataset-file policyengine_uk_data/storage/enhanced_frs_2024_25.h5 --dataset-label "this pull request's build" \
+            --fallback-partition pe-uk-tool/policyengine_uk/data/fiscal_partition.yaml \
+            --no-guard --git-sha "$model" --out "$RUNNER_TEMP/aggregate" || true
+          cp "$RUNNER_TEMP/aggregate/result.json" aggregate_result.json
+      - name: Save the aggregate result (aggregates only)
+        uses: actions/upload-artifact@v7
+        with:
+          name: aggregate_result.json
+          path: aggregate_result.json
       - name: Save calibration log (constituencies)
         uses: actions/upload-artifact@v7
         with:
@@ -111,6 +136,11 @@ jobs:
           # Relaxes built-dataset outcome tolerances to match the reduced
           # fidelity of the TESTING build above (see test_cgt_band_donors).
           TESTING: "1"
+  # The policyengine-uk aggregate-impact tool (policyengine_uk/utils/
+  # aggregate_impact) at a pinned commit measures each build with the locked
+  # model, and the comparison job compares them with the model fixed
+  # (`compare --axis data`). Only result.json leaves a job; its private/
+  # folder (household detail) stays on the runner.
   # The no-worsening check (W3). The base is built the same way as the head:
   # TESTING, one clone and the head's lockfile, so both builds run one model
   # and environment and the comparison measures the data change. Only the
@@ -170,6 +200,31 @@ jobs:
         with:
           name: base_distribution_report.json
           path: base_distribution_report.json
+      - name: Check out the aggregate-impact tool
+        uses: actions/checkout@v6
+        with:
+          repository: PolicyEngine/policyengine-uk
+          ref: f642d6668ea6984ddbbbc98734dbec743c9295cc
+          path: pe-uk-tool
+          sparse-checkout: |
+            policyengine_uk/utils/aggregate_impact
+            policyengine_uk/data/fiscal_partition.yaml
+      - name: Measure national aggregates with the model fixed
+        run: |
+          tool="$RUNNER_TEMP/tool"
+          mkdir -p "$tool"
+          cp -R pe-uk-tool/policyengine_uk/utils/aggregate_impact "$tool/pe_uk_aggregate_impact"
+          model="policyengine-uk==$(uv run --frozen --project base python -c 'import importlib.metadata as m; print(m.version("policyengine-uk"))')"
+          PYTHONPATH="$tool" uv run --frozen --project base python -m pe_uk_aggregate_impact measure \
+            --label base --dataset-file base/policyengine_uk_data/storage/enhanced_frs_2024_25.h5 --dataset-label "the base's build" \
+            --fallback-partition pe-uk-tool/policyengine_uk/data/fiscal_partition.yaml \
+            --no-guard --git-sha "$model" --out "$RUNNER_TEMP/aggregate" || true
+          cp "$RUNNER_TEMP/aggregate/result.json" base_aggregate_result.json
+      - name: Save the aggregate result (aggregates only)
+        uses: actions/upload-artifact@v7
+        with:
+          name: base_aggregate_result.json
+          path: base_aggregate_result.json
   fit-comparison:
     name: Calibration fit against the base
     needs: [test, base-build]
@@ -210,6 +265,21 @@ jobs:
           pattern: "*distribution_report.json"
           path: reports
           merge-multiple: true
+      - name: Download the aggregate results
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: "*aggregate_result.json"
+          path: aggregates
+          merge-multiple: true
+      - name: Check out the aggregate-impact tool
+        uses: actions/checkout@v6
+        with:
+          repository: PolicyEngine/policyengine-uk
+          ref: f642d6668ea6984ddbbbc98734dbec743c9295cc
+          path: pe-uk-tool
+          sparse-checkout: |
+            policyengine_uk/utils/aggregate_impact
       - name: Compare the final fits
         id: compare
         env:
@@ -243,6 +313,25 @@ jobs:
             if [ "$distribution_status" != 0 ]; then echo "status=1" >> "$GITHUB_OUTPUT"; fi
           else
             { echo; echo "The income distribution and single-age reports are missing for one build."; } >> fit.md
+          fi
+          # National aggregates with the model fixed.
+          tool="$RUNNER_TEMP/tool"
+          mkdir -p "$tool" aggregates/base aggregates/head
+          cp -R pe-uk-tool/policyengine_uk/utils/aggregate_impact "$tool/pe_uk_aggregate_impact"
+          if [ -f aggregates/base_aggregate_result.json ] && [ -f aggregates/aggregate_result.json ]; then
+            mv aggregates/base_aggregate_result.json aggregates/base/result.json
+            mv aggregates/aggregate_result.json aggregates/head/result.json
+            set +e
+            PYTHONPATH="$tool" uv run --frozen python -m pe_uk_aggregate_impact compare --axis data \
+              --base aggregates/base --head aggregates/head --markdown aggregates.md --run-url "$RUN_URL"
+            aggregate_status=$?
+            set -e
+            # The tool's comment marker belongs to policyengine-uk's own comment.
+            { echo; grep -v '^<!-- policyengine-uk-aggregate-impact -->' aggregates.md; } >> fit.md
+            if [ "$aggregate_status" != 0 ]; then echo "status=1" >> "$GITHUB_OUTPUT"; fi
+          else
+            { echo; echo "The national aggregate results are missing for one build."; } >> fit.md
+            echo "status=1" >> "$GITHUB_OUTPUT"
           fi
           cat fit.md >> "$GITHUB_STEP_SUMMARY"
       - name: Post or update the pull request comment

@@ -99,8 +99,16 @@ def test_the_pull_request_workflow_uploads_only_aggregate_reports():
             if uses.startswith("actions/upload-artifact"):
                 uploads.append(step["with"]["path"])
     assert uploads and all(
-        p.endswith(("calibration_log.csv", "distribution_report.json")) for p in uploads
+        p.endswith(
+            ("calibration_log.csv", "distribution_report.json", "aggregate_result.json")
+        )
+        for p in uploads
     ), uploads
+    # The aggregate tool writes household detail under private/; only its
+    # result.json is copied out for upload.
+    text = workflow.read_text()
+    assert 'cp "$RUNNER_TEMP/aggregate/result.json"' in text
+    assert "private" not in " ".join(uploads)
     assert jobs["fit-comparison"]["needs"] == ["test", "base-build"]
 
 
