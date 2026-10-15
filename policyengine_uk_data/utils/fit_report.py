@@ -1,29 +1,37 @@
-"""Final calibration fit from a build's log, and the comparison of two builds.
+"""Final calibration fit of a build, summarised safely, and the comparison of two.
 
 A build writes ``constituency_calibration_log.csv``: each target's estimate
-and value every tenth epoch, and at the last one. ``final_fit`` reads the
-last epoch. A target's error is |estimate / target - 1|, and targets of zero
-are left out. The national rows are those named ``UK``.
+and value every tenth epoch and at the last one, nationally (rows named
+``UK``) and for each constituency. The log stays on the runner that built
+it. ``summarise`` reduces its last epoch to what the comparison needs, and
+only the summary is uploaded:
 
-``compare_fits`` checks that a pull request does not worsen the fit of the
-build it would replace, both built the same way: same environment, epochs
-and clone count. Two rules come from ``targets/fit_policy.yaml``:
+- for every national and local target, whether its estimate is within 10%
+  of its value (|estimate / target - 1| <= 0.1), with zero targets left out;
+- for a national target supported by at least ``MIN_RECORDS`` households
+  (the log's ``records`` column), its error. A target supported by fewer has
+  no error in the summary: an estimate built from a few records, divided
+  by a published count, could give one household's value back.
 
-- **Fail** when the share of national (or local) targets within 10% falls
-  by more than the allowance.
+``compare`` checks that a pull request does not worsen the fit of the build
+it would replace, built the same way (same environment, epochs and clones),
+using the policy in ``targets/fit_policy.yaml``:
+
+- **Fail** when the share of national, or of local, targets within 10%
+  falls by more than the allowance, over the targets both builds have.
+  Added and removed targets are reported, not counted.
 - **Flag** each national target whose error rises by more than the
-  same-code spread, for review.
+  same-code spread, for review. Per-target moves do not fail while builds
+  of the same code differ by up to 0.62 on one target (#598).
 
-Per-target moves are not yet gates: builds of the same code currently
-differ by up to 0.62 on one target (#598).
-
-    python -m policyengine_uk_data.utils.fit_report compare BASE.csv HEAD.csv \\
-        [--markdown out.md]
+    python -m policyengine_uk_data.utils.fit_report summarise LOG.csv --out summary.json
+    python -m policyengine_uk_data.utils.fit_report compare BASE.json HEAD.json [--markdown out.md]
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,31 +42,10 @@ import pandas as pd
 import yaml
 
 POLICY_PATH = Path(__file__).parents[1] / "targets" / "fit_policy.yaml"
+SCHEMA = "policyengine-uk-data-fit-summary/1"
 WITHIN = 0.10
-_COLUMNS = ["name", "metric", "estimate", "target", "epoch"]
-
-
-@dataclass(frozen=True)
-class Fit:
-    epoch: int
-    national: pd.Series  # error by target name
-    local_errors: np.ndarray
-
-    @property
-    def national_within(self) -> float:
-        return (
-            float(np.mean(self.national <= WITHIN))
-            if len(self.national)
-            else float("nan")
-        )
-
-    @property
-    def local_within(self) -> float:
-        return (
-            float(np.mean(self.local_errors <= WITHIN))
-            if len(self.local_errors)
-            else float("nan")
-        )
+MIN_RECORDS = 10
+_COLUMNS = ["name", "index", "metric", "estimate", "target", "epoch"]
 
 
 @dataclass(frozen=True)
@@ -78,104 +65,158 @@ def load_policy(path=None) -> FitPolicy:
     )
 
 
-def errors(frame: pd.DataFrame) -> pd.Series:
-    """|estimate / target - 1| for rows with a non-zero target."""
-    frame = frame[frame.target != 0]
-    return (frame.estimate / frame.target - 1).abs()
-
-
-def final_fit(log) -> Fit:
-    """The fit at a calibration log's last epoch."""
-    df = (
-        pd.read_csv(log, usecols=_COLUMNS) if not isinstance(log, pd.DataFrame) else log
-    )
+def summarise(log) -> dict:
+    """The last epoch of a calibration log, reduced to what may leave the runner."""
+    if isinstance(log, pd.DataFrame):
+        df = log
+    else:
+        header = pd.read_csv(log, nrows=0).columns
+        usecols = _COLUMNS + (["records"] if "records" in header else [])
+        df = pd.read_csv(log, usecols=usecols)
     if df.empty:
         raise ValueError("the calibration log has no rows")
-    last = int(df.epoch.max())
+    epochs = sorted(df.epoch.unique())
+    last = int(epochs[-1])
     rows = df[df.epoch == last]
+    previous = int((df.epoch == epochs[-2]).sum()) if len(epochs) > 1 else None
     national = rows[rows.name == "UK"]
     if national.metric.duplicated().any():
         raise ValueError(
             "the calibration log repeats a national target at its last epoch"
         )
-    national_errors = errors(national.set_index("metric"))
-    local_errors = errors(rows[rows.name != "UK"]).to_numpy()
-    if not np.isfinite(national_errors).all() or not np.isfinite(local_errors).all():
+    national = national[national.target != 0].set_index("metric")
+    local = rows[(rows.name != "UK") & (rows.target != 0)]
+    n_errors = (national.estimate / national.target - 1).abs()
+    l_errors = (local.estimate / local.target - 1).abs()
+    if not np.isfinite(n_errors).all() or not np.isfinite(l_errors).all():
         raise ValueError("the calibration log has non-finite estimates")
-    return Fit(last, national_errors, local_errors)
+    records = national["records"] if "records" in national else None
+    return {
+        "schema": SCHEMA,
+        "epoch": last,
+        "rows_last_epoch": int(len(rows)),
+        "rows_previous_epoch": previous,
+        "national": {
+            metric: {
+                "within": bool(error <= WITHIN),
+                "error": float(error)
+                if records is not None and int(records[metric]) >= MIN_RECORDS
+                else None,
+            }
+            for metric, error in n_errors.items()
+        },
+        "local": {
+            f"{i}|{m}": bool(e <= WITHIN)
+            for i, m, e in zip(local["index"], local.metric, l_errors)
+        },
+    }
 
 
-def compare_fits(base: Fit, head: Fit, policy: FitPolicy) -> dict:
+def _within(value) -> bool:
+    return value["within"] if isinstance(value, dict) else bool(value)
+
+
+def _share(flags: list) -> float:
+    return float(np.mean(flags)) if flags else float("nan")
+
+
+def compare(base: dict, head: dict, policy: FitPolicy) -> dict:
     """Failures, flags and the summary for a head build against its base."""
     failures, notes = [], []
+    for side, s in (("base", base), ("head", head)):
+        if s.get("schema") != SCHEMA:
+            failures.append(f"The {side} fit summary is missing or malformed.")
+            continue
+        if not s["national"] or not s["local"]:
+            missing = "national" if not s["national"] else "local"
+            failures.append(f"The {side} build's last epoch has no {missing} targets.")
+        previous = s["rows_previous_epoch"]
+        if previous and s["rows_last_epoch"] < previous:
+            failures.append(
+                f"The {side} build's last logged epoch ({s['epoch']}) has fewer rows "
+                f"({s['rows_last_epoch']}) than the one before ({previous}): the log "
+                "is incomplete."
+            )
+    if failures:
+        return {
+            "status": "fail",
+            "failures": failures,
+            "notes": [],
+            "flags": [],
+            "summary": {},
+            "targets_compared": 0,
+        }
     # A log's last epoch is a multiple of ten or, since #594, the final one;
     # the same epoch count gives last epochs less than ten apart.
-    if abs(base.epoch - head.epoch) >= 10:
+    if abs(base["epoch"] - head["epoch"]) >= 10:
         failures.append(
-            f"The builds ran different epochs (logs end at {base.epoch} and "
-            f"{head.epoch}), so their fits cannot be compared."
+            f"The builds' logs end at epochs {base['epoch']} and {head['epoch']}, so "
+            "they ran different epoch counts and their fits cannot be compared."
         )
-    elif base.epoch != head.epoch:
+    elif base["epoch"] != head["epoch"]:
         notes.append(
-            f"The base log ends at epoch {base.epoch} and the head's at {head.epoch}: "
-            "one of them saves the final epoch (#594)."
+            f"The base log ends at epoch {base['epoch']} and the head's at "
+            f"{head['epoch']}: one of them saves the final epoch (#594)."
         )
     summary = {}
-    for name, b, h in (
-        ("national", base.national_within, head.national_within),
-        ("local", base.local_within, head.local_within),
-    ):
-        summary[name] = {"base": b, "head": h, "change": h - b}
-        if h < b - policy.share_drop_allowance:
-            failures.append(
-                f"The share of {name} targets within 10% falls from {b:.1%} to {h:.1%}, "
-                f"by more than the {policy.share_drop_allowance:.1%} allowed."
+    for name in ("national", "local"):
+        b, h = base[name], head[name]
+        common = sorted(set(b) & set(h))
+        added, removed = sorted(set(h) - set(b)), sorted(set(b) - set(h))
+        before = _share([_within(b[k]) for k in common])
+        after = _share([_within(h[k]) for k in common])
+        summary[name] = {
+            "base": before,
+            "head": after,
+            "change": after - before,
+            "compared": len(common),
+        }
+        if added:
+            notes.append(
+                f"{len(added)} {name} targets are new: {', '.join(added[:10])}"
             )
-    common = base.national.index.intersection(head.national.index)
-    added = sorted(set(head.national.index) - set(common))
-    removed = sorted(set(base.national.index) - set(common))
-    if added:
-        notes.append(f"{len(added)} national targets are new: {', '.join(added[:10])}")
-    if removed:
-        notes.append(
-            f"{len(removed)} national targets are gone: {', '.join(removed[:10])}"
-        )
-    # Largest rise first; ties keep the log's order, so a comparison is
-    # reproducible.
-    rise = (head.national[common] - base.national[common]).sort_values(
-        ascending=False, kind="mergesort"
-    )
-    flags = [
-        {"target": t, "base": float(base.national[t]), "head": float(head.national[t])}
-        for t, r in rise.items()
-        if r > policy.target_flag_threshold
-    ]
+        if removed:
+            notes.append(
+                f"{len(removed)} {name} targets are gone: {', '.join(removed[:10])}"
+            )
+        if not common:
+            failures.append(f"The builds have no {name} targets in common.")
+        elif after < before - policy.share_drop_allowance:
+            failures.append(
+                f"The share of {name} targets within 10% falls from {before:.1%} to "
+                f"{after:.1%}, over the {len(common)} targets both builds have, by "
+                f"more than the {policy.share_drop_allowance:.1%} allowed."
+            )
+    flags = []
+    for target in sorted(set(base["national"]) & set(head["national"])):
+        b = base["national"][target]["error"]
+        h = head["national"][target]["error"]
+        if b is not None and h is not None and h - b > policy.target_flag_threshold:
+            flags.append({"target": target, "base": b, "head": h})
+    flags.sort(key=lambda f: f["base"] - f["head"])
     return {
         "status": "fail" if failures else "pass",
         "failures": failures,
         "notes": notes,
         "flags": flags,
         "summary": summary,
-        "targets_compared": len(common),
+        "targets_compared": summary["national"]["compared"],
     }
 
 
 def render(result: dict, policy: FitPolicy) -> str:
-    lines = [
-        f"## Calibration fit against the base build: {result['status']}",
-        "",
-        "| Targets within 10% | Base | Head | Change |",
-        "|---|---:|---:|---:|",
-    ]
-    for name, row in result["summary"].items():
-        lines.append(
-            f"| {name.capitalize()} | {row['base']:.1%} | {row['head']:.1%} | {100 * row['change']:+.1f}pp |"
-        )
-    lines.append("")
-    lines.append(
-        f"A drop of more than {policy.share_drop_allowance:.1%} fails. "
-        f"{result['targets_compared']} national targets were compared."
-    )
+    lines = [f"## Calibration fit against the base build: {result['status']}", ""]
+    if result["summary"]:
+        lines += [
+            "| Targets within 10% (those both builds have) | Base | Head | Change |",
+            "|---|---:|---:|---:|",
+        ]
+        for name, row in result["summary"].items():
+            lines.append(
+                f"| {name.capitalize()} ({row['compared']:,}) | {row['base']:.1%} "
+                f"| {row['head']:.1%} | {100 * row['change']:+.1f}pp |"
+            )
+        lines += ["", f"A drop of more than {policy.share_drop_allowance:.1%} fails."]
     if result["failures"]:
         lines += ["", "### Failures", ""] + [f"- {f}" for f in result["failures"]]
     if result["notes"]:
@@ -183,7 +224,8 @@ def render(result: dict, policy: FitPolicy) -> str:
     flags = result["flags"]
     lines += [
         "",
-        f"### National targets whose error rises by more than {policy.target_flag_threshold:.2f} ({len(flags)})",
+        "### National targets whose error rises by more than "
+        f"{policy.target_flag_threshold:.2f} ({len(flags)})",
         "",
     ]
     if flags:
@@ -198,7 +240,9 @@ def render(result: dict, policy: FitPolicy) -> str:
         lines.append("None.")
     lines += [
         "",
-        "Flags are for review; builds of the same code differ this much (#598).",
+        "Flags are for review; builds of the same code differ this much (#598). "
+        f"Targets supported by fewer than {MIN_RECORDS} households have no published "
+        "error.",
     ]
     return "\n".join(lines) + "\n"
 
@@ -208,16 +252,29 @@ def main(argv: Optional[list] = None) -> int:
         prog="python -m policyengine_uk_data.utils.fit_report"
     )
     sub = parser.add_subparsers(dest="command", required=True)
+    s = sub.add_parser("summarise", help="reduce a calibration log to a safe summary")
+    s.add_argument("log")
+    s.add_argument("--out", required=True)
     c = sub.add_parser(
-        "compare", help="compare a head build's final fit with its base's"
+        "compare", help="compare a head build's fit summary with its base's"
     )
     c.add_argument("base")
     c.add_argument("head")
     c.add_argument("--markdown", help="write the comparison here as markdown")
     c.add_argument("--policy", help="fit policy YAML (default targets/fit_policy.yaml)")
     args = parser.parse_args(argv)
+    if args.command == "summarise":
+        summary = summarise(args.log)
+        Path(args.out).write_text(json.dumps(summary))
+        print(
+            f"epoch {summary['epoch']}: {len(summary['national'])} national, "
+            f"{len(summary['local'])} local targets"
+        )
+        return 0
     policy = load_policy(args.policy)
-    result = compare_fits(final_fit(args.base), final_fit(args.head), policy)
+    base = json.loads(Path(args.base).read_text())
+    head = json.loads(Path(args.head).read_text())
+    result = compare(base, head, policy)
     text = render(result, policy)
     if args.markdown:
         Path(args.markdown).write_text(text)
