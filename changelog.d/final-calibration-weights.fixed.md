@@ -1,1 +1,1 @@
-Save and return the calibrated weights from the final optimiser step. Weights were saved only every tenth epoch, so a 512-epoch build shipped the state after step 511 and dropped the last update (#456).
+Save and return the calibrated weights from the final optimiser step. Weights were saved only every tenth epoch, so a 512-epoch build shipped the state after epoch 510 of 0–511 and dropped the last update (#456).
