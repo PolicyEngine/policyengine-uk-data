@@ -17,6 +17,11 @@ import numpy as np
 import pandas as pd
 
 from policyengine_uk_data.targets import get_all_targets
+from policyengine_uk_data.targets.coverage import (
+    TargetStatus,
+    check_coverage,
+    column_status,
+)
 from policyengine_uk_data.targets.schema import (
     GeographicLevel,
     Target,
@@ -64,6 +69,7 @@ def create_target_matrix(
     dataset,
     time_period: str = None,
     reform=None,
+    require_coverage: bool = True,
 ) -> tuple[pd.DataFrame, pd.Series]:
     """Create (matrix, target_values) for calibration.
 
@@ -71,11 +77,26 @@ def create_target_matrix(
         dataset: a UKSingleYearDataset instance.
         time_period: calendar year as string; defaults to dataset year.
         reform: optional PolicyEngine reform.
+        require_coverage: fail unless every target is in the matrix with
+            signal or listed in targets/known_gaps.yaml (targets/coverage.py).
 
     Returns:
         (df, targets) where df has one column per target and one row
         per household, and targets is a Series of scalar target values
         indexed by target name.
+    """
+    df, targets, statuses = build_target_matrix(dataset, time_period, reform)
+    if require_coverage:
+        check_coverage(statuses)
+    return df, targets
+
+
+def build_target_matrix(dataset, time_period: str = None, reform=None):
+    """The target matrix, its values, and each offered target's status.
+
+    A target that is dropped (no value for the year, no column, an error)
+    or that enters with a non-finite value or column, or with no household
+    contributing, is recorded with that status (targets/coverage.py).
     """
     from policyengine_uk import Microsimulation
 
@@ -103,22 +124,36 @@ def create_target_matrix(
     df = pd.DataFrame()
     target_names = []
     target_values = []
+    statuses = []
 
     for target in all_targets:
         try:
             val = _resolve_value(target, year)
             if val is None:
+                statuses.append(
+                    TargetStatus(
+                        target.name,
+                        "no_value_for_year",
+                        f"values for {', '.join(str(y) for y in sorted(target.values))}",
+                    )
+                )
                 continue
             col = _compute_column(target, ctx, year)
             if col is None:
+                statuses.append(TargetStatus(target.name, "no_column"))
                 continue
-            df[target.name] = restrict_to_countries(col, ctx.country, target.countries)
+            col = restrict_to_countries(col, ctx.country, target.countries)
+            statuses.append(TargetStatus(target.name, column_status(val, col)))
+            df[target.name] = col
             target_names.append(target.name)
             target_values.append(val)
         except Exception as e:
             logger.warning("Skipping target %s: %s", target.name, e)
+            statuses.append(
+                TargetStatus(target.name, "error", f"{type(e).__name__}: {e}")
+            )
 
-    return df, pd.Series(target_values, index=target_names)
+    return df, pd.Series(target_values, index=target_names), statuses
 
 
 def restrict_to_countries(column, household_country, countries):

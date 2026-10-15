@@ -1,0 +1,80 @@
+# Calibration targets allowed to stay out of the national loss matrix, or to
+# enter it with no signal. targets/coverage.py fails the build on any other
+# target that is dropped (no value for the year, no column, an error), has a
+# non-finite value or column, or has a column no household contributes to.
+#
+# Each entry names the exact targets, the one status they may have, why and
+# the issue that tracks removing them. Errors and non-finite values are never
+# allowed. An entry that no longer matches is reported as stale: remove it.
+#
+# Measured on uk-data 1.58.1 (enhanced_frs_2024_25.h5, sha256 056e80fd) with
+# policyengine-uk 2.122.2 at the calibration year 2025: of 660 targets, 645
+# enter the matrix, 15 have no value for 2025 and 19 of those entering have
+# no signal.
+schema_version: 1
+gaps:
+  - status: no_value_for_year
+    reason: >-
+      Dated 2026 only. The calibration year is 2025, and _resolve_value does
+      not carry a later year back.
+    issue: https://github.com/PolicyEngine/policyengine-uk-data/issues/456
+    targets:
+      - dwp/uc/two_child_limit/3_children_households
+      - dwp/uc/two_child_limit/3_children_households_total_children
+      - dwp/uc/two_child_limit/4_children_households
+      - dwp/uc/two_child_limit/4_children_households_total_children
+      - dwp/uc/two_child_limit/5_children_households
+      - dwp/uc/two_child_limit/5_children_households_total_children
+      - dwp/uc/two_child_limit/6_children_households
+      - dwp/uc/two_child_limit/6_children_households_total_children
+      - dwp/uc/two_child_limit/adult_pip_children
+      - dwp/uc/two_child_limit/adult_pip_households
+      - dwp/uc/two_child_limit/children_affected
+      - dwp/uc/two_child_limit/children_in_affected_households
+      - dwp/uc/two_child_limit/disabled_child_element_children
+      - dwp/uc/two_child_limit/disabled_child_element_households
+      - dwp/uc/two_child_limit/households_affected
+  - status: zero_signal
+    reason: >-
+      Fewer than 10 records have total income of £1m or more, and they have self-employment income only, so the band's targets for every other income type have no signal.
+    issue: https://github.com/PolicyEngine/policyengine-uk-data/issues/593
+    targets:
+      - hmrc/dividend_income_count_income_band_1_000_000_to_inf
+      - hmrc/dividend_income_income_band_1_000_000_to_inf
+      - hmrc/employment_income_count_income_band_1_000_000_to_inf
+      - hmrc/employment_income_income_band_1_000_000_to_inf
+      - hmrc/private_pension_income_count_income_band_1_000_000_to_inf
+      - hmrc/private_pension_income_income_band_1_000_000_to_inf
+      - hmrc/property_income_count_income_band_1_000_000_to_inf
+      - hmrc/property_income_income_band_1_000_000_to_inf
+      - hmrc/state_pension_count_income_band_1_000_000_to_inf
+      - hmrc/state_pension_income_band_1_000_000_to_inf
+  - status: zero_signal
+    reason: >-
+      No record is aged 85 or over; the oldest records fall in the 80-84 band.
+    issue: https://github.com/PolicyEngine/policyengine-uk-data/issues/593
+    targets:
+      - ons/female_85_90
+      - ons/male_85_90
+  - status: zero_signal
+    reason: >-
+      No band-H household in these regions.
+    issue: https://github.com/PolicyEngine/policyengine-uk-data/issues/593
+    targets:
+      - voa/council_tax/NORTH_EAST/H
+      - voa/council_tax/NORTH_WEST/H
+      - voa/council_tax/YORKSHIRE/H
+  - status: zero_signal
+    reason: >-
+      No record repays an English postgraduate loan.
+    issue: https://github.com/PolicyEngine/policyengine-uk-data/issues/593
+    targets:
+      - slc/student_loan_repayment/england/postgraduate
+  - status: zero_signal
+    reason: >-
+      No couple without children receives UC payments above £27,600 a year.
+    issue: https://github.com/PolicyEngine/policyengine-uk-data/issues/593
+    targets:
+      - dwp/uc_payment_dist/COUPLE_NO_CHILDREN_annual_payment_27_600_to_28_800
+      - dwp/uc_payment_dist/COUPLE_NO_CHILDREN_annual_payment_28_800_to_30_000
+      - dwp/uc_payment_dist/COUPLE_NO_CHILDREN_annual_payment_30_000_to_inf

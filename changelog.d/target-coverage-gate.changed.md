@@ -1,0 +1,1 @@
+Fail the calibration build when a national target is dropped (no value for the year, no column, an error), has a non-finite value, or enters with no household contributing, unless `targets/known_gaps.yaml` lists it with a reason and an issue. Add `python -m policyengine_uk_data.targets.coverage` to report every target's status on a dataset.
