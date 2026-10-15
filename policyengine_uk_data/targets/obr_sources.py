@@ -24,21 +24,26 @@ Adopting a new vintage (for example on Budget day):
 obr.uk refuses scripted downloads (HTTP 403 to GitHub Actions runners, as
 11e41f9d records, and to a developer machine on 2026-10-15), so a person
 downloads the two "detailed forecast tables" workbooks in a browser and
-passes their paths. ``--dry-run`` checks everything and prints each
-workbook's title, SHA-256, size and download time and every target's old
-and new value, writing nothing. It also says whether the bytes match the
-committed workbooks when the vintage is the active one, which makes a
-March 2026 download a rehearsal. Without ``--dry-run``, ``ingest`` also
-needs ``--receipts-url`` and ``--expenditure-url``, the pages the workbooks
-came from, which every target cites. It parses the workbooks in a staging
-folder and then moves them under ``storage/obr_efo/<vintage>/``. It requires
+passes their paths, with ``--receipts-url`` and ``--expenditure-url``, the
+obr.uk pages they came from, which every target cites. ``ingest`` requires
 each workbook's title to name the vintage and no other, and requires the
-targets the current manifest requires. It writes the manifest with each
-file's SHA-256, size and download time (the file's modification time unless
-``--downloaded-at`` is given). Each part is written under a temporary name
-and renamed into place, so an interrupted ingest leaves a ``.partial`` file
-that the next attempt names. It never replaces an ingested vintage. Point
+targets the current manifest requires. It parses the workbooks in a staging
+folder and then moves them under ``storage/obr_efo/<vintage>/``. It writes
+the manifest with each file's SHA-256, size and download time, and the
+basis of that time: ``mtime``, the file's modification time, or ``given``
+with ``--downloaded-at``, which a copied or unzipped file needs. Each part is written under a temporary name and
+renamed into place, so an interrupted ingest leaves a ``.partial`` file that
+the next attempt names. It never replaces an ingested vintage. Point
 ``sources.yaml`` at the new manifest to adopt it.
+
+``--dry-run`` checks everything and prints each workbook's title, SHA-256,
+size and download time and every target's old and new value, writing
+nothing. The three things a real ingest refuses before parsing (an ingested
+vintage, an earlier ingest's leftovers, a download page missing or off
+obr.uk) it prints as "would refuse: ..." and exits non-zero; any other
+problem raises, as in a real ingest. On the active vintage it says whether
+the bytes are the committed workbooks; the same bytes are a rehearsal of
+the Budget-day path, not a refusal.
 """
 
 from __future__ import annotations
@@ -54,7 +59,8 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from functools import lru_cache
 from pathlib import Path
-from typing import Mapping, Optional, Sequence
+from typing import Mapping, NamedTuple, Optional, Sequence
+from urllib.parse import urlsplit
 
 import openpyxl
 import yaml
@@ -62,6 +68,9 @@ import yaml
 MANIFEST_DIR = Path(__file__).parent / "source_manifests"
 KINDS = ("receipts", "expenditure")
 UNIT_SCALES = {"£ billion": 1e9}
+# How a download time is known: the file's modification time at ingest, or a
+# time given with --downloaded-at.
+DOWNLOAD_TIME_BASES = ("mtime", "given")
 _FINANCIAL_YEAR = re.compile(r"^\s*(\d{4})\s*[-–]\s*(\d{2})\s*$")
 _HEADER_ROWS = 10
 _UNIT_ROWS = 4
@@ -84,8 +93,10 @@ class SourceFile:
     title: str  # the workbook's own title, cell B2 of its Contents sheet
     url: str
     retrieved: str
-    # When the file was downloaded (ISO 8601 with a UTC offset), if known.
+    # When the file was downloaded (ISO 8601 with a UTC offset), if known, and
+    # how: one of DOWNLOAD_TIME_BASES, or "unrecorded" when there is no time.
     downloaded_at: Optional[str] = None
+    downloaded_at_basis: str = "unrecorded"
 
 
 @dataclass(frozen=True)
@@ -127,6 +138,15 @@ def parse_manifest(raw: Mapping, path: Optional[Path] = None) -> ObrManifest:
         sha = str(entry["sha256"])
         if not re.fullmatch(r"[0-9a-f]{64}", sha):
             raise SourceError(f"{where}: {kind} sha256 must be 64 hex characters")
+        downloaded_at = _timestamp(entry.get("downloaded_at"), f"{where}: {kind}")
+        bases = DOWNLOAD_TIME_BASES if downloaded_at else ("unrecorded",)
+        basis = entry.get("downloaded_at_basis")
+        if basis not in bases:
+            raise SourceError(
+                f"{where}: {kind} downloaded_at_basis is {basis!r}; with "
+                f"{'a' if downloaded_at else 'no'} downloaded_at it must be "
+                + " or ".join(bases)
+            )
         files[kind] = SourceFile(
             kind=kind,
             path=str(entry["path"]),
@@ -135,7 +155,8 @@ def parse_manifest(raw: Mapping, path: Optional[Path] = None) -> ObrManifest:
             title=str(entry["title"]),
             url=str(entry["url"]),
             retrieved=str(entry["retrieved"]),
-            downloaded_at=_timestamp(entry.get("downloaded_at"), f"{where}: {kind}"),
+            downloaded_at=downloaded_at,
+            downloaded_at_basis=basis,
         )
     required, alternatives = [], []
     for item in (raw.get("targets") or {}).get("required") or []:
@@ -198,11 +219,11 @@ def check_names(vintage: str, label: str, titles: Mapping[str, str], where: str)
 
     ``march_2026`` must be labelled "March 2026". Each workbook's title must
     name that vintage and no other, call itself the Economic and fiscal
-    outlook, and end with its kind, ignoring a closing note in brackets and
-    punctuation: "March 2026 Economic and fiscal outlook - detailed forecast
-    tables: receipts" or "Economic and fiscal outlook, March 2026: detailed
-    forecast tables - receipts (revised)". The title is read from the verified
-    bytes, so the bytes decide the vintage.
+    outlook's detailed forecast tables, and end with its kind, ignoring a
+    closing note in brackets and punctuation: "March 2026 Economic and fiscal
+    outlook - detailed forecast tables: receipts" or "Economic and fiscal
+    outlook, March 2026: detailed forecast tables - receipts (revised)". The
+    title is read from the verified bytes, so the bytes decide the vintage.
     """
     if not re.fullmatch(r"[a-z]+_\d{4}", vintage):
         raise SourceError(f"{where}: vintage must look like october_2026")
@@ -216,6 +237,7 @@ def check_names(vintage: str, label: str, titles: Mapping[str, str], where: str)
         if (
             named != {want}
             or "economic and fiscal outlook" not in normal
+            or "detailed forecast tables" not in normal
             or not re.search(rf"\b{kind}$", tail)
         ):
             raise SourceError(
@@ -357,11 +379,16 @@ _ROW_UNIT = re.compile(
     re.IGNORECASE,
 )
 # A sub-heading that restates the unit for the rows under it, as "£ million"
-# or "Memo: per cent".
+# or "Memo: per cent". One giving the table's own unit, as "£ billion" or "£bn"
+# under a "£ billion unless otherwise stated" table, changes nothing and is
+# not refused.
 _UNIT_HEADING = re.compile(
-    rf"^\s*(?:memo\s*:?\s*)?(?:£\s*)?{_UNIT_WORD}(?:\s+unless otherwise stated)?\s*$",
+    rf"^\s*(?:memo\s*:?\s*)?(?P<unit>(?:£\s*)?{_UNIT_WORD})"
+    r"(?:\s+unless otherwise stated)?\s*$",
     re.IGNORECASE,
 )
+# How each unit in UNIT_SCALES may be spelt in such a sub-heading.
+_TABLE_UNIT_SPELLINGS = {"£ billion": re.compile(r"£\s*(?:bn|billions?)")}
 
 
 def read_row(ws, row: int, manifest: ObrManifest) -> dict:
@@ -376,10 +403,12 @@ def read_row(ws, row: int, manifest: ObrManifest) -> dict:
             f"{ws.title}!B{row}: {label!r} states its own unit, not the table's "
             f"{manifest.unit}"
         )
+    own_unit = _TABLE_UNIT_SPELLINGS[manifest.unit]
     for above in range(_UNIT_ROWS + 1, row):
         for column in "AB":
             heading = ws[f"{column}{above}"].value
-            if isinstance(heading, str) and _UNIT_HEADING.match(_normal(heading)):
+            match = isinstance(heading, str) and _UNIT_HEADING.match(_normal(heading))
+            if match and not own_unit.fullmatch(match["unit"]):
                 raise SourceError(
                     f"{ws.title}!{column}{above}: the sub-heading {heading!r} above "
                     f"row {row} gives its own unit, not the table's {manifest.unit}"
@@ -476,6 +505,7 @@ def _manifest_yaml(manifest: ObrManifest, alternatives_raw) -> str:
                 "url": f.url,
                 "retrieved": f.retrieved,
                 **({"downloaded_at": f.downloaded_at} if f.downloaded_at else {}),
+                "downloaded_at_basis": f.downloaded_at_basis,
             }
             for kind, f in manifest.files.items()
         },
@@ -492,6 +522,33 @@ def _manifest_yaml(manifest: ObrManifest, alternatives_raw) -> str:
     return header + yaml.safe_dump(raw, sort_keys=False, allow_unicode=True)
 
 
+class IngestResult(NamedTuple):
+    manifest: ObrManifest
+    path: Path  # where the manifest is, or would be, written
+    diff: list  # each target's current and new value by year
+    # What a real ingest would refuse. Only a dry run returns any; a real
+    # ingest raises them instead.
+    refusals: list
+
+
+def is_obr_page(url) -> bool:
+    """Whether a download page is https on obr.uk or one of its subdomains.
+
+    The address must be the host alone, or with port 443: no user name, no
+    other port, and no backslash, which ``urlsplit`` leaves in the address.
+    """
+    try:
+        parts = urlsplit(str(url))
+        host = parts.hostname or ""
+    except ValueError:
+        return False
+    return (
+        parts.scheme == "https"
+        and parts.netloc.lower() in (host, f"{host}:443")
+        and bool(re.fullmatch(r"(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)*obr\.uk", host))
+    )
+
+
 def ingest(
     *,
     vintage: str,
@@ -506,14 +563,21 @@ def ingest(
     retrieved: Optional[str] = None,
     downloaded_at: Optional[Mapping[str, str]] = None,
     dry_run: bool = False,
-):
-    """Adopt a vintage's two workbooks. Returns (manifest, manifest path, diff).
+) -> IngestResult:
+    """Adopt a vintage's two workbooks.
 
     Each workbook's SHA-256, size and download time go into the manifest.
-    The download time is ``downloaded_at[kind]`` if given, otherwise the
-    file's modification time, which a browser sets when it saves a download.
-    With ``dry_run`` everything is checked and the diff returned, but
-    nothing is written; the manifest returned is not on disk.
+    The download time is ``downloaded_at[kind]`` if given (basis ``given``),
+    otherwise the file's modification time (basis ``mtime``). Copying a file
+    without keeping its times, or unzipping it, changes that time, so give
+    the time for such a file.
+
+    A real ingest refuses an ingested vintage, an earlier ingest's leftovers
+    and a download page that is not https on obr.uk. A dry run returns those
+    as ``refusals`` instead; it checks everything else as a real ingest does,
+    raising on any other problem, returns the diff and writes nothing. The
+    manifest it returns is not on disk. A dry run of the active vintage on the bytes its
+    manifest names is a rehearsal, so that manifest is not a refusal.
 
     Everything is checked in a staging folder first: both workbooks read
     and carry the vintage's titles, and the build's parsers yield every
@@ -537,32 +601,41 @@ def ingest(
     path = manifest_dir / f"obr_{vintage}.yaml"
     partial_dir = destination.parent / f".{vintage}.partial"
     partial_manifest = path.with_name(f".{path.name}.partial")
-    if not dry_run:
-        if path.exists():
-            raise SourceError(
+    data = {kind: Path(sources[kind]).read_bytes() for kind in KINDS}
+    rehearsal = (
+        dry_run
+        and current.path is not None
+        and path.resolve() == Path(current.path).resolve()
+        and all(sha256_bytes(data[k]) == current.files[k].sha256 for k in KINDS)
+    )
+    refusals = []
+    if path.exists():
+        if not rehearsal:
+            refusals.append(
                 f"{vintage} is already ingested ({path} exists); remove it "
                 "deliberately before ingesting again"
             )
+    else:
         leftovers = [
             p for p in (destination, partial_dir, partial_manifest) if p.exists()
         ]
         if leftovers:
-            raise SourceError(
+            refusals.append(
                 f"an earlier ingest of {vintage} stopped part way: "
                 f"{', '.join(str(p) for p in leftovers)} exist but {path.name} does "
                 "not. Remove them deliberately, then ingest again"
             )
-        missing = [
-            kind for kind in KINDS if not str(urls.get(kind, "")).startswith("https://")
-        ]
-        if missing:
-            raise SourceError(
-                f"ingest: give the https page each workbook was downloaded from "
-                f"(--{missing[0]}-url); every target cites it"
-            )
-    files, titles, data = {}, {}, {}
+    missing = [kind for kind in KINDS if not is_obr_page(urls.get(kind, ""))]
+    if missing:
+        refusals.append(
+            "give the obr.uk https page each workbook was downloaded from ("
+            + ", ".join(f"--{kind}-url" for kind in missing)
+            + "); every target cites it"
+        )
+    if refusals and not dry_run:
+        raise SourceError("ingest: " + "; ".join(refusals))
+    files, titles = {}, {}
     for kind in KINDS:
-        data[kind] = Path(sources[kind]).read_bytes()
         try:
             wb = openpyxl.load_workbook(io.BytesIO(data[kind]), data_only=False)
         except Exception as error:
@@ -572,6 +645,10 @@ def ingest(
                 "download the workbook in a browser"
             ) from error
         titles[kind] = workbook_title(wb)
+        given = downloaded_at.get(kind)
+        mtime = datetime.fromtimestamp(
+            Path(sources[kind]).stat().st_mtime, tz=timezone.utc
+        )
         files[kind] = SourceFile(
             kind=kind,
             path=f"obr_efo/{vintage}/{kind}.xlsx",
@@ -580,13 +657,8 @@ def ingest(
             title=titles[kind],
             url=urls.get(kind, ""),
             retrieved=retrieved,
-            downloaded_at=_timestamp(
-                downloaded_at.get(kind)
-                or datetime.fromtimestamp(
-                    Path(sources[kind]).stat().st_mtime, tz=timezone.utc
-                ),
-                f"ingest: {kind}",
-            ),
+            downloaded_at=_timestamp(given or mtime, f"ingest: {kind}"),
+            downloaded_at_basis="given" if given else "mtime",
         )
     check_names(vintage, label, titles, "ingest")
     manifest = ObrManifest(
@@ -607,13 +679,14 @@ def ingest(
             staged.write_bytes(data[kind])
         # Raises unless the new workbooks yield every target and year required.
         new = obr.workbook_targets(manifest, staging)
-    old = obr.workbook_targets(current)
+    diff = target_diff(obr.workbook_targets(current), new)
     text = _manifest_yaml(
         manifest,
         [[sorted(group) for group in groups] for groups in current.alternatives],
     )
+    parse_manifest(yaml.safe_load(text), path)  # reads back before it is written
     if dry_run:
-        return manifest, path, target_diff(old, new)
+        return IngestResult(manifest, path, diff, refusals)
     # Write each part under a temporary name and rename it into place, so an
     # interrupted ingest leaves a partial file that the next attempt names,
     # never a half-written workbook or manifest under the real name.
@@ -624,7 +697,7 @@ def ingest(
     manifest_dir.mkdir(parents=True, exist_ok=True)
     partial_manifest.write_text(text)
     os.replace(partial_manifest, path)
-    return load_manifest(path), path, target_diff(old, new)
+    return IngestResult(load_manifest(path), path, diff, [])
 
 
 def _gbp(value) -> str:
@@ -641,20 +714,26 @@ def main(argv=None) -> int:
     i.add_argument("--label", required=True, help='e.g. "October 2026"')
     i.add_argument("--receipts", required=True, type=Path)
     i.add_argument("--expenditure", required=True, type=Path)
-    i.add_argument("--receipts-url", default="")
-    i.add_argument("--expenditure-url", default="")
+    i.add_argument(
+        "--receipts-url", default="", help="the obr.uk page it was downloaded from"
+    )
+    i.add_argument(
+        "--expenditure-url", default="", help="the obr.uk page it was downloaded from"
+    )
     i.add_argument("--first-year", required=True, type=int)
     i.add_argument("--last-year", required=True, type=int)
     i.add_argument("--retrieved", help="how the files were obtained")
     i.add_argument(
         "--downloaded-at",
-        help="when the workbooks were downloaded (ISO 8601 with offset); "
-        "default: each file's modification time",
+        help="when the workbooks were downloaded (ISO 8601 with offset), "
+        "recorded with basis 'given'; default: each file's modification time, "
+        "with basis 'mtime'",
     )
     i.add_argument(
         "--dry-run",
         action="store_true",
-        help="check everything and print the change, but write nothing",
+        help="check everything and print the change, but write nothing; "
+        "exits 1 if the real ingest would refuse",
     )
     v = sub.add_parser("verify", help="verify the active manifest's workbooks")
     v.add_argument("--manifest", help="manifest file (default: the active one)")
@@ -667,7 +746,7 @@ def main(argv=None) -> int:
         check_coverage(targets, manifest)
         print(f"{manifest.label}: both workbooks verified, {len(targets)} targets")
         return 0
-    manifest, path, diff = ingest(
+    result = ingest(
         vintage=args.vintage,
         label=args.label,
         sources={"receipts": args.receipts, "expenditure": args.expenditure},
@@ -680,26 +759,35 @@ def main(argv=None) -> int:
         else None,
         dry_run=args.dry_run,
     )
+    manifest, path = result.manifest, result.path
     for kind, f in manifest.files.items():
         print(
             f"{kind}: {f.title}; sha256 {f.sha256}, {f.size_bytes:,} bytes, "
-            f"downloaded {f.downloaded_at}"
+            f"downloaded {f.downloaded_at} (basis: {f.downloaded_at_basis})"
         )
-    print(f"{'would write' if args.dry_run else 'wrote'} {path}")
     print("target,year,current £bn,new £bn")
-    for row in diff:
+    for row in result.diff:
         print(f"{row['target']},{row['year']},{_gbp(row['old'])},{_gbp(row['new'])}")
     if not args.dry_run:
+        print(f"wrote {path}")
         print(f"To adopt it, set obr.manifest in sources.yaml to {path.name}.")
+        return 0
+    current = active_manifest()
+    if manifest.vintage == current.vintage:
+        for kind, f in manifest.files.items():
+            same = f.sha256 == current.files[kind].sha256
+            print(
+                f"{kind}: {'the same bytes as' if same else 'different bytes from'} "
+                f"the committed {current.label} workbook"
+            )
+    for refusal in result.refusals:
+        print(f"would refuse: {refusal}")
+    if result.refusals:
+        return 1
+    if path.exists():
+        print(f"{path} already names these bytes: a rehearsal, nothing to write")
     else:
-        current = active_manifest()
-        if manifest.vintage == current.vintage:
-            for kind, f in manifest.files.items():
-                same = f.sha256 == current.files[kind].sha256
-                print(
-                    f"{kind}: {'the same bytes as' if same else 'different bytes from'} "
-                    f"the committed {current.label} workbook"
-                )
+        print(f"would write {path}")
     return 0
 
 

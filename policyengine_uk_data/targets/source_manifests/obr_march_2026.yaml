@@ -10,6 +10,10 @@ label: March 2026
 first_year: 2024
 last_year: 2030
 unit: £ billion
+# Neither workbook has a downloaded_at. Both entered git in 11e41f9d, so
+# they were downloaded no later than 2026-07-21T21:06:50+01:00, but nothing
+# recorded when (git keeps no file times): their download time is neither an
+# mtime nor a given one.
 files:
   receipts:
     path: obr_efo/efo_receipts.xlsx
@@ -22,6 +26,7 @@ files:
       workbook's own properties record it as modified on 2026-03-02.
       obr.uk refused scripted downloads on 2026-10-15 (HTTP 403), so the
       bytes were not re-fetched for this manifest.
+    downloaded_at_basis: unrecorded
   expenditure:
     path: obr_efo/efo_expenditure.xlsx
     sha256: 700bfd700c872794e5fe8cf164086cd38a63850db26427b9d4b2e363d177d9a1
@@ -33,6 +38,7 @@ files:
       workbook's own properties record it as modified on 2026-03-02.
       obr.uk refused scripted downloads on 2026-10-15 (HTTP 403), so the
       bytes were not re-fetched for this manifest.
+    downloaded_at_basis: unrecorded
 # Every target the workbooks must yield, each with every year above. A
 # target the parsers build that is not listed here also fails, so changing
 # the target set means changing this list.

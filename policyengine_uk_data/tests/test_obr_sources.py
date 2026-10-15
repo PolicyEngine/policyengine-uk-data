@@ -10,9 +10,12 @@ These tests pin that:
 
 import io
 import shutil
+from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 
 import openpyxl
 import pytest
+import yaml
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
@@ -299,7 +302,7 @@ def _sources(tmp_path):
 
 
 def _ingest(tmp_path, **overrides):
-    (tmp_path / "manifests").mkdir(exist_ok=True)
+    (tmp_path / "manifests").mkdir(parents=True, exist_ok=True)
     arguments = dict(
         vintage="march_2026",
         label="March 2026",
@@ -317,8 +320,9 @@ def _ingest(tmp_path, **overrides):
 
 
 def test_ingesting_the_same_workbooks_reproduces_the_targets(tmp_path, march_targets):
-    manifest, path, diff = _ingest(tmp_path)
+    manifest, path, diff, refusals = _ingest(tmp_path)
     assert path.name == "obr_march_2026.yaml"
+    assert refusals == []
     assert manifest.vintage == "march_2026"
     assert {k: f.sha256 for k, f in manifest.files.items()} == {
         k: f.sha256 for k, f in MANIFEST.files.items()
@@ -466,13 +470,15 @@ def test_ingest_records_each_download_time(tmp_path):
     when = datetime(2026, 10, 18, 12, tzinfo=timezone.utc).timestamp()
     for path in sources.values():
         os.utime(path, (when, when))
-    manifest, path, _ = _ingest(tmp_path, sources=sources)
-    assert {f.downloaded_at for f in manifest.files.values()} == {
-        "2026-10-18T12:00:00+00:00"
-    }
-    assert "downloaded_at: '2026-10-18T12:00:00+00:00'" in path.read_text()
+    manifest, path, _, _ = _ingest(tmp_path, sources=sources)
+    assert {
+        (f.downloaded_at, f.downloaded_at_basis) for f in manifest.files.values()
+    } == {("2026-10-18T12:00:00+00:00", "mtime")}
+    text = path.read_text()
+    assert "downloaded_at: '2026-10-18T12:00:00+00:00'" in text
+    assert text.count("downloaded_at_basis: mtime") == 2
     (tmp_path / "again").mkdir()
-    manifest, _, _ = _ingest(
+    manifest, path, _, _ = _ingest(
         tmp_path / "again",
         downloaded_at={
             "receipts": "2026-10-28T13:05:00+00:00",
@@ -480,6 +486,8 @@ def test_ingest_records_each_download_time(tmp_path):
         },
     )
     assert manifest.files["receipts"].downloaded_at == "2026-10-28T13:05:00+00:00"
+    assert {f.downloaded_at_basis for f in manifest.files.values()} == {"given"}
+    assert path.read_text().count("downloaded_at_basis: given") == 2
     with pytest.raises(SourceError, match="UTC offset"):
         _ingest(
             tmp_path / "again",
@@ -493,8 +501,9 @@ def test_ingest_records_each_download_time(tmp_path):
 
 
 def test_a_dry_run_checks_everything_and_writes_nothing(tmp_path):
-    manifest, path, diff = _ingest(tmp_path, dry_run=True)
+    manifest, path, diff, refusals = _ingest(tmp_path, dry_run=True)
     assert manifest.vintage == "march_2026"
+    assert refusals == []
     assert diff and all(row["old"] == row["new"] for row in diff)
     assert not path.exists()
     assert not (tmp_path / "storage" / "obr_efo").exists()
@@ -503,10 +512,25 @@ def test_a_dry_run_checks_everything_and_writes_nothing(tmp_path):
         _ingest(tmp_path, vintage="october_2026", label="October 2026", dry_run=True)
 
 
-def test_the_rehearsal_command_runs_on_the_committed_march_workbooks(tmp_path, capsys):
-    """The Budget-day command, end to end, on downloads of the active vintage."""
+@pytest.fixture
+def committed(tmp_path, monkeypatch):
+    """The active manifest and its workbooks, copied under tmp_path and made
+    the active ones, so nothing a test runs can touch the committed files."""
+    storage = _copy_storage(tmp_path / "storage")
+    manifests = tmp_path / "manifests"
+    manifests.mkdir()
+    shutil.copyfile(MANIFEST.path, manifests / MANIFEST.path.name)
+    active = obr_sources.load_manifest(manifests / MANIFEST.path.name)
+    monkeypatch.setattr(obr_sources, "MANIFEST_DIR", manifests)
+    monkeypatch.setattr(obr_sources, "_storage", lambda: storage)
+    monkeypatch.setattr(obr_sources, "active_manifest", lambda: active)
+    return active
+
+
+def _rehearse(tmp_path, *urls):
+    """The Budget-day dry run on copies of the committed March 2026 workbooks."""
     sources = _sources(tmp_path)
-    code = obr_sources.main(
+    return obr_sources.main(
         [
             "ingest",
             "--vintage",
@@ -517,6 +541,7 @@ def test_the_rehearsal_command_runs_on_the_committed_march_workbooks(tmp_path, c
             str(sources["receipts"]),
             "--expenditure",
             str(sources["expenditure"]),
+            *urls,
             "--first-year",
             "2024",
             "--last-year",
@@ -524,10 +549,39 @@ def test_the_rehearsal_command_runs_on_the_committed_march_workbooks(tmp_path, c
             "--dry-run",
         ]
     )
+
+
+def test_the_rehearsal_command_runs_on_the_committed_march_workbooks(
+    tmp_path, committed, capsys
+):
+    """The Budget-day command, end to end, on downloads of the active vintage.
+
+    The committed manifest names these very bytes, so it is a rehearsal, not
+    an ingested vintage the real ingest would refuse.
+    """
+    urls = MANIFEST.files["receipts"].url, MANIFEST.files["expenditure"].url
+    code = _rehearse(tmp_path, "--receipts-url", urls[0], "--expenditure-url", urls[1])
     out = capsys.readouterr().out
     assert code == 0
-    assert "the same bytes as the committed March 2026 workbook" in out
-    assert "would write" in out
+    assert out.count("the same bytes as the committed March 2026 workbook") == 2
+    assert out.count("(basis: mtime)") == 2
+    assert "already names these bytes: a rehearsal, nothing to write" in out
+    assert "would refuse" not in out and "would write" not in out
+
+
+def test_a_dry_run_the_real_ingest_would_refuse_exits_non_zero(
+    tmp_path, committed, capsys
+):
+    """Sol delta review of #592: a rehearsal without the download pages fails."""
+    code = _rehearse(tmp_path)
+    out = capsys.readouterr().out
+    assert code == 1
+    assert (
+        "would refuse: give the obr.uk https page each workbook was downloaded "
+        "from (--receipts-url, --expenditure-url); every target cites it"
+    ) in out
+    assert out.count("the same bytes as the committed March 2026 workbook") == 2
+    assert "would write" not in out and "nothing to write" not in out
 
 
 # Sol re-review of #592: P3 hardening.
@@ -592,6 +646,7 @@ def test_plausible_title_formats_are_accepted(title):
         "October 2026 Fiscal risks and sustainability \u2013 tables: receipts",
         "October 2026 Economic and fiscal outlook \u2013 detailed forecast tables: expenditure",
         "October 2026 Economic and fiscal outlook \u2013 receipts: supplementary tables",
+        "Economic and fiscal outlook \u2013 October 2026: supplementary fiscal tables \u2013 receipts",
     ],
 )
 def test_a_title_for_another_vintage_report_or_kind_is_refused(title):
@@ -609,8 +664,14 @@ def test_a_real_ingest_needs_the_download_pages(tmp_path):
     with pytest.raises(SourceError, match="https page"):
         _ingest(tmp_path, urls={"receipts": "", "expenditure": ""})
     assert not (tmp_path / "storage").exists()
-    # A dry run, the Budget-day rehearsal, does not need them.
-    _ingest(tmp_path, urls={}, dry_run=True)
+    # A dry run reports it instead.
+    refusals = _ingest(tmp_path, urls={}, dry_run=True).refusals
+    assert refusals == [
+        (
+            "give the obr.uk https page each workbook was downloaded from "
+            "(--receipts-url, --expenditure-url); every target cites it"
+        )
+    ]
 
 
 def test_an_interrupted_workbook_copy_is_named_on_retry(tmp_path, monkeypatch):
@@ -650,3 +711,203 @@ def test_an_interrupted_manifest_write_is_named_on_retry(tmp_path, monkeypatch):
         _ingest(tmp_path)
     message = str(refused.value)
     assert "march_2026" in message and ".obr_march_2026.yaml.partial" in message
+
+
+# Sol delta review of #592 at f1faff2f.
+
+
+def test_a_dry_run_reports_what_the_real_ingest_would_refuse(tmp_path):
+    """Leftovers, a page off obr.uk and an ingested vintage, without writing."""
+    partial = tmp_path / "storage" / "obr_efo" / ".march_2026.partial"
+    partial.mkdir(parents=True)
+    urls = {k: f.url for k, f in MANIFEST.files.items()}
+    urls["receipts"] = "https://example.com/receipts.xlsx"
+    _, path, diff, refusals = _ingest(tmp_path, urls=urls, dry_run=True)
+    assert len(refusals) == 2
+    assert "stopped part way" in refusals[0] and ".march_2026.partial" in refusals[0]
+    assert (
+        "https page each workbook was downloaded from (--receipts-url)" in (refusals[1])
+    )
+    # Everything else is still checked, and nothing is written.
+    assert diff and all(row["old"] == row["new"] for row in diff)
+    assert not path.exists()
+    assert [p.name for p in partial.parent.iterdir()] == [partial.name]
+    # The real ingest refuses exactly what the dry run reported.
+    with pytest.raises(SourceError) as refused:
+        _ingest(tmp_path, urls=urls)
+    assert str(refused.value) == "ingest: " + "; ".join(refusals)
+    # An ingested vintage that is not the active manifest is refused too.
+    partial.rmdir()
+    _ingest(tmp_path)
+    refusals = _ingest(tmp_path, dry_run=True).refusals
+    assert len(refusals) == 1 and "march_2026 is already ingested" in refusals[0]
+
+
+def test_a_dry_run_of_the_active_vintage_is_a_rehearsal_only_on_its_own_bytes(
+    tmp_path, committed
+):
+    """The active manifest names these bytes: a rehearsal, not a refusal."""
+    active = {"current": committed, "dry_run": True}
+    _, path, _, refusals = _ingest(tmp_path, **active)
+    assert path == committed.path and refusals == []
+    # Different bytes under the active vintage's name are refused, as a real
+    # ingest refuses any ingested vintage.
+    sources = _sources(tmp_path)
+    openpyxl.load_workbook(sources["receipts"]).save(sources["receipts"])
+    assert obr_sources.sha256_bytes(sources["receipts"].read_bytes()) != (
+        MANIFEST.files["receipts"].sha256
+    )
+    refusals = _ingest(tmp_path, sources=sources, **active).refusals
+    assert len(refusals) == 1 and "march_2026 is already ingested" in refusals[0]
+
+
+@pytest.mark.parametrize(
+    "url, ok",
+    [
+        (MANIFEST.files["receipts"].url, True),
+        ("https://www.obr.uk/download/receipts/", True),
+        ("https://OBR.UK/download/receipts/", True),
+        ("https://obr.uk:443/download/receipts/", True),
+        ("http://obr.uk/download/receipts/", False),
+        ("https://example.com/receipts.xlsx", False),
+        ("https://obr.uk.example.com/receipts/", False),
+        ("https://notobr.uk/receipts/", False),
+        ("https://example.com/obr.uk/receipts/", False),
+        ("https://example.com/?from=https://obr.uk/", False),
+        ("https://obr.uk@example.com/receipts/", False),
+        ("https://example.com\\.obr.uk/receipts/", False),
+        ("https://example.com\\@obr.uk/receipts/", False),
+        ("https://user:password@obr.uk/receipts/", False),
+        ("https://obr.uk:8443/receipts/", False),
+        ("https://obr.uk:notaport/receipts/", False),
+        ("https://-.obr.uk/receipts/", False),
+        ("obr.uk/download/receipts/", False),
+        ("https://[::1/receipts/", False),
+        ("", False),
+    ],
+)
+def test_a_download_page_must_be_https_on_obr_uk(url, ok):
+    assert obr_sources.is_obr_page(url) is ok
+
+
+@settings(max_examples=200, deadline=None)
+@given(
+    labels=st.lists(
+        st.from_regex(r"[a-z0-9](?:[a-z0-9-]{0,7}[a-z0-9])?", fullmatch=True),
+        max_size=3,
+    ),
+    suffix=st.sampled_from(["obr.uk", "uk", "xobr.uk", "obr.uk.example.com", "gov.uk"]),
+    scheme=st.sampled_from(["https", "http"]),
+)
+def test_only_https_pages_on_obr_uk_or_its_subdomains_are_accepted(
+    labels, suffix, scheme
+):
+    host = ".".join([*labels, suffix])
+    expected = scheme == "https" and (host == "obr.uk" or host.endswith(".obr.uk"))
+    assert obr_sources.is_obr_page(f"{scheme}://{host}/download/x/") is expected
+
+
+def test_ingest_refuses_a_download_page_off_obr_uk(tmp_path):
+    urls = {k: f.url for k, f in MANIFEST.files.items()}
+    urls["expenditure"] = "https://example.com/expenditure.xlsx"
+    with pytest.raises(SourceError, match=r"https page .*\(--expenditure-url\)"):
+        _ingest(tmp_path, urls=urls)
+    assert not (tmp_path / "storage").exists()
+
+
+@pytest.mark.parametrize(
+    "heading",
+    [
+        "£ billion",
+        "£bn",
+        "£ billions",
+        "£ billion unless otherwise stated",
+        "Memo: £ billion",
+    ],
+)
+def test_a_sub_heading_restating_the_tables_own_unit_is_not_refused(heading):
+    assert set(obr_sources._TABLE_UNIT_SPELLINGS) == set(obr_sources.UNIT_SCALES)
+    ws = load_workbook("expenditure")["4.19"]
+    row = obr._find_row(ws, "BBC licence fee receipts", max_row=30)
+    values = read_row(ws, row, MANIFEST)
+    ws[f"A{row - 1}"] = heading
+    assert read_row(ws, row, MANIFEST) == values
+
+
+_TIMES = st.datetimes(
+    min_value=datetime(2000, 1, 1),
+    max_value=datetime(2100, 1, 1),
+    timezones=st.sampled_from(
+        [timezone.utc, timezone(timedelta(hours=1)), timezone(-timedelta(hours=9.5))]
+    ),
+)
+
+
+@settings(max_examples=50, deadline=None)
+@given(basis=st.sampled_from(["mtime", "given", "unrecorded"]), when=_TIMES)
+def test_a_manifest_reads_back_as_written(basis, when):
+    """Each download time and its basis survive the manifest YAML."""
+    files = {
+        kind: replace(
+            f,
+            downloaded_at=None if basis == "unrecorded" else when.isoformat(),
+            downloaded_at_basis=basis,
+        )
+        for kind, f in MANIFEST.files.items()
+    }
+    manifest = obr_sources.ObrManifest(**{**MANIFEST.__dict__, "files": files})
+    alternatives = [[sorted(g) for g in groups] for groups in MANIFEST.alternatives]
+    back = parse_manifest(
+        yaml.safe_load(obr_sources._manifest_yaml(manifest, alternatives))
+    )
+    assert back.files == files
+    assert (back.required, back.alternatives) == (
+        MANIFEST.required,
+        MANIFEST.alternatives,
+    )
+
+
+def test_a_dry_run_returns_the_manifest_a_real_ingest_writes(tmp_path):
+    sources = _sources(tmp_path)
+    dry = _ingest(tmp_path / "dry", sources=sources, dry_run=True)
+    real = _ingest(tmp_path / "real", sources=sources)
+    assert dry.manifest.files == real.manifest.files
+    assert {f.downloaded_at_basis for f in real.manifest.files.values()} == {"mtime"}
+
+
+def test_the_march_download_times_are_unrecorded():
+    """The committed workbooks came from git (11e41f9d), with no download time."""
+    assert {
+        (f.downloaded_at, f.downloaded_at_basis) for f in MANIFEST.files.values()
+    } == {(None, "unrecorded")}
+
+
+@pytest.mark.parametrize(
+    "fields, match",
+    [
+        ({"downloaded_at": "2026-10-28T13:05:00+00:00"}, "with a downloaded_at"),
+        (
+            {
+                "downloaded_at": "2026-10-28T13:05:00+00:00",
+                "downloaded_at_basis": "unrecorded",
+            },
+            "must be mtime or given",
+        ),
+        ({"downloaded_at_basis": "mtime"}, "with no downloaded_at it must be"),
+        ({"downloaded_at_basis": None}, "must be unrecorded"),
+        (
+            {
+                "downloaded_at": "2026-10-28T13:05:00+00:00",
+                "downloaded_at_basis": "guessed",
+            },
+            "'guessed'",
+        ),
+    ],
+)
+def test_a_download_time_without_a_matching_basis_is_refused(fields, match):
+    raw = yaml.safe_load(MANIFEST.path.read_text())
+    entry = raw["files"]["receipts"]
+    entry.pop("downloaded_at_basis")
+    entry.update(fields)
+    with pytest.raises(SourceError, match=match):
+        parse_manifest(raw)
