@@ -35,6 +35,15 @@ class _FakeDataset:
         return None
 
 
+def _stack_without_remapping(left: _FakeDataset, right: _FakeDataset) -> _FakeDataset:
+    return _FakeDataset(
+        person=pd.concat([left.person, right.person], ignore_index=True),
+        household=pd.concat([left.household, right.household], ignore_index=True),
+        benunit=pd.concat([left.benunit, right.benunit], ignore_index=True),
+        fiscal_year=left.time_period,
+    )
+
+
 def _fake_dataset() -> _FakeDataset:
     person = pd.DataFrame(
         {
