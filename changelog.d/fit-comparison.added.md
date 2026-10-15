@@ -1,0 +1,1 @@
+Build each pull request's base the same way as its head, with the head's lockfile, and fail when the share of national or local targets within 10% falls by more than 2 percentage points (`targets/fit_policy.yaml`). National targets whose error rises by more than 0.2 are flagged in a pull request comment. Adds `python -m policyengine_uk_data.utils.fit_report compare`.

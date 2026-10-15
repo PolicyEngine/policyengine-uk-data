@@ -1,0 +1,29 @@
+# When a pull request's build fails or flags against its base build's fit
+# (utils/fit_report.py). Both builds run the same way in pull request CI:
+# TESTING, 32 epochs, one output-area clone, the head's lockfile.
+#
+# Adopted under cos d1344 (15 October 2026), from the final-epoch fits of
+# five builds of the same data code: docs, changelog and CI pull requests
+# while main's data code was unchanged from b34a4ea2 to 2b9c1c2c (runs
+# 38006434333, 37959581668, 38009046475, 37960852139, 37864653693).
+schema_version: 1
+
+share_within_10pct:
+  # Fail when the share of national, or of local, targets within 10% of
+  # their values falls by more than this. Across the 20 ordered pairs of the
+  # five builds the national share moved by at most 0.93pp and the local by
+  # at most 0.69pp, so 2pp is about twice the same-code spread.
+  # Alternatives: 1pp leaves no margin over that spread while #598 (builds
+  # of the same code fall into two weight sets) is unexplained. 5pp would
+  # pass the 2.4pp local drop of #551's build against the build of the
+  # 1.58.1 release branch (runs 38661397028 and 38228500493).
+  allowed_drop: 0.02
+
+national_target:
+  # Flag, for review, each national target whose error |estimate / target -
+  # 1| rises by more than this. The five builds give 0 to 6 such rises per
+  # pair (mean 1.8), so a list stays short. 0.1 gives up to 11 from noise
+  # alone, and 0.3 would hide the largest same-code move on the OBR, ONS
+  # population and DWP targets (0.21). Per-target moves don't fail until
+  # #598 is fixed.
+  flag_rise: 0.2
