@@ -180,6 +180,11 @@ def test_negative_incomes_before_housing_costs_are_reset_to_zero_as_hbai_does():
     assert m["mean_bhc"] == pytest.approx(200) and m["mean_ahc"] == pytest.approx(150)
     assert m["gini_bhc"] == pytest.approx(40.0)
     assert m["gini_ahc"] == pytest.approx(53.333333, rel=1e-6)
+    # No children or pensioners: those groups have no rate, not a NaN.
+    assert m["relative_low_income_bhc_children"] is None
+    assert m["relative_low_income_ahc_pensioners"] is None
+    # Median 200, line 120: incomes 0 and 100 are below it.
+    assert m["relative_low_income_bhc_working_age"] == pytest.approx(40.0)
 
 
 def test_an_incomplete_or_non_finite_report_fails():
@@ -193,6 +198,12 @@ def test_an_incomplete_or_non_finite_report_fails():
     head["summary"]["single_age"]["mean_abs_error_0_79"] = float("nan")
     result = compare(_report(), head)
     assert result["status"] == "fail" and "not finite" in result["failures"][0]
+    head = _report()
+    name = next(iter(head["hbai"]))
+    head["hbai"][name]["value"] = None  # an empty group
+    result = compare(_report(), head)
+    assert result["status"] == "fail"
+    assert f"HBAI {name} is missing or not finite on one side." in result["failures"]
 
 
 def test_the_workflow_fails_when_a_distribution_report_is_missing():
