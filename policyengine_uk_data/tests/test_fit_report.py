@@ -9,7 +9,9 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from policyengine_uk_data.utils.fit_report import (
+    BANDS,
     FitPolicy,
+    band,
     compare,
     load_policy,
     main,
@@ -42,9 +44,10 @@ def test_summarise_reads_the_last_epoch_and_drops_zero_targets():
     log.loc[log.epoch == 0, "estimate"] = 1  # earlier epochs are ignored
     s = summarise(log)
     assert s["epoch"] == 30
-    assert s["national"] == {"a": True, "b": False}
+    # Bands of |estimate / target - 1|: 0.05 is within 10%, 0.5 is 25-50%.
+    assert s["national"] == {"a": 0, "b": 2}
     assert "zero" not in s["national"]
-    assert s["local"] == {"E0|local/0": True, "E1|local/1": False}
+    assert s["local"] == {"E0|local/0": 0, "E1|local/1": 3}
 
 
 @settings(max_examples=100, deadline=None)
@@ -61,7 +64,7 @@ def test_the_summary_publishes_no_estimate_or_error(estimates, target):
     )
     s = summarise(log)
     for group in ("national", "local"):
-        assert all(isinstance(v, bool) for v in s[group].values())
+        assert all(type(v) is int and 0 <= v < len(BANDS) for v in s[group].values())
     text = json.dumps(s)
     for e in estimates:
         assert repr(e) not in text and repr(abs(e / target - 1)) not in text
@@ -99,16 +102,34 @@ def test_a_drop_beyond_the_allowance_fails_and_within_it_passes():
     assert compare(base, _summary([0.5] + [0.0] * 99), POLICY)["status"] == "pass"
 
 
-def test_a_target_leaving_the_band_flags_and_one_entering_is_a_note():
+def test_a_target_in_a_worse_band_flags_and_a_better_one_is_a_note():
     base = _summary([0.0, 0.5] + [0.0] * 98)
     head = _summary([0.5, 0.0] + [0.0] * 98)
     result = compare(base, head, POLICY)
     assert result["status"] == "pass"
-    assert result["flags"] == [{"target": "t0"}]
-    assert "1 national targets come within 10% on the head." in result["notes"]
-    # A move inside the band, or outside it, is not a flag.
+    assert result["flags"] == [{"target": "t0", "base": "within 10%", "head": "25-50%"}]
+    assert "1 national targets are in a better band on the head." in result["notes"]
+    # Sol re-review of #599: a target worsening outside 10% flags too.
+    assert compare(_summary([0.15]), _summary([3.0]), POLICY)["flags"] == [
+        {"target": "t0", "base": "10-25%", "head": "over 100%"}
+    ]
+    # A move inside one band is not a flag.
     assert compare(_summary([0.01]), _summary([0.09]), POLICY)["flags"] == []
-    assert compare(_summary([0.2]), _summary([0.9]), POLICY)["flags"] == []
+    assert compare(_summary([0.3]), _summary([0.45]), POLICY)["flags"] == []
+
+
+@pytest.mark.parametrize(
+    "error, expected",
+    [(0.0, 0), (0.1, 0), (0.1000001, 1), (0.25, 1), (0.5, 2), (1.0, 3), (1.01, 4)],
+)
+def test_band_edges_are_inclusive(error, expected):
+    assert band(error) == expected
+
+
+def test_a_repeated_local_target_is_refused():
+    log = _log({"a": (1, 1)}, local=[(1, 1)])
+    with pytest.raises(ValueError, match="repeats a local target"):
+        summarise(pd.concat([log, log[log.name != "UK"]]))
 
 
 def test_added_targets_do_not_count_against_the_existing_ones():
