@@ -160,3 +160,48 @@ def test_compare_fails_on_a_broken_or_mismatched_report(change, message):
     result = compare(_report(), head)
     assert result["status"] == "fail"
     assert any(message in f for f in result["failures"])
+
+
+def test_negative_incomes_before_housing_costs_are_reset_to_zero_as_hbai_does():
+    """Sol review of #600: HBAI resets negative BHC to zero and derives AHC from
+    the adjusted figure, so AHC can still be negative."""
+    from policyengine_uk_data.utils.distribution_validation import (
+        WEEKS_PER_YEAR,
+        hbai_incomes,
+    )
+
+    weekly_bhc = np.array([-100.0, 100.0, 200.0, 300.0, 400.0])
+    annual_bhc = weekly_bhc * WEEKS_PER_YEAR
+    annual_ahc = (weekly_bhc - 50) * WEEKS_PER_YEAR
+    bhc, ahc = hbai_incomes(annual_bhc, annual_ahc, np.ones(5), np.ones(5))
+    np.testing.assert_allclose(bhc, [0, 100, 200, 300, 400])
+    np.testing.assert_allclose(ahc, [-50, 50, 150, 250, 350])
+    m = hbai_measures(bhc, ahc, np.ones(5), np.zeros(5, bool), np.zeros(5, bool))
+    assert m["mean_bhc"] == pytest.approx(200) and m["mean_ahc"] == pytest.approx(150)
+    assert m["gini_bhc"] == pytest.approx(40.0)
+    assert m["gini_ahc"] == pytest.approx(53.333333, rel=1e-6)
+
+
+def test_an_incomplete_or_non_finite_report_fails():
+    """Sol review of #600: every reference measure and age summary must be there."""
+    head = _report()
+    del head["hbai"]["median_bhc"]
+    result = compare(_report(), head)
+    assert result["status"] == "fail"
+    assert result["failures"] == ["The head report has no median_bhc."]
+    head = _report()
+    head["summary"]["single_age"]["mean_abs_error_0_79"] = float("nan")
+    result = compare(_report(), head)
+    assert result["status"] == "fail" and "not finite" in result["failures"][0]
+
+
+def test_the_workflow_fails_when_a_distribution_report_is_missing():
+    from pathlib import Path
+
+    text = (
+        Path(__file__).parents[2] / ".github" / "workflows" / "pull_request.yaml"
+    ).read_text()
+    block = text[
+        text.index("The income distribution and single-age reports are missing") :
+    ]
+    assert 'echo "status=1" >> "$GITHUB_OUTPUT"' in block.split("\n          fi", 1)[0]
