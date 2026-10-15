@@ -258,3 +258,52 @@ def test_calibrate_local_areas_logs_loss_targets_and_source_diagnostics(
     assert row["household_is_spi_synthetic_rows"] == 2
     assert row["household_is_spi_synthetic_prior_share"] == pytest.approx(0.5)
     assert row["household_is_spi_synthetic_household_weight"] > 0
+
+
+def _final_state_run(tmp_path, monkeypatch, epochs, verbose):
+    """Calibrate the toy problem, returning (saved, returned, final optimiser weights)."""
+    import h5py
+    import torch
+
+    from policyengine_uk_data.utils import calibrate as calibrate_module
+    from policyengine_uk_data.utils.calibrate import calibrate_local_areas
+
+    monkeypatch.setattr(calibrate_module, "STORAGE_FOLDER", tmp_path)
+    parameters = []
+
+    class SpyAdam(torch.optim.Adam):
+        def __init__(self, params, *args, **kwargs):
+            params = list(params)
+            parameters.extend(params)
+            super().__init__(params, *args, **kwargs)
+
+    monkeypatch.setattr(torch.optim, "Adam", SpyAdam)
+    matrix_fn, national_matrix_fn = _make_toy_inputs(n_households=4, area_count=2)
+    returned = calibrate_local_areas(
+        dataset=_StubDataset(np.array([1.0, 2.0, 3.0, 4.0])),
+        matrix_fn=matrix_fn,
+        national_matrix_fn=national_matrix_fn,
+        area_count=2,
+        weight_file="final.h5",
+        dataset_key="2025",
+        epochs=epochs,
+        verbose=verbose,
+    )
+    with h5py.File(tmp_path / "final.h5", "r") as f:
+        saved = f["2025"][:]
+    # The toy country mask is all ones, so the weights are exp(parameters).
+    (weights,) = parameters
+    final = torch.exp(weights).detach().numpy()
+    return saved, returned.household["household_weight"].to_numpy(), final
+
+
+@pytest.mark.parametrize("verbose", [False, True])
+@pytest.mark.parametrize("epochs", [1, 2, 10, 11, 12, 20, 21, 25])
+def test_saved_and_returned_weights_are_the_final_optimiser_state(
+    tmp_path, monkeypatch, epochs, verbose
+):
+    """#456: weights were saved only when epoch % 10 == 0, so a 512-epoch
+    build shipped the state after step 511 and dropped the last update."""
+    saved, returned, final = _final_state_run(tmp_path, monkeypatch, epochs, verbose)
+    np.testing.assert_array_equal(saved, final)
+    np.testing.assert_allclose(returned, final.sum(axis=0), rtol=1e-6)
