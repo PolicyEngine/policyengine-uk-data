@@ -243,6 +243,7 @@ jobs:
             if [ "$distribution_status" != 0 ]; then echo "status=1" >> "$GITHUB_OUTPUT"; fi
           else
             { echo; echo "The income distribution and single-age reports are missing for one build."; } >> fit.md
+            echo "status=1" >> "$GITHUB_OUTPUT"
           fi
           cat fit.md >> "$GITHUB_STEP_SUMMARY"
       - name: Post or update the pull request comment

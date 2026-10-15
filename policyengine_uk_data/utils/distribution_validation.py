@@ -42,7 +42,8 @@ SCHEMA = "policyengine-uk-data-distribution/1"
 HBAI_REFERENCE = (
     Path(__file__).parents[1] / "targets" / "reference_data" / "hbai_fye_2025.yaml"
 )
-WEEKS_PER_YEAR = 52
+# The FRS loader annualises weekly amounts with 365.25 / 7 (datasets/frs.py).
+WEEKS_PER_YEAR = 365.25 / 7
 TOP_AGE_BAND = 80
 SEXES = {"male": ("MALE", "Males"), "female": ("FEMALE", "Females")}
 
@@ -67,6 +68,25 @@ def weighted_gini(values, weights) -> float:
     previous = np.concatenate([[0.0], lorenz[:-1]])
     area = np.sum(w / total_w * (lorenz + previous) / 2)
     return float(1 - 2 * area)
+
+
+def hbai_incomes(bhc, ahc, equivalisation_bhc, equivalisation_ahc):
+    """Equivalised weekly incomes as HBAI defines them.
+
+    HBAI resets negative incomes before housing costs to zero, and derives
+    the income after housing costs from the adjusted figure, so it can still
+    be negative (DWP, HBAI background information and methodology, FYE 2025,
+    "Negative incomes"). ``bhc`` and ``ahc`` are annual household incomes.
+    """
+    bhc, ahc = np.asarray(bhc, float), np.asarray(ahc, float)
+    housing_costs = bhc - ahc
+    adjusted = np.maximum(bhc, 0.0)
+    return (
+        adjusted / np.asarray(equivalisation_bhc, float) / WEEKS_PER_YEAR,
+        (adjusted - housing_costs)
+        / np.asarray(equivalisation_ahc, float)
+        / WEEKS_PER_YEAR,
+    )
 
 
 def hbai_measures(income_bhc, income_ahc, weights, child, pensioner) -> dict:
@@ -194,9 +214,15 @@ def measure(
         return np.asarray(sim.calculate(variable, year, map_to="person").values, float)
 
     weights = person("household_weight", period)
+    income_bhc, income_ahc = hbai_incomes(
+        person("hbai_household_net_income", period),
+        person("hbai_household_net_income_ahc", period),
+        person("household_equivalisation_bhc", period),
+        person("household_equivalisation_ahc", period),
+    )
     measures = hbai_measures(
-        person("equiv_hbai_household_net_income", period) / WEEKS_PER_YEAR,
-        person("equiv_hbai_household_net_income_ahc", period) / WEEKS_PER_YEAR,
+        income_bhc,
+        income_ahc,
         weights,
         person("is_hbai_dependent_child", period) > 0,
         person("is_SP_age", period) > 0,
@@ -249,6 +275,25 @@ def compare(base: Mapping, head: Mapping) -> dict:
     for side, report in (("base", base), ("head", head)):
         if report.get("schema") != SCHEMA:
             failures.append(f"The {side} distribution report is missing or malformed.")
+    if failures:
+        return {
+            "status": "fail",
+            "failures": failures,
+            "flags": [],
+            "rows": [],
+            "single_age": {},
+        }
+    required = set(load_hbai_reference()["measures"])
+    for side, report in (("base", base), ("head", head)):
+        missing = sorted(required - set(report.get("hbai") or {}))
+        if missing:
+            failures.append(f"The {side} report has no {', '.join(missing)}.")
+        summary = (report.get("summary") or {}).get("single_age") or {}
+        for key in ("mean_abs_error_0_79", "max_abs_error_0_79", "max_abs_error_15_19"):
+            if not _finite(summary.get(key)):
+                failures.append(
+                    f"The {side} report's single-age {key} is missing or not finite."
+                )
     if failures:
         return {
             "status": "fail",
