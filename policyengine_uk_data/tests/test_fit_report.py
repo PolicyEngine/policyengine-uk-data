@@ -83,7 +83,7 @@ def test_builds_of_different_epochs_cannot_be_compared():
     assert "saves the final epoch" in result["notes"][0]
 
 
-def test_the_pull_request_workflow_uploads_only_calibration_logs():
+def test_the_pull_request_workflow_uploads_only_aggregate_reports():
     """The datasets are licensed microdata: no job may upload or cache one."""
     from pathlib import Path
 
@@ -98,7 +98,9 @@ def test_the_pull_request_workflow_uploads_only_calibration_logs():
             assert not uses.startswith("actions/cache"), step
             if uses.startswith("actions/upload-artifact"):
                 uploads.append(step["with"]["path"])
-    assert uploads and all(p.endswith("calibration_log.csv") for p in uploads), uploads
+    assert uploads and all(
+        p.endswith(("calibration_log.csv", "distribution_report.json")) for p in uploads
+    ), uploads
     assert jobs["fit-comparison"]["needs"] == ["test", "base-build"]
 
 

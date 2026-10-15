@@ -86,6 +86,13 @@ jobs:
         run: uv run --frozen make data
         env:
           TESTING: "1"
+      - name: Measure the income distribution and single ages
+        run: uv run --frozen python -m policyengine_uk_data.utils.distribution_validation measure policyengine_uk_data/storage/enhanced_frs_2024_25.h5 --out distribution_report.json
+      - name: Save the distribution report
+        uses: actions/upload-artifact@v7
+        with:
+          name: distribution_report.json
+          path: distribution_report.json
       - name: Save calibration log (constituencies)
         uses: actions/upload-artifact@v7
         with:
@@ -150,6 +157,19 @@ jobs:
         with:
           name: base_constituency_calibration_log.csv
           path: base/constituency_calibration_log.csv
+      - name: Measure the base's income distribution and single ages
+        working-directory: base
+        # The head's measurement code, on the base's build.
+        run: |
+          mkdir -p policyengine_uk_data/targets/reference_data
+          cp ../head/policyengine_uk_data/utils/distribution_validation.py policyengine_uk_data/utils/
+          cp ../head/policyengine_uk_data/targets/reference_data/hbai_fye_2025.yaml policyengine_uk_data/targets/reference_data/
+          uv run --frozen python -m policyengine_uk_data.utils.distribution_validation measure policyengine_uk_data/storage/enhanced_frs_2024_25.h5 --out ../base_distribution_report.json
+      - name: Save the base distribution report
+        uses: actions/upload-artifact@v7
+        with:
+          name: base_distribution_report.json
+          path: base_distribution_report.json
   fit-comparison:
     name: Calibration fit against the base
     needs: [test, base-build]
@@ -183,6 +203,13 @@ jobs:
         with:
           name: base_constituency_calibration_log.csv
           path: logs/base
+      - name: Download the distribution reports
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: "*distribution_report.json"
+          path: reports
+          merge-multiple: true
       - name: Compare the final fits
         id: compare
         env:
@@ -205,6 +232,17 @@ jobs:
             echo "status=$?" >> "$GITHUB_OUTPUT"
             set -e
             { echo "$marker"; cat body.md 2>/dev/null || echo '## Calibration fit against the base build: FAIL'; echo; echo "[Workflow run]($RUN_URL)"; } > fit.md
+          fi
+          if [ -f reports/base_distribution_report.json ] && [ -f reports/distribution_report.json ]; then
+            set +e
+            uv run --frozen python -m policyengine_uk_data.utils.distribution_validation compare \
+              reports/base_distribution_report.json reports/distribution_report.json --markdown distribution.md
+            distribution_status=$?
+            set -e
+            { echo; cat distribution.md; } >> fit.md
+            if [ "$distribution_status" != 0 ]; then echo "status=1" >> "$GITHUB_OUTPUT"; fi
+          else
+            { echo; echo "The income distribution and single-age reports are missing for one build."; } >> fit.md
           fi
           cat fit.md >> "$GITHUB_STEP_SUMMARY"
       - name: Post or update the pull request comment
