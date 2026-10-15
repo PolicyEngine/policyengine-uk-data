@@ -86,17 +86,11 @@ jobs:
         run: uv run --frozen make data
         env:
           TESTING: "1"
-      - name: Save calibration log (constituencies)
-        uses: actions/upload-artifact@v7
-        with:
-          name: constituency_calibration_log.csv
-          path: constituency_calibration_log.csv
-      
-      - name: Save calibration log (local authorities)
-        uses: actions/upload-artifact@v7
-        with:
-          name: la_calibration_log.csv
-          path: la_calibration_log.csv
+      # The raw calibration logs stay on the runner. They hold every target's
+      # weighted estimate at every logged epoch with no small-cell control, so a
+      # target supported by a few households, divided by a published count,
+      # could give one household's value back, and this repository's
+      # artifacts are public.
 
       - name: Run tests
         run: uv run --frozen make test
