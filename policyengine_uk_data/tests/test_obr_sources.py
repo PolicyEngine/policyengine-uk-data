@@ -62,7 +62,7 @@ def test_the_build_reads_the_manifest_files_and_names_their_vintage():
     built = [t for t in targets if t.forecast_vintage == MANIFEST.vintage]
     assert len(built) == 25
     assert {t.reference_url for t in built} == {f.url for f in MANIFEST.files.values()}
-    check_coverage(targets, MANIFEST)
+    check_coverage(built, MANIFEST)
 
 
 @settings(
@@ -289,7 +289,7 @@ def test_a_target_missing_from_the_manifest_fails(march_targets):
 
 def _sources(tmp_path):
     src = tmp_path / "downloads"
-    src.mkdir()
+    src.mkdir(exist_ok=True)
     out = {}
     for kind, entry in MANIFEST.files.items():
         out[kind] = src / f"{kind}.xlsx"
@@ -300,7 +300,7 @@ def _sources(tmp_path):
 def _ingest(tmp_path, **overrides):
     (tmp_path / "manifests").mkdir(exist_ok=True)
     arguments = dict(
-        vintage="copy_2026",
+        vintage="march_2026",
         label="March 2026",
         sources=overrides.pop("sources", None) or _sources(tmp_path),
         urls={k: f.url for k, f in MANIFEST.files.items()},
@@ -317,29 +317,32 @@ def _ingest(tmp_path, **overrides):
 
 def test_ingesting_the_same_workbooks_reproduces_the_targets(tmp_path, march_targets):
     manifest, path, diff = _ingest(tmp_path)
-    assert path.name == "obr_copy_2026.yaml"
-    assert manifest.vintage == "copy_2026"
+    assert path.name == "obr_march_2026.yaml"
+    assert manifest.vintage == "march_2026"
     assert {k: f.sha256 for k, f in manifest.files.items()} == {
         k: f.sha256 for k, f in MANIFEST.files.items()
     }
-    assert manifest.files["receipts"].path == "obr_efo/copy_2026/receipts.xlsx"
+    assert manifest.files["receipts"].path == "obr_efo/march_2026/receipts.xlsx"
     assert diff and all(row["old"] == row["new"] for row in diff)
     again = obr.workbook_targets(manifest, tmp_path / "storage")
     assert {t.name: t.values for t in again} == {
         t.name: t.values for t in march_targets
     }
-    assert {t.forecast_vintage for t in again} == {"copy_2026"}
+    assert {t.forecast_vintage for t in again} == {"march_2026"}
 
 
 def test_ingest_refuses_a_workbook_that_does_not_name_the_vintage(tmp_path):
+    """Sol review of #592, P1: March bytes cannot be adopted as October."""
     with pytest.raises(SourceError, match="not the October 2026 EFO receipts"):
-        _ingest(tmp_path, label="October 2026")
+        _ingest(tmp_path, vintage="october_2026", label="October 2026")
+    with pytest.raises(SourceError, match="does not name vintage"):
+        _ingest(tmp_path, vintage="october_2026", label="March 2026")
 
 
 def test_ingest_refuses_years_the_tables_do_not_head_and_keeps_nothing(tmp_path):
     with pytest.raises(SourceError, match="the manifest declares 2025 to 2031"):
         _ingest(tmp_path, first_year=2025, last_year=2031)
-    assert not (tmp_path / "storage" / "obr_efo" / "copy_2026").exists()
+    assert not (tmp_path / "storage" / "obr_efo" / "march_2026").exists()
     assert not list((tmp_path / "manifests").iterdir())
 
 
@@ -383,3 +386,69 @@ def test_a_bad_hash_in_the_manifest_is_refused():
     raw["files"]["receipts"]["sha256"] = "abc"
     with pytest.raises(SourceError, match="64 hex"):
         parse_manifest(raw)
+
+
+def test_a_manifest_cannot_relabel_verified_bytes():
+    """Sol review of #592, P1: the vintage, label and titles must agree."""
+    import yaml
+
+    raw = yaml.safe_load(MANIFEST.path.read_text())
+    raw.update(vintage="october_2026", label="October 2026")
+    with pytest.raises(SourceError, match="not the October 2026 EFO"):
+        parse_manifest(raw)
+    raw = yaml.safe_load(MANIFEST.path.read_text())
+    raw.update(label="October 2026")
+    with pytest.raises(SourceError, match="does not name vintage"):
+        parse_manifest(raw)
+
+
+def test_a_row_stating_its_own_unit_is_refused():
+    """Sol review of #592, P1: "£ billion unless otherwise stated" tables."""
+    expenditure = load_workbook("expenditure")
+    ws = expenditure["4.19"]
+    row = obr._find_row(ws, "Standard colour licence fee (£)", max_row=30)
+    with pytest.raises(SourceError, match="states its own unit"):
+        read_row(ws, row, MANIFEST)
+    # A renamed receipts row no longer falls through to the fee row.
+    ws[f"B{obr._find_row(ws, 'BBC licence fee receipts', max_row=30)}"] = (
+        "BBC television licensing receipts"
+    )
+    receipts = load_workbook("receipts")
+    problems = coverage_problems(_workbook_targets(receipts, expenditure), MANIFEST)
+    assert problems == ["obr/tv_licence_fee was not built"]
+
+
+def test_ingest_never_replaces_an_ingested_vintage(tmp_path):
+    """Sol review of #592, P2: a retry cannot delete an adopted vintage."""
+    _ingest(tmp_path)
+    kept = (
+        tmp_path / "storage" / "obr_efo" / "march_2026" / "receipts.xlsx"
+    ).read_bytes()
+    with pytest.raises(SourceError, match="already ingested"):
+        _ingest(tmp_path, first_year=2025, last_year=2031)
+    assert (
+        tmp_path / "storage" / "obr_efo" / "march_2026" / "receipts.xlsx"
+    ).read_bytes() == kept
+    assert (tmp_path / "manifests" / "obr_march_2026.yaml").exists()
+
+
+def test_ingest_checks_both_workbooks_before_copying_either(tmp_path):
+    sources = _sources(tmp_path)
+    sources["expenditure"].write_bytes(b"not a workbook")
+    with pytest.raises(SourceError, match="not an xlsx workbook"):
+        _ingest(tmp_path, sources=sources)
+    assert not (tmp_path / "storage").exists()
+
+
+def test_a_workbook_target_without_the_vintage_fails_coverage(march_targets):
+    """Sol review of #592, P2: an unversioned target cannot skip the checks."""
+    extra = march_targets[0].model_copy(
+        update={
+            "name": "obr/unversioned",
+            "forecast_vintage": None,
+            "values": {2024: 1.0},
+        }
+    )
+    problems = coverage_problems(list(march_targets) + [extra], MANIFEST)
+    assert "obr/unversioned carries vintage None, not 'march_2026'" in problems
+    assert "obr/unversioned was built but is not in the manifest" in problems

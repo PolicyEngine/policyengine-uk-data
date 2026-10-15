@@ -205,14 +205,13 @@ def _parse_nics(
 ) -> list[Target]:
     """Parse Table 3.4 (income tax and NICs detail) for all NIC classes.
 
-    Covers Class 1 employee and employer (PAYE), plus Classes 2, 3 and 4
-    (self-employed flat-rate, voluntary, and self-employed profit-based).
-    Omitting Classes 2/3/4 biased calibration by ~£2-5B/yr of NIC receipts
-    — the omission pushed self-employment income downward to compensate,
-    distorting reforms that touch SE income.
+    Covers Class 1 employee and employer (PAYE) and the self-employed
+    Classes 2 and 4, as one combined line or as separate rows. Class 3
+    (voluntary) is left out: no dataset populates ni_class_3 (#378).
 
     Where a row label is not found the parser logs a warning and skips that
-    variable, so partial matches still produce useful targets.
+    variable; the manifest's required targets then fail the build unless one
+    of the self-employed alternatives was found.
     """
     manifest = manifest or active_manifest()
     vintage, ref = manifest.vintage, manifest.files["receipts"].url
@@ -447,23 +446,22 @@ def _parse_tv_licence(
 
     try:
         ws = wb["4.19"]
-        # Find "Licence fee receipts" or "BBC licence fee"
-        for row_num in range(1, 30):
-            val = ws[f"B{row_num}"].value
-            if val and "licence fee" in str(val).lower():
-                values = read_row(ws, row_num, manifest)
-                if values:
-                    return [
-                        Target(
-                            name="obr/tv_licence_fee",
-                            variable="tv_licence",
-                            source="obr",
-                            unit=Unit.GBP,
-                            values=values,
-                            reference_url=ref,
-                            forecast_vintage=vintage,
-                        )
-                    ]
+        # The receipts row only: neighbouring rows such as "Standard colour
+        # licence fee (£)" share the words but not the unit.
+        row_num = _find_row(ws, "BBC licence fee receipts", max_row=30)
+        values = read_row(ws, row_num, manifest)
+        if values:
+            return [
+                Target(
+                    name="obr/tv_licence_fee",
+                    variable="tv_licence",
+                    source="obr",
+                    unit=Unit.GBP,
+                    values=values,
+                    reference_url=ref,
+                    forecast_vintage=vintage,
+                )
+            ]
     except (KeyError, ValueError):
         logger.warning("OBR: TV licence table not found")
 

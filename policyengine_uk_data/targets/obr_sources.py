@@ -36,7 +36,6 @@ import argparse
 import hashlib
 import io
 import re
-import shutil
 import sys
 from dataclasses import dataclass
 from datetime import date
@@ -134,6 +133,8 @@ def parse_manifest(raw: Mapping, path: Optional[Path] = None) -> ObrManifest:
         raise SourceError(f"{where}: a required target is listed twice")
     if not required:
         raise SourceError(f"{where}: no required targets")
+    vintage, label = str(raw["vintage"]), str(raw["label"])
+    check_names(vintage, label, {kind: f.title for kind, f in files.items()}, where)
     return ObrManifest(
         vintage=str(raw["vintage"]),
         label=str(raw["label"]),
@@ -145,6 +146,28 @@ def parse_manifest(raw: Mapping, path: Optional[Path] = None) -> ObrManifest:
         alternatives=tuple(alternatives),
         path=path,
     )
+
+
+def check_names(vintage: str, label: str, titles: Mapping[str, str], where: str):
+    """The vintage, its label and each workbook's own title must agree.
+
+    ``march_2026`` must be labelled "March 2026", and each workbook titled
+    "March 2026 Economic and fiscal outlook ..." ending with its kind. The
+    title is read from the verified bytes, so the bytes decide the vintage.
+    """
+    if not re.fullmatch(r"[a-z]+_\d{4}", vintage):
+        raise SourceError(f"{where}: vintage must look like october_2026")
+    if label.lower().replace(" ", "_") != vintage:
+        raise SourceError(f"{where}: label {label!r} does not name vintage {vintage!r}")
+    for kind, title in titles.items():
+        lowered = title.strip().lower()
+        if not lowered.startswith(f"{label.lower()} economic and fiscal outlook") or (
+            not lowered.endswith(kind)
+        ):
+            raise SourceError(
+                f"{where}: the {kind} workbook is titled {title!r}, which is not "
+                f"the {label} EFO {kind} tables"
+            )
 
 
 def load_manifest(path) -> ObrManifest:
@@ -266,8 +289,27 @@ def unit_scale(ws, unit: str) -> float:
     raise SourceError(f"{ws.title}: no {unit!r} unit label in rows 1-{_UNIT_ROWS}")
 
 
+# A row label giving its own unit, as table 4.19's "Standard colour licence
+# fee (£)" or "Number of UK households (m)" do under a "£ billion unless
+# otherwise stated" table.
+_ROW_UNIT = re.compile(
+    r"\(\s*(?:£|£m|£bn|£ ?million|£ ?billion|m|bn|million|thousands?|per cent|%|p|pence)\s*\)"
+    r"|\bper cent\b|%"
+)
+
+
 def read_row(ws, row: int, manifest: ObrManifest) -> dict:
-    """A table row's numeric values by year, in pounds."""
+    """A table row's numeric values by year, in pounds.
+
+    Refuses a row whose label states a unit of its own: the table's unit is
+    applied to every row read.
+    """
+    label = str(ws[f"B{row}"].value or "")
+    if _ROW_UNIT.search(label):
+        raise SourceError(
+            f"{ws.title}!B{row}: {label!r} states its own unit, not the table's "
+            f"{manifest.unit}"
+        )
     scale = unit_scale(ws, manifest.unit)
     out = {}
     for column, year in year_columns(
@@ -282,14 +324,18 @@ def read_row(ws, row: int, manifest: ObrManifest) -> dict:
 def coverage_problems(targets: Sequence, manifest: ObrManifest) -> list:
     """Everything wrong with the targets built from a vintage's workbooks.
 
-    Targets built from the workbooks are those carrying the vintage. Each
-    required target must be present with every year of the manifest; one
-    set of each ``any_of`` group must be present; and no workbook target
-    may be missing from the manifest, so the manifest stays the complete
-    list.
+    ``targets`` are all the targets the workbooks yielded. Each must carry
+    the manifest's vintage; each required target must be present with every
+    year of the manifest; one set of each ``any_of`` group must be present;
+    and no workbook target may be missing from the manifest, so the manifest
+    stays the complete list.
     """
-    built = {t.name: t for t in targets if t.forecast_vintage == manifest.vintage}
-    problems = []
+    built = {t.name: t for t in targets}
+    problems = [
+        f"{t.name} carries vintage {t.forecast_vintage!r}, not {manifest.vintage!r}"
+        for t in targets
+        if t.forecast_vintage != manifest.vintage
+    ]
     for name in manifest.required:
         if name not in built:
             problems.append(f"{name} was not built")
@@ -379,50 +425,51 @@ def ingest(
     manifest_dir: Optional[Path] = None,
     retrieved: Optional[str] = None,
 ):
-    """Adopt a vintage's two workbooks. Returns (manifest, manifest path, diff)."""
+    """Adopt a vintage's two workbooks. Returns (manifest, manifest path, diff).
+
+    Everything is checked in a staging folder first: both workbooks read
+    and carry the vintage's titles, and the build's parsers yield every
+    required target and year from them. Only then are the files copied
+    into storage and the manifest written. A vintage already in storage or
+    in the manifests folder is never replaced.
+    """
+    import tempfile
+
     from policyengine_uk_data.targets.sources import obr
 
     current = current or active_manifest()
-    storage = storage or _storage()
-    manifest_dir = manifest_dir or MANIFEST_DIR
+    storage = Path(storage or _storage())
+    manifest_dir = Path(manifest_dir or MANIFEST_DIR)
     retrieved = retrieved or f"ingested {date.today().isoformat()}"
-    if not re.fullmatch(r"[a-z]+_\d{4}", vintage):
-        raise SourceError("vintage must look like october_2026")
-    files = {}
+    destination = storage / "obr_efo" / vintage
+    path = manifest_dir / f"obr_{vintage}.yaml"
+    if destination.exists() or path.exists():
+        raise SourceError(
+            f"{vintage} is already ingested ({destination} or {path} exists); "
+            "remove it deliberately before ingesting again"
+        )
+    files, titles, data = {}, {}, {}
     for kind in KINDS:
-        data = Path(sources[kind]).read_bytes()
+        data[kind] = Path(sources[kind]).read_bytes()
         try:
-            wb = openpyxl.load_workbook(io.BytesIO(data), data_only=False)
+            wb = openpyxl.load_workbook(io.BytesIO(data[kind]), data_only=False)
         except Exception as error:
             raise SourceError(
                 f"{sources[kind]} is not an xlsx workbook ({type(error).__name__}: "
                 f"{error}); obr.uk serves an HTML page to scripted downloads, so "
                 "download the workbook in a browser"
             ) from error
-        title = workbook_title(wb)
-        if not title.startswith(
-            f"{label} Economic and fiscal outlook"
-        ) or not title.endswith(kind):
-            raise SourceError(
-                f"{sources[kind]} is titled {title!r}, which is not the {label} "
-                f"EFO {kind} tables"
-            )
-        relative = f"obr_efo/{vintage}/{kind}.xlsx"
-        target = storage / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(sources[kind], target)
+        titles[kind] = workbook_title(wb)
         files[kind] = SourceFile(
             kind=kind,
-            path=relative,
-            sha256=sha256_bytes(data),
-            size_bytes=len(data),
-            title=title,
+            path=f"obr_efo/{vintage}/{kind}.xlsx",
+            sha256=sha256_bytes(data[kind]),
+            size_bytes=len(data[kind]),
+            title=titles[kind],
             url=urls.get(kind, ""),
             retrieved=retrieved,
         )
-    alternatives_raw = [
-        [sorted(group) for group in groups] for groups in current.alternatives
-    ]
+    check_names(vintage, label, titles, "ingest")
     manifest = ObrManifest(
         vintage=vintage,
         label=label,
@@ -433,15 +480,23 @@ def ingest(
         required=current.required,
         alternatives=current.alternatives,
     )
-    try:
+    with tempfile.TemporaryDirectory() as staging:
+        staging = Path(staging)
+        for kind in KINDS:
+            staged = staging / files[kind].path
+            staged.parent.mkdir(parents=True, exist_ok=True)
+            staged.write_bytes(data[kind])
         # Raises unless the new workbooks yield every target and year required.
-        new = obr.workbook_targets(manifest, storage)
-    except Exception:
-        shutil.rmtree(storage / "obr_efo" / vintage, ignore_errors=True)
-        raise
+        new = obr.workbook_targets(manifest, staging)
     old = obr.workbook_targets(current)
-    path = Path(manifest_dir) / f"obr_{vintage}.yaml"
-    path.write_text(_manifest_yaml(manifest, alternatives_raw))
+    text = _manifest_yaml(
+        manifest,
+        [[sorted(group) for group in groups] for groups in current.alternatives],
+    )
+    destination.mkdir(parents=True)
+    for kind in KINDS:
+        (storage / files[kind].path).write_bytes(data[kind])
+    path.write_text(text)
     return load_manifest(path), path, target_diff(old, new)
 
 
