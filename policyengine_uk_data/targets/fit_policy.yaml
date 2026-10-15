@@ -25,5 +25,7 @@ national_target:
   # pair (mean 1.8), so a list stays short. 0.1 gives up to 11 from noise
   # alone, and 0.3 would hide the largest same-code move on the OBR, ONS
   # population and DWP targets (0.21). Per-target moves don't fail until
-  # #598 is fixed.
+  # #598 is fixed. Those counts used every national target's error; the fit
+  # summary now publishes an error only for targets supported by at least
+  # 10 households (fit_report.MIN_RECORDS), so fewer can flag.
   flag_rise: 0.2
