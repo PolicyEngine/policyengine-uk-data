@@ -9,7 +9,6 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from policyengine_uk_data.utils.fit_report import (
-    MIN_RECORDS,
     FitPolicy,
     compare,
     load_policy,
@@ -17,22 +16,19 @@ from policyengine_uk_data.utils.fit_report import (
     summarise,
 )
 
-POLICY = FitPolicy(share_drop_allowance=0.02, target_flag_threshold=0.2)
+POLICY = FitPolicy(share_drop_allowance=0.02)
 
 
-def _log(national: dict, local=(), epochs=(0, 30), records=100):
+def _log(national: dict, local=(), epochs=(0, 30)):
     """A calibration log: national {metric: (estimate, target)}, local [(est, target)]."""
     rows = []
     for epoch in epochs:
         for metric, (estimate, target) in national.items():
-            rows.append(("UK", 0, metric, estimate, target, epoch, records))
+            rows.append(("UK", 0, metric, estimate, target, epoch))
         for i, (estimate, target) in enumerate(local):
-            rows.append(
-                (f"area {i}", f"E{i}", f"local/{i}", estimate, target, epoch, np.nan)
-            )
+            rows.append((f"area {i}", f"E{i}", f"local/{i}", estimate, target, epoch))
     return pd.DataFrame(
-        rows,
-        columns=["name", "index", "metric", "estimate", "target", "epoch", "records"],
+        rows, columns=["name", "index", "metric", "estimate", "target", "epoch"]
     )
 
 
@@ -46,23 +42,29 @@ def test_summarise_reads_the_last_epoch_and_drops_zero_targets():
     log.loc[log.epoch == 0, "estimate"] = 1  # earlier epochs are ignored
     s = summarise(log)
     assert s["epoch"] == 30
-    assert s["national"]["a"] == {"within": True, "error": pytest.approx(0.05)}
-    assert s["national"]["b"] == {"within": False, "error": pytest.approx(0.5)}
+    assert s["national"] == {"a": True, "b": False}
     assert "zero" not in s["national"]
     assert s["local"] == {"E0|local/0": True, "E1|local/1": False}
 
 
-def test_a_target_with_few_records_has_no_published_error():
-    """Sol review of #599, P1: an estimate from a few records is not published."""
-    s = summarise(_log({"rare": (123.45, 100)}, local=LOCAL, records=MIN_RECORDS - 1))
-    assert s["national"]["rare"] == {"within": False, "error": None}
-    assert "123.45" not in json.dumps(s)
-    # A log without the records column publishes no errors at all.
-    s = summarise(_log({"a": (101, 100)}, local=LOCAL).drop(columns="records"))
-    assert s["national"]["a"]["error"] is None
-    # Local cells give only within 10% or not.
-    s = summarise(_log({"a": (101, 100)}, local=[(123.45, 100)]))
-    assert s["local"] == {"E0|local/0": False}
+@settings(max_examples=100, deadline=None)
+@given(
+    estimates=st.lists(st.floats(0.01, 1e12, allow_nan=False), min_size=1, max_size=20),
+    target=st.floats(1.0, 1e12),
+)
+def test_the_summary_publishes_no_estimate_or_error(estimates, target):
+    """Sol re-reviews of #599: rows don't count respondents and one household
+    can dominate a target, so nothing per target but within 10% is published."""
+    log = _log(
+        {f"t{i}": (e, target) for i, e in enumerate(estimates)},
+        local=[(e, target) for e in estimates],
+    )
+    s = summarise(log)
+    for group in ("national", "local"):
+        assert all(isinstance(v, bool) for v in s[group].values())
+    text = json.dumps(s)
+    for e in estimates:
+        assert repr(e) not in text and repr(abs(e / target - 1)) not in text
 
 
 def test_a_malformed_log_is_refused():
@@ -95,6 +97,18 @@ def test_a_drop_beyond_the_allowance_fails_and_within_it_passes():
     )
     assert [f["target"] for f in result["flags"]] == ["t0", "t1", "t2"]
     assert compare(base, _summary([0.5] + [0.0] * 99), POLICY)["status"] == "pass"
+
+
+def test_a_target_leaving_the_band_flags_and_one_entering_is_a_note():
+    base = _summary([0.0, 0.5] + [0.0] * 98)
+    head = _summary([0.5, 0.0] + [0.0] * 98)
+    result = compare(base, head, POLICY)
+    assert result["status"] == "pass"
+    assert result["flags"] == [{"target": "t0"}]
+    assert "1 national targets come within 10% on the head." in result["notes"]
+    # A move inside the band, or outside it, is not a flag.
+    assert compare(_summary([0.01]), _summary([0.09]), POLICY)["flags"] == []
+    assert compare(_summary([0.2]), _summary([0.9]), POLICY)["flags"] == []
 
 
 def test_added_targets_do_not_count_against_the_existing_ones():
@@ -176,7 +190,6 @@ def test_improving_every_target_never_fails_and_changes_are_antisymmetric(base, 
 def test_the_shipped_policy_loads():
     policy = load_policy()
     assert policy.share_drop_allowance == 0.02
-    assert policy.target_flag_threshold == 0.2
 
 
 def test_the_commands_summarise_and_exit_one_on_a_failure(tmp_path):

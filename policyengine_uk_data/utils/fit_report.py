@@ -4,14 +4,15 @@ A build writes ``constituency_calibration_log.csv``: each target's estimate
 and value every tenth epoch and at the last one, nationally (rows named
 ``UK``) and for each constituency. The log stays on the runner that built
 it. ``summarise`` reduces its last epoch to what the comparison needs, and
-only the summary is uploaded:
-
-- for every national and local target, whether its estimate is within 10%
-  of its value (|estimate / target - 1| <= 0.1), with zero targets left out;
-- for a national target supported by at least ``MIN_RECORDS`` households
-  (the log's ``records`` column), its error. A target supported by fewer has
-  no error in the summary: an estimate built from a few records, divided
-  by a published count, could give one household's value back.
+only the summary is uploaded: for every national and local target, whether
+its estimate is within 10% of its value (|estimate / target - 1| <= 0.1),
+with zero targets left out. No estimate or error leaves the runner. An
+estimate built from a few households, or dominated by one, divided by a
+published count, could give that household's value back, and the dataset
+repeats households (output-area clones, SPI and CGT donors), so a count of
+rows can't show how many respondents support a figure (Sol re-review of
+#599). Whether an estimate is within 10% of a public target is a bound, not
+a value.
 
 ``compare`` checks that a pull request does not worsen the fit of the build
 it would replace, built the same way (same environment, epochs and clones),
@@ -20,9 +21,9 @@ using the policy in ``targets/fit_policy.yaml``:
 - **Fail** when the share of national, or of local, targets within 10%
   falls by more than the allowance, over the targets both builds have.
   Added and removed targets are reported, not counted.
-- **Flag** each national target whose error rises by more than the
-  same-code spread, for review. Per-target moves do not fail while builds
-  of the same code differ by up to 0.62 on one target (#598).
+- **Flag**, for review, each national target that is within 10% on the
+  base and not on the head. Per-target moves do not fail while builds of
+  the same code move 1 to 10 national targets out of the band (#598).
 
     python -m policyengine_uk_data.utils.fit_report summarise LOG.csv --out summary.json
     python -m policyengine_uk_data.utils.fit_report compare BASE.json HEAD.json [--markdown out.md]
@@ -42,16 +43,14 @@ import pandas as pd
 import yaml
 
 POLICY_PATH = Path(__file__).parents[1] / "targets" / "fit_policy.yaml"
-SCHEMA = "policyengine-uk-data-fit-summary/1"
+SCHEMA = "policyengine-uk-data-fit-summary/2"
 WITHIN = 0.10
-MIN_RECORDS = 10
 _COLUMNS = ["name", "index", "metric", "estimate", "target", "epoch"]
 
 
 @dataclass(frozen=True)
 class FitPolicy:
     share_drop_allowance: float
-    target_flag_threshold: float
 
 
 def load_policy(path=None) -> FitPolicy:
@@ -59,9 +58,10 @@ def load_policy(path=None) -> FitPolicy:
         raw = yaml.safe_load(f)
     if raw.get("schema_version") != 1:
         raise ValueError("fit policy: schema_version must be 1")
+    if raw.get("national_target", {}).get("flag") != "left_band":
+        raise ValueError("fit policy: national_target.flag must be left_band")
     return FitPolicy(
         share_drop_allowance=float(raw["share_within_10pct"]["allowed_drop"]),
-        target_flag_threshold=float(raw["national_target"]["flag_rise"]),
     )
 
 
@@ -70,9 +70,7 @@ def summarise(log) -> dict:
     if isinstance(log, pd.DataFrame):
         df = log
     else:
-        header = pd.read_csv(log, nrows=0).columns
-        usecols = _COLUMNS + (["records"] if "records" in header else [])
-        df = pd.read_csv(log, usecols=usecols)
+        df = pd.read_csv(log, usecols=_COLUMNS)
     if df.empty:
         raise ValueError("the calibration log has no rows")
     epochs = sorted(df.epoch.unique())
@@ -90,30 +88,19 @@ def summarise(log) -> dict:
     l_errors = (local.estimate / local.target - 1).abs()
     if not np.isfinite(n_errors).all() or not np.isfinite(l_errors).all():
         raise ValueError("the calibration log has non-finite estimates")
-    records = national["records"] if "records" in national else None
     return {
         "schema": SCHEMA,
         "epoch": last,
         "rows_last_epoch": int(len(rows)),
         "rows_previous_epoch": previous,
         "national": {
-            metric: {
-                "within": bool(error <= WITHIN),
-                "error": float(error)
-                if records is not None and int(records[metric]) >= MIN_RECORDS
-                else None,
-            }
-            for metric, error in n_errors.items()
+            metric: bool(error <= WITHIN) for metric, error in n_errors.items()
         },
         "local": {
             f"{i}|{m}": bool(e <= WITHIN)
             for i, m, e in zip(local["index"], local.metric, l_errors)
         },
     }
-
-
-def _within(value) -> bool:
-    return value["within"] if isinstance(value, dict) else bool(value)
 
 
 def _share(flags: list) -> float:
@@ -163,8 +150,8 @@ def compare(base: dict, head: dict, policy: FitPolicy) -> dict:
         b, h = base[name], head[name]
         common = sorted(set(b) & set(h))
         added, removed = sorted(set(h) - set(b)), sorted(set(b) - set(h))
-        before = _share([_within(b[k]) for k in common])
-        after = _share([_within(h[k]) for k in common])
+        before = _share([bool(b[k]) for k in common])
+        after = _share([bool(h[k]) for k in common])
         summary[name] = {
             "base": before,
             "head": after,
@@ -187,13 +174,13 @@ def compare(base: dict, head: dict, policy: FitPolicy) -> dict:
                 f"{after:.1%}, over the {len(common)} targets both builds have, by "
                 f"more than the {policy.share_drop_allowance:.1%} allowed."
             )
-    flags = []
-    for target in sorted(set(base["national"]) & set(head["national"])):
-        b = base["national"][target]["error"]
-        h = head["national"][target]["error"]
-        if b is not None and h is not None and h - b > policy.target_flag_threshold:
-            flags.append({"target": target, "base": b, "head": h})
-    flags.sort(key=lambda f: f["base"] - f["head"])
+    common = sorted(set(base["national"]) & set(head["national"]))
+    flags = [
+        {"target": t} for t in common if base["national"][t] and not head["national"][t]
+    ]
+    entered = sum(1 for t in common if head["national"][t] and not base["national"][t])
+    if entered:
+        notes.append(f"{entered} national targets come within 10% on the head.")
     return {
         "status": "fail" if failures else "pass",
         "failures": failures,
@@ -224,25 +211,20 @@ def render(result: dict, policy: FitPolicy) -> str:
     flags = result["flags"]
     lines += [
         "",
-        "### National targets whose error rises by more than "
-        f"{policy.target_flag_threshold:.2f} ({len(flags)})",
+        f"### National targets within 10% on the base and not on the head ({len(flags)})",
         "",
     ]
     if flags:
-        lines += ["| Target | Base error | Head error |", "|---|---:|---:|"]
-        lines += [
-            f"| `{f['target']}` | {f['base']:.3f} | {f['head']:.3f} |"
-            for f in flags[:30]
-        ]
+        lines += [f"- `{f['target']}`" for f in flags[:30]]
         if len(flags) > 30:
             lines.append(f"\n{len(flags) - 30} more in the job log.")
     else:
         lines.append("None.")
     lines += [
         "",
-        "Flags are for review; builds of the same code differ this much (#598). "
-        f"Targets supported by fewer than {MIN_RECORDS} households have no published "
-        "error.",
+        "Flags are for review: builds of the same code move 1 to 10 national "
+        "targets out of the band (#598). No target's estimate or error is "
+        "published.",
     ]
     return "\n".join(lines) + "\n"
 
@@ -280,7 +262,7 @@ def main(argv: Optional[list] = None) -> int:
         Path(args.markdown).write_text(text)
     print(text)
     for flag in result["flags"]:
-        print(f"flag: {flag['target']} {flag['base']:.4f} -> {flag['head']:.4f}")
+        print(f"flag: {flag['target']} left the 10% band")
     return 1 if result["status"] == "fail" else 0
 
 
