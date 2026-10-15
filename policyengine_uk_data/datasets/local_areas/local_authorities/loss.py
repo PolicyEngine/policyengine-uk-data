@@ -58,12 +58,17 @@ def create_local_authority_target_matrix(
         time_period = dataset.time_period
 
     la_codes = pd.read_csv(STORAGE_FOLDER / "local_authorities_2021.csv")
+    age_targets = get_la_age_targets()
+    if not pd.Index(age_targets["code"]).equals(pd.Index(la_codes["code"])):
+        raise ValueError(
+            "LA age targets and local authority codes must have the same order"
+        )
 
     sim = Microsimulation(dataset=dataset, reform=reform)
     sim.default_calculation_period = time_period
 
     matrix = pd.DataFrame()
-    y = pd.DataFrame()
+    y = pd.DataFrame(index=pd.Index(age_targets["code"], name="code"))
 
     # ── Income targets ─────────────────────────────────────────────
     incomes = get_la_income_targets()
@@ -92,7 +97,6 @@ def create_local_authority_target_matrix(
         )
 
     # ── Age targets ────────────────────────────────────────────────
-    age_targets = get_la_age_targets()
     uk_total_population = get_uk_total_population(int(time_period))
 
     age = sim.calculate("age").values
@@ -110,7 +114,7 @@ def create_local_authority_target_matrix(
         y[col] *= uk_total_population / targets_total_pop * 0.9
 
     # ── UC targets ─────────────────────────────────────────────────
-    y["uc_households"] = get_la_uc_targets().values
+    y["uc_households"] = get_la_uc_targets().loc[y.index]
     matrix["uc_households"] = sim.map_result(
         (sim.calculate("universal_credit").values > 0).astype(int),
         "benunit",
@@ -305,7 +309,7 @@ def create_local_authority_target_matrix(
         codes=la_codes.code,
     )
 
-    return matrix, y, country_mask
+    return matrix, y.reset_index(drop=True), country_mask
 
 
 def create_country_mask(

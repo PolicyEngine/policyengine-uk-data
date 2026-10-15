@@ -119,6 +119,7 @@ class _FakeSim:
 
 def test_constituency_target_matrix_includes_devolved_housing_targets(monkeypatch):
     age_targets = _age_targets().iloc[[0, 2]].reset_index(drop=True)
+    codes = age_targets["code"].tolist()
     income_targets = pd.DataFrame(
         {
             "self_employment_income_amount": [1.0, 1.0],
@@ -141,7 +142,8 @@ def test_constituency_target_matrix_includes_devolved_housing_targets(monkeypatc
             "uc_hh_1_child": [0.0, 0.0],
             "uc_hh_2_children": [0.0, 0.0],
             "uc_hh_3plus_children": [0.0, 0.0],
-        }
+        },
+        index=pd.Index(codes, name="code"),
     )
 
     monkeypatch.setattr(constituency_loss, "Microsimulation", _FakeSim)
@@ -160,7 +162,7 @@ def test_constituency_target_matrix_includes_devolved_housing_targets(monkeypatc
     monkeypatch.setattr(
         constituency_loss,
         "get_constituency_uc_targets",
-        lambda: pd.Series([1.0, 1.0]),
+        lambda: pd.Series([1.0, 1.0], index=pd.Index(codes, name="code")),
     )
     monkeypatch.setattr(
         constituency_loss,
@@ -168,6 +170,8 @@ def test_constituency_target_matrix_includes_devolved_housing_targets(monkeypatc
         lambda: uc_by_children,
     )
     monkeypatch.setattr(constituency_loss, "mapping_matrix", np.eye(2))
+    monkeypatch.setattr(constituency_loss, "old_codes", codes)
+    monkeypatch.setattr(constituency_loss, "new_codes", codes)
     monkeypatch.setattr(
         constituency_loss.pd,
         "read_csv",
