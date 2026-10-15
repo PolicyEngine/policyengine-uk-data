@@ -75,6 +75,9 @@ def _table(rows: list[tuple]) -> openpyxl.Workbook:
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "4.9"
+    ws["C3"] = "£ billion"
+    for column, year in YEAR_COLUMNS.items():
+        ws[f"{column}5"] = f"{year}-{(year + 1) % 100:02d}"
     for i, (label, value) in enumerate(rows, start=6):
         ws[f"B{i}"] = label
         if value is not None:
