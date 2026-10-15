@@ -133,7 +133,12 @@ def test_built_dataset_sources_are_original_survey_households(enhanced_frs):
     ) & (household["clone_index"] == 0)
     original_ids = household.loc[original, "household_id"]
 
-    assert household["source_household_id"].isin(original_ids).all()
-    np.testing.assert_array_equal(
-        household.loc[original, "source_household_id"], original_ids
+    # Report aggregate counts on failure, never private survey identifiers.
+    n_unknown_sources = int(
+        (~household["source_household_id"].isin(original_ids)).sum()
     )
+    n_misidentified_originals = int(
+        (household.loc[original, "source_household_id"] != original_ids).sum()
+    )
+    assert n_unknown_sources == 0
+    assert n_misidentified_originals == 0
