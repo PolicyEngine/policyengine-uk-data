@@ -113,8 +113,10 @@ def hbai_measures(income_bhc, income_ahc, weights, child, pensioner) -> dict:
         low = income < 0.6 * median
         for group, mask in groups.items():
             w = weights * mask
-            out[f"relative_low_income_{suffix}_{group}"] = float(
-                100 * np.sum(w * low) / np.sum(w)
+            total = np.sum(w)
+            # An empty group has no rate; compare fails on it.
+            out[f"relative_low_income_{suffix}_{group}"] = (
+                float(100 * np.sum(w * low) / total) if total > 0 else None
             )
     return out
 
@@ -235,7 +237,7 @@ def measure(
             "reference": ref["estimate"],
             "low": ref["low"],
             "high": ref["high"],
-            "inside": bool(ref["low"] <= value <= ref["high"]),
+            "inside": value is not None and bool(ref["low"] <= value <= ref["high"]),
         }
     gender = np.asarray(sim.calculate("gender", age_year).values).astype(str)
     ages = single_ages(
