@@ -128,7 +128,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: PolicyEngine/policyengine-uk
-          ref: 7ca4ff2b8b148305a473bfda57269c8d351dfa6f
+          ref: c0d0c49d663de48308788605453804a494b9f5b5
           path: pe-uk-tool
           sparse-checkout: |
             policyengine_uk/utils/aggregate_impact
@@ -231,7 +231,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: PolicyEngine/policyengine-uk
-          ref: 7ca4ff2b8b148305a473bfda57269c8d351dfa6f
+          ref: c0d0c49d663de48308788605453804a494b9f5b5
           path: pe-uk-tool
           sparse-checkout: |
             policyengine_uk/utils/aggregate_impact
@@ -305,7 +305,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: PolicyEngine/policyengine-uk
-          ref: 7ca4ff2b8b148305a473bfda57269c8d351dfa6f
+          ref: c0d0c49d663de48308788605453804a494b9f5b5
           path: pe-uk-tool
           sparse-checkout: |
             policyengine_uk/utils/aggregate_impact
