@@ -96,8 +96,8 @@ def get_performance(weights, m_c, y_c, m_n, y_n, excluded_targets):
     # records support its estimate (utils/fit_report.py publishes a target's
     # error only from 10 records up).
     national_target_validation["records"] = (
-        (np.asarray(national_target_matrix) != 0).sum(axis=0)
-    )
+        np.asarray(national_target_matrix) != 0
+    ).sum(axis=0)
 
     national_target_validation["error"] = (
         national_target_validation["estimate"] - national_target_validation["target"]

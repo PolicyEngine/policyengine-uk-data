@@ -106,9 +106,10 @@ jobs:
           TESTING: "1"
   # The no-worsening check (W3). The base is built the same way as the head:
   # TESTING, one clone and the head's lockfile, so both builds run one model
-  # and environment and the comparison measures the data change. Only the
-  # base's calibration log leaves the job. Like the head's, it holds target
-  # estimates and values, aggregates; no dataset is uploaded or cached.
+  # and environment and the comparison measures the data change. As in the
+  # test job, only the fit summary leaves it. No dataset or calibration log
+  # is uploaded, and no dataset is cached (setup-uv caches Python packages
+  # only).
   base-build:
     name: Build the base for comparison
     runs-on: ubuntu-latest
