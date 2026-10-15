@@ -22,6 +22,7 @@ from policyengine_uk_data.targets.obr_sources import (
     SourceError,
     active_manifest,
     check_coverage,
+    check_names,
     coverage_problems,
     ingest,
     load_workbook,
@@ -527,3 +528,125 @@ def test_the_rehearsal_command_runs_on_the_committed_march_workbooks(tmp_path, c
     assert code == 0
     assert "the same bytes as the committed March 2026 workbook" in out
     assert "would write" in out
+
+
+# Sol re-review of #592: P3 hardening.
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        "BBC licence fee receipts (£ millions)",
+        "BBC licence fee receipts (£ bn)",
+        "BBC licence fee receipts (£ m)",
+        "BBC licence fee receipts (£ thousand)",
+        "BBC licence fee receipts (£000)",
+        "BBC licence fee receipts (000s)",
+        "BBC licence fee receipts (£m, cash)",
+        "BBC licence fee receipts (millions)",
+        "BBC licence fee receipts (bn)",
+        "BBC licence fee receipts, £ million",
+        "BBC licence fee receipts, million",
+        "BBC licence fee receipts (per cent)",
+        "BBC licence fee receipts (% of GDP)",
+        "BBC licence fee receipts\u00a0(£\u00a0million)",
+    ],
+)
+def test_a_row_stating_its_own_unit_in_any_spelling_is_refused(label):
+    ws = load_workbook("expenditure")["4.19"]
+    row = obr._find_row(ws, "BBC licence fee receipts", max_row=30)
+    ws[f"B{row}"] = label
+    with pytest.raises(SourceError, match="states its own unit"):
+        read_row(ws, row, MANIFEST)
+
+
+@pytest.mark.parametrize("heading", ["£ million", "Memo: £ million", "per cent", "£m"])
+def test_a_row_under_a_unit_sub_heading_is_refused(heading):
+    ws = load_workbook("expenditure")["4.19"]
+    row = obr._find_row(ws, "BBC licence fee receipts", max_row=30)
+    assert read_row(ws, row, MANIFEST)  # the real row reads
+    ws[f"A{row - 1}"] = heading
+    with pytest.raises(SourceError, match="sub-heading"):
+        read_row(ws, row, MANIFEST)
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "October 2026 Economic and fiscal outlook \u2013 detailed forecast tables: receipts",
+        "Economic and fiscal outlook \u2013 October 2026: detailed forecast tables \u2013 receipts",
+        "October 2026 Economic and fiscal outlook - detailed forecast tables: receipts (revised)",
+        "October 2026 Economic and fiscal outlook \u2013 detailed forecast tables: receipts.",
+        "October\u00a02026 Economic and fiscal outlook \u2014 detailed forecast tables: Receipts",
+    ],
+)
+def test_plausible_title_formats_are_accepted(title):
+    check_names("october_2026", "October 2026", {"receipts": title}, "test")
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "March 2026 Economic and fiscal outlook \u2013 detailed forecast tables: receipts",
+        "October 2026 Economic and fiscal outlook (March 2026 tables): receipts",
+        "October 2026 Fiscal risks and sustainability \u2013 tables: receipts",
+        "October 2026 Economic and fiscal outlook \u2013 detailed forecast tables: expenditure",
+        "October 2026 Economic and fiscal outlook \u2013 receipts: supplementary tables",
+    ],
+)
+def test_a_title_for_another_vintage_report_or_kind_is_refused(title):
+    with pytest.raises(SourceError, match="not the October 2026 EFO receipts"):
+        check_names("october_2026", "October 2026", {"receipts": title}, "test")
+
+
+def test_a_target_built_twice_fails_coverage(march_targets):
+    targets = [t for t in march_targets if t.forecast_vintage == MANIFEST.vintage]
+    problems = coverage_problems(targets + [targets[0]], MANIFEST)
+    assert problems == [f"{targets[0].name} was built more than once"]
+
+
+def test_a_real_ingest_needs_the_download_pages(tmp_path):
+    with pytest.raises(SourceError, match="https page"):
+        _ingest(tmp_path, urls={"receipts": "", "expenditure": ""})
+    assert not (tmp_path / "storage").exists()
+    # A dry run, the Budget-day rehearsal, does not need them.
+    _ingest(tmp_path, urls={}, dry_run=True)
+
+
+def test_an_interrupted_workbook_copy_is_named_on_retry(tmp_path, monkeypatch):
+    real = obr_sources.Path.write_bytes
+
+    def fail_on_expenditure(self, data):
+        # The copy into storage, after staging and every check have passed.
+        if self.name == "expenditure.xlsx" and self.parent.name.endswith(".partial"):
+            raise OSError("disk full")
+        return real(self, data)
+
+    monkeypatch.setattr(obr_sources.Path, "write_bytes", fail_on_expenditure)
+    with pytest.raises(OSError, match="disk full"):
+        _ingest(tmp_path)
+    monkeypatch.undo()
+    # Nothing is under the vintage's real name.
+    assert not (tmp_path / "storage" / "obr_efo" / "march_2026").exists()
+    assert not (tmp_path / "manifests" / "obr_march_2026.yaml").exists()
+    with pytest.raises(SourceError, match="stopped part way: .*march_2026.partial"):
+        _ingest(tmp_path)
+
+
+def test_an_interrupted_manifest_write_is_named_on_retry(tmp_path, monkeypatch):
+    real = obr_sources.os.replace
+
+    def fail_on_manifest(source, destination):
+        if str(destination).endswith(".yaml"):
+            raise OSError("interrupted")
+        return real(source, destination)
+
+    monkeypatch.setattr(obr_sources.os, "replace", fail_on_manifest)
+    with pytest.raises(OSError, match="interrupted"):
+        _ingest(tmp_path)
+    monkeypatch.undo()
+    assert not (tmp_path / "manifests" / "obr_march_2026.yaml").exists()
+    with pytest.raises(SourceError, match="stopped part way") as refused:
+        _ingest(tmp_path)
+    message = str(refused.value)
+    assert "march_2026" in message and ".obr_march_2026.yaml.partial" in message

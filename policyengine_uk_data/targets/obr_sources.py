@@ -28,14 +28,17 @@ passes their paths. ``--dry-run`` checks everything and prints each
 workbook's title, SHA-256, size and download time and every target's old
 and new value, writing nothing. It also says whether the bytes match the
 committed workbooks when the vintage is the active one, which makes a
-March 2026 download a rehearsal. Without ``--dry-run``, ``ingest`` parses
-the workbooks in a staging folder and then copies them under
-``storage/obr_efo/<vintage>/``. It requires each workbook's title to name
-the vintage, and requires the targets the current manifest requires. It
-writes the manifest with each file's SHA-256, size and download time (the
-file's modification time unless ``--downloaded-at`` is given) and never
-replaces an ingested vintage. Point ``sources.yaml`` at the new manifest to
-adopt it.
+March 2026 download a rehearsal. Without ``--dry-run``, ``ingest`` also
+needs ``--receipts-url`` and ``--expenditure-url``, the pages the workbooks
+came from, which every target cites. It parses the workbooks in a staging
+folder and then moves them under ``storage/obr_efo/<vintage>/``. It requires
+each workbook's title to name the vintage and no other, and requires the
+targets the current manifest requires. It writes the manifest with each
+file's SHA-256, size and download time (the file's modification time unless
+``--downloaded-at`` is given). Each part is written under a temporary name
+and renamed into place, so an interrupted ingest leaves a ``.partial`` file
+that the next attempt names. It never replaces an ingested vintage. Point
+``sources.yaml`` at the new manifest to adopt it.
 """
 
 from __future__ import annotations
@@ -43,8 +46,10 @@ from __future__ import annotations
 import argparse
 import hashlib
 import io
+import os
 import re
 import sys
+import unicodedata
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from functools import lru_cache
@@ -175,21 +180,43 @@ def _timestamp(value, where: str) -> Optional[str]:
     return parsed.isoformat()
 
 
+_MONTHS = (
+    "january|february|march|april|may|june|july|august|september|october|"
+    "november|december"
+)
+
+
+def _normal(text: str) -> str:
+    """Unicode-normalised lower case, one plain space between words, dashes as -."""
+    text = unicodedata.normalize("NFKC", text)
+    text = re.sub(r"[\u2010-\u2015\u2212]", "-", text)
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
 def check_names(vintage: str, label: str, titles: Mapping[str, str], where: str):
     """The vintage, its label and each workbook's own title must agree.
 
-    ``march_2026`` must be labelled "March 2026", and each workbook titled
-    "March 2026 Economic and fiscal outlook ..." ending with its kind. The
-    title is read from the verified bytes, so the bytes decide the vintage.
+    ``march_2026`` must be labelled "March 2026". Each workbook's title must
+    name that vintage and no other, call itself the Economic and fiscal
+    outlook, and end with its kind, ignoring a closing note in brackets and
+    punctuation: "March 2026 Economic and fiscal outlook - detailed forecast
+    tables: receipts" or "Economic and fiscal outlook, March 2026: detailed
+    forecast tables - receipts (revised)". The title is read from the verified
+    bytes, so the bytes decide the vintage.
     """
     if not re.fullmatch(r"[a-z]+_\d{4}", vintage):
         raise SourceError(f"{where}: vintage must look like october_2026")
     if label.lower().replace(" ", "_") != vintage:
         raise SourceError(f"{where}: label {label!r} does not name vintage {vintage!r}")
+    want = _normal(label)
     for kind, title in titles.items():
-        lowered = title.strip().lower()
-        if not lowered.startswith(f"{label.lower()} economic and fiscal outlook") or (
-            not lowered.endswith(kind)
+        normal = _normal(title)
+        named = set(re.findall(rf"\b(?:{_MONTHS}) \d{{4}}\b", normal))
+        tail = re.sub(r"\s*\([^()]*\)\s*$", "", normal).rstrip(" .,:;-")
+        if (
+            named != {want}
+            or "economic and fiscal outlook" not in normal
+            or not re.search(rf"\b{kind}$", tail)
         ):
             raise SourceError(
                 f"{where}: the {kind} workbook is titled {title!r}, which is not "
@@ -318,10 +345,22 @@ def unit_scale(ws, unit: str) -> float:
 
 # A row label giving its own unit, as table 4.19's "Standard colour licence
 # fee (£)" or "Number of UK households (m)" do under a "£ billion unless
-# otherwise stated" table.
+# otherwise stated" table. Broad on purpose (Sol re-review of #592): any £, %
+# or "per cent" in the label, or a unit word in brackets or after a final
+# comma, refuses the row, in any spelling.
+_UNIT_WORD = (
+    r"(?:bn|billions?|millions?|thousands?|0{3}s?|m|p|pence|per\s*cent|"
+    r"percentage points?|ppts?)"
+)
 _ROW_UNIT = re.compile(
-    r"\(\s*(?:£|£m|£bn|£ ?million|£ ?billion|m|bn|million|thousands?|per cent|%|p|pence)\s*\)"
-    r"|\bper cent\b|%"
+    rf"£|%|\bper\s*cent\b|\([^()]*\b{_UNIT_WORD}\b[^()]*\)|,\s*{_UNIT_WORD}\s*$",
+    re.IGNORECASE,
+)
+# A sub-heading that restates the unit for the rows under it, as "£ million"
+# or "Memo: per cent".
+_UNIT_HEADING = re.compile(
+    rf"^\s*(?:memo\s*:?\s*)?(?:£\s*)?{_UNIT_WORD}(?:\s+unless otherwise stated)?\s*$",
+    re.IGNORECASE,
 )
 
 
@@ -332,11 +371,19 @@ def read_row(ws, row: int, manifest: ObrManifest) -> dict:
     applied to every row read.
     """
     label = str(ws[f"B{row}"].value or "")
-    if _ROW_UNIT.search(label):
+    if _ROW_UNIT.search(_normal(label)):
         raise SourceError(
             f"{ws.title}!B{row}: {label!r} states its own unit, not the table's "
             f"{manifest.unit}"
         )
+    for above in range(_UNIT_ROWS + 1, row):
+        for column in "AB":
+            heading = ws[f"{column}{above}"].value
+            if isinstance(heading, str) and _UNIT_HEADING.match(_normal(heading)):
+                raise SourceError(
+                    f"{ws.title}!{column}{above}: the sub-heading {heading!r} above "
+                    f"row {row} gives its own unit, not the table's {manifest.unit}"
+                )
     scale = unit_scale(ws, manifest.unit)
     out = {}
     for column, year in year_columns(
@@ -358,7 +405,12 @@ def coverage_problems(targets: Sequence, manifest: ObrManifest) -> list:
     stays the complete list.
     """
     built = {t.name: t for t in targets}
+    names = [t.name for t in targets]
     problems = [
+        f"{name} was built more than once"
+        for name in sorted({n for n in names if names.count(n) > 1})
+    ]
+    problems += [
         f"{t.name} carries vintage {t.forecast_vintage!r}, not {manifest.vintage!r}"
         for t in targets
         if t.forecast_vintage != manifest.vintage
@@ -465,9 +517,10 @@ def ingest(
 
     Everything is checked in a staging folder first: both workbooks read
     and carry the vintage's titles, and the build's parsers yield every
-    required target and year from them. Only then are the files copied
-    into storage and the manifest written. A vintage already in storage or
-    in the manifests folder is never replaced.
+    required target and year from them. Only then are the files moved
+    into storage and the manifest written, each under a temporary name that
+    is renamed into place. A vintage already in storage or in the manifests
+    folder is never replaced, and a partial ingest is named on the next try.
     """
     import tempfile
 
@@ -482,11 +535,31 @@ def ingest(
     downloaded_at = dict(downloaded_at or {})
     destination = storage / "obr_efo" / vintage
     path = manifest_dir / f"obr_{vintage}.yaml"
-    if not dry_run and (destination.exists() or path.exists()):
-        raise SourceError(
-            f"{vintage} is already ingested ({destination} or {path} exists); "
-            "remove it deliberately before ingesting again"
-        )
+    partial_dir = destination.parent / f".{vintage}.partial"
+    partial_manifest = path.with_name(f".{path.name}.partial")
+    if not dry_run:
+        if path.exists():
+            raise SourceError(
+                f"{vintage} is already ingested ({path} exists); remove it "
+                "deliberately before ingesting again"
+            )
+        leftovers = [
+            p for p in (destination, partial_dir, partial_manifest) if p.exists()
+        ]
+        if leftovers:
+            raise SourceError(
+                f"an earlier ingest of {vintage} stopped part way: "
+                f"{', '.join(str(p) for p in leftovers)} exist but {path.name} does "
+                "not. Remove them deliberately, then ingest again"
+            )
+        missing = [
+            kind for kind in KINDS if not str(urls.get(kind, "")).startswith("https://")
+        ]
+        if missing:
+            raise SourceError(
+                f"ingest: give the https page each workbook was downloaded from "
+                f"(--{missing[0]}-url); every target cites it"
+            )
     files, titles, data = {}, {}, {}
     for kind in KINDS:
         data[kind] = Path(sources[kind]).read_bytes()
@@ -541,10 +614,16 @@ def ingest(
     )
     if dry_run:
         return manifest, path, target_diff(old, new)
-    destination.mkdir(parents=True)
+    # Write each part under a temporary name and rename it into place, so an
+    # interrupted ingest leaves a partial file that the next attempt names,
+    # never a half-written workbook or manifest under the real name.
+    partial_dir.mkdir(parents=True)
     for kind in KINDS:
-        (storage / files[kind].path).write_bytes(data[kind])
-    path.write_text(text)
+        (partial_dir / f"{kind}.xlsx").write_bytes(data[kind])
+    os.replace(partial_dir, destination)
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    partial_manifest.write_text(text)
+    os.replace(partial_manifest, path)
     return load_manifest(path), path, target_diff(old, new)
 
 
