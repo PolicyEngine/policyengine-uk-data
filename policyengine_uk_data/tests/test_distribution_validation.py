@@ -212,7 +212,23 @@ def test_the_workflow_fails_when_a_distribution_report_is_missing():
     text = (
         Path(__file__).parents[2] / ".github" / "workflows" / "pull_request.yaml"
     ).read_text()
-    block = text[
-        text.index("The income distribution and single-age reports are missing") :
-    ]
+    block = text[text.index("The report is missing for one build") :]
     assert 'echo "status=1" >> "$GITHUB_OUTPUT"' in block.split("\n          fi", 1)[0]
+    assert "## Income distribution and single ages: FAIL" in text
+
+
+def test_the_measurement_runs_after_the_tests_and_cannot_skip_them():
+    """Delta reviews of #600: an ONS outage must not skip the tests or the
+    fit summary, nor turn the test job red."""
+    from pathlib import Path
+
+    import yaml
+
+    workflow = Path(__file__).parents[2] / ".github" / "workflows" / "pull_request.yaml"
+    steps = yaml.safe_load(workflow.read_text())["jobs"]["test"]["steps"]
+    names = [step.get("name") for step in steps]
+    measure = names.index("Measure the income distribution and single ages")
+    assert names.index("Run tests") < measure
+    assert names.index("Save the fit summary") < measure
+    assert steps[measure]["if"] == "${{ !cancelled() }}"
+    assert steps[measure]["continue-on-error"] is True

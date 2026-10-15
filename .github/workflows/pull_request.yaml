@@ -72,6 +72,10 @@ jobs:
           fetch-depth: 0 # Fetch all history for all tags and branches
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
+        # Restore uv's package cache but never save one from a job that
+        # holds the data: its location can be moved (UV_CACHE_DIR).
+        with:
+          save-cache: false
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -86,28 +90,32 @@ jobs:
         run: uv run --frozen make data
         env:
           TESTING: "1"
-      # The raw calibration logs stay on the runner: a target supported by a
-      # few households, divided by a published count, could give one
-      # household's value back. Only the summary the fit comparison needs is
-      # uploaded (utils/fit_report.py).
-      - name: Summarise the calibration fit
-        run: uv run --frozen python -m policyengine_uk_data.utils.fit_report summarise constituency_calibration_log.csv --out fit_summary.json
-      - name: Save the fit summary
-        uses: actions/upload-artifact@v7
-        with:
-          name: fit_summary.json
-          path: fit_summary.json
-
       - name: Run tests
         run: uv run --frozen make test
         env:
           # Relaxes built-dataset outcome tolerances to match the reduced
           # fidelity of the TESTING build above (see test_cgt_band_donors).
           TESTING: "1"
+      # After the tests, whatever they did. The raw calibration logs stay on
+      # the runner: a target supported by a few households, divided by a
+      # published count, could give one household's value back. Only the
+      # summary the fit comparison needs is uploaded (utils/fit_report.py).
+      - name: Summarise the calibration fit
+        if: ${{ !cancelled() }}
+        run: uv run --frozen python -m policyengine_uk_data.utils.fit_report summarise constituency_calibration_log.csv --out fit_summary.json
+      - name: Save the fit summary
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: fit_summary.json
+          path: fit_summary.json
       # After the tests, and whatever they did: the measurement downloads the
       # ONS projection, and an ONS outage must not skip the test suite.
       - name: Measure the income distribution and single ages
         if: ${{ !cancelled() }}
+        # A failed measurement fails the comparison (missing report), not
+        # the test job, which stays about the tests.
+        continue-on-error: true
         run: uv run --frozen python -m policyengine_uk_data.utils.distribution_validation measure policyengine_uk_data/storage/enhanced_frs_2024_25.h5 --out distribution_report.json
       - name: Save the distribution report
         if: ${{ !cancelled() }}
@@ -136,7 +144,8 @@ jobs:
             --label head --dataset-file policyengine_uk_data/storage/enhanced_frs_2024_25.h5 --dataset-label "this pull request's build" \
             --fallback-partition pe-uk-tool/policyengine_uk/data/fiscal_partition.yaml \
             --no-guard --git-sha "$model" --out "$RUNNER_TEMP/aggregate" || true
-          cp "$RUNNER_TEMP/aggregate/result.json" aggregate_result.json
+          cp "$RUNNER_TEMP/aggregate/result.json" aggregate_result.json \
+            || echo "::warning::The aggregate measurement wrote no result; see the log above."
       - name: Save the aggregate result (aggregates only)
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
@@ -153,8 +162,8 @@ jobs:
   # and environment and the comparison measures the data change. As in the
   # test job, only aggregate reports leave it: the fit summary, the
   # distribution report and the aggregate result. No dataset or calibration
-  # log is uploaded, and no dataset is cached (setup-uv caches Python
-  # packages only).
+  # log is uploaded, and nothing is cached: setup-uv restores uv's package
+  # cache and saves none.
   base-build:
     name: Build the base for comparison
     runs-on: ubuntu-latest
@@ -175,6 +184,10 @@ jobs:
           path: base
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
+        # Restore uv's package cache but never save one from a job that
+        # holds the data: its location can be moved (UV_CACHE_DIR).
+        with:
+          save-cache: false
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -214,6 +227,7 @@ jobs:
           name: base_distribution_report.json
           path: base_distribution_report.json
       - name: Check out the aggregate-impact tool
+        if: ${{ !cancelled() }}
         uses: actions/checkout@v6
         with:
           repository: PolicyEngine/policyengine-uk
@@ -223,6 +237,7 @@ jobs:
             policyengine_uk/utils/aggregate_impact
             policyengine_uk/data/fiscal_partition.yaml
       - name: Measure national aggregates with the model fixed
+        if: ${{ !cancelled() }}
         run: |
           tool="$RUNNER_TEMP/tool"
           mkdir -p "$tool"
@@ -232,8 +247,10 @@ jobs:
             --label base --dataset-file base/policyengine_uk_data/storage/enhanced_frs_2024_25.h5 --dataset-label "the base's build" \
             --fallback-partition pe-uk-tool/policyengine_uk/data/fiscal_partition.yaml \
             --no-guard --git-sha "$model" --out "$RUNNER_TEMP/aggregate" || true
-          cp "$RUNNER_TEMP/aggregate/result.json" base_aggregate_result.json
+          cp "$RUNNER_TEMP/aggregate/result.json" base_aggregate_result.json \
+            || echo "::warning::The aggregate measurement wrote no result; see the log above."
       - name: Save the aggregate result (aggregates only)
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
           name: base_aggregate_result.json
@@ -253,6 +270,10 @@ jobs:
       - uses: actions/checkout@v6
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
+        # Restore uv's package cache but never save one from a job that
+        # holds the data: its location can be moved (UV_CACHE_DIR).
+        with:
+          save-cache: false
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -319,7 +340,7 @@ jobs:
             { echo; cat distribution.md 2>/dev/null || echo '## Income distribution and single ages: FAIL (the comparison did not finish)'; } >> fit.md
             if [ "$distribution_status" != 0 ]; then echo "status=1" >> "$GITHUB_OUTPUT"; fi
           else
-            { echo; echo "The income distribution and single-age reports are missing for one build."; } >> fit.md
+            { echo; echo '## Income distribution and single ages: FAIL'; echo; echo "The report is missing for one build, so the distributions could not be compared."; } >> fit.md
             echo "status=1" >> "$GITHUB_OUTPUT"
           fi
           # National aggregates with the model fixed.
@@ -334,11 +355,16 @@ jobs:
               --base aggregates/base --head aggregates/head --markdown aggregates.md --run-url "$RUN_URL"
             aggregate_status=$?
             set -e
-            # The tool's comment marker belongs to policyengine-uk's own comment.
-            { echo; grep -v '^<!-- policyengine-uk-aggregate-impact -->' aggregates.md; } >> fit.md
             if [ "$aggregate_status" != 0 ]; then echo "status=1" >> "$GITHUB_OUTPUT"; fi
+            # The tool's comment marker belongs to policyengine-uk's own comment.
+            if [ -s aggregates.md ]; then
+              { echo; sed '/^<!-- policyengine-uk-aggregate-impact -->$/d' aggregates.md; } >> fit.md
+            else
+              { echo; echo '## National aggregates: FAIL (the comparison did not finish)'; } >> fit.md
+              echo "status=1" >> "$GITHUB_OUTPUT"
+            fi
           else
-            { echo; echo "The national aggregate results are missing for one build."; } >> fit.md
+            { echo; echo '## National aggregates: FAIL'; echo; echo "The result is missing for one build (see the build jobs' logs), so the aggregates could not be compared."; } >> fit.md
             echo "status=1" >> "$GITHUB_OUTPUT"
           fi
           cat fit.md >> "$GITHUB_STEP_SUMMARY"
@@ -369,5 +395,5 @@ jobs:
       - name: Fail on a fit regression
         if: steps.compare.outputs.status != '0'
         run: |
-          echo "::error::The calibration fit or distribution comparison failed; see the job summary."
+          echo "::error::The calibration fit, distribution or national aggregate comparison failed; see the job summary."
           exit 1
