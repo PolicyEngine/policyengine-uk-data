@@ -143,3 +143,12 @@ def test_projection_keeps_top_open_ended_band(projections):
     ]
     assert len(top_band) == 1
     assert top_band.iloc[0]["dividend_income_amount"] > 0
+
+
+def test_projection_is_the_spi_table_uprated_with_the_committed_table(
+    projections, base_targets
+):
+    """Regenerate incomes_projection.csv whenever uprating_factors.csv changes."""
+    from policyengine_uk_data.utils.incomes_projection import project_income_table
+
+    pd.testing.assert_frame_equal(project_income_table(base_targets), projections)

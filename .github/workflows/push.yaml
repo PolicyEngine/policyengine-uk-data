@@ -10,9 +10,81 @@ on:
       - pyproject.toml
   workflow_dispatch:
 
+# One Push run at a time. Two builds that overlap both write the unversioned
+# copies of a release (the files at the root of the Hugging Face repo and the
+# GCS objects, both named by file), so whichever finishes last wins, even if
+# it is the older version. A plain group lets a newer run replace one that is
+# still pending, which could discard a version commit's release; #553 dropped
+# the group for that reason. `queue: max` keeps every waiting run (up to 100)
+# instead, and concurrency never cancels a build that has started.
+concurrency:
+  group: release
+  cancel-in-progress: false
+  queue: max
+
 jobs:
-  lint:
+  # A merge that touches pyproject.toml and also adds changelog fragments is
+  # followed by versioning's "Update package version" commit, whose own Push
+  # run builds and publishes the bumped version. Building the merge commit as
+  # well spent about 1.5 hours on a version that was never released (run
+  # 37642619160 on 2026-10-07 was cancelled by hand). This job decides whether
+  # to build: never for a push that changed changelog.d (other than the version
+  # commit), and never for a push whose pyproject.toml version already has a
+  # git tag. publish-git-tag.sh pushes that tag only after the data uploaded,
+  # and data_upload.py raises rather than change a release that is final on
+  # Hugging Face unless the rebuilt manifest equals the published one. Building
+  # such a push would spend about 1.5 hours and release nothing new. Otherwise
+  # it builds as before, and a manual run always builds.
+  gate:
+    name: Decide whether to build
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            /pyproject.toml
+            /.github/fetch_version.py
+          sparse-checkout-cone-mode: false
+      - id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          MESSAGE: ${{ github.event.head_commit.message }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          build=true
+          if [ "$EVENT" = "push" ] && [ "$MESSAGE" != "Update package version" ]; then
+            if ! files=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${BEFORE}...${GITHUB_SHA}" --jq '.files[].filename'); then
+              echo "::warning::Could not list this push's files; building as before."
+            elif printf '%s\n' "$files" | grep -q '^changelog\.d/'; then
+              build=false
+              echo "::notice title=Build deferred to versioning::This push adds changelog fragments, so the versioning workflow bumps the version and the Push run on its 'Update package version' commit builds and publishes."
+            fi
+          fi
+          if [ "$build" = true ] && [ "$EVENT" = "push" ]; then
+            version=$(python3 .github/fetch_version.py) || version=
+            if [ -z "$version" ] || [ "$version" = None ]; then
+              echo "::warning::Could not read the version from pyproject.toml; building as before."
+            else
+              status=0
+              git ls-remote --exit-code --tags origin "refs/tags/${version}" > /dev/null || status=$?
+              if [ "$status" -eq 0 ]; then
+                build=false
+                echo "::notice title=Already released::Version ${version} already has a git tag, so its data is already published. Add a changelog fragment to release a new version, or run this workflow manually to rebuild this one."
+              elif [ "$status" -ne 2 ]; then
+                echo "::warning::Could not check for tag ${version}; building as before."
+              fi
+            fi
+          fi
+          echo "build=${build}" >> "$GITHUB_OUTPUT"
+  lint:
+    needs: gate
+    if: needs.gate.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     name: Lint
     steps:
       - uses: actions/checkout@v6
@@ -28,7 +100,14 @@ jobs:
         run: ruff format --check .
   test:
     name: Build and test
+    # Waiting for Lint means a formatting failure stops the release before it
+    # builds or uploads anything. Lint's checks take about 10 seconds.
+    needs: [gate, lint]
+    if: needs.gate.outputs.build == 'true'
     runs-on: ubuntu-latest
+    # Successful runs since July took 77 to 125 minutes end to end. Fail a hung build
+    # instead of holding a shared org runner for GitHub's 6-hour default.
+    timeout-minutes: 240
     permissions:
       contents: "write"
       # Required to auth against gcp

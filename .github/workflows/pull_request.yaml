@@ -11,9 +11,17 @@ on:
   pull_request:
     branches: [main]
 
+# A new push to a pull request supersedes the run on its previous head. Cancel
+# that run instead of letting its ~40-minute dataset build and test job finish
+# on a stale commit while it holds one of the org's shared runners.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     name: Lint
     steps:
       - uses: actions/checkout@v6
@@ -30,6 +38,7 @@ jobs:
   bundle-release-manifest-contract:
     name: Validate bundle release manifest contract
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
       - name: Set up Python
@@ -49,6 +58,9 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    # Slowest observed 2026-10-06..08: 47 minutes (TESTING build plus tests).
+    # Fail a hung build instead of holding a runner for the 6-hour default.
+    timeout-minutes: 90
     env:
       HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
       PYTHONUNBUFFERED: "1"

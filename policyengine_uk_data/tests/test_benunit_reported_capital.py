@@ -10,6 +10,9 @@ Invariants:
    applies.
 3. Without either column every benefit unit gets -1.
 4. The output is always -1 or a non-negative number, one per benefit unit.
+
+Uprating is checked against the engine for every row, including this
+column, in test_uprating_factors_table.py.
 """
 
 import numpy as np
@@ -70,23 +73,18 @@ def test_output_is_sentinel_or_non_negative_for_random_inputs():
 
 
 def test_uprating_rows_match_the_model():
-    """The build uprates the column with these rows (calibration materialises
-    the calibration year from them), and policyengine-uk projects the saved
-    dataset with the variable's own uprating index at runtime. The rows must
-    equal what ``create_policyengine_uprating_factors_table`` derives from the
-    locked policyengine-uk, or a unit near a capital threshold (Pension
-    Credit's 10,000 pound deemed-income disregard, Universal Credit's 6,000
-    pound tariff threshold and 16,000 pound limit) can be assessed differently
-    in calibration and at runtime."""
-    from policyengine_uk.system import system
-
+    """Capital follows the engine's load-time GDP growth at calibration too."""
     from policyengine_uk_data.storage import STORAGE_FOLDER
-    from policyengine_uk_data.utils.uprating import END_YEAR, START_YEAR
+    from policyengine_uk_data.utils.uprating import (
+        END_YEAR,
+        START_YEAR,
+        UPRATING_TABLE_DECIMALS,
+        policyengine_uk_load_time_index,
+    )
 
-    variable = system.variables["benunit_reported_capital"]
-    index = system.parameters.get_child(variable.uprating)
     years = range(START_YEAR, END_YEAR + 1)
-    expected = {y: round(index(y) / index(START_YEAR), 3) for y in years}
+    expected = policyengine_uk_load_time_index().loc["benunit_reported_capital"]
+    expected = expected.round(UPRATING_TABLE_DECIMALS)
     factors = pd.read_csv(STORAGE_FOLDER / "uprating_factors.csv").set_index("Variable")
     growth = pd.read_csv(STORAGE_FOLDER / "uprating_growth_factors.csv").set_index(
         "Variable"
@@ -94,24 +92,28 @@ def test_uprating_rows_match_the_model():
     for y in years:
         assert factors.loc["benunit_reported_capital", str(y)] == expected[y]
         expected_growth = (
-            0 if y == START_YEAR else round(expected[y] / expected[y - 1] - 1, 3)
+            0
+            if y == START_YEAR
+            else round(expected[y] / expected[y - 1] - 1, UPRATING_TABLE_DECIMALS)
         )
         assert growth.loc["benunit_reported_capital", str(y)] == expected_growth
 
 
 def test_programme_capital_defaults_to_the_recorded_input():
-    """policyengine-uk derives both programmes' reported capital from the one
-    input this build fills, so the dataset stores only the observed figure and
-    the uprating tables carry no rows for the programme variables."""
+    """Programme formulas and legacy stored inputs use the same capital index."""
     from policyengine_uk.system import system
 
     from policyengine_uk_data.storage import STORAGE_FOLDER
 
     assert not system.variables["benunit_reported_capital"].formulas
-    factors = pd.read_csv(STORAGE_FOLDER / "uprating_factors.csv")
+    factors = pd.read_csv(STORAGE_FOLDER / "uprating_factors.csv").set_index("Variable")
     for name in ("pension_credit_reported_capital", "uc_reported_capital"):
         assert system.variables[name].formulas
-        assert name not in set(factors["Variable"])
+        # The engine also projects older datasets that store programme
+        # inputs directly, so its load-time index keeps these rows.
+        np.testing.assert_array_equal(
+            factors.loc[name], factors.loc["benunit_reported_capital"]
+        )
 
 
 def test_spi_copy_records_no_capital():
