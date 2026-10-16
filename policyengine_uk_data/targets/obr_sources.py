@@ -19,6 +19,8 @@ Adopting a new vintage (for example on Budget day):
     python -m policyengine_uk_data.targets.obr_sources ingest \\
         --vintage october_2026 --label "October 2026" \\
         --receipts receipts.xlsx --expenditure expenditure.xlsx \\
+        --receipts-url https://obr.uk/download/<receipts page>/ \\
+        --expenditure-url https://obr.uk/download/<expenditure page>/ \\
         --first-year 2025 --last-year 2031 --dry-run
 
 obr.uk refuses scripted downloads (HTTP 403 to GitHub Actions runners, as
