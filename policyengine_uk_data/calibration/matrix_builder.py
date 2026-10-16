@@ -201,6 +201,9 @@ def _load_area_targets(
 
     # SPI income and age inputs share this source order. Keep the codes
     # through any boundary mapping before selecting the requested rows.
+    assert incomes["code"].equals(age_targets["code"]), (
+        "Income and age code order differs"
+    )
     y = pd.DataFrame(index=pd.Index(age_targets["code"], name="code"))
 
     national_incomes = get_national_income_projections(int(time_period))

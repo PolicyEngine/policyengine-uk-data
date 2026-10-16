@@ -56,6 +56,9 @@ def create_constituency_target_matrix(
 
     # ── Income targets ─────────────────────────────────────────────
     incomes = get_constituency_income_targets()
+    assert incomes["code"].equals(age_targets["code"]), (
+        "Income and age code order differs"
+    )
     national_incomes = get_national_income_projections(int(time_period))
 
     for income_variable in INCOME_VARIABLES:

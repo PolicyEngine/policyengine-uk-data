@@ -12,8 +12,8 @@ def _normalise_area_name(name: str) -> str:
 
 
 def _area_name_aliases(name: str) -> set[str]:
-    # Welsh Stat-Xplore labels contain both Welsh and English names, in
-    # either order. Match either label, without guessing a translation.
+    # Welsh and English names in Stat-Xplore labels may appear in either order.
+    # Match either label, without guessing a translation.
     return {_normalise_area_name(part) for part in re.split(r"/", name)} - {""}
 
 

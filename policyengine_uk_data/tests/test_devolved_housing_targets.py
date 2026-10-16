@@ -122,6 +122,7 @@ def test_constituency_target_matrix_includes_devolved_housing_targets(monkeypatc
     codes = age_targets["code"].tolist()
     income_targets = pd.DataFrame(
         {
+            "code": codes,
             "self_employment_income_amount": [1.0, 1.0],
             "self_employment_income_count": [1.0, 1.0],
             "employment_income_amount": [1.0, 1.0],

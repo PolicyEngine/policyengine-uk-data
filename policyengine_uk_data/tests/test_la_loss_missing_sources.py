@@ -50,6 +50,7 @@ def _patch_common_la_inputs(monkeypatch, tmp_path):
         "get_la_income_targets",
         lambda: pd.DataFrame(
             {
+                "code": _fake_la_codes()["code"],
                 "employment_income_amount": [1.0, 1.0, 1.0, 1.0],
                 "employment_income_count": [1.0, 1.0, 1.0, 1.0],
             }
