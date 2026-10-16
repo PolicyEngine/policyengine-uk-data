@@ -26,3 +26,6 @@ policyengine_uk_data/storage/local_geography_weights.csv.gz
 
 # Hypothesis example database (property-based tests)
 .hypothesis/
+
+# Local build-job evidence and Git metadata
+.job/

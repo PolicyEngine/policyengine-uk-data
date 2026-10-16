@@ -810,8 +810,11 @@ def derive_benunit_reported_capital(benunit: pd.DataFrame) -> np.ndarray:
     with no information on means-tested receipt, and policyengine-uk shares
     it out between the household's benefit units.
 
-    A missing or negative value gives -1, so policyengine-uk falls back to the
-    household proxy.
+    Both source fields are derived pound amounts: DWP has already estimated
+    banded responses within those totals. No new band midpoint is applied
+    here. A finite, non-negative TOTCAPB4 takes precedence, with a row-wise
+    TOTCAPB3 fallback. If neither is usable, -1 tells policyengine-uk to use
+    the household proxy; an observed zero is kept.
     """
     capital = np.full(len(benunit), np.nan)
     for column in ("totcapb3", "totcapb4"):  # later columns take precedence
