@@ -5,7 +5,8 @@ These tests pin that:
 - other bytes, or a workbook with another title, are refused;
 - year columns follow the header row, not the column letter;
 - a missing target or year fails;
-- ingesting a vintage reproduces the build's own targets.
+- ingesting a vintage reproduces the build's own targets;
+- a dry run reports exactly what the real ingest would refuse.
 """
 
 import io
@@ -832,6 +833,10 @@ def test_a_sub_heading_restating_the_tables_own_unit_is_not_refused(heading):
     values = read_row(ws, row, MANIFEST)
     ws[f"A{row - 1}"] = heading
     assert read_row(ws, row, MANIFEST) == values
+    # The same cell giving another unit is refused, so the heading is read.
+    ws[f"A{row - 1}"] = heading.replace("billion", "million").replace("bn", "m")
+    with pytest.raises(SourceError, match="sub-heading"):
+        read_row(ws, row, MANIFEST)
 
 
 _TIMES = st.datetimes(

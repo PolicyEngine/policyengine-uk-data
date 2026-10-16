@@ -31,10 +31,11 @@ targets the current manifest requires. It parses the workbooks in a staging
 folder and then moves them under ``storage/obr_efo/<vintage>/``. It writes
 the manifest with each file's SHA-256, size and download time, and the
 basis of that time: ``mtime``, the file's modification time, or ``given``
-with ``--downloaded-at``, which a copied or unzipped file needs. Each part is written under a temporary name and
-renamed into place, so an interrupted ingest leaves a ``.partial`` file that
-the next attempt names. It never replaces an ingested vintage. Point
-``sources.yaml`` at the new manifest to adopt it.
+with ``--downloaded-at``, which a copied or unzipped file needs. Each part
+is written under a temporary name and renamed into place, so an interrupted
+ingest leaves a ``.partial`` file that the next attempt names. It never
+replaces an ingested vintage. Point ``sources.yaml`` at the new manifest to
+adopt it.
 
 ``--dry-run`` checks everything and prints each workbook's title, SHA-256,
 size and download time and every target's old and new value, writing
@@ -576,8 +577,9 @@ def ingest(
     and a download page that is not https on obr.uk. A dry run returns those
     as ``refusals`` instead; it checks everything else as a real ingest does,
     raising on any other problem, returns the diff and writes nothing. The
-    manifest it returns is not on disk. A dry run of the active vintage on the bytes its
-    manifest names is a rehearsal, so that manifest is not a refusal.
+    manifest it returns is not on disk. A dry run of the active vintage on
+    the bytes its manifest names is a rehearsal, so that manifest is not a
+    refusal.
 
     Everything is checked in a staging folder first: both workbooks read
     and carry the vintage's titles, and the build's parsers yield every
