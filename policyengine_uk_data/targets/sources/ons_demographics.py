@@ -68,9 +68,11 @@ _AGE_BANDS = [
 # the band totals, leaving the age composition *within* a band unconstrained
 # nationally: the calibration could satisfy 15-29 while starving 18-24, which
 # is what collapsed the modelled young-adult population to ~3.4M against ONS's
-# ~5.4M. Regional targets already use finer bands, but they do not constrain
-# the national weights. The ONS projection is published by single year of age,
-# so this is a change of aggregation only - no new source data.
+# ~5.4M. Regional ten-year bands also constrain the shared household weights,
+# including summed local weights in dense local calibration, but provide less
+# age resolution than these five-year sex bands. The ONS projection is published
+# by single year of age, so this is a change of aggregation only - no new source
+# data.
 _GENDER_BANDS = [
     (0, 4),
     (5, 9),
