@@ -58,7 +58,8 @@ def _materialize_base_year_dataset(dataset, frs_release, uprate_dataset):
 def main():
     """Create enhanced FRS dataset with rich progress tracking."""
     try:
-        assert_local_build_environment()
+        # TESTING builds (PR CI) skip the full-build checks.
+        assert_local_build_environment(full_build=os.environ.get("TESTING", "0") != "1")
 
         from policyengine_uk.data import UKSingleYearDataset
         from policyengine_uk_data.datasets.disability_benefits import (
