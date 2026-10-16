@@ -20,10 +20,10 @@ What the check does:
   Every artifact upload must name literal files reviewed for that job in
   ``REVIEWED``: no directories, globs, exclusions or expressions. Every run
   line that matches ``PUBLISH_COMMAND`` (any curl or wget, and the known
-  publishing commands) must be, in full, a command reviewed for that job. A job that commits its whole workspace may run only its
-  reviewed lines (``runs_only``), with no ``shell``, ``env``,
-  ``working-directory``, ``defaults`` or ``container`` that could change what
-  those lines run.
+  publishing commands) must be, in full, a command reviewed for that job. A
+  job that commits its whole workspace may run only its reviewed lines
+  (``runs_only``), with no ``shell``, ``env``, ``working-directory``,
+  ``defaults`` or ``container`` that could change what those lines run.
 - Jobs that can't reach the data (docs, changelog) may publish.
 
 What it does not do (Sol re-review of #603): it recognises reviewed workflow
