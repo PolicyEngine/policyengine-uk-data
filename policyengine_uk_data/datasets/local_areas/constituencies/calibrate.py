@@ -7,6 +7,7 @@ from policyengine_uk_data.targets.build_loss_matrix import (
     create_target_matrix as create_national_target_matrix,
 )
 from policyengine_uk_data.storage import STORAGE_FOLDER
+from policyengine_uk_data.targets.sources.hmrc_cgt import band_count_target_names
 from policyengine_uk.data import UKSingleYearDataset
 
 
@@ -29,6 +30,7 @@ def calibrate(
         area_name="Constituency",
         get_performance=get_performance,
         time_period=time_period,
+        prior_rake_targets=band_count_target_names(),
     )
 
 
