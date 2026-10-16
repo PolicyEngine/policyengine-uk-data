@@ -60,13 +60,14 @@ def test_the_shipped_known_gaps_load_and_cite_issues():
     def named(status):
         return sum(len(g.targets) for g in gaps if g.status == status)
 
-    # The 1.58.1 inventory at 2025, in every build: 15 two-child-limit targets
-    # with no 2025 value, 19 without signal, and 156 SPI and 3 ONS targets
-    # dropped under a name already taken.
+    # The 1.58.1 inventory at 2025, in every build, with #557 (SPI bands
+    # emitted once) and #604 (80-and-over ages in place of 85-90): 15
+    # two-child-limit targets with no 2025 value, 17 without signal, and 3 ONS
+    # targets dropped under a name already taken (#605).
     assert [named(s) for s in ("no_value_for_year", "zero_signal", "duplicate")] == [
         15,
-        19,
-        159,
+        17,
+        3,
     ]
     assert all(g.builds == set(BUILDS) for g in gaps if g.targets)
     # Only in testing builds, any UC payment band may lack signal (#598).
