@@ -1,11 +1,7 @@
 """Local-authority council tax calibration targets (derived proxies).
 
-Produces three kinds of LA-level calibration target from public data:
+Produces two kinds of LA-level calibration target from public data:
 
-- ``ons/council_tax_band_d/{code}``: the average Band D council tax
-  (inclusive of all precepts) each household pays in billing authority
-  ``code``. Sourced from MHCLG, Welsh Government and Scottish
-  Government annual publications.
 - ``voa/council_tax/{code}/{band}``: the number of dwellings in band
   ``A``–``H`` (England) or ``A``–``I`` (Wales) for billing authority
   ``code``. Sourced from the VOA *Council Tax: Stock of Properties*
@@ -13,6 +9,11 @@ Produces three kinds of LA-level calibration target from public data:
 - ``housing/council_tax_net/{code}``: net council tax requirement per
   LA (net of CTR support). England derived from MHCLG taxbase × Band D;
   Wales sourced directly from WG Council Tax Income (Table 3).
+
+No target is emitted from the ``band_d_amount`` column. A Band D
+amount is a **rate**, not an additive household control, and the loss
+matrix is an additive objective — see the note in ``get_targets`` and
+issue #483.
 
 Data for all 360 LAs in ``local_authorities_2021.csv`` is joined from
 the committed canonical file ``storage/la_council_tax.csv``. Rows where
@@ -88,22 +89,17 @@ from policyengine_uk_data.targets.sources._common import STORAGE
 
 _CSV_NAME = "la_council_tax.csv"
 
-# Latest fiscal years covered by each source. The LA Band D amounts are
-# structurally single-year snapshots; callers that need longer time
-# series should uprate via the existing council-tax uprating index.
+# Latest fiscal years covered by each source. These are structurally
+# single-year snapshots; callers that need longer time series should
+# uprate via the existing council-tax uprating index.
+# ``_YEAR_BAND_D_ENGLAND`` is retained because the England net
+# council-tax requirement is derived from the 2026-27 Band D level.
 _YEAR_BAND_D_ENGLAND = 2026
-_YEAR_BAND_D_WALES = 2026
-_YEAR_BAND_D_SCOTLAND = 2025
 _YEAR_BAND_COUNT = 2025
 
 _BAND_COUNT_COLUMNS = {band: f"count_band_{band}" for band in "ABCDEFGHI"}
 
-_ENGLAND_REF = (
-    "https://www.gov.uk/government/statistics/"
-    "council-tax-levels-set-by-local-authorities-in-england-2026-to-2027"
-)
 _WALES_REF = "https://www.gov.wales/council-tax-levels-april-2026-march-2027-html"
-_SCOTLAND_REF = "https://www.gov.scot/publications/council-tax-datasets/"
 _VOA_REF = (
     "https://www.gov.uk/government/statistics/council-tax-stock-of-properties-2025"
 )
@@ -145,50 +141,35 @@ def load_la_net_council_tax() -> pd.DataFrame:
     ].reset_index(drop=True)
 
 
-def _year_for_band_d(country: str) -> int:
-    if country == "WALES":
-        return _YEAR_BAND_D_WALES
-    if country == "SCOTLAND":
-        return _YEAR_BAND_D_SCOTLAND
-    return _YEAR_BAND_D_ENGLAND
-
-
-def _ref_for_band_d(country: str) -> str:
-    if country == "WALES":
-        return _WALES_REF
-    if country == "SCOTLAND":
-        return _SCOTLAND_REF
-    return _ENGLAND_REF
-
-
 def get_targets() -> list[Target]:
-    """Emit LA-level Band D amount + band-count targets."""
+    """Emit LA-level band-count and net council-tax targets."""
     df = _load_table()
     if df is None or df.empty:
         return []
 
     targets: list[Target] = []
 
-    # Band D amount targets — one per LA with a reported value.
-    for _, row in df.iterrows():
-        amount = row.get("band_d_amount")
-        if pd.isna(amount):
-            continue
-        code = str(row["code"])
-        country = str(row["country"])
-        targets.append(
-            Target(
-                name=f"ons/council_tax_band_d/{code}",
-                variable="council_tax_band_d_amount",
-                source="ons",
-                unit=Unit.GBP,
-                geographic_level=GeographicLevel.LOCAL_AUTHORITY,
-                geo_code=code,
-                geo_name=str(row["name"]),
-                values={_year_for_band_d(country): float(amount)},
-                reference_url=_ref_for_band_d(country),
-            )
-        )
+    # NO Band D amount target is emitted here. Do not re-add one.
+    #
+    # A Band D council tax amount is a *rate* (£ per Band D dwelling),
+    # not an additive household control. The loss matrix is an additive
+    # objective: every target is compared against a weighted SUM over
+    # households. Binding a ~£2,500 per-dwelling rate into that objective
+    # is category-wrong — neither as a sum (which would scale with the
+    # number of households in the LA) nor as a mean (which would still be
+    # a rate inside an additive objective).
+    #
+    # Microcosm reached the same verdict independently: its
+    # ``uk_data_target_parity.json`` concern ``local_council_tax_band_d_rate``
+    # is ``reviewed_exclusion`` / ``non_linear``, "Band D currency amounts
+    # are per-rate, not additive household controls", to be kept excluded
+    # "until a rate-aware non-linear objective exists".
+    #
+    # ``band_d_amount`` deliberately REMAINS in ``storage/la_council_tax.csv``
+    # and is loadable: it is needed as data for household liability
+    # computation, and upstream when building the CSV's
+    # ``total_council_tax_net`` column (England = MHCLG taxbase x Band D).
+    # Only the target emission is dropped. See PolicyEngine/policyengine-uk-data#483.
 
     # Band count targets — one per (LA, band) where VOA has a value.
     for _, row in df.iterrows():
