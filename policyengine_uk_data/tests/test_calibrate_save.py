@@ -349,6 +349,7 @@ def _final_state_run(inputs, epochs, verbose):
 
 @settings(max_examples=20, deadline=None)
 @example(epochs=32, verbose=True)  # a TESTING build
+@example(epochs=32, verbose=False)  # the same, through the non-verbose loop
 @given(epochs=st.integers(1, 40), verbose=st.booleans())
 def test_saved_returned_and_logged_weights_are_the_final_optimiser_state(
     epochs, verbose
