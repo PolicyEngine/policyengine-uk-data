@@ -109,12 +109,26 @@ jobs:
         with:
           name: fit_summary.json
           path: fit_summary.json
+      # After the tests, and whatever they did: the measurement downloads the
+      # ONS projection, and an ONS outage must not skip the test suite.
+      - name: Measure the income distribution and single ages
+        if: ${{ !cancelled() }}
+        # A failed measurement fails the comparison (missing report), not
+        # the test job, which stays about the tests.
+        continue-on-error: true
+        run: uv run --frozen python -m policyengine_uk_data.utils.distribution_validation measure policyengine_uk_data/storage/enhanced_frs_2024_25.h5 --out distribution_report.json
+      - name: Save the distribution report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: distribution_report.json
+          path: distribution_report.json
   # The no-worsening check (W3). The base is built the same way as the head:
   # TESTING, one clone and the head's lockfile, so both builds run one model
   # and environment and the comparison measures the data change. As in the
-  # test job, only the fit summary leaves it. No dataset or calibration log
-  # is uploaded, and nothing is cached: setup-uv restores uv's package cache
-  # and saves none.
+  # test job, only aggregate reports leave it: the fit summary and the
+  # distribution report. No dataset or calibration log is uploaded, and
+  # nothing is cached: setup-uv restores uv's package cache and saves none.
   base-build:
     name: Build the base for comparison
     runs-on: ubuntu-latest
@@ -164,6 +178,19 @@ jobs:
         with:
           name: base_fit_summary.json
           path: base_fit_summary.json
+      - name: Measure the base's income distribution and single ages
+        working-directory: base
+        # The head's measurement code, on the base's build.
+        run: |
+          mkdir -p policyengine_uk_data/targets/reference_data
+          cp ../head/policyengine_uk_data/utils/distribution_validation.py policyengine_uk_data/utils/
+          cp ../head/policyengine_uk_data/targets/reference_data/hbai_fye_2025.yaml policyengine_uk_data/targets/reference_data/
+          uv run --frozen python -m policyengine_uk_data.utils.distribution_validation measure policyengine_uk_data/storage/enhanced_frs_2024_25.h5 --out ../base_distribution_report.json
+      - name: Save the base distribution report
+        uses: actions/upload-artifact@v7
+        with:
+          name: base_distribution_report.json
+          path: base_distribution_report.json
   fit-comparison:
     name: Calibration fit against the base
     needs: [test, base-build]
@@ -196,6 +223,13 @@ jobs:
           pattern: "*fit_summary.json"
           path: logs
           merge-multiple: true
+      - name: Download the distribution reports
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: "*distribution_report.json"
+          path: reports
+          merge-multiple: true
       - name: Compare the final fits
         id: compare
         env:
@@ -217,6 +251,18 @@ jobs:
             echo "status=$?" >> "$GITHUB_OUTPUT"
             set -e
             { echo "$marker"; cat body.md 2>/dev/null || echo '## Calibration fit against the base build: FAIL'; echo; echo "[Workflow run]($RUN_URL)"; } > fit.md
+          fi
+          if [ -f reports/base_distribution_report.json ] && [ -f reports/distribution_report.json ]; then
+            set +e
+            uv run --frozen python -m policyengine_uk_data.utils.distribution_validation compare \
+              reports/base_distribution_report.json reports/distribution_report.json --markdown distribution.md
+            distribution_status=$?
+            set -e
+            { echo; cat distribution.md 2>/dev/null || echo '## Income distribution and single ages: FAIL (the comparison did not finish)'; } >> fit.md
+            if [ "$distribution_status" != 0 ]; then echo "status=1" >> "$GITHUB_OUTPUT"; fi
+          else
+            { echo; echo '## Income distribution and single ages: FAIL'; echo; echo "The report is missing for one build, so the distributions could not be compared."; } >> fit.md
+            echo "status=1" >> "$GITHUB_OUTPUT"
           fi
           cat fit.md >> "$GITHUB_STEP_SUMMARY"
       - name: Post or update the pull request comment
@@ -246,5 +292,5 @@ jobs:
       - name: Fail on a fit regression
         if: steps.compare.outputs.status != '0'
         run: |
-          echo "::error::The head build's calibration fit is worse than the base's; see the job summary."
+          echo "::error::The calibration fit or distribution comparison failed; see the job summary."
           exit 1

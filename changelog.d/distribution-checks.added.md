@@ -1,0 +1,1 @@
+Measure each pull request build's HBAI income distribution (medians, means, Gini and relative low income by group against DWP's HBAI FYE 2025 estimates and intervals) and single-age population (against the ONS 2024-based projection), and report them against the base build in the pull request comment. They flag but do not fail yet.
