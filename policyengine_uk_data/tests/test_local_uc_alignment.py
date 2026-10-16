@@ -123,6 +123,37 @@ def _get_targets(area_type):
     return getter()
 
 
+def _map_constituency_targets_by_name(source):
+    """Aggregate the public boundary table without the production matrix or aliases."""
+    boundary = pd.read_csv(
+        STORAGE_FOLDER.parent
+        / "datasets/local_areas/constituencies/boundary_changes/boundary_changes.csv"
+    )
+    old_areas = pd.read_csv(STORAGE_FOLDER / "constituencies_2010.csv")
+    current_areas = _area_metadata("constituency")
+    codes_by_name = {
+        _name_key(row["name"]): row["code"] for _, row in current_areas.iterrows()
+    }
+    old_names = old_areas.set_index("code")["name"]
+    # The boundary source retains 2010 codes for some unchanged Scottish seats.
+    # Resolve those codes through their names instead of copying the code aliases
+    # from mapping_matrix.py; every other destination is already a current code.
+    historical = ~boundary["code_2024"].isin(current_areas["code"])
+    boundary.loc[historical, "code_2024"] = (
+        boundary.loc[historical, "code_2024"]
+        .map(old_names)
+        .map(_name_key)
+        .map(codes_by_name)
+    )
+    assert boundary["code_2024"].notna().all()
+    assert set(boundary["code_2024"]) == set(current_areas["code"])
+    shares = boundary["old_population_present"] / boundary.groupby("code_2010")[
+        "old_population_present"
+    ].transform("sum")
+    contributions = source.loc[boundary["code_2010"]].reset_index(drop=True)
+    return contributions.mul(shares, axis=0).groupby(boundary["code_2024"]).sum()
+
+
 @pytest.mark.parametrize("area_type", ["constituency", "la"])
 def test_all_uc_rows_and_country_totals_match_public_workbooks(area_type):
     """Keep the national payment rescale and per-area rounding unchanged."""
@@ -282,14 +313,19 @@ class _FakeSim:
         return np.asarray(values)
 
 
-def _patch_unrelated_sources(monkeypatch, dense_loss):
+def _patch_unrelated_sources(monkeypatch, dense_loss, area_type):
     from policyengine_uk_data.targets.sources import local_income, local_la_extras
 
     for module in [local_income, dense_loss]:
-        monkeypatch.setattr(module, "INCOME_VARIABLES", [])
         monkeypatch.setattr(
-            module, "get_national_income_projections", lambda year: pd.DataFrame()
+            module,
+            "INCOME_VARIABLES",
+            ["employment_income"] if area_type == "constituency" else [],
         )
+        if area_type == "la":
+            monkeypatch.setattr(
+                module, "get_national_income_projections", lambda year: pd.DataFrame()
+            )
     monkeypatch.setattr(dense_loss, "Microsimulation", _FakeSim)
     if hasattr(dense_loss, "add_private_rent_targets"):
         monkeypatch.setattr(
@@ -343,10 +379,10 @@ def test_each_builder_uc_row_matches_its_area_and_country(
     from policyengine_uk_data.datasets.local_areas.local_authorities import (
         loss as la_loss,
     )
-    from policyengine_uk_data.targets.sources import local_age
+    from policyengine_uk_data.targets.sources import local_age, local_income
 
     loss = constituency_loss if area_type == "constituency" else la_loss
-    _patch_unrelated_sources(monkeypatch, loss)
+    _patch_unrelated_sources(monkeypatch, loss, area_type)
     dataset = SimpleNamespace(time_period=2025)
     areas = _area_metadata(area_type).copy()
     if builder == "dense":
@@ -365,8 +401,6 @@ def test_each_builder_uc_row_matches_its_area_and_country(
         # Assignment rows can arrive in any code order, including interleaved countries.
         areas = areas.sample(frac=1, random_state=468).reset_index(drop=True)
         y = matrix_builder._load_area_targets(area_type, areas, dataset, _FakeSim())
-    _, expected = _workbook_oracle(area_type)
-    np.testing.assert_array_equal(y["uc_households"], expected.loc[areas["code"]])
     source_age = (
         local_age.get_constituency_age_targets()
         if area_type == "constituency"
@@ -395,6 +429,31 @@ def test_each_builder_uc_row_matches_its_area_and_country(
             source_age.set_index("code").loc[areas["code"], age_columns].to_numpy()
             * adjustment,
         )
+    if area_type == "constituency":
+        source = source_age.set_index("code")[age_columns] * adjustment
+        incomes = local_income.get_constituency_income_targets().set_index("code")
+        national = local_income.get_national_income_projections(dataset.time_period)
+        national_amount = national.loc[
+            national["total_income_lower_bound"].eq(12_570)
+            & national["total_income_upper_bound"].eq(np.inf),
+            "employment_income_amount",
+        ].iloc[0]
+        income_adjustment = national_amount / incomes["employment_income_amount"].sum()
+        for metric in ["amount", "count"]:
+            source[f"hmrc/employment_income/{metric}"] = (
+                incomes[f"employment_income_{metric}"] * income_adjustment
+            )
+        expected_mapped = _map_constituency_targets_by_name(source)
+        # Per-code checks catch the Scottish permutation even though its country
+        # totals and all UC targets are unchanged. Check all seats in both paths.
+        np.testing.assert_allclose(
+            y[source.columns].to_numpy(),
+            expected_mapped.loc[areas["code"], source.columns].to_numpy(),
+            rtol=1e-12,
+            atol=1e-7,
+        )
+    _, expected = _workbook_oracle(area_type)
+    np.testing.assert_array_equal(y["uc_households"], expected.loc[areas["code"]])
     if area_type == "constituency":
         children = local_uc.get_constituency_uc_by_children_targets().loc[areas["code"]]
         np.testing.assert_array_equal(y[_CHILD_COLUMNS], children)
