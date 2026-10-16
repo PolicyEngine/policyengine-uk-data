@@ -187,6 +187,7 @@ def test_calibration_reads_the_projected_spi_targets(
     outturn targets are always present and the test needs no download.
     """
     from policyengine_uk_data.targets import get_all_targets
+    from policyengine_uk_data.targets import registry
     from policyengine_uk_data.targets.build_loss_matrix import _resolve_value
     from policyengine_uk_data.targets.sources import hmrc_spi
 
@@ -196,6 +197,7 @@ def test_calibration_reads_the_projected_spi_targets(
         return _without_aggregate(base_targets).reset_index(drop=True)
 
     monkeypatch.setattr(hmrc_spi, "get_income_band_table", committed_table)
+    monkeypatch.setattr(registry, "discover_source_modules", lambda: [hmrc_spi])
 
     names = [t.name for t in hmrc_spi.get_targets()]
     assert len(names) == len(set(names))
