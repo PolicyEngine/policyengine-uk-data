@@ -1,0 +1,75 @@
+# OBR Economic and fiscal outlook, March 2026: detailed forecast tables.
+# The bytes, not this file's labels, decide the vintage: builds verify each
+# workbook's SHA-256, size and own title (Contents!B2) before parsing it.
+# See targets/obr_sources.py for every field.
+schema_version: 1
+vintage: march_2026
+label: March 2026
+# Financial years every parsed table must head, by the calendar year they
+# start in: 2024-25 to 2030-31.
+first_year: 2024
+last_year: 2030
+unit: £ billion
+# Neither workbook has a downloaded_at. Both entered git in 11e41f9d, so
+# they were downloaded no later than 2026-07-21T21:06:50+01:00, but nothing
+# recorded when (git keeps no file times): their download time is neither an
+# mtime nor a given one.
+files:
+  receipts:
+    path: obr_efo/efo_receipts.xlsx
+    sha256: f65b6cb7f96931d4abd85940794eb60f6f65afca8bbf16c74a4548bf92766a28
+    size_bytes: 187899
+    title: "March 2026 Economic and fiscal outlook – detailed forecast tables: receipts"
+    url: https://obr.uk/download/march-2026-economic-and-fiscal-outlook-detailed-forecast-tables-receipts/
+    retrieved: >-
+      Committed on 2026-07-21 in 11e41f9d, as the download fallback. The
+      workbook's own properties record it as modified on 2026-03-02.
+      obr.uk refused scripted downloads on 2026-10-15 (HTTP 403), so the
+      bytes were not re-fetched for this manifest.
+    downloaded_at_basis: unrecorded
+  expenditure:
+    path: obr_efo/efo_expenditure.xlsx
+    sha256: 700bfd700c872794e5fe8cf164086cd38a63850db26427b9d4b2e363d177d9a1
+    size_bytes: 236965
+    title: "March 2026 Economic and fiscal outlook – detailed forecast tables: expenditure"
+    url: https://obr.uk/download/march-2026-economic-and-fiscal-outlook-detailed-forecast-tables-expenditure/
+    retrieved: >-
+      Committed on 2026-07-21 in 11e41f9d, as the download fallback. The
+      workbook's own properties record it as modified on 2026-03-02.
+      obr.uk refused scripted downloads on 2026-10-15 (HTTP 403), so the
+      bytes were not re-fetched for this manifest.
+    downloaded_at_basis: unrecorded
+# Every target the workbooks must yield, each with every year above. A
+# target the parsers build that is not listed here also fails, so changing
+# the target set means changing this list.
+targets:
+  required:
+    - obr/income_tax
+    - obr/ni
+    - obr/vat
+    - obr/fuel_duties
+    - obr/capital_gains_tax
+    - obr/sdlt
+    - obr/ni_employee
+    - obr/ni_employer
+    - obr/council_tax
+    - obr/council_tax_england
+    - obr/council_tax_scotland
+    - obr/council_tax_wales
+    - obr/domestic_rates
+    - obr/pip
+    - obr/esa
+    - obr/attendance_allowance
+    - obr/carers_allowance
+    - obr/statutory_maternity_pay
+    - obr/winter_fuel_allowance
+    - obr/child_benefit
+    - obr/state_pension
+    - obr/jobseekers_allowance
+    - obr/universal_credit
+    - obr/tv_licence_fee
+    # Self-employed NICs: one combined Class 2 and 4 line (March 2026), or
+    # the two classes on separate rows (earlier vintages).
+    - any_of:
+        - [obr/ni_self_employed]
+        - [obr/ni_class_2, obr/ni_class_4]
