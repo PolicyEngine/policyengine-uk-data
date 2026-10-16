@@ -48,7 +48,6 @@ dev = [
     "build",
     "towncrier>=24.8.0",
     "hypothesis>=6.168.3",
-    "pytest-xdist>=3.8.0",
 ]
 
 [tool.setuptools]
