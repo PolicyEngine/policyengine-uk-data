@@ -189,7 +189,8 @@ def clone_and_assign(
 
         # Clone household table
         hh_clone = hh.copy()
-        hh_clone["source_household_id"] = hh_id_col
+        if "source_household_id" not in hh_clone.columns:
+            hh_clone["source_household_id"] = hh_id_col
         if "source_year" not in hh_clone.columns:
             hh_clone["source_year"] = dataset.time_period
         hh_clone["household_id"] = new_hh_ids
