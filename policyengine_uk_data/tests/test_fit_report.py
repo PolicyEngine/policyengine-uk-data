@@ -126,6 +126,12 @@ def test_band_edges_are_inclusive(error, expected):
     assert band(error) == expected
 
 
+def test_an_estimate_exactly_on_a_band_edge_is_inside_it():
+    """Delta review of #599: 110 / 100 - 1 is 0.10000000000000009."""
+    s = summarise(_log({"edge": (110, 100), "quarter": (125, 100)}, local=LOCAL))
+    assert s["national"] == {"edge": 0, "quarter": 1}
+
+
 def test_a_repeated_local_target_is_refused():
     log = _log({"a": (1, 1)}, local=[(1, 1)])
     with pytest.raises(ValueError, match="repeats a local target"):
