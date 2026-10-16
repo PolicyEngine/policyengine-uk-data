@@ -232,3 +232,14 @@ def test_the_measurement_runs_after_the_tests_and_cannot_skip_them():
     assert names.index("Save the fit summary") < measure
     assert steps[measure]["if"] == "${{ !cancelled() }}"
     assert steps[measure]["continue-on-error"] is True
+    # The fit summary runs after the tests too, whatever they did.
+    summarise = names.index("Summarise the calibration fit")
+    assert names.index("Run tests") < summarise
+    assert steps[summarise]["if"] == "${{ !cancelled() }}"
+    assert steps[names.index("Save the fit summary")]["if"] == "${{ !cancelled() }}"
+    # On the base, the distribution measurement runs after the fit summary.
+    base = yaml.safe_load(workflow.read_text())["jobs"]["base-build"]["steps"]
+    base_names = [step.get("name") for step in base]
+    assert base_names.index("Save the base fit summary") < base_names.index(
+        "Measure the base's income distribution and single ages"
+    )
