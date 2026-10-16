@@ -69,8 +69,13 @@ def load_policy(path=None) -> FitPolicy:
 
 
 def band(error: float) -> int:
-    """The index in ``BANDS`` of an error: 0 when within 10% (inclusive)."""
-    return int(np.searchsorted(BAND_EDGES, float(error), side="left"))
+    """The index in ``BANDS`` of an error: 0 when within 10% (inclusive).
+
+    The error is rounded to 9 decimal places first, so an estimate exactly
+    10% off (110 / 100 - 1 = 0.10000000000000009 in floating point) is
+    within 10%.
+    """
+    return int(np.searchsorted(BAND_EDGES, round(float(error), 9), side="left"))
 
 
 def summarise(log) -> dict:
