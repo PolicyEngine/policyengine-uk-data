@@ -17,7 +17,12 @@ from functools import lru_cache
 import openpyxl
 import requests
 
-from policyengine_uk_data.targets.schema import GREAT_BRITAIN, Target, Unit
+from policyengine_uk_data.targets.schema import (
+    ENGLAND_AND_WALES,
+    GREAT_BRITAIN,
+    Target,
+    Unit,
+)
 from policyengine_uk_data.targets.sources._common import (
     HEADERS,
     load_config,
@@ -556,6 +561,21 @@ def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
             "jsa",
         ),
     }
+    # Table 4.9 lists DWP's spending under "DWP social security", the figures
+    # DWP's benefit expenditure and caseload tables (Spring Forecast 2026)
+    # give as "DWP Social Security (GB)": Northern Ireland's benefits are the
+    # table's "NI social security" rows. Those tables leave out Scotland for
+    # benefits whose executive competence passed to the Scottish Government
+    # (Notes K, L and N): Carer's Allowance from 2018-19, disability benefits
+    # from 2020-21 and Winter Fuel Payment from 2024-25. Child benefit is
+    # HMRC's and covers the UK. Every other line here is DWP's GB figure.
+    countries = {
+        "pip": ENGLAND_AND_WALES,
+        "attendance_allowance": ENGLAND_AND_WALES,
+        "carers_allowance": ENGLAND_AND_WALES,
+        "winter_fuel_allowance": ENGLAND_AND_WALES,
+        "child_benefit": None,
+    }
 
     targets = []
     # Welfare cap section (rows 6-36)
@@ -571,6 +591,7 @@ def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
                         source="obr",
                         unit=Unit.GBP,
                         values=values,
+                        countries=countries.get(name, GREAT_BRITAIN),
                         reference_url=ref,
                         forecast_vintage=vintage,
                     )
