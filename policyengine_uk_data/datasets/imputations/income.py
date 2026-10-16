@@ -461,16 +461,24 @@ def impute_over_incomes(
     return dataset
 
 
+REPORTED_CAPITAL_COLUMNS = (
+    "benunit_reported_capital",
+    "pension_credit_reported_capital",
+    "uc_reported_capital",
+)
+
+
 def clear_frs_reported_capital(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
-    """Set ``pension_credit_reported_capital`` to -1 (none recorded).
+    """Set the FRS-recorded capital columns to -1 (none recorded).
 
     Used on the SPI-synthetic copy. The FRS benefit-unit capital belongs to the
     FRS donor, whose incomes the SPI imputation replaces; keeping it would
     assess an SPI-income unit on the donor's capital. With -1, policyengine-uk
-    uses the household capital proxy for these rows.
+    uses the household capital proxy for these rows in every means test.
     """
-    if "pension_credit_reported_capital" in dataset.benunit.columns:
-        dataset.benunit["pension_credit_reported_capital"] = -1.0
+    for column in REPORTED_CAPITAL_COLUMNS:
+        if column in dataset.benunit.columns:
+            dataset.benunit[column] = -1.0
     return dataset
 
 
