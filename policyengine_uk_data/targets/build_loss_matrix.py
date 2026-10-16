@@ -16,12 +16,12 @@ import logging
 import numpy as np
 import pandas as pd
 
-from policyengine_uk_data.targets import get_all_targets
 from policyengine_uk_data.targets.coverage import (
     TargetStatus,
     check_coverage,
     column_status,
 )
+from policyengine_uk_data.targets.registry import emitted_targets
 from policyengine_uk_data.targets.schema import (
     GeographicLevel,
     Target,
@@ -91,12 +91,53 @@ def create_target_matrix(
     return df, targets
 
 
+MATRIX_LEVELS = (
+    GeographicLevel.NATIONAL,
+    GeographicLevel.REGION,
+    GeographicLevel.COUNTRY,
+)
+
+
+def select_matrix_targets(targets):
+    """The targets the matrix offers, and a ``duplicate`` status for each other.
+
+    Targets are taken level by level (national, region, country), each level
+    in the order the sources emit them, and the first target of each name
+    wins. A later target of that name, at the same level or another, is
+    dropped and recorded as a duplicate (targets/coverage.py).
+    """
+    kept, statuses = {}, []
+    for level in MATRIX_LEVELS:
+        for target in targets:
+            if target.geographic_level != level:
+                continue
+            if target.name not in kept:
+                kept[target.name] = target
+                continue
+            first = kept[target.name]
+            statuses.append(
+                TargetStatus(
+                    target.name,
+                    "duplicate",
+                    f"{target.source} {level.value} target for {_years(target)} "
+                    f"dropped for the {first.source} "
+                    f"{first.geographic_level.value} one for {_years(first)}",
+                )
+            )
+    return list(kept.values()), statuses
+
+
+def _years(target: Target) -> str:
+    return ", ".join(str(year) for year in sorted(target.values))
+
+
 def build_target_matrix(dataset, time_period: str = None, reform=None):
     """The target matrix, its values, and each offered target's status.
 
-    A target that is dropped (no value for the year, no column, an error)
-    or that enters with a non-finite value or column, or with no household
-    contributing, is recorded with that status (targets/coverage.py).
+    A target that is dropped (a duplicate name, no value for the year, no
+    column, an error) or that enters with a non-finite value or column, or
+    with no household contributing, is recorded with that status
+    (targets/coverage.py). Each offered target gets exactly one status.
     """
     from policyengine_uk import Microsimulation
 
@@ -109,22 +150,11 @@ def build_target_matrix(dataset, time_period: str = None, reform=None):
 
     ctx = _SimContext(sim, time_period, dataset, reform)
 
-    all_targets = []
-    seen = set()
-    for level in (
-        GeographicLevel.NATIONAL,
-        GeographicLevel.REGION,
-        GeographicLevel.COUNTRY,
-    ):
-        for t in get_all_targets(geographic_level=level):
-            if t.name not in seen:
-                seen.add(t.name)
-                all_targets.append(t)
+    all_targets, statuses = select_matrix_targets(emitted_targets())
 
     df = pd.DataFrame()
     target_names = []
     target_values = []
-    statuses = []
 
     for target in all_targets:
         try:
@@ -132,9 +162,7 @@ def build_target_matrix(dataset, time_period: str = None, reform=None):
             if val is None:
                 statuses.append(
                     TargetStatus(
-                        target.name,
-                        "no_value_for_year",
-                        f"values for {', '.join(str(y) for y in sorted(target.values))}",
+                        target.name, "no_value_for_year", f"values for {_years(target)}"
                     )
                 )
                 continue
@@ -142,9 +170,15 @@ def build_target_matrix(dataset, time_period: str = None, reform=None):
             if col is None:
                 statuses.append(TargetStatus(target.name, "no_column"))
                 continue
-            col = restrict_to_countries(col, ctx.country, target.countries)
-            statuses.append(TargetStatus(target.name, column_status(val, col)))
-            df[target.name] = col
+            df[target.name] = restrict_to_countries(col, ctx.country, target.countries)
+            # The status is of the column as it entered the matrix; a column
+            # whose status cannot be computed leaves the matrix again.
+            try:
+                status = column_status(val, df[target.name])
+            except Exception:
+                del df[target.name]
+                raise
+            statuses.append(TargetStatus(target.name, status))
             target_names.append(target.name)
             target_values.append(val)
         except Exception as e:
