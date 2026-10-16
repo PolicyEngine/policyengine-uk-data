@@ -72,6 +72,10 @@ jobs:
           fetch-depth: 0 # Fetch all history for all tags and branches
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
+        # Restore uv's package cache but never save one from a job that
+        # holds the data: its location can be moved (UV_CACHE_DIR).
+        with:
+          save-cache: false
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -86,21 +90,314 @@ jobs:
         run: uv run --frozen make data
         env:
           TESTING: "1"
-      - name: Save calibration log (constituencies)
-        uses: actions/upload-artifact@v7
-        with:
-          name: constituency_calibration_log.csv
-          path: constituency_calibration_log.csv
-      
-      - name: Save calibration log (local authorities)
-        uses: actions/upload-artifact@v7
-        with:
-          name: la_calibration_log.csv
-          path: la_calibration_log.csv
-
       - name: Run tests
         run: uv run --frozen make test
         env:
           # Relaxes built-dataset outcome tolerances to match the reduced
           # fidelity of the TESTING build above (see test_cgt_band_donors).
           TESTING: "1"
+      # After the tests, whatever they did. The raw calibration logs stay on
+      # the runner: a target supported by a few households, divided by a
+      # published count, could give one household's value back. Only the
+      # summary the fit comparison needs is uploaded (utils/fit_report.py).
+      - name: Summarise the calibration fit
+        if: ${{ !cancelled() }}
+        run: uv run --frozen python -m policyengine_uk_data.utils.fit_report summarise constituency_calibration_log.csv --out fit_summary.json
+      - name: Save the fit summary
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: fit_summary.json
+          path: fit_summary.json
+      # After the tests, and whatever they did: the measurement downloads the
+      # ONS projection, and an ONS outage must not skip the test suite.
+      - name: Measure the income distribution and single ages
+        if: ${{ !cancelled() }}
+        # A failed measurement fails the comparison (missing report), not
+        # the test job, which stays about the tests.
+        continue-on-error: true
+        run: uv run --frozen python -m policyengine_uk_data.utils.distribution_validation measure policyengine_uk_data/storage/enhanced_frs_2024_25.h5 --out distribution_report.json
+      - name: Save the distribution report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: distribution_report.json
+          path: distribution_report.json
+      - name: Check out the aggregate-impact tool
+        if: ${{ !cancelled() }}
+        # A missing result fails the comparison, not the test job.
+        continue-on-error: true
+        uses: actions/checkout@v6
+        with:
+          repository: PolicyEngine/policyengine-uk
+          ref: 6406b2ceae24f174eca41bfa1dbb1026305d2a46
+          path: pe-uk-tool
+          sparse-checkout: |
+            policyengine_uk/utils/aggregate_impact
+            policyengine_uk/data/fiscal_partition.yaml
+      - name: Measure national aggregates with the model fixed
+        if: ${{ !cancelled() }}
+        # A missing result fails the comparison, not the test job.
+        continue-on-error: true
+        run: |
+          tool="$RUNNER_TEMP/tool"
+          mkdir -p "$tool"
+          cp -R pe-uk-tool/policyengine_uk/utils/aggregate_impact "$tool/pe_uk_aggregate_impact"
+          model="policyengine-uk==$(uv run --frozen python -c 'import importlib.metadata as m; print(m.version("policyengine-uk"))')"
+          PYTHONPATH="$tool" uv run --frozen python -m pe_uk_aggregate_impact measure \
+            --label head --dataset-file policyengine_uk_data/storage/enhanced_frs_2024_25.h5 --dataset-label "this pull request's build" \
+            --fallback-partition pe-uk-tool/policyengine_uk/data/fiscal_partition.yaml \
+            --no-guard --git-sha "$model" --out "$RUNNER_TEMP/aggregate" || true
+          cp "$RUNNER_TEMP/aggregate/result.json" aggregate_result.json \
+            || echo "::warning::The aggregate measurement wrote no result; see the log above."
+      - name: Save the aggregate result (aggregates only)
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: aggregate_result.json
+          path: aggregate_result.json
+  # The policyengine-uk aggregate-impact tool (policyengine_uk/utils/
+  # aggregate_impact) at a pinned commit measures each build with the locked
+  # model, and the comparison job compares them with the model fixed
+  # (`compare --axis data`). Only result.json leaves a job; its private/
+  # folder (household detail) stays on the runner.
+  # The no-worsening check (W3). The base is built the same way as the head:
+  # TESTING, one clone and the head's lockfile, so both builds run one model
+  # and environment and the comparison measures the data change. As in the
+  # test job, only aggregate reports leave it: the fit summary, the
+  # distribution report and the aggregate result. No dataset or calibration
+  # log is uploaded, and nothing is cached: setup-uv restores uv's package
+  # cache and saves none.
+  base-build:
+    name: Build the base for comparison
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+      PYTHONUNBUFFERED: "1"
+      PE_UK_DATA_OA_CLONES: "1"
+    steps:
+      - name: Check out the head, for its lockfile
+        uses: actions/checkout@v6
+        with:
+          path: head
+      - name: Check out the base
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        # Restore uv's package cache but never save one from a job that
+        # holds the data: its location can be moved (UV_CACHE_DIR).
+        with:
+          save-cache: false
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.13
+      - name: Sync the head's locked environment for the base
+        run: |
+          cp head/uv.lock base/uv.lock
+          cd base && uv sync --frozen --all-extras
+      - name: Download data inputs
+        working-directory: base
+        run: uv run --frozen make download
+      - name: Build the base datasets
+        working-directory: base
+        run: uv run --frozen make data
+        env:
+          TESTING: "1"
+      - name: Summarise the base's calibration fit
+        run: |
+          cp head/policyengine_uk_data/utils/fit_report.py base/policyengine_uk_data/utils/fit_report.py
+          uv run --frozen --project base python -m policyengine_uk_data.utils.fit_report summarise base/constituency_calibration_log.csv --out base_fit_summary.json
+      - name: Save the base fit summary
+        uses: actions/upload-artifact@v7
+        with:
+          name: base_fit_summary.json
+          path: base_fit_summary.json
+      - name: Measure the base's income distribution and single ages
+        working-directory: base
+        # The head's measurement code, on the base's build.
+        run: |
+          mkdir -p policyengine_uk_data/targets/reference_data
+          cp ../head/policyengine_uk_data/utils/distribution_validation.py policyengine_uk_data/utils/
+          cp ../head/policyengine_uk_data/targets/reference_data/hbai_fye_2025.yaml policyengine_uk_data/targets/reference_data/
+          uv run --frozen python -m policyengine_uk_data.utils.distribution_validation measure policyengine_uk_data/storage/enhanced_frs_2024_25.h5 --out ../base_distribution_report.json
+      - name: Save the base distribution report
+        uses: actions/upload-artifact@v7
+        with:
+          name: base_distribution_report.json
+          path: base_distribution_report.json
+      - name: Check out the aggregate-impact tool
+        if: ${{ !cancelled() }}
+        uses: actions/checkout@v6
+        with:
+          repository: PolicyEngine/policyengine-uk
+          ref: 6406b2ceae24f174eca41bfa1dbb1026305d2a46
+          path: pe-uk-tool
+          sparse-checkout: |
+            policyengine_uk/utils/aggregate_impact
+            policyengine_uk/data/fiscal_partition.yaml
+      - name: Measure national aggregates with the model fixed
+        if: ${{ !cancelled() }}
+        run: |
+          tool="$RUNNER_TEMP/tool"
+          mkdir -p "$tool"
+          cp -R pe-uk-tool/policyengine_uk/utils/aggregate_impact "$tool/pe_uk_aggregate_impact"
+          model="policyengine-uk==$(uv run --frozen --project base python -c 'import importlib.metadata as m; print(m.version("policyengine-uk"))')"
+          PYTHONPATH="$tool" uv run --frozen --project base python -m pe_uk_aggregate_impact measure \
+            --label base --dataset-file base/policyengine_uk_data/storage/enhanced_frs_2024_25.h5 --dataset-label "the base's build" \
+            --fallback-partition pe-uk-tool/policyengine_uk/data/fiscal_partition.yaml \
+            --no-guard --git-sha "$model" --out "$RUNNER_TEMP/aggregate" || true
+          cp "$RUNNER_TEMP/aggregate/result.json" base_aggregate_result.json \
+            || echo "::warning::The aggregate measurement wrote no result; see the log above."
+      - name: Save the aggregate result (aggregates only)
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: base_aggregate_result.json
+          path: base_aggregate_result.json
+  fit-comparison:
+    name: Calibration fit against the base
+    needs: [test, base-build]
+    # Report a failed side too: an earlier passing comment must not stand.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        # Restore uv's package cache but never save one from a job that
+        # holds the data: its location can be moved (UV_CACHE_DIR).
+        with:
+          save-cache: false
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.13
+      - name: Sync locked environment
+        run: uv sync --frozen
+      - name: Download the fit summaries
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: "*fit_summary.json"
+          path: logs
+          merge-multiple: true
+      - name: Download the distribution reports
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: "*distribution_report.json"
+          path: reports
+          merge-multiple: true
+      - name: Download the aggregate results
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: "*aggregate_result.json"
+          path: aggregates
+          merge-multiple: true
+      - name: Check out the aggregate-impact tool
+        uses: actions/checkout@v6
+        with:
+          repository: PolicyEngine/policyengine-uk
+          ref: 6406b2ceae24f174eca41bfa1dbb1026305d2a46
+          path: pe-uk-tool
+          sparse-checkout: |
+            policyengine_uk/utils/aggregate_impact
+      - name: Compare the final fits
+        id: compare
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          marker='<!-- policyengine-uk-data-fit-comparison -->'
+          if [ ! -f logs/fit_summary.json ] || [ ! -f logs/base_fit_summary.json ]; then
+            {
+              echo "$marker"
+              echo '## Calibration fit against the base build: FAIL'
+              echo
+              echo "One of the builds produced no fit summary, so the fit could not be compared. See the [workflow run]($RUN_URL)."
+            } > fit.md
+            echo "status=1" >> "$GITHUB_OUTPUT"
+          else
+            set +e
+            uv run --frozen python -m policyengine_uk_data.utils.fit_report compare \
+              logs/base_fit_summary.json logs/fit_summary.json --markdown body.md
+            echo "status=$?" >> "$GITHUB_OUTPUT"
+            set -e
+            { echo "$marker"; cat body.md 2>/dev/null || echo '## Calibration fit against the base build: FAIL'; echo; echo "[Workflow run]($RUN_URL)"; } > fit.md
+          fi
+          if [ -f reports/base_distribution_report.json ] && [ -f reports/distribution_report.json ]; then
+            set +e
+            uv run --frozen python -m policyengine_uk_data.utils.distribution_validation compare \
+              reports/base_distribution_report.json reports/distribution_report.json --markdown distribution.md
+            distribution_status=$?
+            set -e
+            { echo; cat distribution.md 2>/dev/null || echo '## Income distribution and single ages: FAIL (the comparison did not finish)'; } >> fit.md
+            if [ "$distribution_status" != 0 ]; then echo "status=1" >> "$GITHUB_OUTPUT"; fi
+          else
+            { echo; echo '## Income distribution and single ages: FAIL'; echo; echo "The report is missing for one build, so the distributions could not be compared."; } >> fit.md
+            echo "status=1" >> "$GITHUB_OUTPUT"
+          fi
+          # National aggregates with the model fixed.
+          tool="$RUNNER_TEMP/tool"
+          mkdir -p "$tool" aggregates/base aggregates/head
+          cp -R pe-uk-tool/policyengine_uk/utils/aggregate_impact "$tool/pe_uk_aggregate_impact"
+          if [ -f aggregates/base_aggregate_result.json ] && [ -f aggregates/aggregate_result.json ]; then
+            mv aggregates/base_aggregate_result.json aggregates/base/result.json
+            mv aggregates/aggregate_result.json aggregates/head/result.json
+            set +e
+            PYTHONPATH="$tool" uv run --frozen python -m pe_uk_aggregate_impact compare --axis data \
+              --base aggregates/base --head aggregates/head --markdown aggregates.md --run-url "$RUN_URL"
+            aggregate_status=$?
+            set -e
+            if [ "$aggregate_status" != 0 ]; then echo "status=1" >> "$GITHUB_OUTPUT"; fi
+            # The tool's comment marker belongs to policyengine-uk's own comment.
+            if [ -s aggregates.md ]; then
+              { echo; sed '/^<!-- policyengine-uk-aggregate-impact -->$/d' aggregates.md; } >> fit.md
+            else
+              { echo; echo '## National aggregates: FAIL (the comparison did not finish)'; } >> fit.md
+              echo "status=1" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            { echo; echo '## National aggregates: FAIL'; echo; echo "The result is missing for one build (see the build jobs' logs), so the aggregates could not be compared."; } >> fit.md
+            echo "status=1" >> "$GITHUB_OUTPUT"
+          fi
+          cat fit.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Post or update the pull request comment
+        if: ${{ !cancelled() && github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          marker='<!-- policyengine-uk-data-fit-comparison -->'
+          if [ ! -s fit.md ]; then
+            # The job failed before the comparison could write a comment.
+            {
+              echo "$marker"
+              echo '## Calibration fit against the base build: FAIL'
+              echo
+              echo "The comparison did not run. See the [workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+            } > fit.md
+          fi
+          existing=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\") | select(.body | startswith(\"$marker\")) | .id" \
+            | tail -n 1)
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -F body=@fit.md > /dev/null
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@fit.md > /dev/null
+          fi
+      - name: Fail on a fit regression
+        if: steps.compare.outputs.status != '0'
+        run: |
+          echo "::error::The calibration fit, distribution or national aggregate comparison failed; see the job summary."
+          exit 1
