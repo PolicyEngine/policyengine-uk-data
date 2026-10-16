@@ -259,10 +259,17 @@ def uprate_dataset(dataset: UKSingleYearDataset, target_year: int = END_YEAR):
 
     for table in dataset.tables:
         for variable in table.columns:
-            if variable in uprating_factors.index:
+            # Carried priors are household mass, so they must grow with
+            # household weights when moving to the calibration year.
+            uprating_variable = (
+                "household_weight"
+                if variable == "household_calibration_prior"
+                else variable
+            )
+            if uprating_variable in uprating_factors.index:
                 factor = (
-                    uprating_factors.loc[variable, str(target_year)]
-                    / uprating_factors.loc[variable, str(start_year)]
+                    uprating_factors.loc[uprating_variable, str(target_year)]
+                    / uprating_factors.loc[uprating_variable, str(start_year)]
                 )
                 table[variable] *= factor
 

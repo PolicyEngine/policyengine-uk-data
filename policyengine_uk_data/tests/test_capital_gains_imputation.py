@@ -75,6 +75,16 @@ def _impute(dataset, donors: bool = False):
         return cg.stack_cgt_band_donors(out) if donors else out
 
 
+def _priors(dataset):
+    household = dataset.household
+    if "household_calibration_prior" in household:
+        return initialize_weight_priors(
+            household.household_weight.to_numpy(),
+            prior_weights=household.household_calibration_prior.to_numpy(),
+        )
+    return initialize_weight_priors(household.household_weight.to_numpy())
+
+
 households = st.lists(
     st.tuples(
         st.one_of(st.just(0.0), st.floats(0.1, 5_000.0)),
@@ -127,7 +137,9 @@ def test_a_band_with_too_few_first_adults_fails_loudly():
 def test_twins_conserve_mass_and_carry_only_gains_hmrc_describes(rows):
     weights, sizes, bands = (np.array(column) for column in zip(*rows))
     n = len(weights)
-    out = _impute(_dataset(weights, sizes, bands))
+    source_dataset = _dataset(weights, sizes, bands)
+    before_priors = _priors(source_dataset)
+    out = _impute(source_dataset)
     household, person = out.household, out.person
 
     original = household.iloc[:n]
@@ -150,6 +162,12 @@ def test_twins_conserve_mass_and_carry_only_gains_hmrc_describes(rows):
     )
     assert (original.household_weight[~survey] == 0).all()
     assert (original.household_weight[survey] > 0).all()
+
+    prior = _priors(out)
+    twin_prior = np.zeros(n)
+    twin_prior[twin_of - 1] = prior[n:]
+    np.testing.assert_allclose(prior[:n] + twin_prior, before_priors)
+    assert prior.sum() == pytest.approx(before_priors.sum())
 
     # Gains: none on originals; on a twin, the first adult's alone, above
     # the lowest HMRC band limit.
@@ -200,16 +218,17 @@ def test_zero_weight_rows_split_their_prior_like_survey_rows():
 
     # One person per household, so the has-gains share is the table's.
     share = TABLE.percent_with_gains.iloc[TOP_INCOME_BAND]
-    priors = initialize_weight_priors(household.household_weight.to_numpy())
-    survey_twins = priors[n:][~of_zero]
-    np.testing.assert_allclose(
-        survey_twins / (survey_twins + priors[twin_of[~of_zero]]), share
-    )
-    # The same split for zero-weight rows, up to the mass their twins add.
-    added = twin.household_weight[of_zero].sum() / weights.sum()
-    np.testing.assert_allclose(
-        priors[n:][of_zero] / priors[twin_of[of_zero]], share / (1 + added)
-    )
+    priors = _priors(out)
+    before_priors = initialize_weight_priors(weights)
+    twin_priors = np.zeros(n)
+    twin_priors[twin_of] = priors[n:]
+    np.testing.assert_allclose(priors[:n] + twin_priors, before_priors)
+    assert priors.sum() == pytest.approx(before_priors.sum())
+    assert priors.sum() == pytest.approx(400_000)
+    pair_fraction = priors[n:] / (priors[n:] + priors[twin_of])
+    np.testing.assert_allclose(pair_fraction, share)
+    assert of_zero.any() and (~of_zero).any()
+    np.testing.assert_allclose(pair_fraction[of_zero], pair_fraction[~of_zero][0])
     # The only zero-weight rows left are the zero-weight originals.
     assert (household.household_weight == 0).sum() == n_zero
 
@@ -260,6 +279,10 @@ def test_donors_fill_the_top_bands_and_are_never_twins():
     donors = out.household[out.household.household_is_cgt_band_donor]
     assert len(donors) == cg.DONORS_PER_BAND * len(bands)
     assert not donors.household_is_capital_gains_clone.any()
+    np.testing.assert_allclose(
+        _priors(out)[out.household.household_is_cgt_band_donor.to_numpy()],
+        donors.household_weight,
+    )
 
     donor_people = out.person[out.person.person_household_id.isin(donors.household_id)]
     gainers = donor_people[donor_people.capital_gains > 0]
@@ -286,7 +309,7 @@ def test_calibration_starts_with_every_band_count_on_target():
     names = hmrc_cgt.band_count_target_names()
     assert len(names) == 12
 
-    priors = initialize_weight_priors(out.household.household_weight.to_numpy())
+    priors = _priors(out)
     start = rake_priors_to_targets(priors, matrix, targets, names)
 
     estimate = start @ matrix

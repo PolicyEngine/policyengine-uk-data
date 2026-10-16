@@ -29,8 +29,9 @@ logging.getLogger("root").setLevel(logging.WARNING)
 # statistics describe (above the lowest size-of-gain band limit, the annual
 # exempt amount), the household is stacked a second time as a "has-gains
 # twin" carrying the gain, and the household's mass is split between the two
-# records so that the share of people with gains in each income band follows
-# the table. Calibration then moves weight between a household and its twin,
+# records using the table's incidence propensity adjusted for assignment
+# to first adults. Rejecting draws at or under the limit lowers realised
+# incidence. Calibration then moves weight between a household and its twin,
 # pulled by the HMRC targets in targets/sources/hmrc_cgt.py, without
 # disturbing any other target.
 #
@@ -41,10 +42,11 @@ logging.getLogger("root").setLevel(logging.WARNING)
 # people holding £15bn of losses, and 0.4m with gains under the exempt
 # amount.
 #
-# "Mass" is the household's calibration prior expressed as a weight
-# (calibrate.prior_equivalent_weights): the survey weight for a survey row,
-# and for a zero-weight row (the SPI synthetic households) the weight that
-# earns the prior those rows are given. Twins of zero-weight rows used to
+# The original and twin carry complementary household_calibration_prior
+# values into calibration. Survey weights are also split; zero-weight
+# originals stay at zero and their twins receive prior-equivalent weights.
+# These weights must not be used to regenerate the already split priors.
+# Twins of zero-weight rows used to
 # keep a zero weight, and so received a full zero-weight prior each, the same
 # as their no-gains originals. The calibration therefore started with half
 # of the SPI rows' mass holding gains: 6.4m CGT taxpayers and £365bn of gains
@@ -117,11 +119,12 @@ def draw_gains(income_band: np.ndarray, gainer: np.ndarray) -> np.ndarray:
 def has_gains_shares(
     income_band: np.ndarray, first_adult: np.ndarray, person_weight: np.ndarray
 ) -> np.ndarray:
-    """Share of each income band's first adults who hold gains.
+    """Twin propensity among first adults, before rejecting small gains.
 
     The table gives the share of all people in a band with gains, but only
     first adults are given gains, so the share among them is the table's
     share times the band's people per first adult.
+    Rejecting draws at or under the HMRC band limit lowers realised incidence.
     """
     n_bands = len(capital_gains)
     in_table = income_band >= 0
@@ -149,7 +152,10 @@ def has_gains_shares(
 def impute_capital_gains(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     """Stack a has-gains twin for each household whose first adult draws a
     gain above the lowest HMRC size-of-gain band limit."""
-    from policyengine_uk_data.utils.calibrate import prior_equivalent_weights
+    from policyengine_uk_data.utils.calibrate import (
+        initialize_weight_priors,
+        prior_equivalent_weights,
+    )
 
     dataset = dataset.copy()
     total_income, first_adult = _first_adult_incomes(dataset)
@@ -157,6 +163,9 @@ def impute_capital_gains(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         dataset.person.person_household_id
     )
     weight = dataset.household.household_weight.to_numpy(dtype=float)
+    priors = initialize_weight_priors(
+        weight, prior_weights=dataset.household.get("household_calibration_prior")
+    )
 
     income_band = _income_band(total_income)
     gains = draw_gains(income_band, first_adult)
@@ -165,6 +174,7 @@ def impute_capital_gains(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     gainer = first_adult & (gains > load_size_bands().lower_limit.min())
     twin_weight = np.zeros(len(weight))
     twin_weight[household_of_person[gainer]] = share[income_band[gainer]]
+    twin_prior = priors * twin_weight
     twin_weight *= prior_equivalent_weights(weight)
     has_twin = twin_weight > 0
 
@@ -172,6 +182,7 @@ def impute_capital_gains(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     twin = _households(dataset, dataset.household.household_id[has_twin])
     twin.person["capital_gains"] = gains[has_twin[household_of_person]]
     twin.household["household_weight"] = twin_weight[has_twin]
+    twin.household["household_calibration_prior"] = twin_prior[has_twin]
     twin.household["household_is_capital_gains_clone"] = True
 
     dataset.person["capital_gains"] = 0.0
@@ -179,6 +190,7 @@ def impute_capital_gains(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         weight > 0, weight - twin_weight, 0.0
     )
     dataset.household["household_is_capital_gains_clone"] = False
+    dataset.household["household_calibration_prior"] = priors - twin_prior
 
     data = stack_datasets(dataset, twin)
     data.validate()
@@ -298,6 +310,11 @@ def stack_cgt_band_donors(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         donor.household.household_id.map(weight_of_household).fillna(0.0).values
     )
     donor.household["household_is_cgt_band_donor"] = True
+    if "household_calibration_prior" in dataset.household:
+        # Donors add their published band mass, not the copied source prior.
+        donor.household["household_calibration_prior"] = donor.household[
+            "household_weight"
+        ]
 
     # The band mean gain goes to each donor household's first adult;
     # everyone else in the household carries no gain, mirroring the

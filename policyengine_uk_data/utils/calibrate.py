@@ -110,6 +110,8 @@ def load_weights(
 def initialize_weight_priors(
     original_weights: np.ndarray,
     zero_weight_total_share: float = DEFAULT_ZERO_WEIGHT_PRIOR_TOTAL_SHARE,
+    *,
+    prior_weights: np.ndarray | None = None,
 ) -> np.ndarray:
     """Build deterministic positive household priors for calibration.
 
@@ -119,12 +121,23 @@ def initialize_weight_priors(
     zero-weight rows are present, preserve the relative distribution of
     positive survey weights while reserving a fixed share of total prior mass
     for the zero-weight rows.
+
+    When a build step has already split these priors between household
+    copies, use its carried priors directly rather than assigning new mass
+    to zero-weight originals from the enlarged population of copies.
     """
     weights = np.asarray(original_weights, dtype=np.float64)
     if weights.ndim != 1:
         raise ValueError("original_weights must be one-dimensional")
     if np.any(weights < 0):
         raise ValueError("original_weights must be non-negative")
+    if prior_weights is not None:
+        priors = np.asarray(prior_weights, dtype=np.float64)
+        if priors.shape != weights.shape:
+            raise ValueError("prior_weights must match original_weights")
+        if not np.isfinite(priors).all() or (priors <= 0).any():
+            raise ValueError("prior_weights must be finite and positive")
+        return priors.copy()
     if weights.size == 0:
         return weights.copy()
     if not 0 < zero_weight_total_share < 1:
@@ -340,6 +353,9 @@ def calibrate_local_areas(
         household_prior_weights = initialize_weight_priors(
             dataset.household.household_weight.values,
             zero_weight_total_share=zero_weight_prior_total_share,
+            prior_weights=getattr(
+                dataset.household, "household_calibration_prior", None
+            ),
         )
         if prior_rake_targets:
             household_prior_weights = rake_priors_to_targets(
