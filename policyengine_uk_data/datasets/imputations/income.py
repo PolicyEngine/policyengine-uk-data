@@ -532,6 +532,27 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         train_dataset=dataset,
         target_dataset=zero_weight_copy,
     )
+    # Stage 2 rewrote these rows' legacy benefit and Universal Credit
+    # receipt, so redraw the Move to Universal Credit claim flag that
+    # create_frs drew from their donors' receipt.
+    if "would_claim_uc_at_legacy_closure" in zero_weight_copy.benunit.columns:
+        from policyengine_uk_data.parameters import (
+            load_uc_managed_migration_claim_rates,
+        )
+        from policyengine_uk_data.utils.takeup import (
+            UC_MANAGED_MIGRATION_SPI_SEED,
+            assign_uc_claim_at_legacy_closure,
+        )
+
+        zero_weight_copy.benunit["would_claim_uc_at_legacy_closure"] = (
+            assign_uc_claim_at_legacy_closure(
+                zero_weight_copy.person,
+                zero_weight_copy.benunit,
+                load_uc_managed_migration_claim_rates(),
+                seed=UC_MANAGED_MIGRATION_SPI_SEED,
+                would_claim_uc=zero_weight_copy.benunit.get("would_claim_uc"),
+            )
+        )
 
     # The copy keeps its FRS donor's employment status but now has SPI
     # incomes, so derive its gainful self-employment flag again from the

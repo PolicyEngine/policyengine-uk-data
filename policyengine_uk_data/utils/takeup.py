@@ -13,6 +13,7 @@ from __future__ import annotations
 from typing import Optional
 
 import numpy as np
+import pandas as pd
 
 
 def assign_takeup_with_reported_anchors(
@@ -84,3 +85,100 @@ def solve_fill_probability(
     with np.errstate(over="ignore", divide="ignore"):
         probability = needed / remaining_weight
     return float(np.clip(probability, 0.0, 1.0))
+
+
+# Legacy means-tested benefits, in the order their names are joined into a
+# combination key in parameters/take_up/uc_managed_migration.yaml.
+LEGACY_BENEFITS = (
+    "child_tax_credit",
+    "working_tax_credit",
+    "housing_benefit",
+    "esa_income",
+    "income_support",
+    "jsa_income",
+)
+# Seeds for the Move to Universal Credit draw. Each has its own generator, so
+# the draws behind every other take-up flag are unchanged.
+UC_MANAGED_MIGRATION_SEED = 492
+UC_MANAGED_MIGRATION_SPI_SEED = 493
+
+
+def reported_benunit_mask(
+    person: pd.DataFrame, benunit: pd.DataFrame, column: str
+) -> np.ndarray:
+    """Benefit units with a member reporting a positive ``column``."""
+    reporters = person.loc[person[column] > 0, "person_benunit_id"].unique()
+    return benunit["benunit_id"].isin(reporters).values
+
+
+def legacy_benefit_combination(
+    person: pd.DataFrame, benunit: pd.DataFrame
+) -> np.ndarray:
+    """The legacy benefits each benefit unit reports, joined by "+".
+
+    An empty string marks a benefit unit that reports none of them.
+    """
+    reported = [
+        reported_benunit_mask(person, benunit, f"{benefit}_reported")
+        for benefit in LEGACY_BENEFITS
+    ]
+    return np.array(
+        [
+            "+".join(b for b, has in zip(LEGACY_BENEFITS, row) if has)
+            for row in zip(*reported)
+        ],
+        dtype=object,
+    )
+
+
+def assign_uc_claim_at_legacy_closure(
+    person: pd.DataFrame,
+    benunit: pd.DataFrame,
+    rates: dict[str, float],
+    seed: int,
+    would_claim_uc: Optional[np.ndarray] = None,
+) -> np.ndarray:
+    """Draw ``would_claim_uc_at_legacy_closure`` for each benefit unit.
+
+    policyengine-uk reads it once a legacy benefit the unit reports has
+    closed: the unit then claims Universal Credit if it would claim anyway
+    (``would_claim_uc``) or if this is True, and loses its legacy awards
+    either way. So that the share claiming at the closure in each combination
+    of legacy benefits is DWP's Move to Universal Credit claim rate ``r``
+    (``rates``; "all" where DWP reports none), a unit reporting legacy
+    benefits but not Universal Credit and not already claiming is drawn at
+    ``(r - p) / (1 - p)``, clipped to [0, 1], where ``p`` is the share of the
+    combination's such units with ``would_claim_uc`` True (unweighted: the
+    draw precedes calibration). Without ``would_claim_uc``, ``p`` is 0.
+    Units reporting Universal Credit, units already claiming, and units
+    reporting no legacy benefit are True, the model's default.
+
+    Args:
+        person: Person table with ``person_benunit_id`` and the
+            ``<benefit>_reported`` columns.
+        benunit: Benefit unit table with ``benunit_id``.
+        rates: Claim rate by combination, from
+            ``load_uc_managed_migration_claim_rates``.
+        seed: Seed for this draw's own generator.
+        would_claim_uc: The units' ``would_claim_uc``, aligned with
+            ``benunit``.
+
+    Returns:
+        Boolean array aligned with ``benunit``.
+    """
+    combination = legacy_benefit_combination(person, benunit)
+    on_uc = reported_benunit_mask(person, benunit, "universal_credit_reported")
+    claims_anyway = (
+        np.zeros(len(benunit), dtype=bool)
+        if would_claim_uc is None
+        else np.asarray(would_claim_uc, dtype=bool)
+    )
+    drawn = ~on_uc & (combination != "")
+    probability = np.zeros(len(benunit))
+    for c in set(combination[drawn]):
+        cohort = drawn & (combination == c)
+        rate = rates.get(c, rates["all"])
+        p = claims_anyway[cohort].mean()
+        probability[cohort] = 0.0 if p >= 1 else np.clip((rate - p) / (1 - p), 0, 1)
+    draws = np.random.default_rng(seed).random(len(benunit))
+    return ~drawn | claims_anyway | (draws < probability)
