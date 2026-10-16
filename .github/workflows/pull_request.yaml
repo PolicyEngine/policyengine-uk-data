@@ -125,16 +125,20 @@ jobs:
           path: distribution_report.json
       - name: Check out the aggregate-impact tool
         if: ${{ !cancelled() }}
+        # A missing result fails the comparison, not the test job.
+        continue-on-error: true
         uses: actions/checkout@v6
         with:
           repository: PolicyEngine/policyengine-uk
-          ref: c0d0c49d663de48308788605453804a494b9f5b5
+          ref: 5d5558ed242e364cde19a11cb5f890c44c5e03aa
           path: pe-uk-tool
           sparse-checkout: |
             policyengine_uk/utils/aggregate_impact
             policyengine_uk/data/fiscal_partition.yaml
       - name: Measure national aggregates with the model fixed
         if: ${{ !cancelled() }}
+        # A missing result fails the comparison, not the test job.
+        continue-on-error: true
         run: |
           tool="$RUNNER_TEMP/tool"
           mkdir -p "$tool"
@@ -231,7 +235,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: PolicyEngine/policyengine-uk
-          ref: c0d0c49d663de48308788605453804a494b9f5b5
+          ref: 5d5558ed242e364cde19a11cb5f890c44c5e03aa
           path: pe-uk-tool
           sparse-checkout: |
             policyengine_uk/utils/aggregate_impact
@@ -305,7 +309,7 @@ jobs:
         uses: actions/checkout@v6
         with:
           repository: PolicyEngine/policyengine-uk
-          ref: c0d0c49d663de48308788605453804a494b9f5b5
+          ref: 5d5558ed242e364cde19a11cb5f890c44c5e03aa
           path: pe-uk-tool
           sparse-checkout: |
             policyengine_uk/utils/aggregate_impact
