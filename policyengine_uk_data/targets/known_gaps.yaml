@@ -14,10 +14,11 @@
 # no target at all, is reported as stale: remove it.
 #
 # Measured on uk-data 1.58.1 (enhanced_frs_2024_25.h5, sha256 056e80fd) with
-# policyengine-uk 2.122.2 at the calibration year 2025, as a release build:
-# the registry offers 660 names. 645 enter the matrix, 15 have no value for
-# 2025 and 19 of those entering have no signal. 159 more targets reuse a
-# name already taken and are dropped as duplicates.
+# policyengine-uk 2.122.2 at the calibration year 2025, with #557 and #604,
+# as a release build and as a testing build: the registry offers 658 names.
+# 643 enter the matrix, 15 have no value for 2025 and 17 of those entering
+# have no signal. 3 more targets reuse a name already taken and are dropped
+# as duplicates (661 targets in all).
 schema_version: 1
 gaps:
   - status: no_value_for_year
