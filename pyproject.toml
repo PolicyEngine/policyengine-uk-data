@@ -31,6 +31,7 @@ dependencies = [
     "openpyxl",
     "pydantic>=2.0",
     "pyyaml",
+    "scipy",
     "sqlmodel>=0.0.16",
 ]
 
