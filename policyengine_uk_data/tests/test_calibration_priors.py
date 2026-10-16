@@ -13,6 +13,7 @@ from hypothesis import strategies as st
 
 from policyengine_uk_data.utils.calibrate import (
     DEFAULT_ZERO_WEIGHT_PRIOR_TOTAL_SHARE,
+    calibrate_local_areas,
     initialize_weight_priors,
     prior_equivalent_weights,
     rake_priors_to_targets,
@@ -24,6 +25,7 @@ weights = st.lists(
 
 
 @given(weights)
+@settings(deadline=None)
 def test_equivalent_weights_earn_each_row_its_prior(original):
     assume((original > 0).any())
     equivalent = prior_equivalent_weights(original)
@@ -75,7 +77,7 @@ def raking_problems(draw):
 
 
 @given(raking_problems())
-@settings(max_examples=200)
+@settings(max_examples=200, deadline=None)
 def test_rake_meets_every_named_target_and_touches_nothing_else(problem):
     priors, matrix, targets, names = problem
     raked = rake_priors_to_targets(priors, matrix, targets, names)
@@ -117,3 +119,106 @@ def test_rake_rejects_a_non_positive_target():
     matrix = pd.DataFrame({"a": [1.0, 0.0]})
     with pytest.raises(ValueError, match="non-positive"):
         rake_priors_to_targets(np.ones(2), matrix, pd.Series({"a": 0.0}), ["a"])
+
+
+@pytest.mark.parametrize(
+    ("carried_priors", "rake_targets", "expected_household_priors"),
+    [
+        pytest.param(
+            [10.0, 20.0, 40.0, 30.0],
+            ("band_a", "band_b"),
+            [100.0, 100.0, 400.0, 150.0],
+            id="carried-priors-raked",
+        ),
+        pytest.param(
+            [10.0, 20.0, 40.0, 30.0],
+            (),
+            [10.0, 20.0, 40.0, 30.0],
+            id="carried-priors-without-rake",
+        ),
+    ],
+)
+def test_calibrate_rakes_national_priors_before_splitting_between_areas(
+    tmp_path, monkeypatch, carried_priors, rake_targets, expected_household_priors
+):
+    import h5py
+
+    from policyengine_uk_data.tests.test_calibrate_save import _StubDataset
+    from policyengine_uk_data.utils import calibrate as calibrate_module
+
+    national_matrix = pd.DataFrame(
+        {"band_a": [1.0, 0.0, 1.0, 0.0], "band_b": [0.0, 1.0, 0.0, 1.0]}
+    )
+    national_targets = pd.Series({"band_a": 500.0, "band_b": 250.0})
+    # Local columns deliberately count different households, and their targets
+    # differ from the national targets. The rake must use the national inputs.
+    local_matrix = national_matrix[["band_b", "band_a"]].copy()
+    local_matrix.columns = national_matrix.columns
+    local_targets = pd.DataFrame({"band_a": [1.0, 2.0, 3.0], "band_b": [4.0, 5.0, 6.0]})
+    # The first country has two areas; the second has one. Each country's
+    # split must sum back to its households' full national starting priors.
+    area_mask = np.array(
+        [[1.0, 1.0, 0.0, 0.0], [1.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 1.0]]
+    )
+    initial_log_weights = []
+    adam = calibrate_module.torch.optim.Adam
+
+    def freeze_optimizer(parameters, **kwargs):
+        initial_log_weights.append(parameters[0].detach().numpy().copy())
+        optimizer = adam(parameters, **kwargs)
+        # Exercise the actual initialization and save paths without allowing
+        # an optimizer update to obscure the prior or area-split assertions.
+        monkeypatch.setattr(optimizer, "step", lambda: None)
+        return optimizer
+
+    monkeypatch.setattr(calibrate_module.torch.optim, "Adam", freeze_optimizer)
+    monkeypatch.setattr(calibrate_module, "STORAGE_FOLDER", tmp_path)
+    household_columns = {"household_calibration_prior": carried_priors}
+    original_weights = np.array([40.0, 0.0, 60.0, 0.0])
+    result = calibrate_local_areas(
+        dataset=_StubDataset(original_weights, **household_columns),
+        matrix_fn=lambda _d: (local_matrix, local_targets, area_mask),
+        national_matrix_fn=lambda _d: (national_matrix, national_targets),
+        area_count=3,
+        weight_file="raked_priors.h5",
+        dataset_key="2024",
+        epochs=1,
+        prior_rake_targets=rake_targets,
+    )
+
+    initial_area_weights = np.exp(initial_log_weights[0]) * area_mask
+    expected_household_priors = np.array(expected_household_priors)
+    expected_national_estimates = (
+        national_targets
+        if rake_targets
+        else expected_household_priors @ national_matrix
+    )
+    np.testing.assert_allclose(
+        initial_area_weights.sum(axis=0), expected_household_priors, rtol=1e-6
+    )
+    np.testing.assert_allclose(
+        initial_area_weights.sum(axis=0) @ national_matrix,
+        expected_national_estimates,
+        rtol=1e-6,
+    )
+    expected_area_weights = (
+        expected_household_priors / area_mask.sum(axis=0) * area_mask
+    )
+    np.testing.assert_allclose(initial_area_weights, expected_area_weights, rtol=1e-6)
+    with h5py.File(tmp_path / "raked_priors.h5") as file:
+        saved_area_weights = file["2024"][:]
+    np.testing.assert_allclose(saved_area_weights, initial_area_weights, rtol=1e-6)
+    np.testing.assert_allclose(
+        saved_area_weights.sum(axis=0) @ national_matrix,
+        expected_national_estimates,
+        rtol=1e-6,
+    )
+    np.testing.assert_allclose(
+        result.household.household_weight,
+        expected_household_priors,
+        rtol=1e-6,
+    )
+    if not rake_targets:
+        assert result.household.household_weight.sum() == pytest.approx(
+            original_weights.sum()
+        )

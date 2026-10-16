@@ -27,7 +27,8 @@
 # - Gains are after losses and before the AEA.
 #
 # Published total for individuals: 551 thousand taxpayers, £119,258m of gains,
-# £22,503m of tax. The rows below sum to those totals.
+# £22,503m of tax. Band sums may differ from published totals through rounding
+# (the tax rows below sum to £22,502m).
 lower_limit,taxpayers_thousands,gains_gbp_millions,tax_gbp_millions
 0,3,1,16
 3000,73,311,17
