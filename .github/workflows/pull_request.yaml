@@ -72,6 +72,10 @@ jobs:
           fetch-depth: 0 # Fetch all history for all tags and branches
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
+        # Restore uv's package cache but never save one from a job that
+        # holds the data: its location can be moved (UV_CACHE_DIR).
+        with:
+          save-cache: false
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -86,21 +90,161 @@ jobs:
         run: uv run --frozen make data
         env:
           TESTING: "1"
-      - name: Save calibration log (constituencies)
-        uses: actions/upload-artifact@v7
-        with:
-          name: constituency_calibration_log.csv
-          path: constituency_calibration_log.csv
-      
-      - name: Save calibration log (local authorities)
-        uses: actions/upload-artifact@v7
-        with:
-          name: la_calibration_log.csv
-          path: la_calibration_log.csv
-
       - name: Run tests
         run: uv run --frozen make test
         env:
           # Relaxes built-dataset outcome tolerances to match the reduced
           # fidelity of the TESTING build above (see test_cgt_band_donors).
           TESTING: "1"
+      # After the tests, whatever they did. The raw calibration logs stay on
+      # the runner: a target supported by a few households, divided by a
+      # published count, could give one household's value back. Only the
+      # summary the fit comparison needs is uploaded (utils/fit_report.py).
+      - name: Summarise the calibration fit
+        if: ${{ !cancelled() }}
+        run: uv run --frozen python -m policyengine_uk_data.utils.fit_report summarise constituency_calibration_log.csv --out fit_summary.json
+      - name: Save the fit summary
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: fit_summary.json
+          path: fit_summary.json
+  # The no-worsening check (W3). The base is built the same way as the head:
+  # TESTING, one clone and the head's lockfile, so both builds run one model
+  # and environment and the comparison measures the data change. As in the
+  # test job, only the fit summary leaves it. No dataset or calibration log
+  # is uploaded, and nothing is cached: setup-uv restores uv's package cache
+  # and saves none.
+  base-build:
+    name: Build the base for comparison
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+      PYTHONUNBUFFERED: "1"
+      PE_UK_DATA_OA_CLONES: "1"
+    steps:
+      - name: Check out the head, for its lockfile
+        uses: actions/checkout@v6
+        with:
+          path: head
+      - name: Check out the base
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        # Restore uv's package cache but never save one from a job that
+        # holds the data: its location can be moved (UV_CACHE_DIR).
+        with:
+          save-cache: false
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.13
+      - name: Sync the head's locked environment for the base
+        run: |
+          cp head/uv.lock base/uv.lock
+          cd base && uv sync --frozen --all-extras
+      - name: Download data inputs
+        working-directory: base
+        run: uv run --frozen make download
+      - name: Build the base datasets
+        working-directory: base
+        run: uv run --frozen make data
+        env:
+          TESTING: "1"
+      - name: Summarise the base's calibration fit
+        run: |
+          cp head/policyengine_uk_data/utils/fit_report.py base/policyengine_uk_data/utils/fit_report.py
+          uv run --frozen --project base python -m policyengine_uk_data.utils.fit_report summarise base/constituency_calibration_log.csv --out base_fit_summary.json
+      - name: Save the base fit summary
+        uses: actions/upload-artifact@v7
+        with:
+          name: base_fit_summary.json
+          path: base_fit_summary.json
+  fit-comparison:
+    name: Calibration fit against the base
+    needs: [test, base-build]
+    # Report a failed side too: an earlier passing comment must not stand.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        # Restore uv's package cache but never save one from a job that
+        # holds the data: its location can be moved (UV_CACHE_DIR).
+        with:
+          save-cache: false
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.13
+      - name: Sync locked environment
+        run: uv sync --frozen
+      - name: Download the fit summaries
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: "*fit_summary.json"
+          path: logs
+          merge-multiple: true
+      - name: Compare the final fits
+        id: compare
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          marker='<!-- policyengine-uk-data-fit-comparison -->'
+          if [ ! -f logs/fit_summary.json ] || [ ! -f logs/base_fit_summary.json ]; then
+            {
+              echo "$marker"
+              echo '## Calibration fit against the base build: FAIL'
+              echo
+              echo "One of the builds produced no fit summary, so the fit could not be compared. See the [workflow run]($RUN_URL)."
+            } > fit.md
+            echo "status=1" >> "$GITHUB_OUTPUT"
+          else
+            set +e
+            uv run --frozen python -m policyengine_uk_data.utils.fit_report compare \
+              logs/base_fit_summary.json logs/fit_summary.json --markdown body.md
+            echo "status=$?" >> "$GITHUB_OUTPUT"
+            set -e
+            { echo "$marker"; cat body.md 2>/dev/null || echo '## Calibration fit against the base build: FAIL'; echo; echo "[Workflow run]($RUN_URL)"; } > fit.md
+          fi
+          cat fit.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Post or update the pull request comment
+        if: ${{ !cancelled() && github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          marker='<!-- policyengine-uk-data-fit-comparison -->'
+          if [ ! -s fit.md ]; then
+            # The job failed before the comparison could write a comment.
+            {
+              echo "$marker"
+              echo '## Calibration fit against the base build: FAIL'
+              echo
+              echo "The comparison did not run. See the [workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+            } > fit.md
+          fi
+          existing=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\") | select(.body | startswith(\"$marker\")) | .id" \
+            | tail -n 1)
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -F body=@fit.md > /dev/null
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@fit.md > /dev/null
+          fi
+      - name: Fail on a fit regression
+        if: steps.compare.outputs.status != '0'
+        run: |
+          echo "::error::The head build's calibration fit is worse than the base's; see the job summary."
+          exit 1
