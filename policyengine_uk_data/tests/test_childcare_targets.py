@@ -24,7 +24,7 @@ PROGRAMMES = {"tfc", "extended", "targeted", "universal"}
 # Only Tax-Free Childcare has a spending target. Universal and targeted are
 # the caseload times a constant, which duplicates the caseload term in
 # `takeup_rate.objective` instead of adding evidence; extended's only
-# derivable figure is a full-usage ceiling the model pays 75% of.
+# derivable figure is a full-usage ceiling.
 SPENDING_PROGRAMMES = {"tfc"}
 
 
@@ -56,32 +56,46 @@ def test_tfc_targets_keep_the_published_precision():
 
 
 def test_entitlement_caseloads_match_the_dfe_january_2024_census():
-    """Universal nets off the working parent entitlement; the schemes are
-    modelled as mutually exclusive, so the comparator is the children on the
-    universal entitlement only, not DfE's 1.13 million headline."""
+    """Universal is every child registered for the universal entitlement
+    (excluding reception), children also on the working parent entitlement
+    included: the universal hours survive eligibility for it."""
     universal_including_working_parent = 778_327
-    working_parent_three_and_four = 361_790
     assert TARGETS["caseload"]["universal"] == pytest.approx(
-        (universal_including_working_parent - working_parent_three_and_four) / 1e3
+        universal_including_working_parent / 1e3
     )
     assert TARGETS["caseload"]["targeted"] == pytest.approx(115_852 / 1e3)
 
 
-def test_universal_eligibility_still_excludes_the_working_parent_scheme():
-    """The universal target subtracts the working parent registrations.
+def test_universal_hours_survive_working_parent_eligibility():
+    """The universal target counts children on the working parent entitlement.
 
-    That is only the right comparator while policyengine-uk models the two
-    schemes as mutually exclusive. If this fails, the 416,537 figure needs
+    That is only the right comparator while policyengine-uk keeps a child's
+    universal hours when the family is eligible for the working parent
+    entitlement (Childcare Act 2016 s.1(6); policyengine-uk#2177), and counts
+    the child as receiving the working parent entitlement only for hours
+    beyond the universal 15. If this fails, the 778,327 figure needs
     rederiving, not the test relaxing.
     """
-    import inspect
+    from policyengine_uk import Simulation
 
-    from policyengine_uk.system import system
-
-    source = inspect.getsource(
-        type(system.variables["universal_childcare_entitlement_eligible"])
-    )
-    assert "~has_extended_childcare" in source
+    year = 2025
+    situation = {
+        "people": {"child": {"age": {year: 3}}},
+        "benunits": {
+            "family": {
+                "members": ["child"],
+                "extended_childcare_entitlement_eligible": {year: True},
+                "would_claim_universal_childcare": {year: True},
+                # A family using no more than the universal 15 hours.
+                "maximum_extended_childcare_hours_usage": {year: 10},
+            }
+        },
+        "households": {"home": {"members": ["child"], "country": {year: "ENGLAND"}}},
+    }
+    sim = Simulation(situation=situation)
+    assert sim.calculate("universal_childcare_entitlement_eligible", year)[0]
+    assert sim.calculate("is_child_receiving_universal_childcare", year)[0]
+    assert not sim.calculate("is_child_receiving_extended_childcare", year)[0]
 
 
 def test_tolerance_falls_back_to_the_default():
@@ -127,11 +141,11 @@ def test_extended_caseload_matches_the_dfe_january_2025_census():
 
 
 def test_extended_has_no_spending_target():
-    """The only derivable figure is a full-usage ceiling the model pays 75% of.
+    """The only derivable figure is a full-usage ceiling.
 
-    3 and 4-year-olds get 1,140 funded hours in the model, not 570, so the
-    naive 570-hour construction is 65% of the comparable model quantity, and
-    even the correct one calibrates an hours distribution to a ceiling.
+    Calibrating ``maximum_extended_childcare_hours_usage`` to a ceiling, which
+    assumes every registered child took every funded hour, biases hours
+    upward.
     """
     assert "extended" not in TARGETS["spending"]
 
