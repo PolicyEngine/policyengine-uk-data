@@ -1,149 +1,27 @@
 """OBR Economic and Fiscal Outlook targets.
 
-Downloads and parses the OBR's detailed supplementary tables (receipts
-and expenditure xlsx) to extract tax receipt forecasts, benefit
-expenditure, and benefit caseloads.
-
-Sources:
-- Receipts: https://obr.uk/download/march-2026-economic-and-fiscal-outlook-detailed-forecast-tables-receipts/
-- Expenditure: https://obr.uk/download/march-2026-economic-and-fiscal-outlook-detailed-forecast-tables-expenditure/
+Parses the OBR's detailed forecast tables (receipts and expenditure
+workbooks) to extract tax receipt forecasts, benefit expenditure, and
+benefit caseloads. The workbooks are the committed, hash-verified files the
+active manifest names (``targets/obr_sources.py``); nothing is downloaded.
+Each table's year columns are read from its header row, and a missing
+target or year fails the build.
 """
 
-import io
 import logging
-import time
-from functools import lru_cache
 
 import openpyxl
-import requests
 
-from policyengine_uk_data.targets.schema import GREAT_BRITAIN, Target, Unit
-from policyengine_uk_data.targets.sources._common import (
-    HEADERS,
-    load_config,
+from policyengine_uk_data.targets.obr_sources import (
+    ObrManifest,
+    active_manifest,
+    check_coverage,
+    load_workbook,
+    read_row,
 )
+from policyengine_uk_data.targets.schema import GREAT_BRITAIN, Target, Unit
 
 logger = logging.getLogger(__name__)
-
-# Financial year columns in OBR tables: C=2024-25, D=2025-26, ..., I=2030-31
-# PolicyEngine convention: FY 2025-26 → calendar year 2025 (first year)
-_FY_COL_TO_YEAR = {
-    "C": 2024,
-    "D": 2025,
-    "E": 2026,
-    "F": 2027,
-    "G": 2028,
-    "H": 2029,
-    "I": 2030,
-}
-
-
-# OBR occasionally rate-limits CI runners (HTTP 429) or returns transient 5xx
-# errors. Retry with exponential backoff so a single throttled response does not
-# drop the whole OBR target set and red an unrelated build.
-_DOWNLOAD_MAX_ATTEMPTS = 4
-_DOWNLOAD_RETRY_STATUSES = {429, 500, 502, 503, 504}
-
-
-# obr.uk serves 403 Forbidden to GitHub Actions runner IPs (observed on the
-# 2026-07-21 push builds: every attempt 403'd while the same URLs work from
-# residential connections). A 403 is not retryable, and losing the workbook
-# silently drops 28 OBR targets and calibrates a degraded dataset. The EFO
-# workbooks for the vintage pinned in sources.yaml are therefore committed
-# under storage/obr_efo/ — following the committed-not-fetched precedent of
-# capital_gains_size_distribution_hmrc.csv and ons_demographics.py — and
-# used as a fallback whenever the download fails. Update them together with
-# the sources.yaml URLs when a new EFO vintage is adopted.
-_EFO_FALLBACKS = {
-    "receipts": "efo_receipts.xlsx",
-    "expenditure": "efo_expenditure.xlsx",
-}
-
-
-def _fallback_workbook(url: str) -> openpyxl.Workbook | None:
-    from policyengine_uk_data.storage import STORAGE_FOLDER
-
-    for slug, filename in _EFO_FALLBACKS.items():
-        if slug in url:
-            path = STORAGE_FOLDER / "obr_efo" / filename
-            if path.exists():
-                return openpyxl.load_workbook(path, data_only=False)
-    return None
-
-
-@lru_cache(maxsize=2)
-def _download_workbook(url: str) -> openpyxl.Workbook:
-    """Download an xlsx from OBR and return an openpyxl workbook.
-
-    Retries transient HTTP errors (429/5xx) and connection failures with
-    exponential backoff, honouring a numeric Retry-After header when
-    present. Falls back to the committed workbook in storage/obr_efo/ when
-    the download ultimately fails: obr.uk 403s CI runner IPs, and can answer
-    200 with an HTML page that is not a workbook. Neither is retried.
-    """
-    last_error: Exception | None = None
-    for attempt in range(_DOWNLOAD_MAX_ATTEMPTS):
-        wait = 2**attempt
-        try:
-            r = requests.get(url, headers=HEADERS, allow_redirects=True, timeout=60)
-        except requests.RequestException as e:
-            last_error = e  # connection/timeout — retryable
-        else:
-            if r.status_code < 400:
-                # obr.uk can answer 200 with an HTML "No Access" page instead
-                # of the workbook (observed 2026-10-04). A body openpyxl cannot
-                # read will not become a workbook on retry, so it is permanent,
-                # like a 403. An openpyxl break on every workbook still
-                # surfaces, as the fallback goes through the same load_workbook.
-                try:
-                    return openpyxl.load_workbook(
-                        io.BytesIO(r.content), data_only=False
-                    )
-                except Exception as e:
-                    last_error = ValueError(
-                        f"{r.status_code} for url: {url}, but the body "
-                        f"({r.headers.get('Content-Type', 'no Content-Type')}) "
-                        "could not be read as an xlsx workbook "
-                        f"({type(e).__name__}: {e})"
-                    )
-                    last_error.__cause__ = e
-                    break
-            last_error = requests.HTTPError(
-                f"{r.status_code} for url: {url}", response=r
-            )
-            if r.status_code not in _DOWNLOAD_RETRY_STATUSES:
-                break  # 403 and other permanent errors: don't burn retries
-            retry_after = r.headers.get("Retry-After", "")
-            if retry_after.isdigit():
-                wait = int(retry_after)
-        if attempt < _DOWNLOAD_MAX_ATTEMPTS - 1:
-            logger.warning(
-                "OBR download %s failed (%s); retrying in %ss",
-                url,
-                last_error,
-                wait,
-            )
-            time.sleep(wait)
-    fallback = _fallback_workbook(url)
-    if fallback is not None:
-        logger.warning(
-            "OBR download %s failed (%s); using committed workbook fallback",
-            url,
-            last_error,
-        )
-        return fallback
-    raise last_error
-
-
-def _read_row_values(ws, row_num: int, col_letters: list[str]) -> dict[int, float]:
-    """Read numeric values from a row, mapped to calendar years."""
-    result = {}
-    for col in col_letters:
-        cell = ws[f"{col}{row_num}"]
-        val = cell.value
-        if val is not None and isinstance(val, (int, float)):
-            result[_FY_COL_TO_YEAR[col]] = float(val) * 1e9
-    return result
 
 
 def _find_receipts_sheet(wb):
@@ -193,7 +71,9 @@ def _find_row(ws, label: str, col: str = "B", max_row: int = 80) -> int:
     raise ValueError(f"Row '{label}' not found in sheet")
 
 
-def _parse_receipts(wb: openpyxl.Workbook) -> list[Target]:
+def _parse_receipts(
+    wb: openpyxl.Workbook, manifest: ObrManifest | None = None
+) -> list[Target]:
     """Parse tax receipts from the OBR EFO.
 
     Income tax uses Table 3.4 (accrued basis) for consistency with
@@ -202,32 +82,8 @@ def _parse_receipts(wb: openpyxl.Workbook) -> list[Target]:
     table is located by title because EFO vintages renumber the sheets.
     NICs are not read here: ``_parse_nics`` targets them by class.
     """
-    config = load_config()
-    vintage = config["obr"]["vintage"]
-    ref = config["obr"]["efo_receipts"]
-    cols_34 = list(_FY_COL_TO_YEAR.keys())
-
-    # Table 3.9 columns are shifted right by one vs 3.4
-    cols_39 = ["D", "E", "F", "G", "H", "I", "J"]
-    fy_39 = {
-        "D": 2024,
-        "E": 2025,
-        "F": 2026,
-        "G": 2027,
-        "H": 2028,
-        "I": 2029,
-        "J": 2030,
-    }
-
-    def read_39(ws, row_num: int) -> dict[int, float]:
-        result = {}
-        for col in cols_39:
-            cell = ws[f"{col}{row_num}"]
-            val = cell.value
-            if val is not None and isinstance(val, (int, float)):
-                result[fy_39[col]] = float(val) * 1e9
-        return result
-
+    manifest = manifest or active_manifest()
+    vintage, ref = manifest.vintage, manifest.files["receipts"].url
     targets = []
 
     # Income tax from Table 3.4 (accrued basis)
@@ -236,7 +92,7 @@ def _parse_receipts(wb: openpyxl.Workbook) -> list[Target]:
         row_num = _find_row(
             ws34, "Income tax (gross of tax credits)", col="B", max_row=30
         )
-        values = _read_row_values(ws34, row_num, cols_34)
+        values = read_row(ws34, row_num, manifest)
         if values:
             targets.append(
                 Target(
@@ -279,7 +135,7 @@ def _parse_receipts(wb: openpyxl.Workbook) -> list[Target]:
     for name, (label, variable) in cash_rows.items():
         try:
             row_num = _find_row(ws39, label, col="B", max_row=80)
-            values = read_39(ws39, row_num)
+            values = read_row(ws39, row_num, manifest)
             if values:
                 recovered.append(label)
                 targets.append(
@@ -310,32 +166,13 @@ def _parse_receipts(wb: openpyxl.Workbook) -> list[Target]:
     return targets
 
 
-def _parse_council_tax(wb: openpyxl.Workbook) -> list[Target]:
+def _parse_council_tax(
+    wb: openpyxl.Workbook, manifest: ObrManifest | None = None
+) -> list[Target]:
     """Parse Table 4.1 (council tax receipts) from expenditure xlsx."""
-    config = load_config()
-    vintage = config["obr"]["vintage"]
-    ref = config["obr"]["efo_expenditure"]
+    manifest = manifest or active_manifest()
+    vintage, ref = manifest.vintage, manifest.files["expenditure"].url
     ws = wb["4.1"]
-
-    cols = ["C", "D", "E", "F", "G", "H", "I"]
-    fy = {
-        "C": 2024,
-        "D": 2025,
-        "E": 2026,
-        "F": 2027,
-        "G": 2028,
-        "H": 2029,
-        "I": 2030,
-    }
-
-    def read_41(row_num: int) -> dict[int, float]:
-        result = {}
-        for col in cols:
-            cell = ws[f"{col}{row_num}"]
-            val = cell.value
-            if val is not None and isinstance(val, (int, float)):
-                result[fy[col]] = float(val) * 1e9
-        return result
 
     ct_rows = {
         "council_tax": ("Total net council tax receipts", "council_tax"),
@@ -355,7 +192,7 @@ def _parse_council_tax(wb: openpyxl.Workbook) -> list[Target]:
     for name, (label, variable) in ct_rows.items():
         try:
             row_num = _find_row(ws, label, col="B", max_row=30)
-            values = read_41(row_num)
+            values = read_row(ws, row_num, manifest)
             if values:
                 targets.append(
                     Target(
@@ -374,24 +211,22 @@ def _parse_council_tax(wb: openpyxl.Workbook) -> list[Target]:
     return targets
 
 
-def _parse_nics(wb: openpyxl.Workbook) -> list[Target]:
+def _parse_nics(
+    wb: openpyxl.Workbook, manifest: ObrManifest | None = None
+) -> list[Target]:
     """Parse Table 3.4 (income tax and NICs detail) for all NIC classes.
 
-    Covers Class 1 employee and employer (PAYE), plus Classes 2 and 4
-    (self-employed flat-rate and profit-based). Class 3 (voluntary) is
-    skipped: no dataset fills ``ni_class_3`` (#378).
-    Omitting Classes 2/3/4 biased calibration by ~£2-5B/yr of NIC receipts
-    — the omission pushed self-employment income downward to compensate,
-    distorting reforms that touch SE income.
+    Covers Class 1 employee and employer (PAYE) and the self-employed
+    Classes 2 and 4, as one combined line or as separate rows. Class 3
+    (voluntary) is left out: no dataset populates ni_class_3 (#378).
 
     Where a row label is not found the parser logs a warning and skips that
-    variable, so partial matches still produce useful targets.
+    variable; the manifest's required targets then fail the build unless one
+    of the self-employed alternatives was found.
     """
-    config = load_config()
-    vintage = config["obr"]["vintage"]
-    ref = config["obr"]["efo_receipts"]
+    manifest = manifest or active_manifest()
+    vintage, ref = manifest.vintage, manifest.files["receipts"].url
     ws = wb["3.4"]
-    cols = list(_FY_COL_TO_YEAR.keys())
 
     # Map of target name → (list of candidate labels to search, variable
     # name). Candidates let us accept minor wording variation in OBR EFOs
@@ -467,7 +302,7 @@ def _parse_nics(wb: openpyxl.Workbook) -> list[Target]:
             )
             continue
 
-        values = _read_row_values(ws, row_num, cols)
+        values = read_row(ws, row_num, manifest)
         if not values:
             continue
 
@@ -511,32 +346,16 @@ def _universal_credit_rows(ws) -> tuple[int, int]:
     return inside[0], outside[0]
 
 
-def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
+def _parse_welfare(
+    wb: openpyxl.Workbook, manifest: ObrManifest | None = None
+) -> list[Target]:
     """Parse Table 4.9 (welfare spending) from expenditure xlsx."""
-    config = load_config()
-    vintage = config["obr"]["vintage"]
-    ref = config["obr"]["efo_expenditure"]
+    manifest = manifest or active_manifest()
+    vintage, ref = manifest.vintage, manifest.files["expenditure"].url
     ws = wb["4.9"]
 
-    cols = ["C", "D", "E", "F", "G", "H", "I"]
-    fy = {
-        "C": 2024,
-        "D": 2025,
-        "E": 2026,
-        "F": 2027,
-        "G": 2028,
-        "H": 2029,
-        "I": 2030,
-    }
-
     def read_49(row_num: int) -> dict[int, float]:
-        result = {}
-        for col in cols:
-            cell = ws[f"{col}{row_num}"]
-            val = cell.value
-            if val is not None and isinstance(val, (int, float)):
-                result[fy[col]] = float(val) * 1e9
-        return result
+        return read_row(ws, row_num, manifest)
 
     # "Housing benefit (not on JSA)" is not targeted: it is DWP-funded GB
     # spending only, and dwp_housing_benefit.py targets total GB Housing
@@ -629,48 +448,32 @@ def _parse_welfare(wb: openpyxl.Workbook) -> list[Target]:
     return targets
 
 
-def _parse_tv_licence(wb: openpyxl.Workbook) -> list[Target]:
+def _parse_tv_licence(
+    wb: openpyxl.Workbook, manifest: ObrManifest | None = None
+) -> list[Target]:
     """Parse Table 4.19 (BBC) from expenditure xlsx."""
-    config = load_config()
-    vintage = config["obr"]["vintage"]
-    ref = config["obr"]["efo_expenditure"]
+    manifest = manifest or active_manifest()
+    vintage, ref = manifest.vintage, manifest.files["expenditure"].url
 
     try:
         ws = wb["4.19"]
-        cols = ["C", "D", "E", "F", "G", "H", "I"]
-        fy = {
-            "C": 2024,
-            "D": 2025,
-            "E": 2026,
-            "F": 2027,
-            "G": 2028,
-            "H": 2029,
-            "I": 2030,
-        }
-
-        # Find "Licence fee receipts" or "BBC licence fee"
-        for row_num in range(1, 30):
-            val = ws[f"B{row_num}"].value
-            if val and "licence fee" in str(val).lower():
-                values = {}
-                for col in cols:
-                    cell = ws[f"{col}{row_num}"]
-                    v = cell.value
-                    if v is not None and isinstance(v, (int, float)):
-                        values[fy[col]] = float(v) * 1e9
-                if values:
-                    return [
-                        Target(
-                            name="obr/tv_licence_fee",
-                            variable="tv_licence",
-                            source="obr",
-                            unit=Unit.GBP,
-                            values=values,
-                            reference_url=ref,
-                            forecast_vintage=vintage,
-                        )
-                    ]
-    except Exception:
+        # The receipts row only: neighbouring rows such as "Standard colour
+        # licence fee (£)" share the words but not the unit.
+        row_num = _find_row(ws, "BBC licence fee receipts", max_row=30)
+        values = read_row(ws, row_num, manifest)
+        if values:
+            return [
+                Target(
+                    name="obr/tv_licence_fee",
+                    variable="tv_licence",
+                    source="obr",
+                    unit=Unit.GBP,
+                    values=values,
+                    reference_url=ref,
+                    forecast_vintage=vintage,
+                )
+            ]
+    except (KeyError, ValueError):
         logger.warning("OBR: TV licence table not found")
 
     return []
@@ -695,24 +498,29 @@ _SS_ABOVE_CAP_USERS = {
 }
 
 
+def workbook_targets(manifest: ObrManifest | None = None, storage=None) -> list[Target]:
+    """The targets a vintage's two verified workbooks yield.
+
+    Fails if either workbook is not the file its manifest names, or if any
+    target or year the manifest requires is missing.
+    """
+    manifest = manifest or active_manifest()
+    receipts = load_workbook("receipts", manifest, storage)
+    expenditure = load_workbook("expenditure", manifest, storage)
+    targets = [
+        *_parse_receipts(receipts, manifest),
+        *_parse_nics(receipts, manifest),
+        *_parse_council_tax(expenditure, manifest),
+        *_parse_welfare(expenditure, manifest),
+        *_parse_tv_licence(expenditure, manifest),
+    ]
+    check_coverage(targets, manifest)
+    return targets
+
+
 def get_targets() -> list[Target]:
-    config = load_config()
-    targets = []
-
-    try:
-        receipts_wb = _download_workbook(config["obr"]["efo_receipts"])
-        targets.extend(_parse_receipts(receipts_wb))
-        targets.extend(_parse_nics(receipts_wb))
-    except Exception as e:
-        logger.error("Failed to download/parse OBR receipts: %s", e)
-
-    try:
-        expenditure_wb = _download_workbook(config["obr"]["efo_expenditure"])
-        targets.extend(_parse_council_tax(expenditure_wb))
-        targets.extend(_parse_welfare(expenditure_wb))
-        targets.extend(_parse_tv_licence(expenditure_wb))
-    except Exception as e:
-        logger.error("Failed to download/parse OBR expenditure: %s", e)
+    # Not caught: a calibration without the OBR targets is never correct.
+    targets = workbook_targets()
 
     # Static targets that don't come from the xlsx
     targets.append(
