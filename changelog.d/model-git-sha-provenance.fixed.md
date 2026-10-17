@@ -1,0 +1,1 @@
+Record the release manifest's policyengine-uk `git_sha` as null instead of a policyengine-uk-data commit, by refusing values from policyengine-uk releases that report an enclosing repository's HEAD, values equal to this repository's commit, and anything that is not a full commit id (#548).
