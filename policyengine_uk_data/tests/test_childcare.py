@@ -167,7 +167,9 @@ def test_release_gate_is_wired():
     expected = {
         "Build datasets": "uv run --frozen make data",
         "Run tests": "uv run --frozen make test",
-        "Upload data": "uv run --frozen make upload",
+        # The upload's only wrapper is the Hugging Face token exchange, which
+        # execs the command unchanged (test_ci_hf_auth.py).
+        "Upload data": ".github/with-hf-token.sh uv run --frozen make upload",
     }
     for name, command in expected.items():
         assert by_name[name]["run"].strip() == command, (

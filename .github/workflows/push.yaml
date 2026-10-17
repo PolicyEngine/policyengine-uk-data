@@ -110,10 +110,10 @@ jobs:
     timeout-minutes: 240
     permissions:
       contents: "write"
-      # Required to auth against gcp
+      # Required to auth against GCP, and for the Hugging Face token exchange
+      # in .github/with-hf-token.sh
       id-token: "write"
     env:
-      HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
       PYTHONUNBUFFERED: "1"
       PE_UK_DATA_OA_CLONES: "1"
     steps:
@@ -133,10 +133,15 @@ jobs:
           service_account: "policyengine-research@policyengine-research.iam.gserviceaccount.com"
       - name: Sync locked environment
         run: uv sync --frozen --all-extras
+      # Hugging Face access uses a Trusted Publisher on
+      # policyengine/policyengine-uk-data-private that matches this repository,
+      # refs/heads/main and push.yaml, so no Hugging Face secret is stored here.
+      # Each token lasts an hour and the build takes longer, so the download
+      # and the upload each get their own.
       - name: Download data inputs
-        run: uv run --frozen make download
+        run: .github/with-hf-token.sh uv run --frozen make download
         env:
-          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+          HF_OIDC_RESOURCE: policyengine/policyengine-uk-data-private
       - name: Build datasets
         run: uv run --frozen make data
       - name: Save calibration log (constituencies)
@@ -153,8 +158,8 @@ jobs:
       - name: Run tests
         run: uv run --frozen make test
       - name: Upload data
-        run: uv run --frozen make upload
+        run: .github/with-hf-token.sh uv run --frozen make upload
         env:
-          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+          HF_OIDC_RESOURCE: policyengine/policyengine-uk-data-private
       - name: Publish a git tag
         run: ".github/publish-git-tag.sh"
