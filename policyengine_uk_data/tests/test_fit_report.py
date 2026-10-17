@@ -250,7 +250,8 @@ def test_the_commands_summarise_and_exit_one_on_a_failure(tmp_path):
 def test_the_pull_request_workflow_uploads_only_summaries():
     """The datasets are licensed microdata, and raw calibration logs stay on the runner.
 
-    Only aggregate reports leave a job: the fit summaries and the distribution reports.
+    Only aggregate reports leave a job: the fit summaries, the distribution reports
+    and the aggregate results.
     """
     from pathlib import Path
 
@@ -265,11 +266,17 @@ def test_the_pull_request_workflow_uploads_only_summaries():
         if step.get("uses", "").startswith("actions/upload-artifact")
     )
     assert uploads == [
+        "aggregate_result.json",
+        "base_aggregate_result.json",
         "base_distribution_report.json",
         "base_fit_summary.json",
         "distribution_report.json",
         "fit_summary.json",
     ]
+    # The aggregate tool writes household detail under private/; only its
+    # result.json is copied out for upload.
+    text = workflow.read_text()
+    assert 'cp "$RUNNER_TEMP/aggregate/result.json"' in text
     for job in jobs.values():
         for step in job.get("steps", []):
             assert not step.get("uses", "").startswith("actions/cache"), step
@@ -280,3 +287,38 @@ def test_the_pull_request_workflow_uploads_only_summaries():
         if s.get("name", "").startswith("Post")
     )
     assert "if [ ! -s fit.md ]" in post["run"]
+
+
+def test_the_aggregate_comparison_is_wired_consistently():
+    """Delta review of #602: one tool commit on every side, the aggregate
+    steps independent of the other measurements, and a crash fails."""
+    from pathlib import Path
+
+    import yaml
+
+    workflow = Path(__file__).parents[2] / ".github" / "workflows" / "pull_request.yaml"
+    text = workflow.read_text()
+    jobs = yaml.safe_load(text)["jobs"]
+    refs = {
+        step["with"]["ref"]
+        for job in jobs.values()
+        for step in job.get("steps", [])
+        if step.get("name") == "Check out the aggregate-impact tool"
+    }
+    assert len(refs) == 1 and len(next(iter(refs))) == 40, refs
+    for job_id in ("test", "base-build"):
+        for step in jobs[job_id]["steps"]:
+            if "aggregate" in str(step.get("name", "")).lower():
+                assert step.get("if") == "${{ !cancelled() }}", (job_id, step["name"])
+    for step in jobs["test"]["steps"]:
+        if step.get("name") in (
+            "Check out the aggregate-impact tool",
+            "Measure national aggregates with the model fixed",
+        ):
+            assert step.get("continue-on-error") is True, step["name"]
+    compare = next(
+        s for s in jobs["fit-comparison"]["steps"] if s.get("id") == "compare"
+    )["run"]
+    crash = compare[compare.index("aggregate_status=$?") :]
+    assert crash.index('echo "status=1"') < crash.index("aggregates.md")
+    assert "## National aggregates: FAIL (the comparison did not finish)" in crash
