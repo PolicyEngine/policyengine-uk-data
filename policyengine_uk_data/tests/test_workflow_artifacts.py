@@ -92,18 +92,18 @@ REVIEWED = {
             "fit_summary.json": (
                 r"(?m)^"
                 + re.escape(
-                    'uv run --frozen python -m policyengine_uk_data.utils.fit_report '
-                    'summarise constituency_calibration_log.csv --out fit_summary.json'
+                    "uv run --frozen python -m policyengine_uk_data.utils.fit_report "
+                    "summarise constituency_calibration_log.csv --out fit_summary.json"
                 )
                 + r"$"
             ),
             "distribution_report.json": (
                 r"(?m)^"
                 + re.escape(
-                    'uv run --frozen python -m '
-                    'policyengine_uk_data.utils.distribution_validation measure '
-                    'policyengine_uk_data/storage/enhanced_frs_2024_25.h5 --out '
-                    'distribution_report.json'
+                    "uv run --frozen python -m "
+                    "policyengine_uk_data.utils.distribution_validation measure "
+                    "policyengine_uk_data/storage/enhanced_frs_2024_25.h5 --out "
+                    "distribution_report.json"
                 )
                 + r"$"
             ),
@@ -111,10 +111,10 @@ REVIEWED = {
                 r"(?m)^"
                 + re.escape(
                     'PYTHONPATH="$tool" uv run --frozen python -m pe_uk_aggregate_impact '
-                    'measure    --label head --dataset-file '
-                    'policyengine_uk_data/storage/enhanced_frs_2024_25.h5 --dataset-label '
+                    "measure    --label head --dataset-file "
+                    "policyengine_uk_data/storage/enhanced_frs_2024_25.h5 --dataset-label "
                     '"this pull request\'s build"    --fallback-partition '
-                    'pe-uk-tool/policyengine_uk/data/fiscal_partition.yaml    --no-guard '
+                    "pe-uk-tool/policyengine_uk/data/fiscal_partition.yaml    --no-guard "
                     '--git-sha "$model" --out "$RUNNER_TEMP/aggregate" || true'
                 )
                 + "\n"
@@ -134,19 +134,19 @@ REVIEWED = {
             "base_fit_summary.json": (
                 r"(?m)^"
                 + re.escape(
-                    'uv run --frozen --project base python -m '
-                    'policyengine_uk_data.utils.fit_report summarise '
-                    'base/constituency_calibration_log.csv --out base_fit_summary.json'
+                    "uv run --frozen --project base python -m "
+                    "policyengine_uk_data.utils.fit_report summarise "
+                    "base/constituency_calibration_log.csv --out base_fit_summary.json"
                 )
                 + r"$"
             ),
             "base_distribution_report.json": (
                 r"(?m)^"
                 + re.escape(
-                    'uv run --frozen python -m '
-                    'policyengine_uk_data.utils.distribution_validation measure '
-                    'policyengine_uk_data/storage/enhanced_frs_2024_25.h5 --out '
-                    '../base_distribution_report.json'
+                    "uv run --frozen python -m "
+                    "policyengine_uk_data.utils.distribution_validation measure "
+                    "policyengine_uk_data/storage/enhanced_frs_2024_25.h5 --out "
+                    "../base_distribution_report.json"
                 )
                 + r"$"
             ),
@@ -154,10 +154,10 @@ REVIEWED = {
                 r"(?m)^"
                 + re.escape(
                     'PYTHONPATH="$tool" uv run --frozen --project base python -m '
-                    'pe_uk_aggregate_impact measure    --label base --dataset-file '
-                    'base/policyengine_uk_data/storage/enhanced_frs_2024_25.h5 '
+                    "pe_uk_aggregate_impact measure    --label base --dataset-file "
+                    "base/policyengine_uk_data/storage/enhanced_frs_2024_25.h5 "
                     '--dataset-label "the base\'s build"    --fallback-partition '
-                    'pe-uk-tool/policyengine_uk/data/fiscal_partition.yaml    --no-guard '
+                    "pe-uk-tool/policyengine_uk/data/fiscal_partition.yaml    --no-guard "
                     '--git-sha "$model" --out "$RUNNER_TEMP/aggregate" || true'
                 )
                 + "\n"
@@ -176,18 +176,18 @@ REVIEWED = {
         "artifacts": {},
         "commands": (
             (
-                'existing=$(gh api --paginate '
+                "existing=$(gh api --paginate "
                 '"repos/$GITHUB_REPOSITORY/issues/$PR/comments"    --jq ".[] | '
                 'select(.user.login == \\"github-actions[bot]\\") | select(.body | '
                 'startswith(\\"$marker\\")) | .id"    | tail -n 1)'
             ),
             (
                 'gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" '
-                '-F body=@fit.md > /dev/null'
+                "-F body=@fit.md > /dev/null"
             ),
             (
                 'gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F '
-                'body=@fit.md > /dev/null'
+                "body=@fit.md > /dev/null"
             ),
         ),
         "actions": {},
