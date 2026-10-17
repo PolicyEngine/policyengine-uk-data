@@ -503,6 +503,11 @@ def calibrate_local_areas(
         )
         performance_step["epoch"] = epoch
         performance_step["loss"] = performance_step.rel_abs_error**2
+        # training_loss, validation_loss and the two pct_close columns describe
+        # the dropout-perturbed weights before this epoch's optimiser step.
+        # saved_weights_loss and the per-target columns describe final_weights,
+        # the weights after the step, which are the ones saved. So on the last
+        # row, which describes the shipped weights, read saved_weights_loss.
         performance_step["training_loss"] = training_loss
         performance_step["saved_weights_loss"] = saved_weights_loss
         performance_step["validation_loss"] = validation_loss
@@ -556,7 +561,9 @@ def calibrate_local_areas(
                         calculating_loss=False,
                     )
 
-                if epoch % 10 == 0:
+                # Every tenth epoch, and the last: the weights saved and
+                # returned are the final optimiser state (#456).
+                if epoch % 10 == 0 or epoch == epochs - 1:
                     final_weights = (torch.exp(weights) * r).detach().numpy()
 
                     log_performance(
@@ -596,7 +603,7 @@ def calibrate_local_areas(
                         f"Loss: {loss_value.item()}, Epoch: {epoch}, {area_name}<10%: {local_close:.1%}, National<10%: {national_close:.1%}"
                     )
 
-            if epoch % 10 == 0:
+            if epoch % 10 == 0 or epoch == epochs - 1:
                 final_weights = (torch.exp(weights) * r).detach().numpy()
 
                 log_performance(
