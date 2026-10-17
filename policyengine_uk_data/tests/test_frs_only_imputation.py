@@ -259,3 +259,78 @@ def test_frs_only_recomputes_disability_flags_after_amount_imputation(monkeypatc
     assert not result.person["is_severely_disabled_for_benefits"].any()
     assert (result.person["pip_dl_category"] == "NONE").all()
     assert (result.person["pip_m_category"] == "NONE").all()
+
+
+def test_spi_donor_rows_get_zero_reported_council_tax_reduction():
+    """Reported CTR is zeroed on SPI-donor rows, not imputed (uk-data#497).
+
+    Even when every training person reports CTR, the target rows must end
+    with none: the stage-2 QRF would otherwise spread a household-level
+    amount over individual people.
+    """
+    from policyengine_uk_data.datasets.imputations.frs_only import (
+        FRS_ONLY_PERSON_VARIABLES,
+        SPI_DONOR_ZEROED_PERSON_VARIABLES,
+        impute_frs_only_variables,
+    )
+
+    assert "council_tax_benefit_reported" in SPI_DONOR_ZEROED_PERSON_VARIABLES
+    # Keep CTR in the QRF chain so other person draws do not move (#514).
+    assert "council_tax_benefit_reported" in FRS_ONLY_PERSON_VARIABLES
+
+    train = _fake_dataset(person_rows=400, seed=0)
+    train.person["council_tax_benefit_reported"] = 1_000.0
+    target = _fake_dataset(person_rows=60, seed=1)
+    target.person["council_tax_benefit_reported"] = 750.0
+
+    result = impute_frs_only_variables(train_dataset=train, target_dataset=target)
+
+    assert (result.person["council_tax_benefit_reported"] == 0).all()
+    # The training (FRS) rows keep their reported amounts.
+    assert (train.person["council_tax_benefit_reported"] == 1_000.0).all()
+
+
+def test_household_ctr_imputation_uses_original_frs_after_spi_reports_are_zeroed(
+    monkeypatch,
+):
+    from policyengine_uk_data.datasets.imputations import (
+        council_tax_reduction,
+        frs_only,
+    )
+
+    train = _fake_dataset(person_rows=12, seed=0)
+    target = _fake_dataset(person_rows=6, seed=1)
+    train.person["council_tax_benefit_reported"] = 1_000.0
+    target.person["council_tax_benefit_reported"] = 750.0
+    train.household["council_tax"] = 1_600.0
+    target.household["council_tax"] = 1_600.0
+    calls = []
+
+    def fake_person_draw(train, target, outputs):
+        assert "council_tax_benefit_reported" in outputs
+        target.person["council_tax_benefit_reported"] = 777.0
+        return target
+
+    def household_draw(train_dataset, target_dataset):
+        assert train_dataset is train
+        assert (train_dataset.person.council_tax_benefit_reported == 1_000).all()
+        assert (target_dataset.person.council_tax_benefit_reported == 0).all()
+        assert (target_dataset.household.council_tax == 1_600).all()
+        calls.append("household_receipt")
+        target_dataset.benunit["would_claim_council_tax_reduction"] = True
+        return target_dataset
+
+    monkeypatch.setattr(frs_only, "_impute_outputs", fake_person_draw)
+    monkeypatch.setattr(
+        frs_only,
+        "_all_claimants_over_state_pension_age",
+        lambda dataset, year: np.zeros(len(dataset.benunit), dtype=bool),
+    )
+    monkeypatch.setattr(
+        council_tax_reduction, "impute_household_council_tax_reduction", household_draw
+    )
+    result = frs_only.impute_frs_only_variables(train, target)
+    assert calls == ["household_receipt"]
+    assert result.benunit.would_claim_council_tax_reduction.all()
+    assert (result.person.council_tax_benefit_reported == 0).all()
+    assert (target.person.council_tax_benefit_reported == 750).all()

@@ -1,0 +1,2 @@
+- Build `council_tax` as the bill after discounts and before council tax reduction, as policyengine-uk expects: add reported CTR (CTREBAMT) back to the FRS CTANNUAL, which is net of it, impute missing bills from non-recipients only, and in Scotland net off water and sewerage using the 2024-25 gross charges (uk-data#496).
+- Stop imputing reported council tax reduction onto SPI-synthetic rows; set it to zero and impute household receipt from FRS joint incomes and composition, providing a reference-person benefit-unit claim route for modeled CTR (uk-data#497, #514).

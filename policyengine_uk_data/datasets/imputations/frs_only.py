@@ -122,7 +122,7 @@ FRS_ONLY_PERSON_VARIABLES = [
 #   policyengine-uk 2.93.0 the others (housing benefit, income support, tax
 #   credits, income-related ESA and JSA) can only be claimed with a report,
 #   so these rows no longer receive them. Sure Start Maternity Grant needs
-#   one of these awards. Council tax reduction is kept (below).
+#   one of these awards. CTR keeps a household-imputed claim route (below).
 # - Benefits paid only to people out of work or incapable of it: ESA and JSA
 #   (contributory), incapacity benefit and severe disablement allowance. On
 #   the 2024-25 build, 41% of SPI-row ESA (contributory) reporters by weight
@@ -139,10 +139,9 @@ FRS_ONLY_PERSON_VARIABLES = [
 # Kept as drawn: state pension (paid as reported once over pension age),
 # winter fuel payment (not read by the model), the disability benefits and
 # carer's allowance, whose drawn rates sit below the FRS rates as the income
-# gradient implies. Council tax reduction is also kept as drawn for now. In
-# 2.93.0 it too can only be claimed with a report, and zeroing it cut 2025
-# CTR by 21% on the 2024-25 build. It will be zeroed together with a
-# household-level CTR imputation (#499).
+# gradient implies. CTR reports are zeroed: a separate household receipt
+# model sets would_claim_council_tax_reduction for the reference person's
+# benefit unit. Eligibility and awards remain policyengine-uk calculations.
 #
 # Every column stays in the QRF chain above, so the values kept do not
 # change. They were drawn alongside the values later zeroed or restored.
@@ -161,6 +160,7 @@ SPI_DONOR_ZEROED_PERSON_VARIABLES = [
     "incapacity_benefit_reported",
     "sda_reported",
     "child_benefit_reported",
+    "council_tax_benefit_reported",
 ]
 SPI_DONOR_RESTORED_PERSON_VARIABLES = [
     "iidb_reported",
@@ -364,6 +364,22 @@ def impute_frs_only_variables(
             target_dataset, year
         ),
     )
+    # Gross council tax was constructed in create_frs, before reports and
+    # before the SPI copy exists. Learn household receipt from the untouched
+    # FRS, with the SPI households' updated joint incomes as predictors.
+    if (
+        "council_tax_benefit_reported" in train_dataset.person.columns
+        and "council_tax" in train_dataset.household.columns
+        and "council_tax" in target_dataset.household.columns
+    ):
+        from policyengine_uk_data.datasets.imputations.council_tax_reduction import (
+            impute_household_council_tax_reduction,
+        )
+
+        target_dataset = impute_household_council_tax_reduction(
+            train_dataset=train_dataset, target_dataset=target_dataset
+        )
+
     target_dataset.person = add_disability_benefit_categories_from_reported_amounts(
         target_dataset.person,
         int(str(target_dataset.time_period)[:4]),
