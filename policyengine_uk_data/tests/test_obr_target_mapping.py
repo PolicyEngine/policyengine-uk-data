@@ -9,11 +9,10 @@ targets come from, and why total NICs has no target of its own.
 
 from unittest.mock import patch
 
-import openpyxl
 import pytest
 import requests
 
-from policyengine_uk_data.storage import STORAGE_FOLDER
+from policyengine_uk_data.targets.obr_sources import load_workbook
 from policyengine_uk_data.targets.sources import obr
 
 # Every target parsed from the receipts workbook. Expenditure-side and static
@@ -41,25 +40,18 @@ UNMODELLED_ROWS = ("Statutory payment recoveries", "Other NIC")
 
 @pytest.fixture(scope="module")
 def offline_targets():
-    obr._download_workbook.cache_clear()
-
     def get(*args, **kwargs):
         raise requests.ConnectionError("offline")
 
-    with (
-        patch.object(obr.requests, "get", side_effect=get),
-        patch.object(obr.time, "sleep", lambda s: None),
-    ):
+    # The manifest loader reads verified committed bytes without downloading.
+    with patch.object(requests, "get", side_effect=get):
         targets = obr.get_targets()
-    obr._download_workbook.cache_clear()
     return {t.name: t for t in targets}
 
 
 @pytest.fixture(scope="module")
 def receipts():
-    return openpyxl.load_workbook(
-        STORAGE_FOLDER / "obr_efo" / "efo_receipts.xlsx", data_only=True
-    )
+    return load_workbook("receipts")
 
 
 def _row_2025(ws, label: str, column: str) -> float:
@@ -68,7 +60,7 @@ def _row_2025(ws, label: str, column: str) -> float:
 
 
 def test_receipts_target_variables_are_pinned():
-    wb = obr._fallback_workbook("efo-receipts")
+    wb = load_workbook("receipts")
     targets = obr._parse_receipts(wb) + obr._parse_nics(wb)
     assert {t.name: t.variable for t in targets} == EXPECTED_VARIABLES
 

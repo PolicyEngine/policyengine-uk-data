@@ -65,7 +65,8 @@ def test_the_build_reads_the_manifest_files_and_names_their_vintage():
         assert obr_sources.workbook_title(load_workbook(kind)) == entry.title
     targets = obr.get_targets()
     built = [t for t in targets if t.forecast_vintage == MANIFEST.vintage]
-    assert len(built) == 25
+    # #537 removes total NICs; the modelled class targets remain.
+    assert len(built) == 24
     assert {t.reference_url for t in built} == {f.url for f in MANIFEST.files.values()}
     check_coverage(built, MANIFEST)
 
@@ -363,7 +364,7 @@ def test_ingest_refuses_the_page_obr_serves_to_scripts(tmp_path):
 
 def test_verify_command_passes_on_the_active_manifest(capsys):
     assert obr_sources.main(["verify"]) == 0
-    assert "both workbooks verified, 25 targets" in capsys.readouterr().out
+    assert "both workbooks verified, 24 targets" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(

@@ -83,17 +83,12 @@ def conflicts(targets, column) -> set[tuple]:
 
 @pytest.fixture(scope="module")
 def obr_targets():
-    obr._download_workbook.cache_clear()
-
     def get(*args, **kwargs):
         raise requests.ConnectionError("offline")
 
-    with (
-        patch.object(obr.requests, "get", side_effect=get),
-        patch.object(obr.time, "sleep", lambda s: None),
-    ):
+    # The manifest loader reads verified committed bytes without downloading.
+    with patch.object(requests, "get", side_effect=get):
         targets = obr.get_targets()
-    obr._download_workbook.cache_clear()
     return targets
 
 

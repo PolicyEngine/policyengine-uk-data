@@ -172,7 +172,7 @@ def build_target_matrix(dataset, time_period: str = None, reform=None):
     target_names = []
     target_values = []
 
-    for target in calibration_targets():
+    for target in all_targets:
         try:
             val = _resolve_value(target, year)
             if val is None:
