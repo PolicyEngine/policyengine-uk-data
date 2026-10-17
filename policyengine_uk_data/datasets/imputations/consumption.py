@@ -234,7 +234,19 @@ def get_consumption_model_metadata() -> dict:
         "predictor_variables": tuple(PREDICTOR_VARIABLES),
         "impute_variables": tuple(IMPUTATIONS),
         "domestic_energy_consumption_source": "calibrated_electricity_plus_gas",
+        # A model trained before the outputs were clamped must be retrained.
+        "impute_variables_minimum": 0,
     }
+
+
+def _require_non_negative(household: pd.DataFrame, columns) -> None:
+    """Fail the build if an imputed amount is negative."""
+    for column in columns:
+        negative = int((household[column] < 0).sum())
+        if negative:
+            raise ValueError(
+                f"{column} is negative for {negative} households after imputation."
+            )
 
 
 def _qrf_model_matches_current_metadata(
@@ -634,6 +646,13 @@ def generate_lcfs_table(lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame)
 
     # Impute has_fuel_consumption from WAS vehicle ownership
     household = impute_has_fuel_to_lcfs(household)
+
+    # Clamp the imputed amounts at zero, as the energy split above already
+    # does. The LCFS records a negative weekly amount for housing, water and
+    # electricity (P604) in a few households. A QRF predicts values it was
+    # trained on, so those reached the dataset as negative consumption, and
+    # where they outweighed the other categories, as negative VAT.
+    household[IMPUTATIONS] = household[IMPUTATIONS].clip(lower=0)
 
     return household[PREDICTOR_VARIABLES + IMPUTATIONS + ["household_weight"]].dropna()
 
@@ -1070,5 +1089,6 @@ def impute_consumption(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     dataset.household["petrol_spending"][no_fuel] = 0
     dataset.household["diesel_spending"][no_fuel] = 0
 
+    _require_non_negative(dataset.household, IMPUTATIONS)
     dataset.validate()
     return dataset
