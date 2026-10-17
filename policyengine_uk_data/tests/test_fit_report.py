@@ -248,7 +248,10 @@ def test_the_commands_summarise_and_exit_one_on_a_failure(tmp_path):
 
 
 def test_the_pull_request_workflow_uploads_only_summaries():
-    """The datasets are licensed microdata, and raw calibration logs stay on the runner."""
+    """The datasets are licensed microdata, and raw calibration logs stay on the runner.
+
+    Only aggregate reports leave a job: the fit summaries and the distribution reports.
+    """
     from pathlib import Path
 
     import yaml
@@ -261,7 +264,12 @@ def test_the_pull_request_workflow_uploads_only_summaries():
         for step in job.get("steps", [])
         if step.get("uses", "").startswith("actions/upload-artifact")
     )
-    assert uploads == ["base_fit_summary.json", "fit_summary.json"]
+    assert uploads == [
+        "base_distribution_report.json",
+        "base_fit_summary.json",
+        "distribution_report.json",
+        "fit_summary.json",
+    ]
     for job in jobs.values():
         for step in job.get("steps", []):
             assert not step.get("uses", "").startswith("actions/cache"), step
