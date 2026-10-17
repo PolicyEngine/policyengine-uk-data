@@ -122,7 +122,8 @@ def test_raises_when_rows_are_found_but_yield_no_values(monkeypatch):
 
 
 def test_parses_rows_when_values_are_present(monkeypatch):
-    """The same sheet with values yields one target per cash-basis row."""
+    """The same sheet with values yields one target per cash-basis row, except
+    total NICs, which the NICs parser targets by class instead."""
     monkeypatch.setattr(
         "policyengine_uk_data.targets.sources.obr.load_config",
         lambda: {"obr": {"vintage": "test", "efo_receipts": "https://example.invalid"}},
@@ -130,4 +131,5 @@ def test_parses_rows_when_values_are_present(monkeypatch):
     targets = _parse_receipts(_receipts_wb(populate=True))
     names = {target.name for target in targets}
     assert "obr/capital_gains_tax" in names
-    assert len(names) == 5
+    assert "obr/ni" not in names
+    assert len(names) == 4

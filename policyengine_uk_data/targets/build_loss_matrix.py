@@ -21,7 +21,7 @@ from policyengine_uk_data.targets.coverage import (
     check_coverage,
     column_status,
 )
-from policyengine_uk_data.targets.registry import emitted_targets
+from policyengine_uk_data.targets.registry import emitted_targets, get_all_targets
 from policyengine_uk_data.targets.schema import (
     GeographicLevel,
     Target,
@@ -63,6 +63,22 @@ from policyengine_uk_data.targets.compute import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def calibration_targets() -> list[Target]:
+    """The national, regional and country targets the national matrix uses."""
+    targets = []
+    seen = set()
+    for level in (
+        GeographicLevel.NATIONAL,
+        GeographicLevel.REGION,
+        GeographicLevel.COUNTRY,
+    ):
+        for t in get_all_targets(geographic_level=level):
+            if t.name not in seen:
+                seen.add(t.name)
+                targets.append(t)
+    return targets
 
 
 def create_target_matrix(
@@ -156,7 +172,7 @@ def build_target_matrix(dataset, time_period: str = None, reform=None):
     target_names = []
     target_values = []
 
-    for target in all_targets:
+    for target in calibration_targets():
         try:
             val = _resolve_value(target, year)
             if val is None:

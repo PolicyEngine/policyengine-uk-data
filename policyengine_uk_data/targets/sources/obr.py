@@ -200,6 +200,7 @@ def _parse_receipts(wb: openpyxl.Workbook) -> list[Target]:
     the standard fiscal forecasting convention. Other receipts use the
     current-receipts table (cash basis) since they only appear there; that
     table is located by title because EFO vintages renumber the sheets.
+    NICs are not read here: ``_parse_nics`` targets them by class.
     """
     config = load_config()
     vintage = config["obr"]["vintage"]
@@ -255,9 +256,19 @@ def _parse_receipts(wb: openpyxl.Workbook) -> list[Target]:
     # located by title rather than number: EFO vintages renumber the tables, and
     # in March 2026 current receipts moved to 3.8 while 3.9 became the APD
     # forecast, which silently yielded no targets at all.
+    #
+    # The "National insurance contributions" row is deliberately not targeted.
+    # It is total NICs, and it used to be targeted on ni_employee, which
+    # _parse_nics also targets at the Class 1 employee figure (£200bn against
+    # £50bn on one variable in 2025-26). Retargeting it on
+    # total_national_insurance would still conflict: the total also counts
+    # statutory payment recoveries and "Other NIC" (Class 1A, 1B and 3,
+    # settlements, unallocated). PE-UK has no variable for statutory payment
+    # recoveries, Class 1A, Class 1B, settlements or unallocated NICs, and
+    # ni_class_3 exists but no dataset fills it (#378). The class targets
+    # already cover every NIC class the data populates.
     ws39 = _find_receipts_sheet(wb)
     cash_rows = {
-        "ni": ("National insurance contributions", "ni_employee"),
         "vat": ("Value added tax", "vat"),
         "fuel_duties": ("Fuel duties", "fuel_duty"),
         "capital_gains_tax": ("Capital gains tax", "capital_gains_tax"),
@@ -366,8 +377,9 @@ def _parse_council_tax(wb: openpyxl.Workbook) -> list[Target]:
 def _parse_nics(wb: openpyxl.Workbook) -> list[Target]:
     """Parse Table 3.4 (income tax and NICs detail) for all NIC classes.
 
-    Covers Class 1 employee and employer (PAYE), plus Classes 2, 3 and 4
-    (self-employed flat-rate, voluntary, and self-employed profit-based).
+    Covers Class 1 employee and employer (PAYE), plus Classes 2 and 4
+    (self-employed flat-rate and profit-based). Class 3 (voluntary) is
+    skipped: no dataset fills ``ni_class_3`` (#378).
     Omitting Classes 2/3/4 biased calibration by ~£2-5B/yr of NIC receipts
     — the omission pushed self-employment income downward to compensate,
     distorting reforms that touch SE income.
