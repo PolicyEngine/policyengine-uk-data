@@ -95,9 +95,9 @@ _FAILED_DOWNLOADS = {
 
 _EFO_URL_KEYS = ["efo_receipts", "efo_expenditure"]
 
-# Total NICs (obr/ni) is no longer a target: _parse_nics targets NICs by class.
 _RECEIPTS_AND_NICS_TARGETS = {
     "obr/income_tax",
+    "obr/ni",
     "obr/vat",
     "obr/fuel_duties",
     "obr/capital_gains_tax",
