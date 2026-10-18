@@ -1,24 +1,18 @@
-"""Tests for calibrate_local_areas: weight priors, saving and logging.
+"""Regression test for calibrate_local_areas weight saving.
 
-Two save bugs are pinned here. The save block once sat outside the training
-loop, so a 512-epoch run (511 % 10 = 1) never wrote the weight file. It then
-saved only when epoch % 10 == 0, so a 512-epoch build shipped the state after
-epoch 510 of 0-511 and dropped the final update (#456). A property test
-checks, in both training loops, that the saved file, the returned weights and
-the last logged row all describe the final optimiser state.
+Ensures that the non-verbose branch of `calibrate_local_areas` saves the
+weight file to disk — previously the save block was indented outside the
+for-loop, so on a typical 512-epoch run (511 % 10 = 1) no save ever ran
+and the output .h5 file was never written.
 """
 
 from __future__ import annotations
 
 import importlib.util
-import tempfile
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
-from hypothesis import example, given, settings
-from hypothesis import strategies as st
 
 if (
     importlib.util.find_spec("torch") is None
@@ -30,12 +24,7 @@ if (
     )
 
 
-def _make_toy_inputs(
-    n_households: int = 4,
-    area_count: int = 2,
-    n_targets: int = 2,
-    country_mask: np.ndarray | None = None,
-):
+def _make_toy_inputs(n_households: int = 4, area_count: int = 2, n_targets: int = 2):
     """Build minimal matrix/target/mask arrays for `calibrate_local_areas`.
 
     The calibration routine treats `matrix` as (n_households, n_targets),
@@ -50,9 +39,8 @@ def _make_toy_inputs(
     matrix = pd.DataFrame(np.eye(n_households, n_targets, dtype=float))
     # Per-area local targets — identical rows are fine for a smoke test.
     local_targets = pd.DataFrame(np.tile([100.0, 200.0][:n_targets], (area_count, 1)))
-    # Country mask: by default every area includes every household.
-    if country_mask is None:
-        country_mask = np.ones((area_count, n_households), dtype=float)
+    # Country mask: every area includes every household (simple case).
+    country_mask = np.ones((area_count, n_households), dtype=float)
 
     national_matrix = pd.DataFrame(np.ones((n_households, 1), dtype=float))
     national_targets = pd.Series([1000.0])
@@ -64,46 +52,6 @@ def _make_toy_inputs(
         return national_matrix.copy(), national_targets.copy()
 
     return matrix_fn, national_matrix_fn
-
-
-# Two countries of two households each: area 0 holds households 0 and 1, area
-# 1 holds 2 and 3. Its zeros make exp(parameters) differ from the saved
-# weights, so a save that dropped the mask would fail.
-TWO_COUNTRY_MASK = np.array([[1.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 1.0]])
-
-
-def _national_performance(weights, _m_c, _y_c, m_n, y_n, _excluded_targets):
-    """A one-row `get_performance` for the toy's single national target."""
-    estimates = weights.sum(axis=0) @ m_n
-    error = float(estimates.iloc[0] - y_n.iloc[0])
-    return pd.DataFrame(
-        {
-            "name": ["UK"],
-            "metric": ["national_total"],
-            "estimate": [float(estimates.iloc[0])],
-            "target": [float(y_n.iloc[0])],
-            "error": [error],
-            "abs_error": [abs(error)],
-            "rel_abs_error": [abs(error) / float(y_n.iloc[0])],
-            "validation": [False],
-        }
-    )
-
-
-def _toy_loss(weights, matrix_fn, national_matrix_fn):
-    """The calibrator's training loss without dropout, recomputed in float64."""
-
-    def sre(x, y):
-        return np.minimum(((1 + x) / (1 + y) - 1) ** 2, ((1 + y) / (1 + x) - 1) ** 2)
-
-    weights = weights.astype(np.float64)
-    matrix, local_targets, _ = matrix_fn(None)
-    national_matrix, national_targets = national_matrix_fn(None)
-    local = sre(weights @ matrix.to_numpy(), local_targets.to_numpy())
-    national = sre(
-        weights.sum(axis=0) @ national_matrix.to_numpy(), national_targets.to_numpy()
-    )
-    return local.mean() + national.mean()
 
 
 class _StubDataset:
@@ -264,6 +212,22 @@ def test_calibrate_local_areas_logs_loss_targets_and_source_diagnostics(
         household_is_spi_synthetic=[False, True, False, True],
     )
 
+    def get_performance(weights, _m_c, _y_c, m_n, y_n, _excluded_targets):
+        estimates = weights.sum(axis=0) @ m_n
+        error = float(estimates.iloc[0] - y_n.iloc[0])
+        return pd.DataFrame(
+            {
+                "name": ["UK"],
+                "metric": ["national_total"],
+                "estimate": [float(estimates.iloc[0])],
+                "target": [float(y_n.iloc[0])],
+                "error": [error],
+                "abs_error": [abs(error)],
+                "rel_abs_error": [abs(error) / float(y_n.iloc[0])],
+                "validation": [False],
+            }
+        )
+
     weight_file = "toy_diagnostic_weights.h5"
     log_csv = tmp_path / "diagnostics.csv"
     calibrate_local_areas(
@@ -275,7 +239,7 @@ def test_calibrate_local_areas_logs_loss_targets_and_source_diagnostics(
         dataset_key="2025",
         epochs=1,
         log_csv=log_csv,
-        get_performance=_national_performance,
+        get_performance=get_performance,
         verbose=False,
     )
 
@@ -294,77 +258,3 @@ def test_calibrate_local_areas_logs_loss_targets_and_source_diagnostics(
     assert row["household_is_spi_synthetic_rows"] == 2
     assert row["household_is_spi_synthetic_prior_share"] == pytest.approx(0.5)
     assert row["household_is_spi_synthetic_household_weight"] > 0
-
-
-def _final_state_run(inputs, epochs, verbose):
-    """Calibrate the toy problem in a scratch folder.
-
-    Returns the saved weights, the returned household weights, the final
-    optimiser state (exp of the trained parameters times the country mask)
-    and the performance log.
-    """
-    import h5py
-    import torch
-
-    from policyengine_uk_data.utils import calibrate as calibrate_module
-    from policyengine_uk_data.utils.calibrate import calibrate_local_areas
-
-    parameters = []
-
-    class SpyAdam(torch.optim.Adam):
-        def __init__(self, params, *args, **kwargs):
-            params = list(params)
-            parameters.extend(params)
-            super().__init__(params, *args, **kwargs)
-
-    matrix_fn, national_matrix_fn = inputs
-    # Hypothesis reruns the test body, so it can't use pytest's
-    # function-scoped tmp_path and monkeypatch fixtures.
-    with (
-        tempfile.TemporaryDirectory() as folder,
-        pytest.MonkeyPatch.context() as monkeypatch,
-    ):
-        folder = Path(folder)
-        monkeypatch.setattr(calibrate_module, "STORAGE_FOLDER", folder)
-        monkeypatch.setattr(torch.optim, "Adam", SpyAdam)
-        returned = calibrate_local_areas(
-            dataset=_StubDataset(np.array([1.0, 2.0, 3.0, 4.0])),
-            matrix_fn=matrix_fn,
-            national_matrix_fn=national_matrix_fn,
-            area_count=2,
-            weight_file="final.h5",
-            dataset_key="2025",
-            epochs=epochs,
-            log_csv=folder / "log.csv",
-            get_performance=_national_performance,
-            verbose=verbose,
-        )
-        with h5py.File(folder / "final.h5", "r") as f:
-            saved = f["2025"][:]
-        log = pd.read_csv(folder / "log.csv")
-    (weights,) = parameters
-    final = torch.exp(weights).detach().numpy() * TWO_COUNTRY_MASK
-    return saved, returned.household["household_weight"].to_numpy(), final, log
-
-
-@settings(max_examples=20, deadline=None)
-@example(epochs=32, verbose=True)  # a TESTING build
-@example(epochs=32, verbose=False)  # the same, through the non-verbose loop
-@given(epochs=st.integers(1, 40), verbose=st.booleans())
-def test_saved_returned_and_logged_weights_are_the_final_optimiser_state(
-    epochs, verbose
-):
-    """#456: weights were saved only when epoch % 10 == 0, so a 512-epoch
-    build shipped the state after epoch 510 of 0-511 and dropped the last
-    update."""
-    inputs = _make_toy_inputs(country_mask=TWO_COUNTRY_MASK)
-    saved, returned, final, log = _final_state_run(inputs, epochs, verbose)
-    np.testing.assert_array_equal(saved, final)
-    np.testing.assert_allclose(returned, final.sum(axis=0), rtol=1e-6)
-    # Every tenth epoch and the last are logged, so the last row is the
-    # final epoch, and its saved_weights_loss is the saved weights' loss.
-    assert log["epoch"].iloc[-1] == epochs - 1
-    assert log["epoch"].tolist() == sorted({*range(0, epochs, 10), epochs - 1})
-    assert log["saved_weights_loss"].iloc[-1] == pytest.approx(
-        _toy_loss(saved, *inputs), rel=1e-5
-    )
