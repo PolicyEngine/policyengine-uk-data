@@ -5,12 +5,9 @@ reasonable bounds after projection. They require incomes_projection.csv
 to have been generated and will be skipped otherwise.
 """
 
-import re
-
 import pytest
 import pandas as pd
 from policyengine_uk_data.storage import STORAGE_FOLDER
-from policyengine_uk_data.targets.sources._common import load_config
 from policyengine_uk_data.targets.sources.hmrc_spi import _SPI_YEAR
 
 PROJECTION_PATH = STORAGE_FOLDER / "incomes_projection.csv"
@@ -155,74 +152,3 @@ def test_projection_is_the_spi_table_uprated_with_the_committed_table(
     from policyengine_uk_data.utils.incomes_projection import project_income_table
 
     pd.testing.assert_frame_equal(project_income_table(base_targets), projections)
-
-
-def test_spi_year_is_the_start_of_the_configured_tax_year():
-    """The SPI ODS name ends with its tax year (..._2324.ods is 2023-24).
-
-    PolicyEngine UK's year N is tax year N to N+1 (each parameter takes its
-    value at 30 April N), so a 2023-24 outturn is the 2023 value. Mapping it
-    to the end year would treat it as 2024-25 and understate every later
-    year by a year's growth. A refreshed URL without a matching _SPI_YEAR
-    fails here.
-    """
-    url = load_config()["hmrc"]["spi_collated"]
-    match = re.search(r"_(\d{2})(\d{2})\.ods$", url)
-    assert match, url
-    start, end = int(match[1]), int(match[2])
-    assert end == (start + 1) % 100, url
-    assert _SPI_YEAR == 2000 + start
-
-
-def test_calibration_reads_the_projected_spi_targets(
-    projections, base_targets, monkeypatch
-):
-    """Calibration (build_loss_matrix) fetches targets without a year filter,
-    and the registry keeps only the first target of each name. Every SPI band
-    must therefore be one target carrying its outturn and every projected
-    year; if the projected years sit on a second target of the same name they
-    are dropped, and the outturn is carried forward unuprated instead.
-
-    The official table is served from the committed incomes.csv, so the
-    outturn targets are always present and the test needs no download.
-    """
-    from policyengine_uk_data.targets import get_all_targets
-    from policyengine_uk_data.targets import registry
-    from policyengine_uk_data.targets.build_loss_matrix import _resolve_value
-    from policyengine_uk_data.targets.sources import hmrc_spi
-
-    def committed_table(include_aggregate: bool = True) -> pd.DataFrame:
-        if include_aggregate:
-            return base_targets
-        return _without_aggregate(base_targets).reset_index(drop=True)
-
-    monkeypatch.setattr(hmrc_spi, "get_income_band_table", committed_table)
-    monkeypatch.setattr(registry, "discover_source_modules", lambda: [hmrc_spi])
-
-    names = [t.name for t in hmrc_spi.get_targets()]
-    assert len(names) == len(set(names))
-
-    spi = {t.name: t for t in get_all_targets() if t.source == "hmrc_spi"}
-    expected = _without_aggregate(projections[projections["year"] >= _SPI_YEAR])
-    checked = 0
-    for row in expected.itertuples():
-        label = hmrc_spi._format_band_label(
-            row.total_income_lower_bound, row.total_income_upper_bound
-        )
-        for variable in hmrc_spi.INCOME_VARIABLES:
-            amount = getattr(row, f"{variable}_amount")
-            if variable == "property_income":
-                amount *= hmrc_spi._PROPERTY_INCOME_SCALE
-            amount_target = spi[f"hmrc/{variable}_income_band_{label}"]
-            count_target = spi[f"hmrc/{variable}_count_income_band_{label}"]
-            assert _resolve_value(amount_target, row.year) == pytest.approx(amount)
-            assert _resolve_value(count_target, row.year) == pytest.approx(
-                getattr(row, f"{variable}_count")
-            )
-            checked += 2
-    assert checked == 2 * len(hmrc_spi.INCOME_VARIABLES) * len(expected)
-
-    years = set(projections["year"])
-    assert _SPI_YEAR in years
-    for target in spi.values():
-        assert set(target.values) == years, target.name

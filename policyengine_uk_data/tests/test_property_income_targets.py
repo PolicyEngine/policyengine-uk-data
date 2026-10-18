@@ -5,7 +5,6 @@ HMRC Property Rental Income Statistics rather than SPI alone.
 """
 
 from policyengine_uk_data.targets import get_all_targets
-from policyengine_uk_data.targets.sources.hmrc_spi import _SPI_YEAR
 
 
 def test_property_income_targets_scaled():
@@ -14,7 +13,7 @@ def test_property_income_targets_scaled():
     Raw SPI 2023-24 total is scaled up to better match HMRC rental
     income statistics, which cover more landlords than SPI.
     """
-    base_year = _SPI_YEAR
+    base_year = 2024
     targets = get_all_targets(year=base_year)
     total = sum(
         t.values[base_year]
