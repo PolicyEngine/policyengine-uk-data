@@ -91,9 +91,6 @@ def _receipts_wb(*, populate: bool) -> openpyxl.Workbook:
     wb.create_sheet("3.4")["B2"] = "3.4 Income tax (accrued basis)"
     ws = wb.create_sheet("3.8")
     ws["B2"] = "3.8 Current receipts (on a cash basis)"
-    ws["D3"] = "£ billion"
-    for col, year in zip("DEFGHIJ", range(2024, 2031)):
-        ws[f"{col}5"] = f"{year}-{(year + 1) % 100:02d}"
     labels = [
         "National insurance contributions",
         "Value added tax",
@@ -110,19 +107,27 @@ def _receipts_wb(*, populate: bool) -> openpyxl.Workbook:
     return wb
 
 
-def test_raises_when_rows_are_found_but_yield_no_values():
+def test_raises_when_rows_are_found_but_yield_no_values(monkeypatch):
     """A column shift finds every label and still produces nothing.
 
     The guard must key on targets produced, not on exceptions caught, or this
     reproduces the silent drop by a different route.
     """
+    monkeypatch.setattr(
+        "policyengine_uk_data.targets.sources.obr.load_config",
+        lambda: {"obr": {"vintage": "test", "efo_receipts": "https://example.invalid"}},
+    )
     with pytest.raises(ValueError, match="produced values"):
         _parse_receipts(_receipts_wb(populate=False))
 
 
-def test_parses_rows_when_values_are_present():
+def test_parses_rows_when_values_are_present(monkeypatch):
     """The same sheet with values yields one target per cash-basis row, except
     total NICs, which the NICs parser targets by class instead."""
+    monkeypatch.setattr(
+        "policyengine_uk_data.targets.sources.obr.load_config",
+        lambda: {"obr": {"vintage": "test", "efo_receipts": "https://example.invalid"}},
+    )
     targets = _parse_receipts(_receipts_wb(populate=True))
     names = {target.name for target in targets}
     assert "obr/capital_gains_tax" in names

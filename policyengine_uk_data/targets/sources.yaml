@@ -2,10 +2,9 @@
 # Update these when new vintages are published.
 
 obr:
-  # The EFO vintage the OBR targets come from: a manifest in
-  # targets/source_manifests/ naming its hash-verified workbooks. Adopt a new
-  # vintage with `python -m policyengine_uk_data.targets.obr_sources ingest`.
-  manifest: obr_march_2026.yaml
+  efo_receipts: "https://obr.uk/download/march-2026-economic-and-fiscal-outlook-detailed-forecast-tables-receipts/"
+  efo_expenditure: "https://obr.uk/download/march-2026-economic-and-fiscal-outlook-detailed-forecast-tables-expenditure/"
+  vintage: "march_2026"
 
 hmrc:
   spi_collated: "https://assets.publishing.service.gov.uk/media/69f1f12d2fae53a03709682f/Collated_Tables_3_1_to_3_11_2324.ods"
