@@ -11,9 +11,9 @@ The imputations are applied in this order (dependencies noted):
 3. **VAT** (from ETB)
 4. **Public Services** (from ETB)
 5. **Income** (from SPI)
-6. **Salary Sacrifice** (from FRS subsample)
-7. **Student Loan Plan** (rule-based, from age)
-8. **Capital Gains** (from Advani-Summers data and HMRC statistics) — last, after Pension Credit take-up is assigned, because it stacks a second record for each household with gains
+6. **Capital Gains** (from Advani-Summers data)
+7. **Salary Sacrifice** (from FRS subsample)
+8. **Student Loan Plan** (rule-based, from age)
 
 ---
 
@@ -160,15 +160,14 @@ Imputes detailed income components to create "synthetic taxpayers" with higher i
 
 ## Capital Gains Imputation
 
-**Sources:** Advani-Summers capital gains distribution data; HMRC Capital Gains Tax statistics, Table 2.1a (individuals, by size of gain)
+**Source:** Advani-Summers capital gains distribution data
 
-Not a QRF. Advani and Summers give, for each band of total income, the share of people with gains and the percentiles of those gains. HMRC gives the number of individuals with a CGT liability, and their gains, by size of gain. The imputation takes who holds gains from the first and how many hold how much from the second.
+Uses a gradient-based optimization approach rather than QRF. The dataset is doubled, with one half receiving imputed capital gains amounts. Weights are then optimized to match the empirical relationship between total income and capital gains incidence.
 
 ### Method
-1. Each household's first adult draws a gain from their income band's Advani-Summers distribution.
-2. Where the draw is above the lowest HMRC size band limit (the £3,000 annual exempt amount), the household is stacked again as a has-gains twin carrying the gain. The split propensity adjusts Advani-Summers' share of all people in the income band for assignment to first adults only. This is the propensity before rejecting draws of £3,000 or less; rejecting those draws lowers realised incidence. For a zero-weight (SPI synthetic) household, complementary original and twin calibration priors are carried into calibration. The prior-equivalent weight sets only the twin's household weight, while the original's household weight remains zero. Smaller draws, including losses, get no twin: HMRC publishes liable taxpayers only, so nothing would anchor them.
-3. The spline stops at each band's 95th percentile, so few draws exceed £500,000 and none exceeds about £2m. For each HMRC size band from £500,000 up, 30 donor households are stacked carrying the band's published mean gain.
-4. Calibration targets the taxpayer count and the gains of each HMRC size band, and their totals. Before the first epoch it scales the starting weights so that each band's taxpayer count is on its target.
+1. Double the dataset (original + clone)
+2. Assign capital gains to one adult per household in the cloned half
+3. Optimize blend weights to match income-band capital gains incidence from Advani-Summers data
 
 ---
 

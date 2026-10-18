@@ -215,25 +215,6 @@ class TestCloneAndAssign:
         cloned_total = result.household["household_weight"].sum()
         np.testing.assert_allclose(cloned_total, original_total, rtol=1e-10)
 
-    def test_calibration_prior_preservation(self, toy_dataset, small_crosswalk):
-        """OA copies must share each source household's carried prior."""
-        original_prior = np.linspace(25.0, 250.0, len(toy_dataset.household))
-        toy_dataset.household["household_calibration_prior"] = original_prior
-
-        result = clone_and_assign(
-            toy_dataset,
-            n_clones=5,
-            crosswalk_path=str(small_crosswalk),
-        )
-
-        by_source = result.household.groupby("source_household_id")[
-            "household_calibration_prior"
-        ].sum()
-        np.testing.assert_allclose(by_source, original_prior)
-        np.testing.assert_array_equal(
-            toy_dataset.household.household_calibration_prior, original_prior
-        )
-
     def test_unique_household_ids(self, toy_dataset, small_crosswalk):
         result = clone_and_assign(
             toy_dataset,

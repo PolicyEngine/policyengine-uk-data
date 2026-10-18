@@ -1,11 +1,11 @@
 # HMRC Capital Gains Tax statistics, Table 2.1a: estimated number of taxpayers,
 # amounts of gains and tax liabilities by size of gain, for individuals,
-# 2024 to 2025 tax year (provisional).
+# 2023 to 2024 tax year (provisional).
 #
 # Collection: https://www.gov.uk/government/statistics/capital-gains-tax-statistics
-# File:       Table_2_2026_Size_of_gain.ods, sheet "2_1a_2024-25"
-# URL:        https://assets.publishing.service.gov.uk/media/6a7b240b423b0bdba0290eca/Table_2_2026_Size_of_gain.ods
-# Published:  27 August 2026 release.
+# File:       Table_2_2025_Size_of_gain.ods, sheet "2_1a_2023-24"
+# URL:        https://assets.publishing.service.gov.uk/media/6878ac562bad77c3dae4dcef/Table_2_2025_Size_of_gain.ods
+# Published:  24 July 2025 release.
 #
 # Committed rather than downloaded at build time because the asset URL embeds a
 # content hash that changes with every HMRC release, so it is not a stable
@@ -14,32 +14,26 @@
 #
 # Units: taxpayers in thousands, gains in £ millions, as published.
 #
-# The annual exempt amount (AEA) for individuals in 2024 to 2025 was £3,000.
+# IMPORTANT DEFINITIONAL NOTE: HMRC's published figures "only include taxpayers
+# who have a CGT liability". They are therefore not the same population as
+# "everyone with gains above the annual exempt amount", and are narrower than
+# the set of people carrying a positive imputed gain in the microdata. The
+# under-£12,300 rows are correspondingly small and should not be read as the
+# true count of people with small gains.
 #
-# IMPORTANT DEFINITIONAL NOTES:
-# - Individuals only. Trusts and personal representatives are in Table 2.1b
-#   (32 thousand taxpayers and £8,057m of gains in 2024 to 2025) and are not
-#   people in the microdata. The all-taxpayer headline (Table 1: 584 thousand
-#   taxpayers, £127,316m of gains) includes them.
-# - HMRC's figures "only include taxpayers who have a CGT liability". The row
-#   under £3,000 is therefore not the count of people with small gains; it is
-#   the few who are liable with gains under the AEA.
-# - Gains are after losses and before the AEA.
-#
-# Published total for individuals: 551 thousand taxpayers, £119,258m of gains,
-# £22,503m of tax. Band sums may differ from published totals through rounding
-# (the tax rows below sum to £22,502m).
+# Trailing "All" row is the published total and may not equal the sum of the
+# bands due to rounding.
 lower_limit,taxpayers_thousands,gains_gbp_millions,tax_gbp_millions
-0,3,1,16
-3000,73,311,17
-6000,57,448,49
-10000,26,289,38
-12300,97,1747,264
-25000,98,3516,608
-50000,78,5510,1041
-100000,61,9487,1777
-250000,25,8820,1546
-500000,16,11372,1828
-1000000,9,12806,2191
-2000000,5,16477,3188
-5000000,3,48474,9939
+0,2,1,9
+3000,0,1,0
+6000,61,461,18
+10000,23,251,20
+12300,79,1418,169
+25000,74,2645,423
+50000,53,3731,706
+100000,37,5649,1077
+250000,14,4766,826
+500000,8,5705,895
+1000000,5,6390,1067
+2000000,3,9189,1718
+5000000,2,22714,4532

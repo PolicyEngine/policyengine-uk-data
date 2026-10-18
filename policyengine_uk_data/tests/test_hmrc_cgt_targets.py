@@ -69,7 +69,7 @@ def test_count_excludes_people_below_the_aea():
 
 
 def test_amount_is_gated_on_the_same_threshold_as_the_count():
-    """HMRC's total is gains of CGT-liable taxpayers, not all gains."""
+    """HMRC's £65.9bn is gains of CGT-liable taxpayers, not all gains."""
     ctx = _dummy_ctx(
         capital_gains=[100.0, 2_999.0, 3_001.0, 50_000.0],
         household_of_person=[0, 0, 1, 2],
@@ -170,10 +170,10 @@ def test_aea_boundary_moves_with_the_year():
 
 
 def test_amount_and_count_select_exactly_the_same_people():
-    """The module docstring's central claim: the amount and the count are
-    two statistics about *one* population, so no sub-threshold gain may
-    leak into the amount. Putting each person in their own household lets
-    us compare the two gates person by person.
+    """The module docstring's central claim: the £65.9bn amount and the
+    378k count are two statistics about *one* population, so no
+    sub-threshold gain may leak into the amount. Putting each person in
+    their own household lets us compare the two gates person by person.
     """
     gains = [
         -10_000.0,
@@ -257,8 +257,8 @@ def test_taxpayer_count_is_deliberately_flat_across_projection_years():
     factors, but those are a nominal-income index; applying them to a
     *headcount* would forecast more CGT taxpayers purely because gains
     are worth more in cash terms. The repo has no administrative basis
-    for forecasting CGT taxpayer numbers, so the outturn count is held
-    flat. Changing this should be a conscious decision that
+    for forecasting CGT taxpayer numbers, so the 2023-24 outturn count
+    is held flat. Changing this should be a conscious decision that
     updates this test.
     """
     count = {t.name: t for t in get_targets()}["hmrc/cgt_taxpayers"]
@@ -296,7 +296,7 @@ def test_registry_keeps_custom_compute_for_the_calibration_years():
 
 
 def test_registry_year_filter_excludes_years_before_the_outturn():
-    """The targets describe the 2024-25 outturn, PolicyEngine year 2024,
+    """The targets describe a 2023-24 outturn mapped to calendar 2024,
     so they must not appear for earlier years."""
     from policyengine_uk_data.targets import get_all_targets
 
