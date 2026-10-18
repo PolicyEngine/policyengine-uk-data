@@ -21,6 +21,17 @@
 # as duplicates (661 targets in all).
 schema_version: 1
 gaps:
+  - status: zero_signal
+    reason: >-
+      DIAGNOSTIC ONLY, on the batch-3 leave-one-out branch b3/attrib-no604-seeded
+      (uk-data #612), never for release. With #604 reverted, the ONS 85-90 age
+      targets enter the matrix, but the FRS top-codes age at 80, so no household
+      contributes to them, as on main before #604. This lets the release build
+      without #604 for the fit attribution of #608.
+    issue: https://github.com/PolicyEngine/policyengine-uk-data/pull/608
+    targets:
+      - ons/female_85_90
+      - ons/male_85_90
   - status: no_value_for_year
     reason: >-
       Dated 2026 only. The calibration year is 2025, and _resolve_value does
