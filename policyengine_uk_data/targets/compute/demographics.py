@@ -26,8 +26,7 @@ def compute_regional_age(target, ctx) -> np.ndarray | None:
     region_name = name[:idx]
     age_part = name[idx + 5 :]
     lower, upper = age_part.split("_")
-    lower = int(lower)
-    upper = np.inf if upper == "plus" else int(upper)
+    lower, upper = int(lower), int(upper)
 
     pe_region = _REGION_INV.get(region_name)
     if pe_region is None:
@@ -45,7 +44,7 @@ def compute_gender_age(target, ctx) -> np.ndarray:
     parts = name.split("_")
     sex = parts[0]
     lower = int(parts[1])
-    upper = np.inf if parts[2] == "plus" else int(parts[2])
+    upper = int(parts[2])
 
     gender = ctx.sim.calculate("gender").values
     sex_match = gender == ("FEMALE" if sex == "female" else "MALE")
