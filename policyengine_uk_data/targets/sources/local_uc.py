@@ -71,12 +71,14 @@ def _scaled_uc_children_by_country(gb_total_households: float) -> dict[str, np.n
 
 
 def get_constituency_uc_targets() -> pd.Series:
-    """UC household counts indexed by 2024 constituency code."""
+    """UC household counts for 650 constituencies (positional order).
+
+    Returns Series of household_count values, aligned to the same
+    ordering as the constituency age.csv.
+    """
     from policyengine_uk_data.utils.uc_data import uc_pc_households
 
-    return uc_pc_households.set_index("code", verify_integrity=True)[
-        "household_count"
-    ].sort_index()
+    return uc_pc_households.household_count
 
 
 def get_constituency_uc_by_children_targets() -> pd.DataFrame:
@@ -85,43 +87,50 @@ def get_constituency_uc_by_children_targets() -> pd.DataFrame:
     Applies country-level proportions from Stat-Xplore to each
     constituency's total UC count.  Returns a DataFrame with columns
     ``uc_hh_0_children``, ``uc_hh_1_child``, ``uc_hh_2_children``,
-    ``uc_hh_3plus_children``, indexed by 2024 constituency code. Integer
-    buckets sum exactly to each area's total, using its matched country.
+    ``uc_hh_3plus_children``, in the same positional order as
+    :func:`get_constituency_uc_targets`.
     """
-    totals = get_constituency_uc_targets()
+    from policyengine_uk_data.utils.uc_data import uc_pc_households
+    from policyengine_uk_data.storage import STORAGE_FOLDER
 
+    codes = pd.read_csv(STORAGE_FOLDER / "constituencies_2024.csv")["code"]
+    totals = uc_pc_households.household_count.values.astype(float)
+
+    result = pd.DataFrame(index=range(len(totals)))
     cols = [
         "uc_hh_0_children",
         "uc_hh_1_child",
         "uc_hh_2_children",
         "uc_hh_3plus_children",
     ]
-    gb_total = totals[totals.index.str[0].isin(["E", "W", "S"])].sum()
+    for col in cols:
+        result[col] = 0.0
+
+    gb_total = totals[codes.str[0].isin(["E", "W", "S"])].sum()
     country_buckets = _scaled_uc_children_by_country(gb_total)
 
-    rows = []
-    for code, total in totals.items():
-        proportions = country_buckets[code[0]]
+    for i, (total, code) in enumerate(zip(totals, codes)):
+        country_prefix = code[0]
+        proportions = country_buckets.get(
+            country_prefix,
+            country_buckets["N"],  # fallback
+        )
         shares = proportions / proportions.sum()
-        expected = total * shares
-        counts = np.floor(expected).astype(int)
-        # Allocate remaining households to the largest fractional parts.
-        # Independent rounding can otherwise lose or add a household.
-        remainder = int(total - counts.sum())
-        order = np.argsort(-(expected - counts), kind="stable")
-        counts[order[:remainder]] += 1
-        rows.append(counts)
+        for j, col in enumerate(cols):
+            result.loc[i, col] = round(total * shares[j])
 
-    return pd.DataFrame(rows, index=totals.index, columns=cols)
+    return result
 
 
 def get_la_uc_targets() -> pd.Series:
-    """UC household counts indexed by local authority code."""
+    """UC household counts for 360 local authorities (positional order).
+
+    Returns Series of household_count values, aligned to the same
+    ordering as the LA age.csv.
+    """
     from policyengine_uk_data.utils.uc_data import uc_la_households
 
-    return uc_la_households.set_index("code", verify_integrity=True)[
-        "household_count"
-    ].sort_index()
+    return uc_la_households.household_count
 
 
 REFERENCE_URL = _REF

@@ -5,19 +5,6 @@ from pathlib import Path
 # 1. Read the boundary change data into a DataFrame
 df = pd.read_csv(Path(__file__).parent / "boundary_changes.csv")
 
-# Five unchanged Scottish constituencies retain their 2010 codes in the
-# boundary-change source. Use their 2024 codes from constituencies_2024.csv
-# so the mapped rows can be joined to the other 2024 targets by code.
-df["code_2024"] = df["code_2024"].replace(
-    {
-        "S14000006": "S14000107",  # Ayr, Carrick and Cumnock
-        "S14000008": "S14000108",  # Berwickshire, Roxburgh and Selkirk
-        "S14000010": "S14000109",  # Central Ayrshire
-        "S14000040": "S14000110",  # Kilmarnock and Loudoun
-        "S14000058": "S14000111",  # West Aberdeenshire and Kincardine
-    }
-)
-
 # 2. Get unique constituency codes for 2010 and 2024, sorted alphabetically
 old_codes = sorted(df["code_2010"].unique())
 new_codes = sorted(df["code_2024"].unique())

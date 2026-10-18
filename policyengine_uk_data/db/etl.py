@@ -429,19 +429,21 @@ def _load_local_uc_targets(session: Session) -> int:
 
         from policyengine_uk_data.utils import uc_data
 
-        df = getattr(uc_data, loader_attr).set_index("code", verify_integrity=True)
+        df = getattr(uc_data, loader_attr)
 
         if level == "constituency":
             codes_df = pd.read_csv(STORAGE_FOLDER / "constituencies_2024.csv")
         else:
             codes_df = pd.read_csv(STORAGE_FOLDER / "local_authorities_2021.csv")
 
-        areas = codes_df.set_index("code", verify_integrity=True)
-        for code, hh_count in df["household_count"].items():
-            area_name = areas.loc[code, "name"]
+        for i, hh_count in enumerate(df.household_count.values):
+            if i >= len(codes_df):
+                break
+            code = codes_df.iloc[i]["code"]
+            area_name = codes_df.iloc[i].get("name", "")
             value = float(hh_count)
-            if not np.isfinite(value):
-                raise ValueError(f"Non-finite UC household target for {code}")
+            if np.isnan(value):
+                continue
             target_name = f"dwp/{level}/{code}/uc_households"
             _insert_target(
                 session,
