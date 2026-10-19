@@ -23,7 +23,7 @@ from policyengine_uk_data.targets.build_loss_matrix import (
     _compute_column,
     restrict_to_countries,
 )
-from policyengine_uk_data.targets.schema import GREAT_BRITAIN
+from policyengine_uk_data.targets.schema import GREAT_BRITAIN, GeographicLevel
 from policyengine_uk_data.targets.sources import obr
 
 COUNTRIES = ("ENGLAND", "SCOTLAND", "WALES", "NORTHERN_IRELAND")
@@ -183,7 +183,13 @@ def test_target_matrix_counts_gb_households_only(monkeypatch):
             )
 
     monkeypatch.setattr(policyengine_uk, "Microsimulation", FakeMicrosimulation)
-    monkeypatch.setattr(build_loss_matrix, "emitted_targets", lambda: [target])
+    monkeypatch.setattr(
+        build_loss_matrix,
+        "get_all_targets",
+        lambda geographic_level=None: (
+            [target] if geographic_level == GeographicLevel.NATIONAL else []
+        ),
+    )
 
     matrix, values = build_loss_matrix.create_target_matrix(
         SimpleNamespace(time_period="2025"), time_period="2025"

@@ -31,11 +31,6 @@ def discover_source_modules() -> list:
     return modules
 
 
-def emitted_targets() -> list[Target]:
-    """Every target the source modules emit, in order, duplicate names included."""
-    return [target for mod in discover_source_modules() for target in mod.get_targets()]
-
-
 def get_all_targets(
     year: int | None = None,
     geographic_level: GeographicLevel | None = None,
@@ -48,20 +43,23 @@ def get_all_targets(
         geographic_level: if provided, filter to this geographic level.
 
     Returns:
-        De-duplicated list of Target objects: of the targets that pass the
-        filters, the first of each name. ``emitted_targets`` keeps them all.
+        De-duplicated list of Target objects.
     """
     all_targets: list[Target] = []
     seen_names: set[str] = set()
 
-    for target in emitted_targets():
-        if target.name in seen_names:
-            continue
-        if year is not None and year not in target.values:
-            continue
-        if geographic_level is not None and target.geographic_level != geographic_level:
-            continue
-        seen_names.add(target.name)
-        all_targets.append(target)
+    for mod in discover_source_modules():
+        for target in mod.get_targets():
+            if target.name in seen_names:
+                continue
+            if year is not None and year not in target.values:
+                continue
+            if (
+                geographic_level is not None
+                and target.geographic_level != geographic_level
+            ):
+                continue
+            seen_names.add(target.name)
+            all_targets.append(target)
 
     return all_targets

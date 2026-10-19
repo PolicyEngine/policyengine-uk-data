@@ -32,9 +32,3 @@ def baseline(enhanced_frs: UKSingleYearDataset):
     from policyengine_uk import Microsimulation
 
     return Microsimulation(dataset=enhanced_frs)
-
-
-@pytest.fixture(autouse=True)
-def no_job_summary(monkeypatch):
-    """Keep tests out of the GitHub Actions job summary the build writes to."""
-    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)

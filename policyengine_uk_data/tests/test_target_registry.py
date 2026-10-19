@@ -7,12 +7,8 @@ Verifies that:
 4. Target values match the current system's hardcoded values
 """
 
-from collections import Counter
-
 from policyengine_uk_data.targets import get_all_targets
 from policyengine_uk_data.targets.build_loss_matrix import _compute_column
-from policyengine_uk_data.targets.coverage import load_known_gaps
-from policyengine_uk_data.targets.registry import emitted_targets
 
 
 def test_registry_loads():
@@ -22,20 +18,11 @@ def test_registry_loads():
 
 
 def test_no_duplicate_names():
-    """Each name is emitted once, apart from the duplicates known_gaps.yaml lists.
-
-    get_all_targets keeps only the first target of each name, so this counts
-    what the sources emit before that.
-    """
-    counts = Counter(t.name for t in emitted_targets())
-    listed = {
-        name
-        for gap in load_known_gaps()
-        if gap.status == "duplicate"
-        for name in gap.targets
-    }
-    duplicates = sorted(n for n, k in counts.items() if k > 1 and n not in listed)
-    assert not duplicates, f"Duplicate target names: {duplicates}"
+    """Target names should be unique across all sources."""
+    targets = get_all_targets()
+    names = [t.name for t in targets]
+    duplicates = [n for n in names if names.count(n) > 1]
+    assert len(duplicates) == 0, f"Duplicate target names: {set(duplicates)}"
 
 
 def test_obr_income_tax_exists():
