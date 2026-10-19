@@ -24,8 +24,6 @@ Follow-up (issue #378, partial close of #88):
 from __future__ import annotations
 
 import importlib.util
-from unittest.mock import patch
-
 import pytest
 
 if importlib.util.find_spec("openpyxl") is None:
@@ -33,17 +31,13 @@ if importlib.util.find_spec("openpyxl") is None:
 
 import openpyxl  # noqa: E402
 
-_FAKE_CONFIG = {
-    "obr": {
-        "vintage": "test",
-        "efo_receipts": "https://example.invalid/receipts",
-        "efo_expenditure": "https://example.invalid/expenditure",
-    }
-}
-
 
 def _populate_sheet(ws, rows: list[tuple[str, list[float]]]) -> None:
-    """Write rows of (label, fy_values) into column B / C-I of ``ws``."""
+    """Write rows of (label, fy_values) into column B / C-I of ``ws``, under
+    a unit label and 2024-25 to 2030-31 year headers in row 1."""
+    ws["A1"] = "£ billion"
+    for col_idx, year in enumerate(range(2024, 2031), start=3):
+        ws.cell(row=1, column=col_idx, value=f"{year}-{(year + 1) % 100:02d}")
     for row_idx, (label, values) in enumerate(rows, start=2):
         ws.cell(row=row_idx, column=2, value=label)
         for col_idx, value in enumerate(values, start=3):
@@ -93,8 +87,7 @@ def test_parse_nics_combined_self_employed_line():
     target alongside Class 1 employee/employer."""
     from policyengine_uk_data.targets.sources import obr as obr_module
 
-    with patch.object(obr_module, "load_config", return_value=_FAKE_CONFIG):
-        targets = obr_module._parse_nics(_build_combined_efo_workbook())
+    targets = obr_module._parse_nics(_build_combined_efo_workbook())
 
     names = {t.name for t in targets}
     assert names == {
@@ -114,8 +107,7 @@ def test_parse_nics_falls_back_to_separate_classes_for_old_efo():
     the legacy candidates pick them up individually."""
     from policyengine_uk_data.targets.sources import obr as obr_module
 
-    with patch.object(obr_module, "load_config", return_value=_FAKE_CONFIG):
-        targets = obr_module._parse_nics(_build_separate_efo_workbook())
+    targets = obr_module._parse_nics(_build_separate_efo_workbook())
 
     names = {t.name for t in targets}
     assert names == {
@@ -134,8 +126,7 @@ def test_parse_nics_intentionally_skips_class_3_in_combined_efo():
     "Other NIC" and the parser must not emit it (#378)."""
     from policyengine_uk_data.targets.sources import obr as obr_module
 
-    with patch.object(obr_module, "load_config", return_value=_FAKE_CONFIG):
-        targets = obr_module._parse_nics(_build_combined_efo_workbook())
+    targets = obr_module._parse_nics(_build_combined_efo_workbook())
 
     assert "obr/ni_class_3" not in {t.name for t in targets}
     assert "ni_class_3" not in {t.variable for t in targets}
@@ -146,8 +137,7 @@ def test_parse_nics_intentionally_skips_class_3_in_separate_efo():
     a target for it — the underlying PE-UK variable has no signal (#378)."""
     from policyengine_uk_data.targets.sources import obr as obr_module
 
-    with patch.object(obr_module, "load_config", return_value=_FAKE_CONFIG):
-        targets = obr_module._parse_nics(_build_separate_efo_workbook())
+    targets = obr_module._parse_nics(_build_separate_efo_workbook())
 
     assert "obr/ni_class_3" not in {t.name for t in targets}
     assert "ni_class_3" not in {t.variable for t in targets}
@@ -171,8 +161,7 @@ def test_parse_nics_tolerates_alt_label_wording():
         ],
     )
 
-    with patch.object(obr_module, "load_config", return_value=_FAKE_CONFIG):
-        targets = obr_module._parse_nics(wb)
+    targets = obr_module._parse_nics(wb)
 
     assert {t.variable for t in targets} == {
         "ni_employee",

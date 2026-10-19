@@ -23,7 +23,7 @@ from policyengine_uk_data.targets.build_loss_matrix import (
     _compute_column,
     restrict_to_countries,
 )
-from policyengine_uk_data.targets.schema import GREAT_BRITAIN, GeographicLevel
+from policyengine_uk_data.targets.schema import GREAT_BRITAIN
 from policyengine_uk_data.targets.sources import obr
 
 COUNTRIES = ("ENGLAND", "SCOTLAND", "WALES", "NORTHERN_IRELAND")
@@ -75,6 +75,9 @@ def _table(rows: list[tuple]) -> openpyxl.Workbook:
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "4.9"
+    ws["C3"] = "£ billion"
+    for column, year in YEAR_COLUMNS.items():
+        ws[f"{column}5"] = f"{year}-{(year + 1) % 100:02d}"
     for i, (label, value) in enumerate(rows, start=6):
         ws[f"B{i}"] = label
         if value is not None:
@@ -180,13 +183,7 @@ def test_target_matrix_counts_gb_households_only(monkeypatch):
             )
 
     monkeypatch.setattr(policyengine_uk, "Microsimulation", FakeMicrosimulation)
-    monkeypatch.setattr(
-        build_loss_matrix,
-        "get_all_targets",
-        lambda geographic_level=None: (
-            [target] if geographic_level == GeographicLevel.NATIONAL else []
-        ),
-    )
+    monkeypatch.setattr(build_loss_matrix, "emitted_targets", lambda: [target])
 
     matrix, values = build_loss_matrix.create_target_matrix(
         SimpleNamespace(time_period="2025"), time_period="2025"
