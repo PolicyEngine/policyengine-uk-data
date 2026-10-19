@@ -23,6 +23,33 @@ schema_version: 1
 gaps:
   - status: zero_signal
     reason: >-
+      DIAGNOSTIC ONLY (uk-data #618, #620): in release builds of the batch-3
+      release the zero-signal set among the top UC payment bands varies between
+      builds (#598); run 39181798638 also lost COUPLE_NO_CHILDREN 26,400 to
+      27,600. Every top band is listed so the 512-epoch fit can be measured.
+    issue: https://github.com/PolicyEngine/policyengine-uk-data/issues/598
+    builds: [release]
+    targets:
+      - dwp/uc_payment_dist/SINGLE_annual_payment_24_000_to_25_200
+      - dwp/uc_payment_dist/SINGLE_annual_payment_26_400_to_27_600
+      - dwp/uc_payment_dist/SINGLE_annual_payment_28_800_to_30_000
+      - dwp/uc_payment_dist/SINGLE_annual_payment_30_000_to_inf
+      - dwp/uc_payment_dist/SINGLE_WITH_CHILDREN_annual_payment_24_000_to_25_200
+      - dwp/uc_payment_dist/SINGLE_WITH_CHILDREN_annual_payment_25_200_to_26_400
+      - dwp/uc_payment_dist/SINGLE_WITH_CHILDREN_annual_payment_26_400_to_27_600
+      - dwp/uc_payment_dist/SINGLE_WITH_CHILDREN_annual_payment_27_600_to_28_800
+      - dwp/uc_payment_dist/SINGLE_WITH_CHILDREN_annual_payment_28_800_to_30_000
+      - dwp/uc_payment_dist/SINGLE_WITH_CHILDREN_annual_payment_30_000_to_inf
+      - dwp/uc_payment_dist/COUPLE_NO_CHILDREN_annual_payment_24_000_to_25_200
+      - dwp/uc_payment_dist/COUPLE_NO_CHILDREN_annual_payment_25_200_to_26_400
+      - dwp/uc_payment_dist/COUPLE_NO_CHILDREN_annual_payment_26_400_to_27_600
+      - dwp/uc_payment_dist/COUPLE_WITH_CHILDREN_annual_payment_24_000_to_25_200
+      - dwp/uc_payment_dist/COUPLE_WITH_CHILDREN_annual_payment_25_200_to_26_400
+      - dwp/uc_payment_dist/COUPLE_WITH_CHILDREN_annual_payment_26_400_to_27_600
+      - dwp/uc_payment_dist/COUPLE_WITH_CHILDREN_annual_payment_28_800_to_30_000
+      - dwp/uc_payment_dist/COUPLE_WITH_CHILDREN_annual_payment_30_000_to_inf
+  - status: zero_signal
+    reason: >-
       DIAGNOSTIC ONLY, on the batch-3 production-setting attribution branches
       (uk-data #618, #619), never for release as written. In release builds
       (TESTING unset) of the batch-3 release 21d5dbf9, these three UC payment
