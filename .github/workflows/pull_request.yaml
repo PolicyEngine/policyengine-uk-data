@@ -60,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     # Slowest observed 2026-10-06..08: 47 minutes (TESTING build plus tests).
     # Fail a hung build instead of holding a runner for the 6-hour default.
-    timeout-minutes: 90
+    timeout-minutes: 180  # DIAGNOSTIC ONLY: production build
     env:
       HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
       PYTHONUNBUFFERED: "1"
@@ -89,7 +89,7 @@ jobs:
       - name: Build datasets
         run: uv run --frozen make data
         env:
-          TESTING: "1"
+          TESTING: "0"  # DIAGNOSTIC ONLY: production settings (512 epochs)
       # The raw calibration logs stay on the runner. They hold every target's
       # weighted estimate at every logged epoch with no small-cell control, so a
       # target supported by a few households, divided by a published count,
