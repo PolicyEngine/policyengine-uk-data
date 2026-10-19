@@ -30,7 +30,6 @@ def calibrate(
         area_name="Constituency",
         get_performance=get_performance,
         time_period=time_period,
-        prior_rake_targets=band_count_target_names(),
     )
 
 
