@@ -97,12 +97,9 @@ jobs:
       # artifacts are public.
 
       - name: Run tests
-        if: false  # DIAGNOSTIC ONLY (batch-3 attribution): skip tests to save runner time
-        run: uv run --frozen make test
-        env:
-          # Relaxes built-dataset outcome tolerances to match the reduced
-          # fidelity of the TESTING build above (see test_cgt_band_donors).
-          TESTING: "1"
+        # DIAGNOSTIC ONLY (#551 at production settings): run only #551's
+        # built-dataset hours-and-pay test on this production build.
+        run: uv run --frozen pytest -q -p no:cacheprovider policyengine_uk_data/tests/test_spi_income_rank_draw.py::test_built_enhanced_frs_spi_pay_rises_with_hours
       # After the tests, whatever they did. The raw calibration logs stay on
       # the runner: a target supported by a few households, divided by a
       # published count, could give one household's value back. Only the
