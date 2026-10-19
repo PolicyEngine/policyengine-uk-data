@@ -21,6 +21,20 @@
 # as duplicates (661 targets in all).
 schema_version: 1
 gaps:
+  - status: zero_signal
+    reason: >-
+      DIAGNOSTIC ONLY, on the batch-3 production-setting attribution branches
+      (uk-data #618, #619), never for release as written. In release builds
+      (TESTING unset) of the batch-3 release 21d5dbf9, these three UC payment
+      bands have no signal, so #595's gate stops the build (runs 39180561028 and
+      39180562951). Listed here only so the 512-epoch fit can be measured; the
+      release itself needs its own fix.
+    issue: https://github.com/PolicyEngine/policyengine-uk-data/pull/608
+    builds: [release]
+    targets:
+      - dwp/uc_payment_dist/SINGLE_annual_payment_25_200_to_26_400
+      - dwp/uc_payment_dist/SINGLE_annual_payment_27_600_to_28_800
+      - dwp/uc_payment_dist/COUPLE_WITH_CHILDREN_annual_payment_27_600_to_28_800
   - status: no_value_for_year
     reason: >-
       Dated 2026 only. The calibration year is 2025, and _resolve_value does
