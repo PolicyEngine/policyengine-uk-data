@@ -388,7 +388,7 @@ IMPUTATIONS = INCOME_COMPONENTS + ["gift_aid", "charitable_investment_gifts"]
 DRAW_QUANTILE_GRID = (np.arange(1_000) + 0.5) / 1_000
 # Seed for the rank tie-breaks (and for the random quantiles of a draw made
 # without ranks).
-DRAW_SEED = 0
+DRAW_SEED = 1  # BRANCH PLACEBO: only the rank tie-break seed changes
 
 
 def draw_quantile_column(variable: str) -> str:
