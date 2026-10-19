@@ -170,7 +170,11 @@ def test_policybench_transfer_calibration_improves_loss(tmp_path: Path):
 def test_policybench_transfer_calibration_uses_iterative_solver(monkeypatch):
     calls = {}
 
-    def fake_create_target_matrix(dataset, time_period, reform=None):
+    def fake_create_target_matrix(
+        dataset, time_period, reform=None, require_coverage=True
+    ):
+        # The transfer dataset is not the Enhanced FRS, so it is not gated.
+        assert require_coverage is False
         return pd.DataFrame(
             [[1.0, 0.0], [0.0, 1.0]],
         ), pd.Series([1.0, 2.0])

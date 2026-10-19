@@ -1,0 +1,1 @@
+Read the Scottish council tax band targets from the committed September 2025 chargeable-dwellings workbook, verified by its SHA-256, instead of downloading it and substituting a fixed distribution when gov.scot blocked the download (#596).
