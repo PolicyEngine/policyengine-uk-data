@@ -1,1 +1,0 @@
-Compare each pull request build's national aggregates (receipts, spending, caseloads, poverty, deciles and the standard reform costings) with its base build's, measured with the locked model by policyengine-uk's aggregate-impact tool, and report them in the pull request comment.

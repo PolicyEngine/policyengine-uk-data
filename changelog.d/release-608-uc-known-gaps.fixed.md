@@ -1,1 +1,0 @@
-Allow release builds to pass the coverage gate when UC payment bands starting at £24,000 have no pre-calibration signal, across all four family types. Name all 24 workbook bands, including the three existing allowances, because the empty bands vary between builds (#598); bands retaining signal only warn as stale. Testing builds keep their existing UC-band pattern.

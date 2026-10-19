@@ -1,3 +1,39 @@
+## [1.59.0] - 2026-10-19
+
+### Added
+
+- Compare each pull request build's national aggregates (receipts, spending, caseloads, poverty, deciles and the standard reform costings) with its base build's, measured with the locked model by policyengine-uk's aggregate-impact tool, and report them in the pull request comment.
+- Measure each pull request build's HBAI income distribution (medians, means, Gini and relative low income by group against DWP's HBAI FYE 2025 estimates and intervals) and single-age population (against the ONS 2024-based projection), and report them against the base build in the pull request comment. They flag but do not fail yet.
+- Build each pull request's base the same way as its head, with the head's lockfile, and fail when the share of national or local targets within 10% falls by more than 2 percentage points over the targets both builds have (`targets/fit_policy.yaml`). National targets in a worse error band on the head are flagged in a pull request comment. The raw calibration logs stay on the runner; only each target's error band (within 10%, 10-25%, 25-50%, 50-100%, over 100%) is uploaded, with no estimate or error (`python -m policyengine_uk_data.utils.fit_report summarise` and `compare`).
+
+### Changed
+
+- Build the OBR targets only from the committed EFO workbooks named, with their SHA-256 and title, in a vintage manifest (`targets/source_manifests/`). Read each table's financial years from its header row rather than fixed column letters, and fail the build when a manifest target or year is missing instead of logging and dropping it. Add `python -m policyengine_uk_data.targets.obr_sources ingest` for adopting a new EFO vintage, which prints every target's change; its `--dry-run` reports, and exits non-zero on, an ingested vintage, an interrupted ingest's leftovers or a download page off obr.uk, which the real ingest refuses.
+- Fail the calibration build when a national target is dropped (its name already taken, no value for the year, no column, an error), has a non-finite value, or enters with no household contributing, unless `targets/known_gaps.yaml` lists it with a reason and an issue, for every build or only for testing or release builds. Add `python -m policyengine_uk_data.targets.coverage` to report every target's status on a dataset.
+
+### Fixed
+
+- Save and return the calibrated weights from the final optimiser step. Weights were saved only every tenth epoch, so a 512-epoch build shipped the state after epoch 510 of 0–511 and dropped the last update (#456).
+- Code FRS dependants in unwaged government training as in approved training, from the TRAINEE flag on child-table records. The build read `train`, which is the question name of `TRAIN2` and not a column, so nobody was in approved training. In FRS 2024-25 that left all 20 dependants aged 16 to 19 outside full-time education (33.0k grossed, every one a trainee) failing the education-or-training condition of the UC, Pension Credit, Child Benefit and Child Tax Credit qualifying-young-person tests.
+- Stop calibrating OBR total NICs (Table 3.8, £200bn in 2025-26) on `ni_employee`, which the Class 1 employee NICs target (£50bn) also used; the two targets on one matrix column could not both be met. The Table 3.4 class targets (employee, employer, self-employed) already cover every NIC class the data populates. Tests now pin the variable of each OBR receipts target and check that no two calibration targets sharing a plain-variable column disagree on a year's value.
+- Read the Scottish council tax band targets from the committed September 2025 chargeable-dwellings workbook, verified by its SHA-256, instead of downloading it and substituting a fixed distribution when gov.scot blocked the download (#596).
+- Map the HMRC Survey of Personal Incomes 2023-24 outturn to PolicyEngine year 2023, the tax year it describes, instead of 2024. Return each SPI income band as one target that holds both the base year and the projected years, so calibration uses the projected values rather than the base-year outturn carried forward. Regenerate the SPI projections from the corrected base year with the current uprating factors. Defer the CGT year mapping and aggregate/band feasibility to a follow-up on top of #571.
+- Pull request and push builds no longer upload the raw constituency and local authority calibration logs as Actions artifacts, which are public on this repository; the logs stay on the runner.
+- Matched national and regional ONS age targets to the FRS top code with open-ended 80+ bands, including the projection's oldest age groups.
+- - Calibrate capital gains to HMRC's 2024-25 outturn for individuals (Capital Gains Tax statistics, 2026 release: 548,000 taxpayers with £119.3bn of gains above the annual exempt amount) and start the calibration on it. The 1.58.0 build targeted the 2023-24 all-taxpayer headline (£65.9bn, including trusts) and ended 19% under even that, with £53bn of gains above the exempt amount and a further -£15bn of losses on 1.4m people. Its calibration started 17 times over on CGT taxpayers, because the has-gains copy of each zero-weight SPI household received a full prior weight. Capital gains are now the last imputation, so a has-gains copy matches its original in everything but the gain. Each household splits its calibration prior into complementary original and twin parts using the Advani-Summers propensity for its income band before rejecting small draws, zero-weight households included; both parts are carried through geography cloning and uprating into calibration; draws at or under the exempt amount, including losses, carry no gains; donors cover only the size bands from £500,000 up; and the calibration scales its starting weights so every HMRC size band's taxpayer count begins on target. The aggregate targets are now the sums of the size-band targets.
+- Allow release builds to pass the coverage gate when UC payment bands starting at £24,000 have no pre-calibration signal, across all four family types. Name all 24 workbook bands, including the three existing allowances, because the empty bands vary between builds (#598); bands retaining signal only warn as stale. Testing builds keep their existing UC-band pattern.
+- Align local Universal Credit targets by area code, preserve constituencies' 2024 boundaries, and use each matched constituency's country for its children split.
+
+  Restore the correct 2024 code order for the mapped income, age and housing targets of all 57 Scottish constituencies. This is a pure reorder; Scotland's totals are unchanged. Target moves from the previous positional assignment are:
+
+  | Target | Rows moving >5% | Rows moving >25% | Maximum move |
+  |---|---:|---:|---:|
+  | Age population | 44 | 11 | 269.7% |
+  | Housing anchor | 44 | 11 | 269.7% |
+  | Employment income amount | 53 | 26 | 245% |
+  | Self-employment income amount | 53 | 37 | 799% |
+
+
 ## [1.58.2] - 2026-10-15
 
 ### Fixed
