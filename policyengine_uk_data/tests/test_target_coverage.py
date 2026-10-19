@@ -35,6 +35,7 @@ from policyengine_uk_data.targets.coverage import (
     parse_known_gaps,
 )
 from policyengine_uk_data.targets.schema import GeographicLevel, Target, Unit
+from policyengine_uk_data.targets.sources.dwp import _uc_payment_distribution_targets
 
 UC_BANDS = "dwp/uc_payment_dist/*"
 
@@ -60,16 +61,19 @@ def test_the_shipped_known_gaps_load_and_cite_issues():
     def named(status):
         return sum(len(g.targets) for g in gaps if g.status == status)
 
-    # The 1.58.1 inventory at 2025, in every build, with #557 (SPI bands
-    # emitted once) and #604 (80-and-over ages in place of 85-90): 15
-    # two-child-limit targets with no 2025 value, 17 without signal, and 3 ONS
-    # targets dropped under a name already taken (#605).
+    # The original inventory has 15 targets without a 2025 value, 17 without
+    # signal, and 3 duplicate ONS names. Release builds additionally name 21
+    # high UC bands for #598's varying pre-calibration states: all 24 workbook
+    # bands starting at £24,000, less the 3 already listed for both builds.
     assert [named(s) for s in ("no_value_for_year", "zero_signal", "duplicate")] == [
         15,
-        17,
+        38,
         3,
     ]
-    assert all(g.builds == set(BUILDS) for g in gaps if g.targets)
+    [release_uc] = [g for g in gaps if g.builds == {"release"}]
+    assert release_uc.status == "zero_signal"
+    assert len(release_uc.targets) == 21
+    assert all(g.builds == set(BUILDS) for g in gaps if g.targets and g != release_uc)
     # Only in testing builds, any UC payment band may lack signal (#598).
     [uc] = [g for g in gaps if g.patterns]
     assert (uc.status, uc.patterns, uc.builds) == (
@@ -82,7 +86,7 @@ def test_the_shipped_known_gaps_load_and_cite_issues():
 def test_the_shipped_gaps_excuse_any_uc_band_without_signal_in_testing_builds_only():
     gaps = load_known_gaps()
     flickers = TargetStatus(
-        "dwp/uc_payment_dist/COUPLE_WITH_CHILDREN_annual_payment_27_600_to_28_800",
+        "dwp/uc_payment_dist/COUPLE_WITH_CHILDREN_annual_payment_22_800_to_24_000",
         "zero_signal",
     )
     listed = TargetStatus(
@@ -97,6 +101,41 @@ def test_the_shipped_gaps_excuse_any_uc_band_without_signal_in_testing_builds_on
     assert coverage_problems([broken], gaps, "testing")[0] == [
         f"{flickers.name}: error (ValueError: x)"
     ]
+
+
+def test_the_shipped_release_gaps_cover_every_uc_band_starting_at_24000(monkeypatch):
+    # Read the real workbook through the source loader, including its open top
+    # band, so the release list cannot omit a band or a family type.
+    targets = _uc_payment_distribution_targets()
+    top = {t.name for t in targets if t.lower_bound >= 24_000}
+    assert len(top) == 24  # Six bands for each of the four workbook family types.
+    gaps = load_known_gaps()
+    [release_uc] = [g for g in gaps if g.builds == {"release"}]
+    existing = {n for g in gaps if g != release_uc for n in g.targets}
+    assert release_uc.targets == top - existing
+    assert release_uc.issue.endswith("/issues/598")
+    rows = [TargetStatus(name, "zero_signal") for name in sorted(top)]
+
+    # The publish workflow leaves TESTING unset. All top bands must pass then.
+    monkeypatch.delenv("TESTING", raising=False)
+    assert current_build() == "release"
+    assert coverage_problems(rows, gaps)[0] == []
+
+    # The new named entry does not apply to testing; its original pattern does.
+    assert coverage_problems(rows, [release_uc], "testing") == (
+        [f"{row.name}: zero_signal" for row in rows],
+        [],
+    )
+    assert coverage_problems(rows, gaps, "testing")[0] == []
+
+    # Below the cutoff the release gate stays strict for every family type.
+    lower = [
+        TargetStatus(t.name, "zero_signal") for t in targets if t.lower_bound < 24_000
+    ]
+    assert coverage_problems(lower, gaps, "release")[0] == [
+        f"{row.name}: zero_signal" for row in lower
+    ]
+    assert coverage_problems(lower, gaps, "testing")[0] == []
 
 
 def _entry(**kwargs):
