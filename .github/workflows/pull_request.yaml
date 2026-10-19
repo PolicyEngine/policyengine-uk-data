@@ -127,6 +127,18 @@ jobs:
         with:
           name: distribution_report.json
           path: distribution_report.json
+      - name: Measure SPI-row aggregates (DIAGNOSTIC ONLY, #551)
+        if: ${{ !cancelled() }}
+        # Aggregates only: every figure from fewer than 10 survey households
+        # is suppressed (diag_551/measure_spi_rows.py).
+        continue-on-error: true
+        run: uv run --frozen python diag_551/measure_spi_rows.py policyengine_uk_data/storage/enhanced_frs_2024_25.h5 --out spi_rows_report.json
+      - name: Save the SPI-row aggregates
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: spi_rows_report.json
+          path: spi_rows_report.json
       - name: Check out the aggregate-impact tool
         if: ${{ !cancelled() }}
         # A missing result fails the comparison, not the test job.
