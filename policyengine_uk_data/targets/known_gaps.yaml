@@ -116,18 +116,22 @@ gaps:
       - "dwp/uc_payment_dist/*"
   - status: zero_signal
     reason: >-
-      In release builds of one commit the UC payment bands without
-      pre-calibration signal vary between two states (#598). Production-setting
-      runs 39180561028 (#618) and 39180562951 (#619, without #571) lost SINGLE
-      25,200 to 26,400 and 27,600 to 28,800, and COUPLE_WITH_CHILDREN 27,600
-      to 28,800. After those were excused, runs 39181798638 (#618) and
-      39181880705 (#620) lost COUPLE_NO_CHILDREN 26,400 to 27,600; the #619
-      rerun passed. The testing history above also found SINGLE 24,000 to
+      In release builds, the set of top UC payment bands without
+      pre-calibration signal varies between builds (#598). The controlled
+      evidence is uk-data #618's two runs, which differ only in known-gap
+      allowances. Run 39180561028 lost SINGLE 25,200 to 26,400 and 27,600 to
+      28,800, and COUPLE_WITH_CHILDREN 27,600 to 28,800, while
+      COUPLE_NO_CHILDREN 26,400 to 27,600 still had signal. Run 39181798638
+      then lost COUPLE_NO_CHILDREN 26,400 to 27,600. The other cited runs
+      (#619 without #571, #620 without CGT prior raking) used different code
+      and corroborate it.
+      The testing history above also found SINGLE 24,000 to
       25,200 exactly zero in 20 of 21 builds. Therefore name every workbook
       band whose annual lower edge is at least £24,000 for every family type,
       except the three COUPLE_NO_CHILDREN targets already listed above.
-      This superset covers either state: named entries that retain signal
-      are stale, which only warns and does not fail the coverage gate.
+      This superset covers any combination of these bands: named entries that
+      retain signal are stale, which only warns and does not fail the coverage
+      gate.
     issue: https://github.com/PolicyEngine/policyengine-uk-data/issues/598
     builds: [release]
     targets:
