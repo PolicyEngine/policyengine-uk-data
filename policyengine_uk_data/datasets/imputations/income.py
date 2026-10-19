@@ -297,6 +297,11 @@ class EarningsGroupIncomeModel:
                 inputs = pd.DataFrame(
                     {column: np.asarray(X[column])[in_group] for column in PREDICTORS}
                 )
+                # PLACEBO: only the SPI draw seed changes (microimpute 1.8.1 draws
+                # with default_rng(self.seed)); training is unchanged.
+                for sub in model.model.models.values():
+                    if hasattr(sub, "qrf"):
+                        sub.seed = 43
                 draws = model.predict(inputs)
                 output.loc[in_group, IMPUTATIONS] = draws[IMPUTATIONS].to_numpy()
         return output
