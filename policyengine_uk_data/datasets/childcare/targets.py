@@ -48,27 +48,26 @@ The prior 740 thousand was inherited from before this module existed and
 could not be traced to any release.
 
 **No extended spending target.** The prior £2.5bn was equally untraceable,
-and the only figure derivable from DfE is a full-usage construction that does
-not match what the model pays. ``extended_childcare_entitlement`` gives 3 and
-4-year-olds 30 weekly hours (1,140 a year), because extended-eligible
-children are excluded from the separate universal variable; 2-year-olds get
-15 (570). At the 2024-25 funding rates that is:
+and the only figure derivable from DfE is a full-usage construction.
+``extended_childcare_entitlement`` is the working parent hours above each
+child's universal or targeted hours (policyengine-uk#2177, following
+Childcare Act 2016 s.1(6)): at most 15 weekly hours (570 a year) for a 3 or
+4-year-old and, in 2024, 15 (570) for a 2-year-old. At the 2024-25 funding
+rates that is:
 
-    379,000 x 1,140 x 5.88 = £2.540bn
-    242,500 x   570 x 8.28 = £1.145bn
-                             £3.685bn
+    379,000 x 570 x 5.88 = £1.270bn
+    242,500 x 570 x 8.28 = £1.145bn
+                           £2.415bn
 
-against £2.778bn modelled on enhanced_frs_2024_25 — the weighted sum of
-``extended_childcare_entitlement``, a model output rather than a DfE outturn,
-and 75% of the full-usage ceiling above.
-An earlier draft of this module set £2.415bn by giving both age groups 570
-hours, which is 65% of the comparable model quantity and would have pulled
-the calibrated hours distribution against a number the model cannot reach.
-Even correctly constructed, £3.685bn assumes every registered child took
-every funded hour: it is a ceiling, not an outturn, and calibrating
-``maximum_extended_childcare_hours_usage`` to a ceiling biases hours upward.
-No published outturn exists to replace it. The constraint stays out until one
-does.
+That assumes every registered child took every funded hour: it is a ceiling,
+not an outturn, and calibrating ``maximum_extended_childcare_hours_usage`` to
+a ceiling biases hours upward. No published outturn exists to replace it. The
+constraint stays out until one does.
+
+(Before policyengine-uk#2177 the model excluded extended-eligible children
+from the universal and targeted variables and paid 3 and 4-year-olds all 30
+hours as extended, so the comparable ceiling was £3.685bn, against £2.778bn
+modelled on enhanced_frs_2024_25.)
 
 *Caseload basis is January 2025, not January 2024.* Every other target here
 is for 2024. January 2024 cannot serve this programme: the 2-year-old working
@@ -94,24 +93,31 @@ education and childcare", reporting year 2026, national figures for January
 
   registered for the universal entitlement, excluding reception   778,327
   registered for the working parent entitlement, aged 3 to 4      361,790
-  => registered for the universal entitlement only                416,537
 
   early learning for 2-year-olds, registered                      115,852
   early learning for 2-year-olds, eligible                        154,957
 
-The universal figure nets off the working parent entitlement because
-``universal_childcare_entitlement_eligible`` in policyengine-uk ends with
-``& ~has_extended_childcare`` — the schemes are modelled as mutually
-exclusive, so the comparator is children on the universal entitlement *only*,
-not the 1.13 million headline. The subtraction is only correct while that
-exclusion holds: an eligibility refactor that dropped it would make 416,537
-the wrong comparator without any target here looking wrong.
-test_universal_eligibility_still_excludes_the_working_parent_scheme in
-tests/test_childcare_targets.py asserts it against the installed
+The universal figure is the whole 778,327, children on the working parent
+entitlement included. Since policyengine-uk#2177 the universal and targeted
+entitlements survive eligibility for the working parent one, as Childcare
+Act 2016 s.1(6) and DfE's statutory guidance require (a child eligible for
+both gets 15 universal or Early Learning for 2-year-olds hours plus 15
+working parent hours), so ``is_child_receiving_universal_childcare`` counts
+every 3 and 4-year-old on the universal hours. Before that change the model
+treated the schemes as mutually exclusive and this target was 416,537, the
+universal registrations net of the 361,790 working parent ones. The
+comparator is only right while universal eligibility ignores the working
+parent entitlement:
+test_universal_hours_survive_working_parent_eligibility in
+tests/test_childcare_targets.py asserts that against the installed
 policyengine-uk, so the cross-repo dependency fails loudly instead of
-silently. The prior 490 thousand target was 1.18x that
-figure and the prior 130 thousand target was 1.12x the EL2 count, both
-unsourced.
+silently. The prior 490 thousand target was unsourced, as was the prior 130
+thousand targeted one (1.12x the EL2 count).
+
+Children on both the targeted and the working parent entitlement are funded
+for their first 15 hours under Early Learning for 2-year-olds (statutory
+guidance para A1.11), so they belong in the 115,852 and the model now counts
+them there.
 
 **No universal or targeted spending target.** DfE publishes January
 headcounts of children registered for at least some provision, and publishes
@@ -152,13 +158,13 @@ TARGETS = {
         # No extended, universal or targeted entry. Universal and targeted are
         # the caseload times a constant, which duplicates the caseload term in
         # the loss rather than adding evidence; extended's derivable figure is
-        # a full-usage ceiling the model pays 75% of. See the module docstring.
+        # a full-usage ceiling. See the module docstring.
     },
     "caseload": {
         "tfc": 1_085.02,  # HMRC 1,085,020 children, 2024-25
         "extended": 621.5,  # DfE Jan 2025: 379,000 + 242,500
         "targeted": 115.852,  # DfE Jan 2024: 115,852 registered
-        "universal": 416.537,  # DfE Jan 2024: 778,327 - 361,790
+        "universal": 778.327,  # DfE Jan 2024, working parent children included
     },
 }
 
