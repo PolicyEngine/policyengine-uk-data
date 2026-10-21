@@ -61,8 +61,11 @@ jobs:
     # Slowest observed 2026-10-06..08: 47 minutes (TESTING build plus tests).
     # Fail a hung build instead of holding a runner for the 6-hour default.
     timeout-minutes: 90
+    permissions:
+      contents: read
+      # For the Hugging Face token exchange in .github/with-hf-token.sh
+      id-token: write
     env:
-      HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
       PYTHONUNBUFFERED: "1"
       PE_UK_DATA_OA_CLONES: "1"
     steps:
@@ -82,10 +85,15 @@ jobs:
           python-version: 3.13
       - name: Sync locked environment
         run: uv sync --frozen --all-extras
+      # A read-only token from policyengine-auto's CI/CD identity on Hugging
+      # Face, which reads the gated policyengine/policyengine-uk-data-private
+      # and nothing private. Never a repo publisher here: that token could
+      # write to the data repo from a pull request. Only the download needs
+      # it: the build and tests make no Hugging Face calls.
       - name: Download data inputs
-        run: uv run --frozen make download
+        run: .github/with-hf-token.sh uv run --frozen make download
         env:
-          HUGGING_FACE_TOKEN: ${{ secrets.HUGGING_FACE_TOKEN }}
+          HF_OIDC_RESOURCE: policyengine-auto
       - name: Build datasets
         run: uv run --frozen make data
         env:
