@@ -20,6 +20,7 @@ from policyengine_uk_data.utils.hf_destinations import PRIVATE_REPO
 from policyengine_uk_data.utils.release_manifest import (
     RELEASE_MANIFEST_SCHEMA_VERSION,
     build_release_manifest,
+    serialize_release_manifest,
     validate_release_manifest,
 )
 
@@ -87,14 +88,18 @@ def _load_uploaded_manifest_after_commit(mock_api: MagicMock):
     return fake_load_release_manifest
 
 
-def _valid_release_manifest(tmp_path: Path, content: bytes = b"enhanced-frs") -> dict:
+def _valid_release_manifest(
+    tmp_path: Path,
+    content: bytes = b"enhanced-frs",
+    model_package_git_sha: str | None = "deadbeef",
+) -> dict:
     dataset_path = _write_file(tmp_path / "enhanced_frs_2023_24.h5", content)
     return build_release_manifest(
         files_with_repo_paths=[(dataset_path, "enhanced_frs_2023_24.h5")],
         version="1.40.4",
         repo_id=PRIVATE_REPO,
         model_package_version="2.74.0",
-        model_package_git_sha="deadbeef",
+        model_package_git_sha=model_package_git_sha,
         model_package_data_build_fingerprint="sha256:fingerprint",
         core_package_metadata=EXPECTED_CORE_PACKAGE,
         data_package_git_sha="cafebabe",
@@ -257,7 +262,10 @@ def test_build_release_manifest_defaults_to_current_frs_release(tmp_path):
     }
 
 
-def test_build_release_manifest_validates_against_bundle_contract(tmp_path):
+@pytest.mark.parametrize("model_git_sha", ["deadbeef", None])
+def test_build_release_manifest_validates_against_bundle_contract(
+    tmp_path, model_git_sha
+):
     policyengine_bundles = pytest.importorskip("policyengine_bundles")
     dataset_path = _write_file(
         tmp_path / "enhanced_frs_2023_24.h5",
@@ -269,7 +277,7 @@ def test_build_release_manifest_validates_against_bundle_contract(tmp_path):
         version="1.40.4",
         repo_id=PRIVATE_REPO,
         model_package_version="2.74.0",
-        model_package_git_sha="deadbeef",
+        model_package_git_sha=model_git_sha,
         model_package_data_build_fingerprint="sha256:fingerprint",
         core_package_metadata=EXPECTED_CORE_PACKAGE,
         data_package_git_sha="cafebabe",
@@ -277,6 +285,16 @@ def test_build_release_manifest_validates_against_bundle_contract(tmp_path):
     )
 
     policyengine_bundles.DataReleaseManifest.model_validate(manifest)
+
+
+def test_build_release_manifest_writes_unknown_model_git_sha_as_null(tmp_path):
+    manifest = _valid_release_manifest(tmp_path, model_package_git_sha=None)
+
+    built_with_model = manifest["build"]["built_with_model_package"]
+    assert "git_sha" in built_with_model
+    assert built_with_model["git_sha"] is None
+    serialized = json.loads(serialize_release_manifest(manifest))
+    assert serialized["build"]["built_with_model_package"]["git_sha"] is None
 
 
 @pytest.mark.parametrize(
@@ -616,7 +634,7 @@ def test_upload_files_to_hf_adds_uk_release_manifest_operations(tmp_path):
         patch(
             "policyengine_uk_data.utils.data_upload._get_model_package_build_metadata",
             return_value=MODEL_BUILD_METADATA_FIXTURE,
-        ),
+        ) as mock_model_build_metadata,
         patch(
             "policyengine_uk_data.utils.data_upload._get_data_package_git_sha",
             return_value="cafebabe",
@@ -666,6 +684,8 @@ def test_upload_files_to_hf_adds_uk_release_manifest_operations(tmp_path):
         manifest["build"]["built_with_model_package"]["core"] == EXPECTED_CORE_PACKAGE
     )
     assert mock_api.create_commit.call_args.kwargs["token"] == "token"
+    # The model git SHA is vetted against this checkout's own commit.
+    mock_model_build_metadata.assert_called_once_with(data_package_git_sha="cafebabe")
 
 
 def test_upload_files_to_hf_refreshes_same_version_unfinalized_manifest(tmp_path):
