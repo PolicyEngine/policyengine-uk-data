@@ -34,8 +34,19 @@ from policyengine_uk_data.utils.datasets import (
     fill_with_mean,
     STORAGE_FOLDER,
 )
-from policyengine_uk_data.parameters import load_take_up_rate, load_parameter
-from policyengine_uk_data.utils.takeup import assign_takeup_with_reported_anchors
+from policyengine_uk_data.parameters import (
+    load_parameter,
+    load_take_up_rate,
+    load_uc_managed_migration_claim_rates,
+)
+from policyengine_uk_data.utils.takeup import (
+    LEGACY_BENEFITS,
+    UC_MANAGED_MIGRATION_SEED,
+    UC_MANAGED_MIGRATION_YEARS,
+    assign_takeup_with_reported_anchors,
+    assign_uc_claim_at_legacy_closure,
+    reported_benunit_mask,
+)
 from policyengine_uk_data.datasets.childcare.assumptions import (
     EXTENDED_HOURS_MEAN,
     EXTENDED_HOURS_SD,
@@ -272,16 +283,6 @@ def derive_esa_support_group_proxy(
         & esa_health_condition_proxy
         & severe_health_evidence
     )
-
-
-def reported_benunit_mask(
-    person: pd.DataFrame, benunit: pd.DataFrame, person_column: str
-) -> np.ndarray:
-    """Benefit units with any member reporting a positive ``person_column``."""
-    reporter_benunits = set(
-        person.loc[person[person_column] > 0, "person_benunit_id"].values
-    )
-    return benunit["benunit_id"].isin(reporter_benunits).values
 
 
 def assign_reported_takeup(
@@ -574,6 +575,111 @@ def derive_all_claimants_over_state_pension_age(
         .reindex(np.asarray(benunit_ids), fill_value=0)
     )
     return ((counts.claimants > 0) & (counts.over == counts.claimants)).to_numpy()
+
+
+def derive_moves_to_uc_at_legacy_closure(
+    reports: dict,
+    pension_age_route,
+    mixed_age_couple,
+) -> np.ndarray:
+    """Identify the benefit units policyengine-uk moves to Universal Credit
+    when their legacy benefits close, the units that read
+    ``would_claim_uc_at_legacy_closure``.
+
+    ``reports`` maps each legacy benefit in ``LEGACY_BENEFITS`` and
+    ``pension_credit`` to whether the claimant or partner reports it; the
+    other arguments are policyengine-uk's ``meets_pension_credit_age_conditions``
+    and ``is_mixed_age_couple`` for one model year. The rule is
+    ``legacy_benefits_closed`` with every closure in force. Tax credit units
+    move unless DWP sends them to Pension Credit: those on it, and those
+    meeting its age conditions without Working Tax Credit (SI 2019/167 art.
+    3A(1); SI 2014/1230 reg 60A). Income Support, income-based JSA and
+    income-related ESA units move unless on Pension Credit or wholly over the
+    qualifying age (reg 8(2B)). Housing Benefit units move unless they meet
+    the Pension Credit age conditions (SI 2025/1148 art. 7(4)(a), reg
+    6A(4)-(5)); the specified or temporary accommodation saving has no input
+    in the data. policyengine-uk reads the flag for income-related ESA and
+    Housing Benefit units only once it ends those awards (#1914, PE-UK
+    #1910); a unit on neither until then never reads it, so drawing it is
+    harmless.
+    """
+
+    def reported(benefit):
+        return np.asarray(reports[benefit], dtype=bool)
+
+    pension_age_route = np.asarray(pension_age_route, dtype=bool)
+    on_pension_credit = reported("pension_credit")
+    on_wtc = reported("working_tax_credit")
+    pension_credit_route = on_pension_credit | (pension_age_route & ~on_wtc)
+    tax_credits = reported("child_tax_credit") | on_wtc
+    working_age_benefits = (
+        reported("income_support") | reported("jsa_income") | reported("esa_income")
+    )
+    wholly_pension_age = pension_age_route & ~np.asarray(mixed_age_couple, dtype=bool)
+    return (
+        (tax_credits & ~pension_credit_route)
+        | (working_age_benefits & ~on_pension_credit & ~wholly_pension_age)
+        | (reported("housing_benefit") & ~pension_age_route)
+    )
+
+
+def first_year_moved_to_uc(sim, benunit, year, years) -> np.ndarray:
+    """The first of ``years`` in which policyengine-uk moves each unit in
+    ``benunit`` to Universal Credit at the closure of its legacy benefits, or
+    0 if it moves in none.
+
+    ``sim`` is the policyengine-uk simulation on the survey-year (``year``)
+    data. The claimant's and partner's reports are read in the survey year;
+    the age conditions in each of ``years``. The model holds ages at their
+    survey values, so inferred dates of birth move with the model year: a
+    unit can leave the Pension Credit route in a later year, for example a
+    mixed-age couple whose older member is then born too late for the SI
+    2019/37 art. 4 saving, and move from then.
+    """
+    benunit_ids = benunit.benunit_id
+    person_benunit = sim.calculate("person_benunit_id", year).values
+    owners = np.asarray(
+        sim.calculate(
+            claimant_or_partner_variable(sim.tax_benefit_system.variables), year
+        ).values,
+        dtype=bool,
+    )
+
+    def owners_report(variable):
+        reported = np.asarray(sim.calculate(variable, year).values) > 0
+        return (
+            pd.Series(reported & owners, index=person_benunit)
+            .groupby(level=0)
+            .any()
+            .reindex(benunit_ids, fill_value=False)
+            .to_numpy()
+        )
+
+    reports = {
+        benefit: owners_report(f"{benefit}_reported")
+        for benefit in (*LEGACY_BENEFITS, "pension_credit")
+    }
+    sim_benunit_ids = sim.calculate("benunit_id", year).values
+    first_year = np.zeros(len(benunit_ids), dtype=int)
+    for model_year in sorted(years, reverse=True):
+
+        def benunit_values(variable):
+            return (
+                pd.Series(
+                    np.asarray(sim.calculate(variable, model_year).values, dtype=bool),
+                    index=sim_benunit_ids,
+                )
+                .reindex(benunit_ids, fill_value=False)
+                .to_numpy()
+            )
+
+        moves = derive_moves_to_uc_at_legacy_closure(
+            reports,
+            pension_age_route=benunit_values("meets_pension_credit_age_conditions"),
+            mixed_age_couple=benunit_values("is_mixed_age_couple"),
+        )
+        first_year = np.where(moves, model_year, first_year)
+    return first_year
 
 
 def derive_is_claimant_or_partner_from_frs_microdata(
@@ -1780,6 +1886,27 @@ def create_frs(
         ).values,
         is_over_state_pension_age=sim.calculate("is_SP_age", year).values,
         benunit_ids=pe_benunit.benunit_id,
+    )
+    # Whether a legacy-benefit family claims Universal Credit once its legacy
+    # benefits close, at DWP's Move to Universal Credit claim rates. Its own
+    # generator keeps every other draw on the seed=100 sequence. Checked
+    # because the dataset loader drops columns the model does not define.
+    require_variable(
+        "would_claim_uc_at_legacy_closure",
+        "Move to Universal Credit claim flag",
+    )
+    # Only units the model moves to Universal Credit read the flag, so only
+    # they are drawn and counted against DWP's rates, by the year they move.
+    first_move_year = first_year_moved_to_uc(
+        sim, pe_benunit, year, UC_MANAGED_MIGRATION_YEARS
+    )
+    pe_benunit["would_claim_uc_at_legacy_closure"] = assign_uc_claim_at_legacy_closure(
+        pe_person,
+        pe_benunit,
+        load_uc_managed_migration_claim_rates(),
+        seed=UC_MANAGED_MIGRATION_SEED,
+        would_claim_uc=pe_benunit["would_claim_uc"].values,
+        first_move_year=first_move_year,
     )
     pe_benunit["would_claim_tfc"] = generator.random(len(pe_benunit)) < tfc_rate
 
