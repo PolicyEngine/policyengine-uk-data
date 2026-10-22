@@ -17,6 +17,8 @@ from policyengine_uk_data.calibration.clone_and_assign import (
     _household_country_codes,
     _remap_ids,
 )
+from policyengine_uk_data.utils.stack import stack_datasets
+from policyengine_uk_data.utils.subsample import subsample_dataset
 
 
 @pytest.fixture(scope="module")
@@ -116,6 +118,74 @@ def toy_dataset() -> UKSingleYearDataset:
 
 
 class TestCloneAndAssign:
+    @pytest.mark.parametrize("existing_source", [False, True])
+    def test_source_household_id_survives_cloning(
+        self, toy_dataset, small_crosswalk, existing_source
+    ):
+        source_ids = toy_dataset.household["household_id"].to_numpy().copy()
+        if existing_source:
+            source_ids = np.tile(source_ids[:5], 2)
+            toy_dataset.household["source_household_id"] = source_ids
+        result = clone_and_assign(
+            toy_dataset, n_clones=3, crosswalk_path=str(small_crosswalk)
+        )
+        np.testing.assert_array_equal(
+            result.household["source_household_id"], np.tile(source_ids, 3)
+        )
+
+    @pytest.mark.parametrize(
+        "source_on_left,source_on_right",
+        [(False, False), (True, False), (False, True), (True, True)],
+    )
+    def test_stacking_preserves_existing_sources(
+        self, toy_dataset, source_on_left, source_on_right
+    ):
+        left, right = toy_dataset.copy(), toy_dataset.copy()
+        original_ids = toy_dataset.household["household_id"].to_numpy()
+        expected = []
+        for dataset, has_source in ((left, source_on_left), (right, source_on_right)):
+            source_ids = original_ids * 100 if has_source else original_ids
+            if has_source:
+                dataset.household["source_household_id"] = source_ids
+            expected.extend(source_ids)
+        result = stack_datasets(left, right)
+        result.validate()
+        np.testing.assert_array_equal(result.household["source_household_id"], expected)
+
+    def test_stacked_copies_trace_to_survey_households_after_save(
+        self, toy_dataset, small_crosswalk, tmp_path
+    ):
+        """SPI subsampling, CG doubling and OA cloning retain one source ID."""
+        toy_dataset.household["household_is_spi_synthetic"] = False
+        toy_dataset.household["household_is_capital_gains_clone"] = False
+        spi_copy = subsample_dataset(toy_dataset, 4)
+        spi_copy.household["household_is_spi_synthetic"] = True
+        source_ids = np.concatenate(
+            [toy_dataset.household["household_id"], spi_copy.household["household_id"]]
+        )
+        stacked = stack_datasets(toy_dataset, spi_copy)
+        cg_copy = stacked.copy()
+        cg_copy.household["household_is_capital_gains_clone"] = True
+        stacked = stack_datasets(stacked, cg_copy)
+        result = clone_and_assign(
+            stacked, n_clones=3, crosswalk_path=str(small_crosswalk)
+        )
+        path = tmp_path / "synthetic_enhanced_frs.h5"
+        result.save(path)
+        household = UKSingleYearDataset(path).household
+        original = ~(
+            household["household_is_spi_synthetic"]
+            | household["household_is_capital_gains_clone"]
+        ) & (household["clone_index"] == 0)
+        original_ids = household.loc[original, "household_id"]
+
+        assert household["household_id"].is_unique
+        assert household["source_household_id"].isin(original_ids).all()
+        assert household["source_household_id"].nunique() == len(toy_dataset.household)
+        np.testing.assert_array_equal(
+            household["source_household_id"], np.tile(source_ids, 2 * 3)
+        )
+
     def test_output_dimensions(self, toy_dataset, small_crosswalk):
         n_clones = 3
         result = clone_and_assign(
@@ -144,6 +214,25 @@ class TestCloneAndAssign:
 
         cloned_total = result.household["household_weight"].sum()
         np.testing.assert_allclose(cloned_total, original_total, rtol=1e-10)
+
+    def test_calibration_prior_preservation(self, toy_dataset, small_crosswalk):
+        """OA copies must share each source household's carried prior."""
+        original_prior = np.linspace(25.0, 250.0, len(toy_dataset.household))
+        toy_dataset.household["household_calibration_prior"] = original_prior
+
+        result = clone_and_assign(
+            toy_dataset,
+            n_clones=5,
+            crosswalk_path=str(small_crosswalk),
+        )
+
+        by_source = result.household.groupby("source_household_id")[
+            "household_calibration_prior"
+        ].sum()
+        np.testing.assert_allclose(by_source, original_prior)
+        np.testing.assert_array_equal(
+            toy_dataset.household.household_calibration_prior, original_prior
+        )
 
     def test_unique_household_ids(self, toy_dataset, small_crosswalk):
         result = clone_and_assign(
