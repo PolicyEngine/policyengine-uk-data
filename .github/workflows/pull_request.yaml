@@ -384,6 +384,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
         run: |
+          set -o pipefail
           marker='<!-- policyengine-uk-data-fit-comparison -->'
           if [ ! -s fit.md ]; then
             # The job failed before the comparison could write a comment.
@@ -394,14 +395,32 @@ jobs:
               echo "The comparison did not run. See the [workflow run]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
             } > fit.md
           fi
-          existing=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
-            --jq ".[] | select(.user.login == \"github-actions[bot]\") | select(.body | startswith(\"$marker\")) | .id" \
-            | tail -n 1)
-          if [ -n "$existing" ]; then
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -F body=@fit.md > /dev/null
-          else
-            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@fit.md > /dev/null
-          fi
+          # GitHub's API sometimes answers with an error status and an empty
+          # body, which the GitHub CLI reports only as "unexpected end of JSON
+          # input", so a failed attempt is retried. Each attempt searches for
+          # the comment first, so a retry after a write that GitHub applied but
+          # reported as failed updates that comment instead of posting another.
+          post_or_update_comment() {
+            existing=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" \
+              --jq ".[] | select(.user.login == \"github-actions[bot]\") | select(.body | startswith(\"$marker\")) | .id" \
+              | tail -n 1) || return 1
+            if [ -n "$existing" ]; then
+              gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" -F body=@fit.md > /dev/null
+            else
+              gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@fit.md > /dev/null
+            fi
+          }
+          for attempt in 1 2 3; do
+            if post_or_update_comment; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Attempt $attempt to post or update the comment failed; retrying in $((attempt * 20)) seconds."
+              sleep $((attempt * 20))
+            fi
+          done
+          echo "::error::Could not post or update the pull request comment after 3 attempts."
+          exit 1
       - name: Fail on a fit regression
         if: steps.compare.outputs.status != '0'
         run: |
