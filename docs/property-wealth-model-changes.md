@@ -293,9 +293,7 @@ sale-expense list does not override that omission.
 Retain the current additional residential purchase formula:
 
 ```python
-other_residential_property_value = household(
-    "other_residential_property_value", period
-)
+other_residential_property_value = household("other_residential_property_value", period)
 return other_residential_property_value * property_purchased
 ```
 
