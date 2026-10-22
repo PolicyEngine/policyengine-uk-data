@@ -422,6 +422,10 @@ class FakeMicrosimulation:
             return pd.Series(self.dataset.person.age.values >= 18)
         if variable == "is_SP_age":
             return pd.Series(self.dataset.person.age.values >= 66)
+        if variable == "benunit_id":
+            return pd.Series(self.dataset.benunit.benunit_id.values)
+        if variable in ("meets_pension_credit_age_conditions", "is_mixed_age_couple"):
+            return pd.Series(np.zeros(len(self.dataset.benunit), dtype=bool))
         if variable in (
             "childcare_grant",
             "parents_learning_allowance",

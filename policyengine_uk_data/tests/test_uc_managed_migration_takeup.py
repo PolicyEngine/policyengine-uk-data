@@ -214,11 +214,19 @@ def test_built_dataset_anchors(fixture, request):
 
 def test_built_frs_cohort_shares(frs):
     # The FRS build, before SPI rows and geography clones, has one row per
-    # surveyed benefit unit, so its draws are independent. Among units not
-    # claiming anyway, the flag's share is the conditional rate.
+    # surveyed benefit unit, so its draws are independent. Among units the
+    # model moves to Universal Credit and not claiming anyway, the flag's
+    # share is the conditional rate.
+    from policyengine_uk import Microsimulation
+
+    from policyengine_uk_data.datasets.frs import moves_to_uc_at_legacy_closure
+
     flags, combination, on_uc = _built_flags(frs)
     anyway = frs.benunit["would_claim_uc"].values.astype(bool)
-    drawn = ~on_uc & (combination != "")
+    moves = moves_to_uc_at_legacy_closure(
+        Microsimulation(dataset=frs), frs.person, frs.benunit, frs.time_period
+    )
+    drawn = ~on_uc & (combination != "") & moves
     for c in set(combination[drawn]):
         cohort = drawn & (combination == c)
         p = anyway[cohort].mean()
@@ -330,3 +338,78 @@ def test_spi_rows_redraw_the_closure_flag_from_their_own_receipt(monkeypatch):
     # FRS rows keep their flag; SPI rows report no legacy benefit, so True.
     assert not flags[:n].any()
     assert flags[n:].all()
+
+
+def test_units_not_moved_are_neither_drawn_nor_counted():
+    """Only units the model moves to Universal Credit set and take the
+    conditional rate. Pension Credit route families reporting the same
+    benefit, none of whom would claim anyway, stay True (the default) and do
+    not pull the moved units' claim share above DWP's rate."""
+    n = 20_000
+    units = [[{"child_tax_credit_reported": 100.0}] for _ in range(2 * n)]
+    person, benunit = frames(units)
+    moves = (benunit["benunit_id"] < 10 + n).values
+    anyway = moves & (np.random.default_rng(5).random(2 * n) < 0.3)
+    flags = assign_uc_claim_at_legacy_closure(
+        person,
+        benunit,
+        RATES,
+        seed=UC_MANAGED_MIGRATION_SEED,
+        would_claim_uc=anyway,
+        moves_to_uc=moves,
+    )
+    assert flags[~moves].all()
+    rate = RATES["child_tax_credit"]
+    claims = (anyway | flags)[moves]
+    assert abs(claims.mean() - rate) <= 4 * np.sqrt(rate * (1 - rate) / n)
+
+
+@pytest.mark.parametrize("seed", range(50))
+def test_universal_credit_reporters_do_not_set_the_rate(seed):
+    """A unit already reporting Universal Credit is True and outside ``p``,
+    so the other units in its combination draw at DWP's rate itself."""
+    units = [[{"child_tax_credit_reported": 100.0}] for _ in range(2)] + [
+        [{"child_tax_credit_reported": 100.0, "universal_credit_reported": 100.0}]
+    ]
+    person, benunit = frames(units)
+    on_uc = (benunit["benunit_id"] == 12).values
+    flags = assign_uc_claim_at_legacy_closure(
+        person, benunit, RATES, seed=seed, would_claim_uc=on_uc
+    )
+    draws = np.random.default_rng(seed).random(len(benunit))
+    assert flags[on_uc].all()
+    rate = RATES["child_tax_credit"]
+    assert (flags[~on_uc] == (draws[~on_uc] < rate)).all()
+
+
+def test_moves_to_uc_follows_the_closure_rule():
+    """Who policyengine-uk moves to Universal Credit, case by case."""
+    from policyengine_uk_data.datasets.frs import (
+        derive_moves_to_uc_at_legacy_closure,
+    )
+
+    cases = [
+        # (reported benefits, pension-age route, mixed-age couple,
+        #  member over State Pension age, moved)
+        ({"child_tax_credit"}, False, False, False, True),
+        ({"child_tax_credit"}, True, False, True, False),
+        ({"child_tax_credit", "pension_credit"}, False, False, False, False),
+        ({"working_tax_credit"}, True, False, True, True),
+        ({"child_tax_credit"}, True, True, True, False),
+        ({"income_support"}, True, True, True, True),
+        ({"income_support"}, True, False, True, False),
+        ({"jsa_income", "pension_credit"}, True, True, True, False),
+        ({"esa_income"}, False, False, False, True),
+        ({"housing_benefit"}, False, False, False, True),
+        ({"housing_benefit"}, False, False, True, False),
+        ({"housing_benefit"}, True, True, True, False),
+        (set(), False, False, False, False),
+    ]
+    benefits = (*LEGACY_BENEFITS, "pension_credit")
+    moved = derive_moves_to_uc_at_legacy_closure(
+        reports={b: np.array([b in case[0] for case in cases]) for b in benefits},
+        pension_age_route=np.array([case[1] for case in cases]),
+        mixed_age_couple=np.array([case[2] for case in cases]),
+        any_over_state_pension_age=np.array([case[3] for case in cases]),
+    )
+    assert moved.tolist() == [case[4] for case in cases]

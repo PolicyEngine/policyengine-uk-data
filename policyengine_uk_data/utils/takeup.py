@@ -137,6 +137,7 @@ def assign_uc_claim_at_legacy_closure(
     rates: dict[str, float],
     seed: int,
     would_claim_uc: Optional[np.ndarray] = None,
+    moves_to_uc: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """Draw ``would_claim_uc_at_legacy_closure`` for each benefit unit.
 
@@ -150,8 +151,14 @@ def assign_uc_claim_at_legacy_closure(
     ``(r - p) / (1 - p)``, clipped to [0, 1], where ``p`` is the share of the
     combination's such units with ``would_claim_uc`` True (unweighted: the
     draw precedes calibration). Without ``would_claim_uc``, ``p`` is 0.
-    Units reporting Universal Credit, units already claiming, and units
-    reporting no legacy benefit are True, the model's default.
+    Only units that policyengine-uk moves to Universal Credit when their
+    legacy benefits close (``moves_to_uc``) are drawn and counted in ``p``:
+    a unit DWP sends to Pension Credit instead never reads the flag, and
+    counting it would move the share among the units that do away from ``r``.
+    Units reporting Universal Credit, units already claiming, units reporting
+    no legacy benefit and units not moved are True, the model's default.
+    The share matches ``r`` in expectation, not exactly: the draw is random,
+    and ``(r - p) / (1 - p)`` is clipped at 0 when ``p`` exceeds ``r``.
 
     Args:
         person: Person table with ``person_benunit_id`` and the
@@ -162,6 +169,10 @@ def assign_uc_claim_at_legacy_closure(
         seed: Seed for this draw's own generator.
         would_claim_uc: The units' ``would_claim_uc``, aligned with
             ``benunit``.
+        moves_to_uc: Whether policyengine-uk moves each unit to Universal
+            Credit when its legacy benefits close, aligned with ``benunit``
+            (``derive_moves_to_uc_at_legacy_closure``). Without it every
+            unit reporting a legacy benefit is drawn.
 
     Returns:
         Boolean array aligned with ``benunit``.
@@ -174,6 +185,8 @@ def assign_uc_claim_at_legacy_closure(
         else np.asarray(would_claim_uc, dtype=bool)
     )
     drawn = ~on_uc & (combination != "")
+    if moves_to_uc is not None:
+        drawn &= np.asarray(moves_to_uc, dtype=bool)
     probability = np.zeros(len(benunit))
     for c in set(combination[drawn]):
         cohort = drawn & (combination == c)
