@@ -101,6 +101,9 @@ LEGACY_BENEFITS = (
 # the draws behind every other take-up flag are unchanged.
 UC_MANAGED_MIGRATION_SEED = 492
 UC_MANAGED_MIGRATION_SPI_SEED = 493
+# Model years whose movers the draw targets: from 2025-26, when tax credits
+# closed, to 2035-36.
+UC_MANAGED_MIGRATION_YEARS = tuple(range(2025, 2036))
 
 
 def reported_benunit_mask(
@@ -137,7 +140,7 @@ def assign_uc_claim_at_legacy_closure(
     rates: dict[str, float],
     seed: int,
     would_claim_uc: Optional[np.ndarray] = None,
-    moves_to_uc: Optional[np.ndarray] = None,
+    first_move_year: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """Draw ``would_claim_uc_at_legacy_closure`` for each benefit unit.
 
@@ -152,11 +155,17 @@ def assign_uc_claim_at_legacy_closure(
     combination's such units with ``would_claim_uc`` True (unweighted: the
     draw precedes calibration). Without ``would_claim_uc``, ``p`` is 0.
     Only units that policyengine-uk moves to Universal Credit when their
-    legacy benefits close (``moves_to_uc``) are drawn and counted in ``p``:
-    a unit DWP sends to Pension Credit instead never reads the flag, and
-    counting it would move the share among the units that do away from ``r``.
+    legacy benefits close are drawn and counted in ``p``: a unit DWP sends to
+    Pension Credit instead never reads the flag, and counting it would move
+    the share among the units that do away from ``r``. ``first_move_year``
+    is the first model year in which the model moves each unit (0 for never;
+    ``first_year_moved_to_uc``). A unit can first move after others in its
+    combination, since the model recomputes the Pension Credit route each
+    year from ages held at their survey values. So ``p`` and the draw are
+    taken within each combination and first year: each such group claims at
+    ``r``, and so do each year's movers, the groups that have moved by then.
     Units reporting Universal Credit, units already claiming, units reporting
-    no legacy benefit and units not moved are True, the model's default.
+    no legacy benefit and units never moved are True, the model's default.
     The share matches ``r`` in expectation, not exactly: the draw is random,
     and ``(r - p) / (1 - p)`` is clipped at 0 when ``p`` exceeds ``r``.
 
@@ -169,10 +178,10 @@ def assign_uc_claim_at_legacy_closure(
         seed: Seed for this draw's own generator.
         would_claim_uc: The units' ``would_claim_uc``, aligned with
             ``benunit``.
-        moves_to_uc: Whether policyengine-uk moves each unit to Universal
-            Credit when its legacy benefits close, aligned with ``benunit``
-            (``derive_moves_to_uc_at_legacy_closure``). Without it every
-            unit reporting a legacy benefit is drawn.
+        first_move_year: The first model year in which policyengine-uk
+            moves each unit to Universal Credit, 0 for never, aligned with
+            ``benunit``. Without it every unit reporting a legacy benefit is
+            drawn, as one group per combination.
 
     Returns:
         Boolean array aligned with ``benunit``.
@@ -184,12 +193,15 @@ def assign_uc_claim_at_legacy_closure(
         if would_claim_uc is None
         else np.asarray(would_claim_uc, dtype=bool)
     )
-    drawn = ~on_uc & (combination != "")
-    if moves_to_uc is not None:
-        drawn &= np.asarray(moves_to_uc, dtype=bool)
+    first_year = (
+        np.ones(len(benunit), dtype=int)
+        if first_move_year is None
+        else np.asarray(first_move_year, dtype=int)
+    )
+    drawn = ~on_uc & (combination != "") & (first_year > 0)
     probability = np.zeros(len(benunit))
-    for c in set(combination[drawn]):
-        cohort = drawn & (combination == c)
+    for c, year in set(zip(combination[drawn], first_year[drawn])):
+        cohort = drawn & (combination == c) & (first_year == year)
         rate = rates.get(c, rates["all"])
         p = claims_anyway[cohort].mean()
         probability[cohort] = 0.0 if p >= 1 else np.clip((rate - p) / (1 - p), 0, 1)

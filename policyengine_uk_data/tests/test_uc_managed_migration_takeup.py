@@ -37,6 +37,7 @@ from policyengine_uk_data.parameters import (
 from policyengine_uk_data.utils.takeup import (
     LEGACY_BENEFITS,
     UC_MANAGED_MIGRATION_SEED,
+    UC_MANAGED_MIGRATION_YEARS,
     assign_uc_claim_at_legacy_closure,
     legacy_benefit_combination,
 )
@@ -215,20 +216,23 @@ def test_built_dataset_anchors(fixture, request):
 def test_built_frs_cohort_shares(frs):
     # The FRS build, before SPI rows and geography clones, has one row per
     # surveyed benefit unit, so its draws are independent. Among units the
-    # model moves to Universal Credit and not claiming anyway, the flag's
-    # share is the conditional rate.
+    # model moves to Universal Credit, by first year moved, and not claiming
+    # anyway, the flag's share is the conditional rate.
     from policyengine_uk import Microsimulation
 
-    from policyengine_uk_data.datasets.frs import moves_to_uc_at_legacy_closure
+    from policyengine_uk_data.datasets.frs import first_year_moved_to_uc
 
     flags, combination, on_uc = _built_flags(frs)
     anyway = frs.benunit["would_claim_uc"].values.astype(bool)
-    moves = moves_to_uc_at_legacy_closure(
-        Microsimulation(dataset=frs), frs.person, frs.benunit, frs.time_period
+    first_year = first_year_moved_to_uc(
+        Microsimulation(dataset=frs),
+        frs.benunit,
+        frs.time_period,
+        UC_MANAGED_MIGRATION_YEARS,
     )
-    drawn = ~on_uc & (combination != "") & moves
-    for c in set(combination[drawn]):
-        cohort = drawn & (combination == c)
+    drawn = ~on_uc & (combination != "") & (first_year > 0)
+    for c, year in set(zip(combination[drawn], first_year[drawn])):
+        cohort = drawn & (combination == c) & (first_year == year)
         p = anyway[cohort].mean()
         rate = RATES.get(c, RATES["all"])
         q = 0.0 if p >= 1 else min(max((rate - p) / (1 - p), 0.0), 1.0)
@@ -356,7 +360,7 @@ def test_units_not_moved_are_neither_drawn_nor_counted():
         RATES,
         seed=UC_MANAGED_MIGRATION_SEED,
         would_claim_uc=anyway,
-        moves_to_uc=moves,
+        first_move_year=np.where(moves, 2025, 0),
     )
     assert flags[~moves].all()
     rate = RATES["child_tax_credit"]
@@ -389,27 +393,86 @@ def test_moves_to_uc_follows_the_closure_rule():
     )
 
     cases = [
-        # (reported benefits, pension-age route, mixed-age couple,
-        #  member over State Pension age, moved)
-        ({"child_tax_credit"}, False, False, False, True),
-        ({"child_tax_credit"}, True, False, True, False),
-        ({"child_tax_credit", "pension_credit"}, False, False, False, False),
-        ({"working_tax_credit"}, True, False, True, True),
-        ({"child_tax_credit"}, True, True, True, False),
-        ({"income_support"}, True, True, True, True),
-        ({"income_support"}, True, False, True, False),
-        ({"jsa_income", "pension_credit"}, True, True, True, False),
-        ({"esa_income"}, False, False, False, True),
-        ({"housing_benefit"}, False, False, False, True),
-        ({"housing_benefit"}, False, False, True, False),
-        ({"housing_benefit"}, True, True, True, False),
-        (set(), False, False, False, False),
+        # (claimant or partner reports, Pension Credit age conditions,
+        #  mixed-age couple, moved)
+        ({"child_tax_credit"}, False, False, True),
+        ({"child_tax_credit"}, True, False, False),
+        ({"child_tax_credit", "pension_credit"}, False, False, False),
+        ({"working_tax_credit"}, True, False, True),
+        ({"child_tax_credit"}, True, True, False),
+        ({"income_support"}, True, True, True),
+        ({"income_support"}, True, False, False),
+        ({"jsa_income", "pension_credit"}, True, True, False),
+        ({"esa_income"}, False, False, True),
+        ({"housing_benefit"}, False, False, True),
+        # A mixed-age couple without the 2019 saving loses its award.
+        ({"housing_benefit"}, False, True, True),
+        ({"housing_benefit"}, True, True, False),
+        ({"housing_benefit"}, True, False, False),
+        (set(), False, False, False),
     ]
     benefits = (*LEGACY_BENEFITS, "pension_credit")
     moved = derive_moves_to_uc_at_legacy_closure(
         reports={b: np.array([b in case[0] for case in cases]) for b in benefits},
         pension_age_route=np.array([case[1] for case in cases]),
         mixed_age_couple=np.array([case[2] for case in cases]),
-        any_over_state_pension_age=np.array([case[3] for case in cases]),
     )
-    assert moved.tolist() == [case[4] for case in cases]
+    assert moved.tolist() == [case[3] for case in cases]
+
+
+def test_each_first_year_group_claims_at_the_rate():
+    """Units first moving in a later year are drawn on their own, so the
+    movers of every year claim at DWP's rate: here half of the 2025 movers
+    claim anyway and none of the 2027 movers do."""
+    n = 20_000
+    units = [[{"child_tax_credit_reported": 100.0}] for _ in range(2 * n)]
+    person, benunit = frames(units)
+    early = (benunit["benunit_id"] < 10 + n).values
+    anyway = early & (np.random.default_rng(5).random(2 * n) < 0.5)
+    flags = assign_uc_claim_at_legacy_closure(
+        person,
+        benunit,
+        RATES,
+        seed=UC_MANAGED_MIGRATION_SEED,
+        would_claim_uc=anyway,
+        first_move_year=np.where(early, 2025, 2027),
+    )
+    rate = RATES["child_tax_credit"]
+    claims = anyway | flags
+    for movers in (early, np.ones(2 * n, dtype=bool)):
+        share = claims[movers].mean()
+        assert abs(share - rate) <= 4 * np.sqrt(rate * (1 - rate) / movers.sum())
+
+
+class _YearlySimulation:
+    """A simulation whose Pension Credit route depends on the year: the
+    couple meets the age conditions only in 2024, as a mixed-age couple
+    whose older member is born too late for the saving from 2025."""
+
+    class tax_benefit_system:
+        variables = {"is_claimant_or_partner": None}
+
+    def calculate(self, variable, year):
+        values = {
+            "person_benunit_id": [10, 10, 10],
+            "is_claimant_or_partner": [True, True, False],
+            "child_tax_credit_reported": [100.0, 0.0, 0.0],
+            "housing_benefit_reported": [100.0, 0.0, 0.0],
+            "benunit_id": [10],
+            "meets_pension_credit_age_conditions": [year < 2025],
+            "is_mixed_age_couple": [True],
+        }.get(variable, [0.0, 0.0, 0.0])
+        return pd.Series(values)
+
+
+def test_a_unit_leaving_the_pension_route_later_is_drawn():
+    """A unit on the Pension Credit route in the survey year that the model
+    moves from 2025 is drawn, not given the default True (review r3)."""
+    from policyengine_uk_data.datasets.frs import first_year_moved_to_uc
+
+    benunit = pd.DataFrame({"benunit_id": [10]})
+    sim = _YearlySimulation()
+    assert first_year_moved_to_uc(sim, benunit, 2024, [2024]).tolist() == [0]
+    assert first_year_moved_to_uc(sim, benunit, 2024, range(2025, 2036)).tolist() == [
+        2025
+    ]

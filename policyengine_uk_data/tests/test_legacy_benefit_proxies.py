@@ -424,6 +424,10 @@ class FakeMicrosimulation:
             return pd.Series(self.dataset.person.age.values >= 66)
         if variable == "benunit_id":
             return pd.Series(self.dataset.benunit.benunit_id.values)
+        if variable.endswith("_reported"):
+            if variable in self.dataset.person.columns:
+                return pd.Series(self.dataset.person[variable].values)
+            return pd.Series(np.zeros(len(self.dataset.person)))
         if variable in ("meets_pension_credit_age_conditions", "is_mixed_age_couple"):
             return pd.Series(np.zeros(len(self.dataset.benunit), dtype=bool))
         if variable in (
