@@ -30,6 +30,10 @@ if importlib.util.find_spec("policyengine_uk") is None:
         allow_module_level=True,
     )
 
+from policyengine_core.errors import ParameterNotFoundError
+
+from policyengine_uk_data.datasets.spi import model_simulates_unknown_region
+
 
 SPI_COLUMNS = [
     "SEX",
@@ -38,6 +42,7 @@ SPI_COLUMNS = [
     "DIVIDENDS",
     "GIFTAID",
     "GORCODE",
+    "SCOT_TXP",
     "INCBBS",
     "INCPROP",
     "PAY",
@@ -357,7 +362,17 @@ def test_income_projection_rebuilds_stale_spi_dataset_year(
     assert dataset_path.read_text() == "rebuilt h5"
 
 
-def test_income_projection_loads_local_h5_dataset(monkeypatch):
+@pytest.mark.parametrize(
+    "model_simulates, expected",
+    [
+        (False, ["SOUTH_EAST", "LONDON", "SOUTH_EAST"]),
+        (True, ["UNKNOWN", "LONDON", "SOUTH_EAST"]),
+    ],
+)
+def test_income_projection_loads_local_h5_dataset(
+    monkeypatch, model_simulates, expected
+):
+    """UNKNOWN becomes SOUTH_EAST only for a model that cannot simulate it."""
     from policyengine_uk_data.utils import incomes_projection
 
     calls = {}
@@ -375,16 +390,55 @@ def test_income_projection_loads_local_h5_dataset(monkeypatch):
         lambda: "/tmp/spi_2022_23.h5",
     )
     monkeypatch.setattr(incomes_projection, "UKSingleYearDataset", FakeDataset)
+    monkeypatch.setattr(
+        incomes_projection,
+        "model_simulates_unknown_region",
+        lambda: model_simulates,
+    )
 
     dataset = incomes_projection.load_spi_dataset()
 
     assert isinstance(dataset, FakeDataset)
     assert calls == {"path": "/tmp/spi_2022_23.h5"}
-    assert dataset.household["region"].tolist() == [
-        "SOUTH_EAST",
-        "LONDON",
-        "SOUTH_EAST",
-    ]
+    assert dataset.household["region"].tolist() == expected
+
+
+def test_income_projection_rebuilds_spi_dataset_without_scottish_flag(
+    tmp_path, monkeypatch
+):
+    """A cached H5 from before create_spi read SCOT_TXP is rebuilt; a current
+    one is reused."""
+    from policyengine_uk_data.datasets.spi import create_spi
+    from policyengine_uk_data.utils import incomes_projection
+
+    tab_dir = tmp_path / "spi_2022_23"
+    tab_dir.mkdir()
+    tab = tab_dir / "put2223uk.tab"
+    _write_fake_spi(tab, gor_values=(11, 13), maind_values=(0, 0))
+    dataset_path = tmp_path / "spi_2022_23.h5"
+    stale = create_spi(tab, 2022)
+    stale.person = stale.person.drop(columns="pays_scottish_income_tax")
+    stale.save(dataset_path)
+
+    builds = []
+
+    def counting_create_spi(path, fiscal_year):
+        builds.append(fiscal_year)
+        return create_spi(path, fiscal_year)
+
+    monkeypatch.setattr(incomes_projection, "STORAGE_FOLDER", tmp_path)
+    monkeypatch.setattr(incomes_projection, "SPI_RELEASE_NAME", "spi_2022_23")
+    monkeypatch.setattr(incomes_projection, "SPI_TAB_FILENAME", "put2223uk.tab")
+    monkeypatch.setattr(incomes_projection, "SPI_H5_FILENAME", "spi_2022_23.h5")
+    monkeypatch.setattr(incomes_projection, "SPI_FISCAL_YEAR", 2022)
+    monkeypatch.setattr(incomes_projection, "create_spi", counting_create_spi)
+
+    assert not incomes_projection._has_scottish_taxpayer_flag(dataset_path)
+    assert incomes_projection.ensure_spi_dataset() == str(dataset_path)
+    assert builds == [2022]
+    assert incomes_projection._has_scottish_taxpayer_flag(dataset_path)
+    assert incomes_projection.ensure_spi_dataset() == str(dataset_path)
+    assert builds == [2022]
 
 
 def _write_income_model_cache(path, income_module, metadata):
@@ -456,6 +510,263 @@ def test_income_model_cache_accepts_current_spi_release(tmp_path, monkeypatch):
     )
 
     assert income_module.create_income_model().metadata == current_metadata
+
+
+def _set_spi_columns(path, **columns):
+    df = pd.read_csv(path, sep="\t")
+    for col, values in columns.items():
+        df[col] = list(values)
+    df.to_csv(path, sep="\t", index=False)
+
+
+# HMRC's GORCODE codes 1-12 (SN 9422, Annex A) as policyengine-uk regions,
+# written out here rather than read from REGION_MAP so a wrong mapping fails.
+HMRC_REGIONS = {
+    1: "NORTH_EAST",
+    2: "NORTH_WEST",
+    3: "YORKSHIRE",  # Yorkshire and the Humber
+    4: "EAST_MIDLANDS",
+    5: "WEST_MIDLANDS",
+    6: "EAST_OF_ENGLAND",
+    7: "LONDON",
+    8: "SOUTH_EAST",
+    9: "SOUTH_WEST",
+    10: "WALES",
+    11: "SCOTLAND",
+    12: "NORTHERN_IRELAND",
+}
+
+
+@pytest.mark.parametrize("not_scottish", [0, ".", ""])
+def test_create_spi_region_and_scottish_taxpayer_invariants(tmp_path, not_scottish):
+    """For every GORCODE (documented 1-14, composite -1, undocumented 99) and
+    SCOT_TXP value, the region follows GORCODE alone and is always a Region
+    member, and Scottish taxpayer status follows SCOT_TXP alone. HMRC
+    documents "not a Scottish taxpayer" as "."; the 2022-23 tape writes 0.
+    """
+    from itertools import product
+
+    from policyengine_uk.variables.household.demographic.geography import Region
+
+    from policyengine_uk_data.datasets.spi import create_spi
+
+    cases = list(product([-1, *range(1, 15), 99], (not_scottish, 1)))
+    gor = [g for g, _ in cases]
+    scot = [s for _, s in cases]
+    tab = tmp_path / "spi.tab"
+    _write_fake_spi(tab, gor_values=gor, maind_values=[0] * len(cases))
+    _set_spi_columns(tab, SCOT_TXP=scot)
+
+    ds = create_spi(tab, 2022)
+
+    regions = ds.household["region"].tolist()
+    assert regions == [HMRC_REGIONS.get(g, "UNKNOWN") for g in gor]
+    assert set(regions) <= {region.name for region in Region}
+    assert ds.person["pays_scottish_income_tax"].tolist() == [s == 1 for s in scot]
+    # Address abroad, address unknown and composite records stay UNKNOWN even
+    # when they are Scottish taxpayers.
+    assert {r for r, g in zip(regions, gor) if g in (-1, 13, 14)} == {"UNKNOWN"}
+
+
+def test_create_spi_scottish_taxpayer_status_survives_h5_round_trip(tmp_path):
+    from policyengine_uk.data import UKSingleYearDataset
+
+    from policyengine_uk_data.datasets.spi import create_spi
+
+    tab = tmp_path / "spi.tab"
+    _write_fake_spi(tab, gor_values=(13, 11, 7), maind_values=(0, 0, 0))
+    _set_spi_columns(tab, SCOT_TXP=(1, 0, 1))
+    ds = create_spi(tab, 2022)
+    ds.save(tmp_path / "spi.h5")
+
+    loaded = UKSingleYearDataset(str(tmp_path / "spi.h5"))
+
+    assert loaded.person["pays_scottish_income_tax"].tolist() == [True, False, True]
+    assert loaded.household["region"].tolist() == ["UNKNOWN", "SCOTLAND", "LONDON"]
+
+
+def _missing(name):
+    return ParameterNotFoundError(name, "2023-01-01", "rent")
+
+
+UNKNOWN_RENT_INDEX = _missing(
+    "gov.economic_assumptions.yoy_growth.ons.private_rental_prices.UNKNOWN"
+)
+
+
+@pytest.mark.parametrize(
+    "errors, expected",
+    [
+        ({}, True),
+        ({"UNKNOWN": UNKNOWN_RENT_INDEX}, False),
+        # Any failure that relabelling to SOUTH_EAST cures.
+        ({"UNKNOWN": KeyError("UNKNOWN")}, False),
+    ],
+)
+def test_unknown_region_probe_reads_the_simulation(monkeypatch, errors, expected):
+    import policyengine_uk
+
+    regions = []
+
+    def simulate(dataset):
+        (region,) = dataset.household["region"]
+        regions.append(region)
+        if region in errors:
+            raise errors[region]
+
+    monkeypatch.setattr(policyengine_uk, "Microsimulation", simulate)
+
+    assert model_simulates_unknown_region.__wrapped__() is expected
+    assert regions == (["UNKNOWN"] if expected else ["UNKNOWN", "SOUTH_EAST"])
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        _missing("gov.hmrc.unrelated.UNKNOWN"),
+        _missing("gov.hmrc.income_tax.rates.uk"),
+        KeyError("employment_income"),
+    ],
+)
+def test_unknown_region_probe_raises_failures_relabelling_would_not_cure(
+    monkeypatch, error
+):
+    """When the SOUTH_EAST household fails too, its error is raised, not read
+    as a missing UNKNOWN index."""
+    import policyengine_uk
+
+    original = RuntimeError("the UNKNOWN household failed")
+
+    def simulate(dataset):
+        (region,) = dataset.household["region"]
+        raise original if region == "UNKNOWN" else error
+
+    monkeypatch.setattr(policyengine_uk, "Microsimulation", simulate)
+
+    with pytest.raises(type(error)) as raised:
+        model_simulates_unknown_region.__wrapped__()
+    assert raised.value is error
+    assert raised.value.__context__ is original
+
+
+def test_unknown_region_probe_agrees_with_policyengine_uk_release():
+    """2.104.5 is the first policyengine-uk release with
+    PolicyEngine/policyengine-uk#1985. For a final release not installed from
+    a direct URL, whose imported economic_assumptions.py is the installed file
+    and matches its RECORD, the probe agrees with the release number."""
+    import base64
+    import hashlib
+    from importlib.metadata import PackageNotFoundError, distribution
+    from pathlib import Path
+
+    from packaging.version import Version
+    from policyengine_uk.data import economic_assumptions
+
+    try:
+        release = distribution("policyengine-uk")
+    except PackageNotFoundError:
+        pytest.skip("policyengine-uk is not installed as a distribution")
+    version = Version(release.version)
+    if version.is_prerelease or version.is_devrelease or version.local:
+        pytest.skip(f"policyengine-uk {version} is not a final release")
+    if release.read_text("direct_url.json") is not None:
+        pytest.skip("policyengine-uk was installed from a direct URL")
+    # #1985 changed this module, so it must be the installed file, unmodified.
+    path = "policyengine_uk/data/economic_assumptions.py"
+    installed = Path(release.locate_file(path))
+    if not installed.exists() or not installed.samefile(economic_assumptions.__file__):
+        pytest.skip("the imported policyengine-uk is not the installed release")
+    record = {file.as_posix(): file.hash for file in release.files or []}.get(path)
+    if record is None:
+        pytest.skip("policyengine-uk's RECORD does not list the module")
+    digest = hashlib.new(record.mode, installed.read_bytes()).digest()
+    if base64.urlsafe_b64encode(digest).rstrip(b"=").decode() != record.value:
+        pytest.skip("the installed economic_assumptions.py has been modified")
+
+    assert model_simulates_unknown_region() == (version >= Version("2.104.5"))
+
+
+# GORCODE, SCOT_TXP: abroad, unknown, composite, London, Scotland, abroad and
+# Scottish, Scotland but not Scottish.
+SIMULATED_RECORDS = ((13, 0), (14, 0), (-1, 0), (7, 0), (11, 1), (13, 1), (11, 0))
+# The data year, an uprated year and 2030, the last year policyengine-uk
+# carries dataset inputs to.
+YEARS = [2022, 2026, 2030]
+
+
+def _spi_income_tax(tmp_path, region_rule=False, **kwargs):
+    """Income tax on SIMULATED_RECORDS, each paid £60,000, in YEARS. With
+    region_rule, the Scottish taxpayer flag is dropped, so policyengine-uk
+    derives it from the region as it did before create_spi read SCOT_TXP."""
+    from policyengine_uk import Microsimulation
+
+    from policyengine_uk_data.datasets.spi import create_spi
+
+    tab = tmp_path / "spi.tab"
+    gor, scot = zip(*SIMULATED_RECORDS)
+    _write_fake_spi(tab, gor_values=gor, maind_values=[0] * len(gor))
+    _set_spi_columns(
+        tab, SCOT_TXP=scot, PAY=[60_000] * len(gor), AGERANGE=[3] * len(gor)
+    )
+    dataset = create_spi(tab, 2022, **kwargs)
+    if region_rule:
+        dataset.person = dataset.person.drop(columns="pays_scottish_income_tax")
+    sim = Microsimulation(dataset=dataset)
+    return {year: sim.calculate("income_tax", year).values for year in YEARS}
+
+
+def test_spi_income_tax_follows_scottish_taxpayer_flag(tmp_path):
+    """Equal pay, so income tax depends only on SCOT_TXP, in the data year
+    and after uprating. Uses the legacy SOUTH_EAST label so it runs on any
+    policyengine-uk release."""
+    for year, tax in _spi_income_tax(tmp_path, unknown_region="SOUTH_EAST").items():
+        abroad, unknown, composite, london, scotland, abroad_scot, scotland_ruk = tax
+
+        assert london > 0, year
+        assert abroad == unknown == composite == scotland_ruk == london, year
+        assert abroad_scot == scotland != london, year
+
+
+def test_spi_income_tax_changes_only_where_scottish_flag_and_region_disagree(
+    tmp_path,
+):
+    """Records whose SCOT_TXP agrees with their region get exactly the income
+    tax they got when the region decided Scottish status. The two records
+    where they disagree change."""
+    label = "UNKNOWN" if model_simulates_unknown_region() else "SOUTH_EAST"
+    flag = _spi_income_tax(tmp_path, unknown_region=label)
+    region = _spi_income_tax(tmp_path, region_rule=True, unknown_region=label)
+    agrees = np.array([(g == 11) == (s == 1) for g, s in SIMULATED_RECORDS])
+
+    for year in YEARS:
+        assert (flag[year][agrees] == region[year][agrees]).all(), year
+        assert (flag[year][~agrees] != region[year][~agrees]).all(), year
+
+
+def test_create_spi_output_with_unknown_region_can_be_simulated(tmp_path):
+    """SPI records with an address abroad (13), an unknown address (14) or a
+    composite record (-1) keep region UNKNOWN and still run through
+    policyengine-uk, giving record for record the income tax of the legacy
+    SOUTH_EAST relabelling: the region label does not move income tax.
+    Models without PolicyEngine/policyengine-uk#1985 must fail on the missing
+    rent index, and on nothing else.
+    """
+    if not model_simulates_unknown_region():
+        with pytest.raises(
+            ParameterNotFoundError, match=r"private_rental_prices\.UNKNOWN'"
+        ):
+            _spi_income_tax(tmp_path)
+        pytest.xfail(
+            "policyengine-uk before 2.104.5 (PolicyEngine/policyengine-uk#1985) "
+            "has no rent index for Region.UNKNOWN"
+        )
+
+    tax = _spi_income_tax(tmp_path)
+    legacy = _spi_income_tax(tmp_path, unknown_region="SOUTH_EAST")
+
+    for year in YEARS:
+        assert (tax[year] > 0).all(), year
+        assert (tax[year] == legacy[year]).all(), year
 
 
 def test_create_spi_marks_every_taxpayer_as_their_benefit_units_claimant(tmp_path):

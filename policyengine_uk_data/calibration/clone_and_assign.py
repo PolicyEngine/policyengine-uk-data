@@ -80,8 +80,8 @@ def clone_and_assign(
     The OA's region, LA and constituency therefore never
     contradict the household's ``region``.
 
-    Household weights are divided by n_clones so aggregate
-    population totals are preserved.
+    Household weights and any carried calibration priors are divided by
+    n_clones so their aggregate totals are preserved.
 
     Args:
         dataset: Input FRS dataset (post-imputation).
@@ -189,11 +189,16 @@ def clone_and_assign(
 
         # Clone household table
         hh_clone = hh.copy()
-        hh_clone["source_household_id"] = hh_id_col
+        if "source_household_id" not in hh_clone.columns:
+            hh_clone["source_household_id"] = hh_id_col
         if "source_year" not in hh_clone.columns:
             hh_clone["source_year"] = dataset.time_period
         hh_clone["household_id"] = new_hh_ids
         hh_clone["household_weight"] = hh["household_weight"].values / n_clones
+        if "household_calibration_prior" in hh:
+            hh_clone["household_calibration_prior"] = (
+                hh["household_calibration_prior"].values / n_clones
+            )
 
         # Add geography columns from assignment
         # Initialise with empty strings for all households
