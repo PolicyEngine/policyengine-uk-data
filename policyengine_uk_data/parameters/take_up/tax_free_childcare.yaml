@@ -10,9 +10,18 @@ metadata:
 values:
   2015-01-01: 0.586
   # Bumped from the 2020-21 FRS-calibrated 0.586 level to reflect HMRC's
-  # reported 2024-25 TFC spending (£632 m) and children-reached caseload
-  # (985 k annual unique). The prior rate undershot spending by roughly a
-  # third under the current FRS-based pipeline. A full recalibration via
-  # `datasets/childcare/takeup_rate.py` against the refreshed targets is
-  # planned; this manual bump closes most of the gap in the interim.
+  # reported 2024-25 TFC outturn: £632.2m of government top-up and 1,085,020
+  # children with used accounts (Table 2 of the June 2025 release). The prior
+  # rate undershot spending under the FRS-based pipeline of the time. This was
+  # a manual bump, calibrated against enhanced_frs_2022_23; the build moved to
+  # the 2024-25 FRS release five weeks later without the rate being revisited.
+  #
+  # The caseload figure was previously recorded here as 985k. That does not
+  # appear in the cited release and has been corrected, along with the
+  # matching target in `datasets/childcare/targets.py`.
+  #
+  # A full recalibration via `datasets/childcare/takeup_rate.py` remains
+  # outstanding. Note that a single rate cannot hit both targets when they
+  # diverge: it moves spending and caseload together, so if caseload is on
+  # target the residual is the average award, not take-up.
   2024-04-06: 0.88

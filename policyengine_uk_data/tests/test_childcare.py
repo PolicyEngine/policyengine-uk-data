@@ -1,114 +1,176 @@
-def test_childcare(baseline, enhanced_frs):
-    import numpy as np
+"""Check built childcare spending and caseloads against their calibration targets.
 
-    # Define targets (same as in the optimization script)
-    targets = {
-        "spending": {
-            "tfc": 0.6,
-            "extended": 2.5,
-            "targeted": 0.6,
-            "universal": 1.7,
-        },
-        "caseload": {
-            "tfc": 660,
-            "extended": 740,
-            "targeted": 130,
-            "universal": 490,
-        },
-    }
+The targets live in ``datasets/childcare/targets.py`` and are shared with the
+take-up optimisation, so the two cannot drift apart again.
+"""
 
-    # Calculate dataframe with all required variables
-    df = baseline.calculate_dataframe(
-        [
-            "age",
-            "tax_free_childcare",
-            "extended_childcare_entitlement",
-            "universal_childcare_entitlement",
-            "targeted_childcare_entitlement",
-            "would_claim_tfc",
-            "would_claim_extended_childcare",
-            "would_claim_targeted_childcare",
-            "would_claim_universal_childcare",
-            "is_child_receiving_tax_free_childcare",
-            "is_child_receiving_extended_childcare",
-            "is_child_receiving_universal_childcare",
-            "is_child_receiving_targeted_childcare",
-            "maximum_extended_childcare_hours_usage",  # Added this variable
-        ],
-        2024,
+import os
+from pathlib import Path
+
+import pytest
+import yaml
+
+from policyengine_uk_data.datasets.childcare.targets import (
+    KNOWN_MISSES,
+    TARGETS,
+    tolerance,
+)
+
+PROGRAMMES = {
+    "tfc": ("tax_free_childcare", "is_child_receiving_tax_free_childcare"),
+    "extended": (
+        "extended_childcare_entitlement",
+        "is_child_receiving_extended_childcare",
+    ),
+    "targeted": (
+        "targeted_childcare_entitlement",
+        "is_child_receiving_targeted_childcare",
+    ),
+    "universal": (
+        "universal_childcare_entitlement",
+        "is_child_receiving_universal_childcare",
+    ),
+}
+
+# Iterate over the targets that exist, not every programme: extended has no
+# spending target, because the only figure derivable from DfE is a full-usage
+# ceiling the model pays 75% of. See targets.py.
+CASES = [
+    (metric, programme)
+    for metric in ("spending", "caseload")
+    for programme in TARGETS[metric]
+]
+
+# Which build produced the dataset under test. pull_request.yaml sets
+# TESTING=1 for a 32-epoch smoke build; push.yaml builds the release at 512
+# epochs with no flag and gates the upload on this suite.
+# A non-testing run only tells us the dataset is not a smoke build: locally it
+# may be a previously downloaded artefact rather than one built here.
+SMOKE = os.environ.get("TESTING") == "1"
+BUILD = (
+    "smoke (TESTING=1, 32 epochs)"
+    if SMOKE
+    else "non-smoke, provenance unknown (a release build, or an artefact "
+    "built or downloaded earlier)"
+)
+PUSH_WORKFLOW = Path(__file__).resolve().parents[2] / ".github/workflows/push.yaml"
+
+
+def measure(baseline, metric: str, programme: str) -> float:
+    """Built value for one programme: spending in £bn, caseload in thousands."""
+    spending_variable, caseload_variable = PROGRAMMES[programme]
+    if metric == "spending":
+        return baseline.calculate(spending_variable, 2024).sum() / 1e9
+    return baseline.calculate(caseload_variable, 2024).sum() / 1e3
+
+
+@pytest.mark.parametrize("metric,programme", CASES)
+def test_childcare_hits_its_calibration_target(baseline, metric, programme):
+    target = TARGETS[metric][programme]
+    actual = measure(baseline, metric, programme)
+    ratio = actual / target
+    allowed = tolerance(metric, programme, smoke=SMOKE)
+
+    known_miss = KNOWN_MISSES.get((metric, programme))
+    if known_miss is not None:
+        pytest.xfail(
+            f"{metric}/{programme} is a known miss ({ratio:.2f}x): {known_miss}"
+        )
+
+    assert abs(ratio - 1) < allowed, (
+        f"{programme} {metric} is {actual:.3f} against a target of {target:.3f} "
+        f"({ratio:.2f}x), outside the ±{allowed:.0%} tolerance "
+        f"for the {BUILD} build"
     )
 
-    # Calculate actual spending values
-    spending = {
-        "tfc": baseline.calculate("tax_free_childcare", 2024).sum() / 1e9,
-        "extended": baseline.calculate("extended_childcare_entitlement", 2024).sum()
-        / 1e9,
-        "targeted": baseline.calculate("targeted_childcare_entitlement", 2024).sum()
-        / 1e9,
-        "universal": baseline.calculate("universal_childcare_entitlement", 2024).sum()
-        / 1e9,
-    }
 
-    # Calculate actual caseload values
-    caseload = {
-        "tfc": df["is_child_receiving_tax_free_childcare"].sum() / 1e3,
-        "extended": df["is_child_receiving_extended_childcare"].sum() / 1e3,
-        "universal": df["is_child_receiving_universal_childcare"].sum() / 1e3,
-        "targeted": df["is_child_receiving_targeted_childcare"].sum() / 1e3,
-    }
+def test_known_misses_are_still_missing(baseline):
+    """Fail once a known miss is fixed, so the exemption gets removed.
 
-    # Calculate take-up rates for reporting
-    take_up_rates = {
-        "tfc": df["would_claim_tfc"].mean(),
-        "extended": df["would_claim_extended_childcare"].mean(),
-        "universal": df["would_claim_universal_childcare"].mean(),
-        "targeted": df["would_claim_targeted_childcare"].mean(),
-    }
-
-    # Report extended hours usage statistics
-    hours_mean = df["maximum_extended_childcare_hours_usage"].mean()
-    hours_std = df["maximum_extended_childcare_hours_usage"].std()
-
-    # Print results table
-    print("\n===== CHILDCARE TEST RESULTS =====")
-
-    print("\nTAKE-UP RATES:")
-    for key, rate in take_up_rates.items():
-        print(f"{key.upper():<12} {rate:.3f}")
-
-    print(f"\nEXTENDED HOURS: Mean = {hours_mean:.2f}, Std Dev = {hours_std:.2f}")
-
-    print("\nSPENDING (£ billion):")
-    print(f"{'PROGRAM':<12} {'ACTUAL':<10} {'TARGET':<10} {'RATIO':<10} {'PASS?':<10}")
-    print("-" * 55)
-
-    failed_any = False
-    # Test spending for each program
-    for key in targets["spending"]:
-        target_spending = targets["spending"][key]
-        ratio = spending[key] / target_spending
-        passed = abs(ratio - 1) < 1
-        status = "✓" if passed else "✗"
-        print(
-            f"{key.upper():<12} {spending[key]:<10.3f} {target_spending:<10.3f} {ratio:<10.3f} {status:<10}"
+    Without this a target could be met while CI still reports it as expected
+    to fail, and the exemption would outlive the problem.
+    """
+    for (metric, programme), reason in KNOWN_MISSES.items():
+        ratio = measure(baseline, metric, programme) / TARGETS[metric][programme]
+        assert abs(ratio - 1) >= tolerance(metric, programme), (
+            f"{programme} {metric} now hits its target ({ratio:.2f}x). "
+            f"Remove it from KNOWN_MISSES in datasets/childcare/targets.py. "
+            f"Recorded reason: {reason}"
         )
-        if not passed:
-            failed_any = True
 
-    print("\nCASELOAD (thousands):")
-    print(f"{'PROGRAM':<12} {'ACTUAL':<10} {'TARGET':<10} {'RATIO':<10} {'PASS?':<10}")
-    print("-" * 55)
 
-    # Test caseload for each program
-    for key in targets["caseload"]:
-        target_caseload = targets["caseload"][key]
-        ratio = caseload[key] / target_caseload
-        passed = abs(ratio - 1) < 1
-        status = "✓" if passed else "✗"
-        print(
-            f"{key.upper():<12} {caseload[key]:<10.1f} {target_caseload:<10.1f} {ratio:<10.3f} {status:<10}"
+def test_report_ratios(baseline, capsys):
+    """Record every programme's deviation from target, pass or fail.
+
+    The check above reports only whether a programme is inside its tolerance.
+    Printing the ratios makes the current build's actual position visible in
+    CI, which is what a future tightening of the tolerances needs.
+    """
+    lines = [
+        "",
+        f"childcare calibration check — build: {BUILD}",
+        f"{'metric':10s} {'programme':11s} {'built':>10s} {'target':>10s} {'ratio':>7s}",
+    ]
+    for metric, programme in CASES:
+        target = TARGETS[metric][programme]
+        actual = measure(baseline, metric, programme)
+        lines.append(
+            f"{metric:10s} {programme:11s} {actual:10.3f} {target:10.3f} {actual / target:6.2f}x"
         )
-        if not passed:
-            failed_any = True
+    with capsys.disabled():
+        print("\n".join(lines))
 
-    assert not failed_any
+
+def test_release_gate_is_wired():
+    """The release build must run this suite before uploading.
+
+    push.yaml is the only place the calibration targets are checked against
+    the artefact users receive. This pins the properties that make it a gate,
+    so a workflow edit that broke one fails CI rather than shipping an
+    unvalidated dataset: the release build is a 512-epoch, one-OA-clone build
+    rather than a TESTING smoke build, the tests run before the upload, and a
+    failing test stops the job.
+
+    "Not a smoke build" is not the same as full fidelity — the release runs
+    one OA clone where the non-testing default is ten — so the contract is
+    stated as what it is and the clone count is pinned with the rest.
+    """
+    workflow = yaml.safe_load(PUSH_WORKFLOW.read_text())
+    job = workflow["jobs"]["test"]
+    steps = job["steps"]
+    by_name = {step.get("name"): step for step in steps}
+    order = [step.get("name") for step in steps]
+
+    # TESTING set at workflow or job scope would reach the build step just as
+    # a step-level setting does, so all three scopes are checked.
+    for scope in (workflow, job, by_name["Build datasets"]):
+        assert scope.get("env", {}).get("TESTING") != "1", (
+            "the release build must not be a TESTING smoke build"
+        )
+    assert order.index("Run tests") < order.index("Upload data"), (
+        "tests must run before the upload, or a failing target cannot block it"
+    )
+    assert not by_name["Run tests"].get("continue-on-error", False), (
+        "a failing test must stop the job, or the gate is decorative"
+    )
+    # `if: always()` or `if: failure()` on the upload would run it whatever the
+    # tests did, which is the same as having no gate.
+    assert "if" not in by_name["Upload data"], (
+        "the upload must be unconditional on success, not run despite a failure"
+    )
+    # The release contract, pinned: one OA clone, stated rather than assumed.
+    assert job["env"]["PE_UK_DATA_OA_CLONES"] == "1"
+
+    # Pin the commands themselves. Without this the gate survives `echo make
+    # test`, `make test || true`, or an inline `TESTING=1 make data` — each of
+    # which leaves every assertion above true while the gate does nothing.
+    expected = {
+        "Build datasets": "uv run --frozen make data",
+        "Run tests": "uv run --frozen make test",
+        "Upload data": "uv run --frozen make upload",
+    }
+    for name, command in expected.items():
+        assert by_name[name]["run"].strip() == command, (
+            f"{name} must run exactly `{command}`: a wrapped, echoed or "
+            "failure-swallowing variant is not a gate"
+        )

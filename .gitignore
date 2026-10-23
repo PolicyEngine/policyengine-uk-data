@@ -18,4 +18,15 @@
 !policyengine_uk_data/datasets/local_areas/**/*.csv
 **/_build
 !policyengine_uk_data/storage/*.csv
+!policyengine_uk_data/tests/fixtures/ons_uk_population_2025.csv
 **/version.json
+# Build output: household weights by local area, derived from FRS microdata
+policyengine_uk_data/storage/local_geography_weights.csv.gz
+
+.brma-cache/
+
+# Hypothesis example database (property-based tests)
+.hypothesis/
+
+# Local build-job notes, caches and hand-off artefacts
+.job/

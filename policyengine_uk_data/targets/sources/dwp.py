@@ -168,7 +168,7 @@ def get_targets() -> list[Target]:
         "couple_no_children": 231.368,
         "couple_with_children": 839.379,
     }
-    undercount_relative = 1.27921 / sum(_UC_BY_FAMILY_TYPE.values())
+    # This vintage sums to 6.096 million; 2025-26 totals are targeted separately.
     for family_type, count_k in _UC_BY_FAMILY_TYPE.items():
         targets.append(
             Target(
@@ -176,11 +176,28 @@ def get_targets() -> list[Target]:
                 variable="universal_credit",
                 source="dwp",
                 unit=Unit.COUNT,
-                values={2025: count_k * (1 + undercount_relative) * 1e3},
+                values={2025: count_k * 1e3},
                 is_count=True,
                 reference_url="https://stat-xplore.dwp.gov.uk/",
             )
         )
+
+    # DWP UC deductions statistics, Table 1: total households are households
+    # with a deduction divided by their share. This gives 6.38m in April 2025,
+    # 6.60m in May-August, 6.96m in September-November, and 7.17m in
+    # December 2025-February 2026. The 2025 value is the calendar-year average;
+    # the 2026 value represents the December-February plateau.
+    targets.append(
+        Target(
+            name="dwp/uc/households",
+            variable="universal_credit",
+            source="dwp",
+            unit=Unit.COUNT,
+            values={2025: 6_700_000, 2026: 7_200_000},
+            is_count=True,
+            reference_url="https://www.gov.uk/government/statistics/universal-credit-quarterly-statistics-29-april-2013-to-12-february-2026/universal-credit-deductions-statistics-march-2025-to-february-2026",
+        )
+    )
 
     # Two-child limit statistics (April 2025 publication, modeled at 2026)
     targets.append(

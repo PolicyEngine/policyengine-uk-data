@@ -7,7 +7,12 @@ Verifies that:
 4. Target values match the current system's hardcoded values
 """
 
+from collections import Counter
+
 from policyengine_uk_data.targets import get_all_targets
+from policyengine_uk_data.targets.build_loss_matrix import _compute_column
+from policyengine_uk_data.targets.coverage import load_known_gaps
+from policyengine_uk_data.targets.registry import emitted_targets
 
 
 def test_registry_loads():
@@ -17,11 +22,20 @@ def test_registry_loads():
 
 
 def test_no_duplicate_names():
-    """Target names should be unique across all sources."""
-    targets = get_all_targets()
-    names = [t.name for t in targets]
-    duplicates = [n for n in names if names.count(n) > 1]
-    assert len(duplicates) == 0, f"Duplicate target names: {set(duplicates)}"
+    """Each name is emitted once, apart from the duplicates known_gaps.yaml lists.
+
+    get_all_targets keeps only the first target of each name, so this counts
+    what the sources emit before that.
+    """
+    counts = Counter(t.name for t in emitted_targets())
+    listed = {
+        name
+        for gap in load_known_gaps()
+        if gap.status == "duplicate"
+        for name in gap.targets
+    }
+    duplicates = sorted(n for n, k in counts.items() if k > 1 and n not in listed)
+    assert not duplicates, f"Duplicate target names: {duplicates}"
 
 
 def test_obr_income_tax_exists():
@@ -60,6 +74,44 @@ def test_dwp_pip_targets():
     names = {t.name for t in targets}
     assert "dwp/pip_dl_standard_claimants" in names
     assert "dwp/pip_dl_enhanced_claimants" in names
+
+
+def test_dwp_uc_households_target_uses_count_fallback():
+    """The UC household total should be registered and produce a matrix column."""
+    target = next(
+        target
+        for target in get_all_targets(year=2025)
+        if target.name == "dwp/uc/households"
+    )
+
+    class DummyCtx:
+        @staticmethod
+        def pe_count(variable):
+            assert variable == "universal_credit"
+            return [1, 0, 1]
+
+    assert target.values[2025] == 6.7e6
+    assert _compute_column(target, DummyCtx(), 2025) == [1, 0, 1]
+
+
+def test_hmrc_salary_sacrifice_relief_targets():
+    """HMRC Table 6.1/6.2 relief targets reach the registry (uk-data: 410 Gone
+    on the old CSV dropped them from every build without failing it)."""
+    targets = {t.name: t for t in get_all_targets(year=2025)}
+    for name in (
+        "hmrc/salary_sacrifice_it_relief_basic_rate",
+        "hmrc/salary_sacrifice_it_relief_higher_rate",
+        "hmrc/salary_sacrifice_it_relief_additional_rate",
+        "hmrc/salary_sacrifice_employee_nics_relief",
+        "hmrc/salary_sacrifice_employer_nics_relief",
+    ):
+        assert name in targets, f"{name} missing from the target registry"
+    # The bands, not HMRC's separately rounded total, are the targets.
+    assert "hmrc/salary_sacrifice_it_relief_total" not in targets
+    # One NICs relief target per class: the OBR-labelled copies of the
+    # 2023-24 figures are gone.
+    assert "obr/salary_sacrifice_employee_ni_relief" not in targets
+    assert "obr/salary_sacrifice_employer_ni_relief" not in targets
 
 
 def test_voa_council_tax_targets():

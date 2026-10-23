@@ -50,6 +50,7 @@ def _patch_common_la_inputs(monkeypatch, tmp_path):
         "get_la_income_targets",
         lambda: pd.DataFrame(
             {
+                "code": _fake_la_codes()["code"],
                 "employment_income_amount": [1.0, 1.0, 1.0, 1.0],
                 "employment_income_count": [1.0, 1.0, 1.0, 1.0],
             }
@@ -69,10 +70,19 @@ def _patch_common_la_inputs(monkeypatch, tmp_path):
     monkeypatch.setattr(
         loss,
         "get_la_age_targets",
-        lambda: pd.DataFrame({"age/0_100": [1.0, 1.0, 1.0, 1.0]}),
+        lambda: pd.DataFrame(
+            {
+                "code": _fake_la_codes()["code"],
+                "age/0_100": [1.0, 1.0, 1.0, 1.0],
+            }
+        ),
     )
     monkeypatch.setattr(loss, "get_uk_total_population", lambda year: 4.0)
-    monkeypatch.setattr(loss, "get_la_uc_targets", lambda: pd.Series([0, 1, 0, 0]))
+    monkeypatch.setattr(
+        loss,
+        "get_la_uc_targets",
+        lambda: pd.Series([0, 1, 0, 0], index=_fake_la_codes()["code"]),
+    )
     monkeypatch.setattr(
         loss,
         "get_ons_income_uprating_factors",

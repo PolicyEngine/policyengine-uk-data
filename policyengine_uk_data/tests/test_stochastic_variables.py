@@ -57,6 +57,31 @@ class TestStochasticParameters:
         assert 0 <= rate <= 1
         assert rate < 0.2  # Evasion rate should be low
 
+    def test_tax_free_childcare_spend_routed_share_loads(self):
+        share = load_parameter(
+            "stochastic", "tax_free_childcare_spend_routed_share", 2024
+        )
+        assert 0 < share <= 1
+        # HMRC's 2024-25 ratio: 7,715,605 monthly child-account observations
+        # over 1,085,020 annual unique children, over twelve months.
+        assert share == pytest.approx(0.593, abs=0.001)
+
+    def test_tax_free_childcare_spend_routed_share_series_is_bounded(self):
+        # Every published year must be a usable share; a value outside 0-1
+        # would produce a negative or supra-statutory award downstream.
+        for year in range(2018, 2027):
+            share = load_parameter(
+                "stochastic", "tax_free_childcare_spend_routed_share", year
+            )
+            assert 0 < share <= 1, f"{year}: {share}"
+
+    def test_tax_free_childcare_spend_routed_share_launch_year(self):
+        # Tax-Free Childcare launched part-way through 2017-18, so its first
+        # year is much lower than the settled 0.58-0.59 of later years.
+        assert load_parameter(
+            "stochastic", "tax_free_childcare_spend_routed_share", 2017
+        ) == pytest.approx(0.359, abs=0.001)
+
     def test_first_time_buyer_rate_loads(self):
         rate = load_parameter("stochastic", "first_time_buyer_rate", 2024)
         assert 0 <= rate <= 1

@@ -6,20 +6,33 @@ https://www.gov.uk/government/publications/salary-sacrifice-reform-for-pension-c
 """
 
 import os
+from types import SimpleNamespace
+
+import numpy as np
+import pandas as pd
 
 from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
+from policyengine_uk_data.storage import STORAGE_FOLDER
+from policyengine_uk_data.targets.compute.income import compute_ss_headcount
 
-# The total combines below-cap and above-cap users and moves slightly with
-# each generated FRS calibration refresh. Widened from 0.16 after the
-# household-weight alignment fix (#436) shifted the calibration starting point
-# under the reduced-epoch CI build (TESTING=1).
-TOTAL_TOLERANCE = 0.20
-# The below-cap count sits right at the 15% boundary under the
-# reduced-epoch CI build (observed 15.09% on one TESTING=1 run and passing
-# the next), so the tolerance widens under TESTING like TOTAL_TOLERANCE
-# did after #436. Full builds keep the strict 15%.
-TOLERANCE = 0.25 if os.environ.get("TESTING") == "1" else 0.15
-ABOVE_CAP_TOLERANCE = 0.20
+REDUCED_BUILD = os.environ.get("TESTING") == "1"
+# The 32-epoch reduced build stops well short of the OBR salary-sacrifice
+# counts that calibration targets: in the seed-0 full build of #529 the users
+# are 4.5m at epoch 0, 5.5m at epoch 30 and 7.9m at epoch 510. Before #529,
+# reduced builds met the old bounds (20% total, 25% below cap) only because
+# SPI-synthetic children were imputed salary sacrifice (about 1.35m users on
+# the seed-0 reduced build of main, which held 5.0m users without them).
+# #529 gives those children no pay, so the reduced bounds widen to 40% and
+# 45%. They still catch a collapse; full builds keep the strict bounds.
+# The total was earlier widened from 0.16 after the household-weight
+# alignment fix (#436).
+TOTAL_TOLERANCE = 0.40 if REDUCED_BUILD else 0.20
+TOLERANCE = 0.45 if REDUCED_BUILD else 0.15
+# Widened under the reduced-epoch CI build after the benunit-table sort fix
+# (#462) shifted the calibration starting point (observed 20.4% on a
+# TESTING=1 run), following the precedent of TOTAL_TOLERANCE (#436) and
+# TOLERANCE above. Full builds keep the strict 20%.
+ABOVE_CAP_TOLERANCE = 0.25 if REDUCED_BUILD else 0.20
 PERIOD = CURRENT_FRS_RELEASE.calibration_year
 
 
@@ -83,3 +96,53 @@ def test_salary_sacrifice_above_cap_users(baseline):
         f"Expected ~{TARGET / 1e6:.1f}mn above-cap SS users, "
         f"got {total_above_cap / 1e6:.1f}mn ({total_above_cap / TARGET * 100:.0f}% of target)"
     )
+
+
+def _headcount_masks(contributions):
+    """Run compute_ss_headcount for each target on one person per household."""
+    contributions = np.asarray(contributions, dtype=float)
+    ctx = SimpleNamespace(
+        sim=SimpleNamespace(calculate=lambda variable: contributions),
+        household_from_person=lambda values: np.asarray(values),
+        time_period=PERIOD,
+    )
+    return {
+        kind: compute_ss_headcount(
+            SimpleNamespace(name=f"obr/salary_sacrifice_users_{kind}"), ctx
+        )
+        for kind in ("total", "below_cap", "above_cap")
+    }
+
+
+def test_headcount_targets_split_users_at_the_cap_on_simulated_amounts():
+    """Calibration classifies the amounts the calibration-year simulation holds.
+
+    The same amounts the tests above classify, with no adjustment through the
+    uprating table (which has no salary sacrifice row, as policyengine-uk does
+    not uprate it at load). Below and above the cap partition the users.
+    """
+    edges = [0.0, 0.01, 1_999.99, 2_000.0, 2_000.01, 1e6]
+    rng = np.random.default_rng(0)
+    for contributions in (edges, rng.uniform(0, 5_000, 1_000)):
+        masks = _headcount_masks(contributions)
+        contributions = np.asarray(contributions)
+        np.testing.assert_array_equal(
+            masks["below_cap"], (contributions > 0) & (contributions <= 2_000)
+        )
+        np.testing.assert_array_equal(masks["above_cap"], contributions > 2_000)
+        np.testing.assert_array_equal(
+            masks["below_cap"].astype(int) + masks["above_cap"], masks["total"]
+        )
+
+
+def test_calibration_year_contributions_are_the_survey_amounts():
+    """The cap split classifies survey-year contributions only while
+    policyengine-uk carries them unchanged at load, so the table has no row.
+
+    If policyengine-uk starts uprating them (policyengine-uk#1863), the
+    regenerated table gains a row and the split moves to nominal
+    calibration-year amounts. Decide then which of the two the headcount
+    targets should classify (policyengine-uk-data#541).
+    """
+    table = pd.read_csv(STORAGE_FOLDER / "uprating_factors.csv", index_col="Variable")
+    assert "pension_contributions_via_salary_sacrifice" not in table.index

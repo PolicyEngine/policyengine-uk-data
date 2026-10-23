@@ -2,16 +2,19 @@
 # Update these when new vintages are published.
 
 obr:
-  efo_receipts: "https://obr.uk/download/march-2026-economic-and-fiscal-outlook-detailed-forecast-tables-receipts/"
-  efo_expenditure: "https://obr.uk/download/march-2026-economic-and-fiscal-outlook-detailed-forecast-tables-expenditure/"
-  vintage: "march_2026"
+  # The EFO vintage the OBR targets come from: a manifest in
+  # targets/source_manifests/ naming its hash-verified workbooks. Adopt a new
+  # vintage with `python -m policyengine_uk_data.targets.obr_sources ingest`.
+  manifest: obr_march_2026.yaml
 
 hmrc:
   spi_collated: "https://assets.publishing.service.gov.uk/media/69f1f12d2fae53a03709682f/Collated_Tables_3_1_to_3_11_2324.ods"
   spi_geography: "https://assets.publishing.service.gov.uk/media/69f1f17cc42061e837e3ac3b/Collated_Tables_3_12_to_3_15a_2324.ods"
   income_tax_liabilities: "https://www.gov.uk/government/statistics/income-tax-liabilities-statistics-tax-year-2022-to-2023-to-tax-year-2025-to-2026"
   capital_gains_statistics: "https://www.gov.uk/government/statistics/capital-gains-tax-statistics"
-  salary_sacrifice_table_6: "https://assets.publishing.service.gov.uk/media/687a294e312ee8a5f0806b6d/Tables_6_1_and_6_2.csv"
+  # Private pension statistics, July 2026 (tax year 2024-25). Refresh with
+  # storage/hmrc_pension_relief_tables_6_1_6_2_*.csv (hmrc_salary_sacrifice.py).
+  salary_sacrifice_table_6: "https://assets.publishing.service.gov.uk/media/6a673e0e5e87122783093901/Tables_6_1_and_6_2.csv"
 
 dwp:
   stat_xplore_api: "https://stat-xplore.dwp.gov.uk/webapi/rest/v1"

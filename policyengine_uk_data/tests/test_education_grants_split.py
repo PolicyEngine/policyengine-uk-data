@@ -24,9 +24,10 @@ def test_allocate_reported_education_grants_splits_by_capacity():
 class FakeStudentSupportSim:
     def __init__(self, values):
         self.values = values
+        self.calls = []
 
     def calculate(self, variable, year):
-        del year
+        self.calls.append((variable, year))
         return self.values[variable]
 
 
@@ -78,3 +79,57 @@ def test_split_reported_education_grants_does_not_seed_dsa_before_model_year():
         result["disabled_students_allowance_eligible_expenses"], [0]
     )
     np.testing.assert_allclose(result["education_grants"], [100])
+
+
+def test_split_reported_education_grants_seeds_dsa_at_the_policy_year():
+    # The FRS 2024-25 build is simulated from 2025, the first year
+    # policyengine-uk models DSA, so the seed is gated on the policy year
+    # rather than the survey year (uk-data#478).
+    pe_person = pd.DataFrame({"education_grants": [100]})
+    sim = FakeStudentSupportSim(
+        {
+            "childcare_grant": np.array([0]),
+            "parents_learning_allowance": np.array([0]),
+            "adult_dependants_grant": np.array([0]),
+            "maintenance_loan_in_england_system": np.array([True]),
+            "disabled_students_allowance_course_eligible": np.array([True]),
+            "disabled_students_allowance_has_qualifying_condition": np.array([True]),
+            "disabled_students_allowance_receives_equivalent_support": np.array(
+                [False]
+            ),
+        }
+    )
+
+    result = split_reported_education_grants(
+        pe_person, sim, 2024, dsa_maximum=500, policy_year=2025
+    )
+
+    np.testing.assert_allclose(
+        result["disabled_students_allowance_eligible_expenses"], [100]
+    )
+    np.testing.assert_allclose(result["education_grants"], [0])
+    # Grant capacities stay at the survey year; the DSA gate and eligibility
+    # are evaluated at the policy year.
+    assert ("childcare_grant", 2024) in sim.calls
+    dsa_years = {
+        year for variable, year in sim.calls if variable.startswith("disabled_")
+    }
+    assert dsa_years == {2025}
+
+
+def test_split_reported_education_grants_policy_year_defaults_to_survey_year():
+    pe_person = pd.DataFrame({"education_grants": [100]})
+    sim = FakeStudentSupportSim(
+        {
+            "childcare_grant": np.array([0]),
+            "parents_learning_allowance": np.array([0]),
+            "adult_dependants_grant": np.array([0]),
+            "maintenance_loan_in_england_system": np.array([True]),
+        }
+    )
+
+    result = split_reported_education_grants(pe_person, sim, 2024, dsa_maximum=500)
+
+    np.testing.assert_allclose(
+        result["disabled_students_allowance_eligible_expenses"], [0]
+    )

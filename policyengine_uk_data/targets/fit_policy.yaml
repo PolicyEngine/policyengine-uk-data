@@ -1,0 +1,47 @@
+# When a pull request's build fails or flags against its base build's fit
+# (utils/fit_report.py). Both builds run the same way in pull request CI:
+# TESTING, 32 epochs, one output-area clone, the head's lockfile.
+#
+# The share allowance was adopted under cos d1344 (15 October 2026), from the final-epoch fits of
+# five builds of the same data code: docs, changelog and CI pull requests
+# while main's data code was unchanged from b34a4ea2 to 2b9c1c2c (runs
+# 38006434333, 37959581668, 38009046475, 37960852139, 37864653693).
+schema_version: 1
+
+share_within_10pct:
+  # Fail when the share of national, or of local, targets within 10% of
+  # their values falls by more than this. Across the 20 ordered pairs of the
+  # five builds the national share moved by at most 0.93pp and the local by
+  # at most 0.69pp, so 2pp is about twice the same-code spread.
+  # Alternatives: 1pp leaves no margin over that spread while #598 (builds
+  # of the same code fall into two weight sets) is unexplained. 5pp would
+  # pass the 2.4pp local drop of #551's build against the build of the
+  # 1.58.1 release branch (runs 38661397028 and 38228500493).
+  allowed_drop: 0.02
+
+national_target:
+  # Flag, for review, each national target whose error band is worse on the
+  # head than on the base. Bands of |estimate / target - 1|: within 10%,
+  # 10-25%, 25-50%, 50-100%, over 100% (fit_report.BANDS). Across the 20
+  # ordered pairs of the five same-code builds above, 2 to 12 of the 644
+  # national targets move to a worse band per pair (mean 7), so a list stays
+  # short. #551's build moves 31 and #579's 27 against the 1.58.1 release
+  # branch's build.
+  #
+  # This replaces flagging an error rise of more than 0.2 (adopted under
+  # d1344 on 15 October), which needed each target's error in the uploaded
+  # summary. Sol's re-review of #599 found no safe way to publish them: the
+  # dataset repeats households (output-area clones, SPI and CGT donors), so
+  # a count of rows can't show how many respondents support an estimate, and
+  # one household can dominate a target. A band is a bound, not a value.
+  # The old rule gave 0 to 6 flags per same-code pair. Bands still can't see
+  # a move inside one band (say 30% to 45%). The replacement is a W3
+  # threshold call under d1344's delegation (thresholds on evidence, with an
+  # independent review agreeing), pending that review. Per-target moves
+  # don't fail until #598 is fixed.
+  #
+  # Run ids of the five builds and their saved log folders: 38006434333
+  # (docs-ebdbbce5), 37959581668 (docs-2a071400), 38009046475
+  # (changelog-6af935fb), 37960852139 (changelog-bb41c3ca), 37864653693
+  # (ci-push-gate-03b3ecd9); the 1.58.1 release branch is 38228500493.
+  flag: worse_band

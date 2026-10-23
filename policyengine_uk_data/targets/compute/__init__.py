@@ -7,8 +7,6 @@ from policyengine_uk_data.targets.compute.benefits import (
     compute_two_child_limit,
     compute_uc_by_children,
     compute_uc_by_family_type,
-    compute_uc_jobseeker,
-    compute_uc_outside_cap,
     compute_uc_payment_dist,
 )
 from policyengine_uk_data.targets.compute.council_tax import (
@@ -77,8 +75,6 @@ __all__ = [
     "compute_two_child_limit",
     "compute_uc_by_children",
     "compute_uc_by_family_type",
-    "compute_uc_jobseeker",
-    "compute_uc_outside_cap",
     "compute_uc_payment_dist",
     "compute_uk_population",
     "compute_vehicles",

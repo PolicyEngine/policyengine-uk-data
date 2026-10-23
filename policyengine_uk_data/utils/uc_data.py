@@ -1,5 +1,114 @@
+import numpy as np
 import pandas as pd
 from pathlib import Path
+import re
+import unicodedata
+
+
+def _normalise_area_name(name: str) -> str:
+    """Ignore case, accents, punctuation and the spelling of ampersands."""
+    name = unicodedata.normalize("NFKD", name.casefold().replace("&", "and"))
+    return "".join(character for character in name if character.isalnum())
+
+
+def _area_name_aliases(name: str) -> set[str]:
+    # Welsh and English names in Stat-Xplore labels may appear in either order.
+    # Match either label, without guessing a translation.
+    return {_normalise_area_name(part) for part in re.split(r"/", name)} - {""}
+
+
+def _match_uc_area_codes(
+    data: pd.DataFrame, areas: pd.DataFrame, name_column: str
+) -> pd.DataFrame:
+    """Attach canonical codes with a complete, one-to-one area match.
+
+    Extracts with codes use those directly; the committed workbooks have
+    names only. Reject incomplete or ambiguous extracts before scaling so
+    the national rescale cannot hide a missing or duplicated area.
+    """
+    if areas["code"].isna().any() or areas["code"].duplicated().any():
+        raise ValueError("UC reference areas contain missing or duplicate codes")
+
+    aliases = {}
+    for area in areas.itertuples(index=False):
+        for alias in _area_name_aliases(area.name):
+            if alias in aliases and aliases[alias] != area.code:
+                raise ValueError(f"Ambiguous UC reference area name: {area.name!r}")
+            aliases[alias] = area.code
+
+    expected_codes = set(areas["code"])
+    matched_codes = []
+    for row in data.to_dict("records"):
+        code = row.get("code")
+        if pd.notna(code) and code != "":
+            if code not in expected_codes:
+                raise ValueError(f"Unmatched UC area code: {code!r}")
+        else:
+            name = row[name_column]
+            candidates = (
+                {
+                    aliases[alias]
+                    for alias in _area_name_aliases(name)
+                    if alias in aliases
+                }
+                if isinstance(name, str)
+                else set()
+            )
+            if len(candidates) != 1:
+                raise ValueError(f"Unmatched or ambiguous UC area name: {name!r}")
+            code = candidates.pop()
+        matched_codes.append(code)
+
+    result = data.copy()
+    result["code"] = matched_codes
+    duplicates = result.loc[result["code"].duplicated(keep=False), "code"].tolist()
+    if duplicates:
+        raise ValueError(f"Duplicate UC areas: {duplicates}")
+    missing = expected_codes - set(matched_codes)
+    if missing:
+        raise ValueError(f"Missing UC areas: {sorted(missing)}")
+    return result
+
+
+def parse_monthly_award_band(band: str) -> tuple[float, float]:
+    """Annual (lower, upper] payment bounds of a Stat-Xplore monthly award band.
+
+    Awards are whole pence, so the band '£100.01 to £200.00' holds monthly
+    awards over £100.00 and up to £200.00: annual bounds (1,200, 2,400]. The
+    lower bound is the previous band's top, so consecutive bands meet with no
+    gap. The open top band '£2500.01 or over' is (30,000, inf).
+    """
+    text = band.replace("£", "").replace(",", "").strip()
+    if text.endswith(" or over"):
+        lower, upper = float(text.removesuffix(" or over")), np.inf
+    else:
+        parts = text.split(" to ")
+        if len(parts) != 2:
+            raise ValueError(f"Unrecognised UC monthly award band: {band!r}")
+        lower, upper = float(parts[0]), float(parts[1]) * 12
+    lower = round((lower - 0.01) * 12, 2)
+    if not (np.isfinite(lower) and lower >= 0 and upper > lower):
+        raise ValueError(f"Invalid UC monthly award band: {band!r}")
+    return lower, upper
+
+
+def _check_bands_disjoint(bands: pd.DataFrame) -> None:
+    """Fail if any family type's payment bands overlap.
+
+    Stat-Xplore's '£1500.01 or over' band is its top band for months up to
+    August 2022 and spans the finer bands added from September 2022. It is
+    suppressed ('..') in the committed extract; if a new extract filled it
+    in, counting it as well would double count those households.
+    """
+    for family_type, group in bands.groupby("family_type"):
+        group = group.sort_values("uc_annual_payment_min")
+        lower = group.uc_annual_payment_min.to_numpy()
+        upper = group.uc_annual_payment_max.to_numpy()
+        if (lower[1:] < upper[:-1]).any():
+            raise ValueError(
+                f"UC payment bands for {family_type} overlap: check for "
+                "summary bands spanning finer ones"
+            )
 
 
 def _parse_uc_national_payment_dist():
@@ -44,17 +153,10 @@ def _parse_uc_national_payment_dist():
 
     result_df = pd.DataFrame(data_rows)
 
-    # Parse monthly band into min and max, then convert to annual
-    def parse_band(band):
-        """Parse band like '£100.01 to £200.00' into (min, max)."""
-        parts = band.replace("£", "").replace(",", "").split(" to ")
-        if len(parts) == 2:
-            return float(parts[0]) * 12, float(parts[1]) * 12
-        return None, None
-
-    result_df[["uc_annual_payment_min", "uc_annual_payment_max"]] = result_df[
-        "monthly_award_band"
-    ].apply(lambda x: pd.Series(parse_band(x)))
+    result_df[["uc_annual_payment_min", "uc_annual_payment_max"]] = [
+        parse_monthly_award_band(band) for band in result_df["monthly_award_band"]
+    ]
+    _check_bands_disjoint(result_df)
 
     # Map family types to constant names
     family_type_mapping = {
@@ -131,6 +233,11 @@ def _parse_uc_pc_households():
 
     # Combine GB and NI data
     result_df = pd.DataFrame(gb_data_rows + ni_data_rows)
+    result_df = _match_uc_area_codes(
+        result_df,
+        pd.read_csv(storage_path / "constituencies_2024.csv"),
+        "constituency_name",
+    )
 
     # Scale constituency counts to match national total
     national_total = _parse_uc_national_payment_dist()["household_count"].sum()
@@ -202,6 +309,11 @@ def _parse_uc_la_households():
 
     # Combine GB and NI data
     result_df = pd.DataFrame(gb_data_rows + ni_data_rows)
+    result_df = _match_uc_area_codes(
+        result_df,
+        pd.read_csv(storage_path / "local_authorities_2021.csv"),
+        "la_name",
+    )
 
     # Scale LA counts to match national total
     national_total = _parse_uc_national_payment_dist()["household_count"].sum()

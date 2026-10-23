@@ -5,5 +5,24 @@ metadata:
   reference:
     - title: Empirical estimate from FRS data
       href: https://github.com/PolicyEngine/policyengine-uk-data
+# DfE publishes a take-up rate for early learning for 2-year-olds directly —
+# 74.8% of eligible children registered in January 2024 — but it is not
+# transferable to this parameter as things stand, because the two are measured
+# on different populations.
+#
+# policyengine-uk gives 2-year-olds extended (working parent) entitlement from
+# 2024-01-01, and targeted_childcare_entitlement_eligible excludes benefit
+# units that qualify for it. The real working-parent entitlement for
+# 2-year-olds began in April 2024, after DfE's January 2024 census, so DfE's
+# eligible count contains no corresponding exclusion. Applying DfE's rate to
+# the model's smaller base would fit one difference against another.
+#
+# DfE also notes its eligible count omits multiple two-year-olds and several
+# non-economic eligibility routes, so the published percentage overstates true
+# take-up, and PolicyEngine models a different subset of those routes again.
+#
+# Aligning the populations — starting with the 2024-01-01 date on
+# gov.dfe.extended_childcare_entitlement.hours, which should be April — is a
+# prerequisite for transferring the rate.
 values:
   2015-01-01: 0.597
