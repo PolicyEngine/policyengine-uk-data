@@ -16,7 +16,12 @@ import logging
 import numpy as np
 import pandas as pd
 
-from policyengine_uk_data.targets import get_all_targets
+from policyengine_uk_data.targets.coverage import (
+    TargetStatus,
+    check_coverage,
+    column_status,
+)
+from policyengine_uk_data.targets.registry import emitted_targets, get_all_targets
 from policyengine_uk_data.targets.schema import (
     GeographicLevel,
     Target,
@@ -52,7 +57,6 @@ from policyengine_uk_data.targets.compute import (
     compute_two_child_limit,
     compute_uc_by_children,
     compute_uc_by_family_type,
-    compute_uc_outside_cap,
     compute_uc_payment_dist,
     compute_uk_population,
     compute_vehicles,
@@ -61,10 +65,27 @@ from policyengine_uk_data.targets.compute import (
 logger = logging.getLogger(__name__)
 
 
+def calibration_targets() -> list[Target]:
+    """The national, regional and country targets the national matrix uses."""
+    targets = []
+    seen = set()
+    for level in (
+        GeographicLevel.NATIONAL,
+        GeographicLevel.REGION,
+        GeographicLevel.COUNTRY,
+    ):
+        for t in get_all_targets(geographic_level=level):
+            if t.name not in seen:
+                seen.add(t.name)
+                targets.append(t)
+    return targets
+
+
 def create_target_matrix(
     dataset,
     time_period: str = None,
     reform=None,
+    require_coverage: bool = True,
 ) -> tuple[pd.DataFrame, pd.Series]:
     """Create (matrix, target_values) for calibration.
 
@@ -72,11 +93,67 @@ def create_target_matrix(
         dataset: a UKSingleYearDataset instance.
         time_period: calendar year as string; defaults to dataset year.
         reform: optional PolicyEngine reform.
+        require_coverage: fail unless every target is in the matrix with
+            signal or listed in targets/known_gaps.yaml (targets/coverage.py).
 
     Returns:
         (df, targets) where df has one column per target and one row
         per household, and targets is a Series of scalar target values
         indexed by target name.
+    """
+    df, targets, statuses = build_target_matrix(dataset, time_period, reform)
+    if require_coverage:
+        check_coverage(statuses)
+    return df, targets
+
+
+MATRIX_LEVELS = (
+    GeographicLevel.NATIONAL,
+    GeographicLevel.REGION,
+    GeographicLevel.COUNTRY,
+)
+
+
+def select_matrix_targets(targets):
+    """The targets the matrix offers, and a ``duplicate`` status for each other.
+
+    Targets are taken level by level (national, region, country), each level
+    in the order the sources emit them, and the first target of each name
+    wins. A later target of that name, at the same level or another, is
+    dropped and recorded as a duplicate (targets/coverage.py).
+    """
+    kept, statuses = {}, []
+    for level in MATRIX_LEVELS:
+        for target in targets:
+            if target.geographic_level != level:
+                continue
+            if target.name not in kept:
+                kept[target.name] = target
+                continue
+            first = kept[target.name]
+            statuses.append(
+                TargetStatus(
+                    target.name,
+                    "duplicate",
+                    f"{target.source} {level.value} target for {_years(target)} "
+                    f"dropped for the {first.source} "
+                    f"{first.geographic_level.value} one for {_years(first)}",
+                )
+            )
+    return list(kept.values()), statuses
+
+
+def _years(target: Target) -> str:
+    return ", ".join(str(year) for year in sorted(target.values))
+
+
+def build_target_matrix(dataset, time_period: str = None, reform=None):
+    """The target matrix, its values, and each offered target's status.
+
+    A target that is dropped (a duplicate name, no value for the year, no
+    column, an error) or that enters with a non-finite value or column, or
+    with no household contributing, is recorded with that status
+    (targets/coverage.py). Each offered target gets exactly one status.
     """
     from policyengine_uk import Microsimulation
 
@@ -89,17 +166,7 @@ def create_target_matrix(
 
     ctx = _SimContext(sim, time_period, dataset, reform)
 
-    all_targets = []
-    seen = set()
-    for level in (
-        GeographicLevel.NATIONAL,
-        GeographicLevel.REGION,
-        GeographicLevel.COUNTRY,
-    ):
-        for t in get_all_targets(geographic_level=level):
-            if t.name not in seen:
-                seen.add(t.name)
-                all_targets.append(t)
+    all_targets, statuses = select_matrix_targets(emitted_targets())
 
     df = pd.DataFrame()
     target_names = []
@@ -109,27 +176,60 @@ def create_target_matrix(
         try:
             val = _resolve_value(target, year)
             if val is None:
+                statuses.append(
+                    TargetStatus(
+                        target.name, "no_value_for_year", f"values for {_years(target)}"
+                    )
+                )
                 continue
             col = _compute_column(target, ctx, year)
             if col is None:
+                statuses.append(TargetStatus(target.name, "no_column"))
                 continue
-            df[target.name] = col
+            df[target.name] = restrict_to_countries(col, ctx.country, target.countries)
+            # The status is of the column as it entered the matrix; a column
+            # whose status cannot be computed leaves the matrix again.
+            try:
+                status = column_status(val, df[target.name])
+            except Exception:
+                del df[target.name]
+                raise
+            statuses.append(TargetStatus(target.name, status))
             target_names.append(target.name)
             target_values.append(val)
         except Exception as e:
             logger.warning("Skipping target %s: %s", target.name, e)
+            statuses.append(
+                TargetStatus(target.name, "error", f"{type(e).__name__}: {e}")
+            )
 
-    return df, pd.Series(target_values, index=target_names)
+    return df, pd.Series(target_values, index=target_names), statuses
+
+
+def restrict_to_countries(column, household_country, countries):
+    """Zero a household column outside the countries a target covers.
+
+    ``countries`` of None means the target covers the whole UK, and the
+    column is returned unchanged.
+    """
+    if countries is None:
+        return column
+    in_scope = np.isin(np.asarray(household_country), countries)
+    return np.asarray(column, dtype=float) * in_scope
 
 
 def _resolve_value(target: Target, year: int) -> float | None:
     """Get the target value for a year, falling back to nearest year.
 
-    VOA council tax targets are population-uprated when extrapolating
-    from their base year (2024).
+    A missing year takes the value of the nearest listed year (the earlier
+    on a tie) if that year is earlier and at most three years away, unless
+    the target sets ``carry_forward=False``; otherwise there is no value. VOA council tax targets are
+    population-uprated when extrapolating from their base year (2024).
     """
     if year in target.values:
         return target.values[year]
+    if not target.carry_forward:
+        return None
     available = sorted(target.values.keys())
     if not available:
         return None
@@ -386,15 +486,9 @@ def _compute_column(target: Target, ctx: _SimContext, year: int) -> np.ndarray |
     # Salary sacrifice NI relief
     if name in (
         "hmrc/salary_sacrifice_employee_nics_relief",
-        "obr/salary_sacrifice_employee_ni_relief",
         "hmrc/salary_sacrifice_employer_nics_relief",
-        "obr/salary_sacrifice_employer_ni_relief",
     ):
         return compute_ss_ni_relief(target, ctx)
-
-    # UC outside benefit cap
-    if name == "obr/universal_credit_outside_cap":
-        return compute_uc_outside_cap(target, ctx)
 
     # Two-child limit
     if "two_child_limit" in name:
