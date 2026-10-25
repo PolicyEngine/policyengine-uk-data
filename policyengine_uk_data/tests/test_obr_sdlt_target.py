@@ -10,10 +10,12 @@ Invariants, for every year the OBR forecasts:
 - 0 <= target <= OBR SDLT whenever 0 <= statistic <= OBR SDLT, and a statistic
   above the OBR figure is an error rather than a negative target;
 - the statistic subtracted is the one `corporate_sdlt` adds;
-- the projection check (an uprating index on each statistic) agrees with the
-  installed values, which vary only when they are projected.
+- the projection check reads each statistic's uprating index, and on the
+  installed policyengine-uk finds both uprated from 2.152.0 (#2322) and
+  neither before.
 """
 
+import importlib.metadata
 import itertools
 import logging
 from contextlib import ExitStack, contextmanager
@@ -22,6 +24,7 @@ from unittest.mock import patch
 import pytest
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
+from packaging.version import Version
 
 from policyengine_uk_data.targets.obr_sources import (
     SourceError,
@@ -193,10 +196,18 @@ def test_projection_check_reads_each_statistics_uprating_index(uprated):
         assert obr.unprojected_corporate_sdlt() == expected
 
 
-def test_projection_check_agrees_with_the_installed_values():
-    """policyengine-uk either uprates both statistics, which then vary over
-    the manifest years, or neither, which then stay at their 2020-21 values."""
+def test_projection_check_on_the_installed_policyengine_uk():
+    """policyengine-uk 2.152.0 and later (#2322) uprate both statistics. The
+    earlier versions uk-data can lock uprate neither and hold the 2020-21
+    figures, £3.13bn in all, in every later year."""
+    version = Version(importlib.metadata.version("policyengine-uk"))
     unprojected = obr.unprojected_corporate_sdlt()
-    values = set(obr.corporate_sdlt_receipts().values())
-    assert len(unprojected) in (0, 2)
-    assert (not unprojected) == (len(values) > 1)
+    if version >= Version("2.152.0"):
+        assert unprojected == []
+    else:
+        assert unprojected == [
+            f"gov.hmrc.stamp_duty.statistics.{kind}.corporate.revenue"
+            for kind in ("residential", "non_residential")
+        ]
+        for value in obr.corporate_sdlt_receipts().values():
+            assert value == pytest.approx(3.13e9)

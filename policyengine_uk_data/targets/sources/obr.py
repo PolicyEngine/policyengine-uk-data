@@ -77,11 +77,12 @@ def corporate_sdlt_receipts(years=None) -> dict[int, float]:
 
     These are the statistics `corporate_sdlt` allocates to households: each
     household's `shareholding` divides its corporate-sector wealth by the
-    weighted total, so the weighted sum of `corporate_sdlt` is this statistic
-    whatever the weights. Read from the installed policyengine-uk, which
-    projects it from PolicyEngine/policyengine-uk#2322 on (see
-    `unprojected_corporate_sdlt`). Years are PolicyEngine years (2025 is
-    2025-26); the default is the active OBR manifest's years.
+    weighted total, so while that total is not zero the weighted sum of
+    `corporate_sdlt` is this statistic whatever the weights. Read from the
+    installed policyengine-uk, which projects it from
+    PolicyEngine/policyengine-uk#2322 on (see `unprojected_corporate_sdlt`).
+    Years are PolicyEngine years (2025 is 2025-26); the default is the active
+    OBR manifest's years.
     """
     from policyengine_uk.system import system
 
