@@ -106,10 +106,10 @@ def main():
             "Impute VAT",
             "Impute public service usage",
             "Impute income",
-            "Impute capital gains",
             "Impute salary sacrifice",
             "Impute student loan plan",
             "Assign Pension Credit take-up",
+            "Impute capital gains",
             "Clone and assign OA geography",
             "Calibrate constituency weights",
             "Calibrate local authority weights",
@@ -189,18 +189,6 @@ def main():
             frs = impute_income(frs)
             update_dataset("Impute income", "completed")
 
-            update_dataset("Impute capital gains", "processing")
-            frs = impute_capital_gains(frs)
-            # Zero-weight donors for the HMRC size-of-gain bands the spline
-            # cannot reach; weighted (or not) by calibration via the
-            # per-band targets in targets/sources/hmrc_cgt.py.
-            from policyengine_uk_data.datasets.imputations.capital_gains import (
-                stack_cgt_band_donors,
-            )
-
-            frs = stack_cgt_band_donors(frs)
-            update_dataset("Impute capital gains", "completed")
-
             update_dataset("Impute salary sacrifice", "processing")
             frs = impute_salary_sacrifice(frs)
             update_dataset("Impute salary sacrifice", "completed")
@@ -223,6 +211,25 @@ def main():
                 frs, year=frs_release.calibration_year
             )
             update_dataset("Assign Pension Credit take-up", "completed")
+
+            # Capital gains come last of the imputations. They stack a second
+            # record for each household with gains and give the copies of
+            # zero-weight (SPI) households a weight, so that the calibration
+            # starts from the right share of each. Running last, the copies
+            # match their originals in everything but the gain, and the
+            # steps above, which count people on survey weights, never see
+            # them.
+            update_dataset("Impute capital gains", "processing")
+            frs = impute_capital_gains(frs)
+            # Donors for the HMRC size-of-gain bands the spline cannot
+            # reach; weighted by calibration via the per-band targets in
+            # targets/sources/hmrc_cgt.py.
+            from policyengine_uk_data.datasets.imputations.capital_gains import (
+                stack_cgt_band_donors,
+            )
+
+            frs = stack_cgt_band_donors(frs)
+            update_dataset("Impute capital gains", "completed")
 
             # Clone households and assign OA geography
             update_dataset("Clone and assign OA geography", "processing")
@@ -264,6 +271,9 @@ def main():
             from policyengine_uk_data.datasets.local_areas.constituencies.calibrate import (
                 get_performance,
             )
+            from policyengine_uk_data.targets.sources.hmrc_cgt import (
+                band_count_target_names,
+            )
 
             # Run calibration with verbose progress
             frs_calibrated_constituencies = calibrate_local_areas(
@@ -281,6 +291,7 @@ def main():
                 get_performance=get_performance,
                 nested_progress=nested_progress,  # Pass the nested progress manager
                 time_period=frs_release.calibration_year,
+                prior_rake_targets=band_count_target_names(),
             )
             update_dataset("Calibrate constituency weights", "completed")
 
@@ -308,6 +319,7 @@ def main():
                 get_performance=get_la_performance,
                 nested_progress=nested_progress,  # Pass the nested progress manager
                 time_period=frs_release.calibration_year,
+                prior_rake_targets=band_count_target_names(),
             )
             update_dataset("Calibrate local authority weights", "completed")
 
@@ -337,13 +349,15 @@ def main():
             # materialisation on purpose. Rail and bus (subsidy and fares) are
             # fitted by simulating the saved base-year file at the calibration
             # year, the configuration consumers actually run: policyengine-uk
-            # re-uprates rail_usage (gov.dft.rail.ridership_index) and
-            # bus_fare_spending (CPI) at load, so a factor fitted on a
-            # calibration-year file and then down-rated would be uprated a
-            # second time. rail_usage, rail_subsidy_spending,
-            # bus_subsidy_spending and bus_fare_spending are not in
+            # re-uprates bus_fare_spending (CPI) at load, so a factor fitted
+            # on a calibration-year file and then down-rated would be uprated
+            # a second time. (rail_usage declares gov.dft.rail.ridership_index,
+            # but policyengine-uk carries it forward unchanged at load because
+            # uprating_indices.yaml does not list it.) rail_usage,
+            # rail_subsidy_spending and bus_subsidy_spending are not in
             # uprating_factors.csv, so `uprate_dataset` leaves them untouched
-            # in either direction: uprating the saved file back to the
+            # in either direction, and bus_fare_spending moves by the same CPI
+            # factor both ways: uprating the saved file back to the
             # calibration year reproduces the calibrated weights and monetary
             # levels but keeps these post-calibration scalings, which the
             # weight solve never saw. The saved file is therefore not
