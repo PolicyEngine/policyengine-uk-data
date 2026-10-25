@@ -649,8 +649,9 @@ def generate_lcfs_table(lcfs_person: pd.DataFrame, lcfs_household: pd.DataFrame)
 
     # Clamp the imputed amounts at zero, as the energy split above already
     # does. The LCFS records a negative weekly amount for housing, water and
-    # electricity (P604) in a few households. A QRF predicts values it was
-    # trained on, so those reached the dataset as negative consumption, and
+    # electricity (P604) in a few households. The QRF samples conditional
+    # quantiles of its training values, so its predictions stay within their
+    # range: those amounts reached the dataset as negative consumption, and
     # where they outweighed the other categories, as negative VAT.
     household[IMPUTATIONS] = household[IMPUTATIONS].clip(lower=0)
 

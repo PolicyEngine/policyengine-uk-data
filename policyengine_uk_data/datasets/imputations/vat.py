@@ -122,7 +122,8 @@ def generate_etb_table(etb: pd.DataFrame, year: int = DEFAULT_ETB_YEAR) -> pd.Da
     # Keep the rate a share of expenditure. A few ETB households report
     # expenditure at or below their VAT, where the ratio is negative or
     # undefined, and a few report more VAT than their expenditure can carry,
-    # where it exceeds one. A QRF predicts values it was trained on, so those
+    # where it exceeds one. The QRF samples conditional quantiles of its
+    # training values, so its predictions stay within their range: those rows
     # reached the dataset as negative rates, and with them negative VAT, and
     # as rates of up to 55.
     expenditure_before_vat = etb_year.expdis - etb_year.totvat

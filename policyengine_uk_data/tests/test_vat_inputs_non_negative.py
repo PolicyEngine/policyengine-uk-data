@@ -3,7 +3,9 @@
 policyengine-uk charges VAT on consumption times the full-rate expenditure
 rate, with no floor. On the 1.58.0 enhanced FRS, 44 households had negative
 total consumption and 32 a negative rate, so 76 had negative VAT
-(uk-data#565). Both came from survey training rows that a QRF reproduced.
+(uk-data#565). Both came from survey training rows: the QRF samples
+conditional quantiles of its training values, so its predictions stay within
+their range.
 """
 
 from unittest import mock
@@ -142,6 +144,46 @@ def test_guard_names_the_negative_column():
     consumption._require_non_negative(household, ["b_spending"])
     with pytest.raises(ValueError, match="a_consumption is negative for 2"):
         consumption._require_non_negative(household, ["b_spending", "a_consumption"])
+
+
+def test_impute_consumption_fails_on_negative_imputed_consumption(monkeypatch):
+    """The guard runs on the dataset impute_consumption returns, after the
+    energy raking and fuel zeroing."""
+    predicted = pd.DataFrame({column: [1.0, 1.0] for column in consumption.IMPUTATIONS})
+    predicted.loc[1, "housing_water_and_electricity_consumption"] = -5.0
+
+    class _Model:
+        input_columns = ("household_weight", "has_fuel_consumption")
+
+        def predict(self, frame):
+            return predicted
+
+    class _Dataset:
+        household = pd.DataFrame({"household_id": [1, 2]})
+
+        def copy(self):
+            return self
+
+        def validate(self):
+            return None
+
+    class _Simulation:
+        def __init__(self, dataset):
+            pass
+
+        def calculate(self, variable, map_to):
+            values = np.array(["NONE", "NONE"]) if variable == "region" else [1, 1]
+            return pd.Series(values)
+
+        def calculate_dataframe(self, columns, map_to):
+            return pd.DataFrame({column: [1.0, 1.0] for column in columns})
+
+    monkeypatch.setattr(consumption, "create_consumption_model", lambda: _Model())
+    monkeypatch.setattr(consumption, "Microsimulation", _Simulation)
+    with pytest.raises(
+        ValueError, match="housing_water_and_electricity_consumption is negative for 1"
+    ):
+        consumption.impute_consumption(_Dataset())
 
 
 @pytest.mark.parametrize("bad_rate", [-0.01, 1.01])
