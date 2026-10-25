@@ -79,9 +79,9 @@ def corporate_sdlt_receipts(years=None) -> dict[int, float]:
     household's `shareholding` divides its corporate-sector wealth by the
     weighted total, so the weighted sum of `corporate_sdlt` is this statistic
     whatever the weights. Read from the installed policyengine-uk, which
-    projects it from PolicyEngine/policyengine-uk#2322 on. Years are
-    PolicyEngine years (2025 is 2025-26); the default is the active OBR
-    manifest's years.
+    projects it from PolicyEngine/policyengine-uk#2322 on (see
+    `unprojected_corporate_sdlt`). Years are PolicyEngine years (2025 is
+    2025-26); the default is the active OBR manifest's years.
     """
     from policyengine_uk.system import system
 
@@ -95,13 +95,23 @@ def corporate_sdlt_receipts(years=None) -> dict[int, float]:
     }
 
 
-def corporate_sdlt_is_projected(corporate: dict[int, float]) -> bool:
-    """Whether the corporate SDLT statistic changes over the years given.
+def unprojected_corporate_sdlt() -> list[str]:
+    """The corporate SDLT revenue parameters policyengine-uk does not project.
 
-    policyengine-uk before PolicyEngine/policyengine-uk#2322 held it at its
-    2020-21 value, £3.13bn, in every later year.
+    PolicyEngine/policyengine-uk#2322 (first released in 2.152.0) gives each
+    one an uprating index, the OBR's SDLT receipts for its property type, so
+    that load-time uprating projects it past HMRC's last outturn. Earlier
+    versions have no index and carry the 2020-21 figures forward unchanged,
+    £3.13bn in all, so the check is on the index, not on the values.
     """
-    return len(set(corporate.values())) > 1
+    from policyengine_uk.system import system
+
+    statistics = system.parameters.gov.hmrc.stamp_duty.statistics
+    return [
+        f"gov.hmrc.stamp_duty.statistics.{kind}.corporate.revenue"
+        for kind in ("residential", "non_residential")
+        if not getattr(statistics, kind).corporate.revenue.metadata.get("uprating")
+    ]
 
 
 def household_sdlt(obr_sdlt: dict[int, float]) -> dict[int, float]:
@@ -114,17 +124,15 @@ def household_sdlt(obr_sdlt: dict[int, float]) -> dict[int, float]:
     Raises SourceError, which the receipts parser does not catch, if the
     statistic exceeds the OBR's line in any year.
     """
-    corporate = corporate_sdlt_receipts(obr_sdlt)
-    if len(corporate) > 1 and not corporate_sdlt_is_projected(corporate):
+    unprojected = unprojected_corporate_sdlt()
+    if unprojected:
         logger.warning(
-            "OBR receipts: policyengine-uk holds corporate SDLT at £%.2fbn in "
-            "every year from %d to %d, so it predates "
+            "OBR receipts: policyengine-uk does not project %s, so it predates "
             "PolicyEngine/policyengine-uk#2322 and the household SDLT target "
             "overstates households' share. Full builds refuse it.",
-            next(iter(corporate.values())) / 1e9,
-            min(corporate),
-            max(corporate),
+            " or ".join(unprojected),
         )
+    corporate = corporate_sdlt_receipts(obr_sdlt)
     household = {year: total - corporate[year] for year, total in obr_sdlt.items()}
     negative = sorted(year for year, value in household.items() if value < 0)
     if negative:

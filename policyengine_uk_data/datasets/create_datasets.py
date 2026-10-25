@@ -57,6 +57,14 @@ def _materialize_base_year_dataset(dataset, frs_release, uprate_dataset):
 
 def main():
     """Create enhanced FRS dataset with rich progress tracking."""
+    # Imported before the try, whose handler reports any failure with it,
+    # the preflight's included.
+    from policyengine_uk_data.utils.progress import (
+        ProcessingProgress,
+        display_success_panel,
+        display_error_panel,
+    )
+
     try:
         # TESTING builds (PR CI) skip the full-build checks.
         assert_local_build_environment(full_build=os.environ.get("TESTING", "0") != "1")
@@ -68,11 +76,6 @@ def main():
         from policyengine_uk_data.datasets.frs import create_frs
         from policyengine_uk_data.datasets.frs_release import CURRENT_FRS_RELEASE
         from policyengine_uk_data.storage import STORAGE_FOLDER
-        from policyengine_uk_data.utils.progress import (
-            ProcessingProgress,
-            display_success_panel,
-            display_error_panel,
-        )
         from policyengine_uk_data.utils.subsample import subsample_dataset
         from policyengine_uk_data.utils.uprating import uprate_dataset
 

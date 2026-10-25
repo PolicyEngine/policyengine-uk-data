@@ -9,14 +9,18 @@ Invariants, for every year the OBR forecasts:
 - target + corporate statistic = OBR SDLT;
 - 0 <= target <= OBR SDLT whenever 0 <= statistic <= OBR SDLT, and a statistic
   above the OBR figure is an error rather than a negative target;
-- the statistic subtracted is the one `corporate_sdlt` adds.
+- the statistic subtracted is the one `corporate_sdlt` adds;
+- the projection check (an uprating index on each statistic) agrees with the
+  installed values, which vary only when they are projected.
 """
 
+import itertools
 import logging
+from contextlib import ExitStack, contextmanager
 from unittest.mock import patch
 
 import pytest
-from hypothesis import given
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from policyengine_uk_data.targets.obr_sources import (
@@ -46,12 +50,18 @@ def _row(ws, label: str) -> dict[int, float]:
     return read_row(ws, obr._find_row(ws, label), active_manifest())
 
 
-def _stub_statistic(corporate: dict[int, float]):
-    return patch.object(
-        obr,
-        "corporate_sdlt_receipts",
-        lambda years=None: {year: corporate[year] for year in years},
-    )
+@contextmanager
+def _stub_statistic(corporate: dict[int, float], unprojected: tuple = ()):
+    """Stand in for policyengine-uk's statistic and its projection check."""
+    with (
+        patch.object(
+            obr,
+            "corporate_sdlt_receipts",
+            lambda years=None: {year: corporate[year] for year in years},
+        ),
+        patch.object(obr, "unprojected_corporate_sdlt", lambda: list(unprojected)),
+    ):
+        yield
 
 
 def test_target_is_obr_sdlt_less_corporate_statistic(receipts_workbook):
@@ -102,8 +112,12 @@ def test_statistic_is_what_corporate_sdlt_adds():
 
 
 _amounts = st.floats(min_value=0, max_value=1e12, allow_nan=False)
+# Generation can pass Hypothesis's time limit after policyengine-uk's imports
+# on a loaded machine; the properties do not depend on timing.
+relaxed = settings(deadline=None, suppress_health_check=[HealthCheck.too_slow])
 
 
+@relaxed
 @given(st.dictionaries(st.integers(2000, 2040), st.tuples(_amounts, _amounts)))
 def test_household_sdlt_is_obr_sdlt_less_statistic(pairs):
     obr_sdlt = {year: max(pair) for year, pair in pairs.items()}
@@ -117,6 +131,7 @@ def test_household_sdlt_is_obr_sdlt_less_statistic(pairs):
         assert household[year] + corporate[year] == pytest.approx(total, abs=1e-3)
 
 
+@relaxed
 @given(
     st.dictionaries(st.integers(2000, 2040), _amounts, min_size=1),
     st.floats(min_value=1, max_value=1e9),
@@ -138,15 +153,50 @@ def test_statistic_above_obr_sdlt_stops_the_receipts_parse(receipts_workbook):
         obr._parse_receipts(receipts_workbook)
 
 
-def test_flat_statistic_warns(caplog):
+def test_unprojected_statistic_warns(caplog):
     flat = dict.fromkeys(YEARS, 3.13e9)
-    with _stub_statistic(flat), caplog.at_level(logging.WARNING):
+    unprojected = ("gov.hmrc.stamp_duty.statistics.residential.corporate.revenue",)
+    with _stub_statistic(flat, unprojected), caplog.at_level(logging.WARNING):
         obr.household_sdlt(dict.fromkeys(YEARS, 20e9))
     assert "PolicyEngine/policyengine-uk#2322" in caplog.text
+    assert unprojected[0] in caplog.text
 
 
 def test_projected_statistic_does_not_warn(caplog):
-    projected = {year: 4e9 + 1e8 * (year - YEARS[0]) for year in YEARS}
-    with _stub_statistic(projected), caplog.at_level(logging.WARNING):
+    """Even when equal in every year, as a one-year manifest's always is."""
+    with _stub_statistic(dict.fromkeys(YEARS, 4e9)), caplog.at_level(logging.WARNING):
         obr.household_sdlt(dict.fromkeys(YEARS, 20e9))
     assert caplog.text == ""
+
+
+@pytest.mark.parametrize("uprated", itertools.product([False, True], repeat=2))
+def test_projection_check_reads_each_statistics_uprating_index(uprated):
+    """Whatever the installed version, a statistic counts as projected exactly
+    when its parameter names an uprating index."""
+    from policyengine_uk.system import system
+
+    statistics = system.parameters.gov.hmrc.stamp_duty.statistics
+    expected = []
+    with ExitStack() as stack:
+        for kind, on in zip(("residential", "non_residential"), uprated):
+            metadata = getattr(statistics, kind).corporate.revenue.metadata
+            stack.enter_context(patch.dict(metadata))
+            metadata.pop("uprating", None)
+            if on:
+                metadata["uprating"] = (
+                    f"gov.economic_assumptions.indices.obr.stamp_duty_land_tax.{kind}"
+                )
+            else:
+                expected.append(
+                    f"gov.hmrc.stamp_duty.statistics.{kind}.corporate.revenue"
+                )
+        assert obr.unprojected_corporate_sdlt() == expected
+
+
+def test_projection_check_agrees_with_the_installed_values():
+    """policyengine-uk either uprates both statistics, which then vary over
+    the manifest years, or neither, which then stay at their 2020-21 values."""
+    unprojected = obr.unprojected_corporate_sdlt()
+    values = set(obr.corporate_sdlt_receipts().values())
+    assert len(unprojected) in (0, 2)
+    assert (not unprojected) == (len(values) > 1)
