@@ -105,8 +105,10 @@ def _receipts_wb(*, populate: bool) -> openpyxl.Workbook:
         row = 10 + offset
         ws[f"B{row}"] = label
         if populate:
+            # £100bn a year, above the corporate SDLT statistic the SDLT
+            # target subtracts.
             for col in ("D", "E", "F", "G", "H", "I", "J"):
-                ws[f"{col}{row}"] = 1.0
+                ws[f"{col}{row}"] = 100.0
     return wb
 
 
