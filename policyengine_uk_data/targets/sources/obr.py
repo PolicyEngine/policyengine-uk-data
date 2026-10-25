@@ -14,6 +14,7 @@ import openpyxl
 
 from policyengine_uk_data.targets.obr_sources import (
     ObrManifest,
+    SourceError,
     active_manifest,
     check_coverage,
     load_workbook,
@@ -69,6 +70,68 @@ def _find_row(ws, label: str, col: str = "B", max_row: int = 80) -> int:
         if cell_val and str(cell_val).strip().startswith(label):
             return row
     raise ValueError(f"Row '{label}' not found in sheet")
+
+
+def corporate_sdlt_receipts(years=None) -> dict[int, float]:
+    """policyengine-uk's SDLT receipts from non-natural persons, by year.
+
+    These are the statistics `corporate_sdlt` allocates to households: each
+    household's `shareholding` divides its corporate-sector wealth by the
+    weighted total, so the weighted sum of `corporate_sdlt` is this statistic
+    whatever the weights. Read from the installed policyengine-uk, which
+    projects it from PolicyEngine/policyengine-uk#2322 on. Years are
+    PolicyEngine years (2025 is 2025-26); the default is the active OBR
+    manifest's years.
+    """
+    from policyengine_uk.system import system
+
+    statistics = system.parameters.gov.hmrc.stamp_duty.statistics
+    return {
+        year: float(
+            statistics.residential.corporate.revenue(f"{year}-01-01")
+            + statistics.non_residential.corporate.revenue(f"{year}-01-01")
+        )
+        for year in (active_manifest().years if years is None else years)
+    }
+
+
+def corporate_sdlt_is_projected(corporate: dict[int, float]) -> bool:
+    """Whether the corporate SDLT statistic changes over the years given.
+
+    policyengine-uk before PolicyEngine/policyengine-uk#2322 held it at its
+    2020-21 value, £3.13bn, in every later year.
+    """
+    return len(set(corporate.values())) > 1
+
+
+def household_sdlt(obr_sdlt: dict[int, float]) -> dict[int, float]:
+    """The OBR's SDLT receipts less policyengine-uk's corporate SDLT, by year.
+
+    The OBR's SDLT line covers every buyer. policyengine-uk counts receipts
+    from non-natural persons (companies, partnerships, collective investment
+    schemes) separately, as `corporate_sdlt`, so targeting the household
+    variable `stamp_duty_land_tax` at the whole line counted them twice (#564).
+    Raises SourceError, which the receipts parser does not catch, if the
+    statistic exceeds the OBR's line in any year.
+    """
+    corporate = corporate_sdlt_receipts(obr_sdlt)
+    if len(corporate) > 1 and not corporate_sdlt_is_projected(corporate):
+        logger.warning(
+            "OBR receipts: policyengine-uk holds corporate SDLT at £%.2fbn in "
+            "every year from %d to %d, so it predates "
+            "PolicyEngine/policyengine-uk#2322 and the household SDLT target "
+            "overstates households' share. Full builds refuse it.",
+            next(iter(corporate.values())) / 1e9,
+            min(corporate),
+            max(corporate),
+        )
+    household = {year: total - corporate[year] for year, total in obr_sdlt.items()}
+    negative = sorted(year for year, value in household.items() if value < 0)
+    if negative:
+        raise SourceError(
+            f"policyengine-uk's corporate SDLT exceeds the OBR's SDLT in {negative}"
+        )
+    return household
 
 
 def _parse_receipts(
@@ -136,6 +199,8 @@ def _parse_receipts(
         try:
             row_num = _find_row(ws39, label, col="B", max_row=80)
             values = read_row(ws39, row_num, manifest)
+            if values and name == "sdlt":
+                values = household_sdlt(values)
             if values:
                 recovered.append(label)
                 targets.append(
