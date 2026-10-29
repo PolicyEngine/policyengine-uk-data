@@ -28,8 +28,9 @@ And for the built datasets:
 7. The uprating table moves it exactly as miscellaneous income, so the bound
    holds in every year, once policyengine-uk reads it.
 
-The data checks assert on counts only, so a failure never prints a record's
-amounts (the FRS is licensed microdata).
+The data checks reduce each dataset to counts in helper functions and
+assert only on those counts, so a failure never prints a record (the FRS is
+licensed microdata).
 """
 
 import numpy as np
@@ -207,40 +208,86 @@ def test_clear_adds_no_column_to_a_dataset_without_one():
     assert VARIABLE not in cleared.person.columns
 
 
-def _bound_violations(person, mask=None) -> dict:
-    chapter_8 = person[VARIABLE].to_numpy()
-    miscellaneous = person["miscellaneous_income"].to_numpy()
-    keep = np.ones(len(person), dtype=bool) if mask is None else mask
+NO_VIOLATIONS = {
+    "negative": 0,
+    "not_finite": 0,
+    "negative_miscellaneous_income": 0,
+    "miscellaneous_income_not_finite": 0,
+    "above_miscellaneous_income": 0,
+}
+
+
+def _bound_violations(person) -> dict:
+    """Counts of rows that break invariant 1, in the keys of NO_VIOLATIONS."""
+    chapter_8 = person[VARIABLE].to_numpy(dtype=float)
+    miscellaneous = person["miscellaneous_income"].to_numpy(dtype=float)
     return {
-        "negative": int((chapter_8[keep] < 0).sum()),
-        "above_miscellaneous_income": int((chapter_8 > miscellaneous)[keep].sum()),
-        "not_finite": int((~np.isfinite(chapter_8[keep])).sum()),
+        "negative": int((chapter_8 < 0).sum()),
+        "not_finite": int((~np.isfinite(chapter_8)).sum()),
+        "negative_miscellaneous_income": int((miscellaneous < 0).sum()),
+        "miscellaneous_income_not_finite": int((~np.isfinite(miscellaneous)).sum()),
+        "above_miscellaneous_income": int((chapter_8 > miscellaneous).sum()),
     }
 
 
-NO_VIOLATIONS = {"negative": 0, "above_miscellaneous_income": 0, "not_finite": 0}
+@pytest.mark.parametrize(
+    "chapter_8, miscellaneous, broken",
+    [
+        (0.0, np.nan, ["miscellaneous_income_not_finite"]),
+        (np.nan, 10.0, ["not_finite"]),
+        (-1.0, 10.0, ["negative"]),
+        (0.0, -1.0, ["negative_miscellaneous_income", "above_miscellaneous_income"]),
+        (20.0, 10.0, ["above_miscellaneous_income"]),
+        (np.inf, np.inf, ["not_finite", "miscellaneous_income_not_finite"]),
+    ],
+)
+def test_bound_check_counts_each_violation(chapter_8, miscellaneous, broken):
+    person = pd.DataFrame(
+        {VARIABLE: [chapter_8, 5.0], "miscellaneous_income": [miscellaneous, 5.0]}
+    )
+    assert _bound_violations(person) == {**NO_VIOLATIONS, **dict.fromkeys(broken, 1)}
+
+
+def _frs_counts(dataset) -> dict:
+    person = dataset.person
+    return {
+        "violations": _bound_violations(person),
+        "with_value": int((person[VARIABLE] > 0).sum()),
+    }
+
+
+def _enhanced_frs_counts(dataset) -> dict:
+    person = dataset.person
+    household = dataset.household
+    synthetic_households = household.household_id[
+        household.household_is_spi_synthetic.astype(bool)
+    ]
+    synthetic = person.person_household_id.isin(synthetic_households).to_numpy()
+    values = person[VARIABLE].to_numpy(dtype=float)
+    return {
+        "violations": _bound_violations(person),
+        "spi_donor_rows": int(synthetic.sum()),
+        "spi_donor_rows_with_value": int((values[synthetic] != 0).sum()),
+        "frs_rows_with_value": int((values[~synthetic] > 0).sum()),
+    }
 
 
 def test_frs_within_miscellaneous_income(frs):
     if VARIABLE not in frs.person.columns:
         pytest.skip(f"Dataset built before {VARIABLE} was added")
-    assert _bound_violations(frs.person) == NO_VIOLATIONS
-    assert int((frs.person[VARIABLE] > 0).sum()) > 0, "expected FRS odd-job income"
+    counts = _frs_counts(frs)
+    assert counts["violations"] == NO_VIOLATIONS
+    assert counts["with_value"] > 0, "expected FRS odd-job income"
 
 
 def test_enhanced_frs_within_bound_and_none_on_spi_donor_rows(enhanced_frs):
-    person = enhanced_frs.person
-    if VARIABLE not in person.columns:
+    if VARIABLE not in enhanced_frs.person.columns:
         pytest.skip(f"Dataset built before {VARIABLE} was added")
-    household = enhanced_frs.household
-    synthetic_households = household.household_id[
-        household.household_is_spi_synthetic.astype(bool)
-    ]
-    synthetic = person.person_household_id.isin(synthetic_households).to_numpy()
-    assert int(synthetic.sum()) > 0, "expected SPI-donor rows in the enhanced FRS"
-    assert _bound_violations(person) == NO_VIOLATIONS
-    assert int((person[VARIABLE].to_numpy()[synthetic] != 0).sum()) == 0
-    assert int((person[VARIABLE].to_numpy()[~synthetic] > 0).sum()) > 0
+    counts = _enhanced_frs_counts(enhanced_frs)
+    assert counts["spi_donor_rows"] > 0, "expected SPI-donor rows in the enhanced FRS"
+    assert counts["violations"] == NO_VIOLATIONS
+    assert counts["spi_donor_rows_with_value"] == 0
+    assert counts["frs_rows_with_value"] > 0
 
 
 def test_uprated_exactly_as_miscellaneous_income():

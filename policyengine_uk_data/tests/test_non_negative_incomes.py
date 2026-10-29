@@ -16,7 +16,10 @@ INCOME_VARIABLES = [
 
 @pytest.mark.parametrize("variable", INCOME_VARIABLES)
 def test_income_non_negative(frs, variable: str):
-    """Test that income variables have no negative values."""
-    values = frs.person[variable]
-    min_value = values.min()
-    assert min_value >= 0, f"{variable} has negative values (min = {min_value:.2f})"
+    """Test that income variables have no negative values.
+
+    The test counts the negative values rather than reporting the smallest, so
+    a failure prints no single record's amount.
+    """
+    negative = int((frs.person[variable] < 0).sum())
+    assert negative == 0, f"{variable} has {negative} negative values"

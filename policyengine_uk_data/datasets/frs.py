@@ -381,16 +381,19 @@ def frs_miscellaneous_income(
     money the person received in the last 4 weeks from babysitting, acting as
     a mail order agent, or an odd job, occasional work or professional advice
     (ODDTYPE 1 to 3), that the employment and self-employment questions have
-    not covered. A person does an odd job once, without regularity or
-    continuity. OJAMT is the amount the person received and OJNOW whether
-    they did the work in the last 7 days. Jobs from the last 7 days count, as
-    weekly amounts (#640). Negative OJAMT values are FRS missing-value codes
-    (-1 to -9), not amounts, so they count as zero.
+    not covered. The FRS defines an odd job as one done once only, without
+    regularity or continuity. OJAMT is the amount the person received and
+    OJNOW whether they did the work in the last 7 days. Jobs from the last 7
+    days count, as weekly amounts (#640). Negative OJAMT values are FRS
+    missing-value codes (-1 to -9), not amounts, so they count as zero.
 
-    Odd-job income is the income not otherwise charged: casual income that
-    no other provision charges, which ITTOIA 2005 Part 5 Chapter 8 charges
-    (s. 687) and the trading allowance relieves (s. 783AB). Casual work
-    that amounts to a trade takes the same allowance. The six other amounts
+    Odd-job income stands in for the income not otherwise charged. The FRS
+    records it outside the employment and self-employment questions, and
+    casual income that no other provision charges falls under ITTOIA 2005
+    Part 5 Chapter 8 (s. 687), which the trading allowance relieves
+    (s. 783AB). The survey does not say how HMRC would treat each job: casual
+    work that amounts to a trade takes the same allowance as trade
+    receipts, and Chapter 8 then does not charge it. The six other amounts
     are not Chapter 8 income: royalties fall under Part 5 Chapter 2, a
     sleeping partner's share is partnership trading income, an overseas
     pension is pension income (ITEPA 2003 Part 9), a child's spare time job
