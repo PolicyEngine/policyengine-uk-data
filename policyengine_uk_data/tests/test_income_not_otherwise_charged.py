@@ -1,10 +1,10 @@
-"""FRS odd-job income is the income not otherwise charged.
+"""FRS odd-job income stands in for the income not otherwise charged.
 
 policyengine-uk's trading allowance relieves income chargeable under ITTOIA
 2005 Part 5 Chapter 8 (s. 783AB), which it reads from
 ``income_not_otherwise_charged``, the part of ``miscellaneous_income`` that
 Chapter 8 charges. The build sets it to the FRS odd-job income in
-``miscellaneous_income``.
+``miscellaneous_income``, as a proxy for that part.
 
 Invariants, for any person table and ODDJOB table (amounts including FRS
 missing-value codes and blanks):
@@ -28,9 +28,9 @@ And for the built datasets:
 7. The uprating table moves it exactly as miscellaneous income, so the bound
    holds in every year, once policyengine-uk reads it.
 
-The data checks reduce each dataset to counts in helper functions and
-assert only on those counts, so a failure never prints a record (the FRS is
-licensed microdata).
+The data checks reduce each dataset to counts through ``counts_or_fail``
+and assert only on those counts, so neither a failed assertion nor an error
+inside the reduction prints a record (the FRS is licensed microdata).
 """
 
 import numpy as np
@@ -49,6 +49,7 @@ from policyengine_uk_data.datasets.imputations.income import (
     clear_income_not_otherwise_charged,
 )
 from policyengine_uk_data.storage import STORAGE_FOLDER
+from policyengine_uk_data.tests.record_safe import counts_or_fail
 from policyengine_uk_data.utils.datasets import (
     sum_from_positive_fields,
     sum_to_entity,
@@ -275,7 +276,7 @@ def _enhanced_frs_counts(dataset) -> dict:
 def test_frs_within_miscellaneous_income(frs):
     if VARIABLE not in frs.person.columns:
         pytest.skip(f"Dataset built before {VARIABLE} was added")
-    counts = _frs_counts(frs)
+    counts = counts_or_fail(_frs_counts, frs)
     assert counts["violations"] == NO_VIOLATIONS
     assert counts["with_value"] > 0, "expected FRS odd-job income"
 
@@ -283,7 +284,7 @@ def test_frs_within_miscellaneous_income(frs):
 def test_enhanced_frs_within_bound_and_none_on_spi_donor_rows(enhanced_frs):
     if VARIABLE not in enhanced_frs.person.columns:
         pytest.skip(f"Dataset built before {VARIABLE} was added")
-    counts = _enhanced_frs_counts(enhanced_frs)
+    counts = counts_or_fail(_enhanced_frs_counts, enhanced_frs)
     assert counts["spi_donor_rows"] > 0, "expected SPI-donor rows in the enhanced FRS"
     assert counts["violations"] == NO_VIOLATIONS
     assert counts["spi_donor_rows_with_value"] == 0

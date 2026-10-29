@@ -1,5 +1,7 @@
 import pytest
 
+from policyengine_uk_data.tests.record_safe import counts_or_fail
+
 INCOME_VARIABLES = [
     "employment_income",
     "self_employment_income",
@@ -21,5 +23,9 @@ def test_income_non_negative(frs, variable: str):
     The test counts the negative values rather than reporting the smallest, so
     a failure prints no single record's amount.
     """
-    negative = int((frs.person[variable] < 0).sum())
+    negative = counts_or_fail(_negative_values, frs, variable)
     assert negative == 0, f"{variable} has {negative} negative values"
+
+
+def _negative_values(dataset, variable: str) -> int:
+    return int((dataset.person[variable] < 0).sum())
