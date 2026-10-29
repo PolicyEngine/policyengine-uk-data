@@ -352,6 +352,63 @@ def frs_property_income(person: pd.DataFrame, household: pd.DataFrame) -> np.nda
     ).values
 
 
+MISC_INCOME_FIELDS = [
+    "allpay2",
+    "royyr2",
+    "royyr3",
+    "royyr4",
+    "chamtern",
+    "chamttst",
+]
+
+
+def frs_miscellaneous_income(
+    person: pd.DataFrame, oddjob: pd.DataFrame
+) -> tuple[np.ndarray, np.ndarray]:
+    """Annual miscellaneous income and the income not otherwise charged in it.
+
+    Returns ``(miscellaneous_income, income_not_otherwise_charged)``, aligned
+    with ``person.person_id``. The second is part of the first, so it never
+    exceeds it.
+
+    Miscellaneous income adds odd-job income to six amounts on the person
+    tables, whose sum is floored at zero: ALLPAY2 (allowance from an
+    organisation), ROYYR2 (royalties), ROYYR3 (income as a sleeping
+    partner), ROYYR4 (overseas pension), and from the child table CHAMTERN
+    (earnings from a spare time job) and CHAMTTST (income from a trust).
+
+    Odd-job income comes from the ODDJOB table. The FRS asks (OddJob) about
+    money the person received in the last 4 weeks from babysitting, acting as
+    a mail order agent, or an odd job, occasional work or professional advice
+    (ODDTYPE 1 to 3), that the employment and self-employment questions have
+    not covered. A person does an odd job once, without regularity or
+    continuity. OJAMT is the amount the person received and OJNOW whether
+    they did the work in the last 7 days. Jobs from the last 7 days count, as
+    weekly amounts (#640). Negative OJAMT values are FRS missing-value codes
+    (-1 to -9), not amounts, so they count as zero.
+
+    Odd-job income is the income not otherwise charged: casual income that
+    no other provision charges, which ITTOIA 2005 Part 5 Chapter 8 charges
+    (s. 687) and the trading allowance relieves (s. 783AB). Casual work
+    that amounts to a trade takes the same allowance. The six other amounts
+    are not Chapter 8 income: royalties fall under Part 5 Chapter 2, a
+    sleeping partner's share is partnership trading income, an overseas
+    pension is pension income (ITEPA 2003 Part 9), a child's spare time job
+    is a job, trust income is an annual payment (Part 5 Chapter 7) or keeps
+    its source, and the organisation's allowance is a transfer, which
+    private_transfer_income also counts (#627).
+    """
+    odd_job_income = sum_to_entity(
+        oddjob.ojamt.clip(lower=0) * (oddjob.ojnow == 1),
+        oddjob.person_id,
+        person.person_id,
+    )
+    miscellaneous_income = (
+        odd_job_income + sum_from_positive_fields(person, MISC_INCOME_FIELDS)
+    ) * WEEKS_IN_YEAR
+    return miscellaneous_income, odd_job_income * WEEKS_IN_YEAR
+
+
 def derive_is_in_non_advanced_education(
     current_education,
     is_apprentice=None,
@@ -1376,22 +1433,10 @@ def create_frs(
         * WEEKS_IN_YEAR
     )
 
-    odd_job_income = sum_to_entity(
-        oddjob.ojamt * (oddjob.ojnow == 1), oddjob.person_id, person.person_id
-    )
-
-    MISC_INCOME_FIELDS = [
-        "allpay2",
-        "royyr2",
-        "royyr3",
-        "royyr4",
-        "chamtern",
-        "chamttst",
-    ]
-
-    pe_person["miscellaneous_income"] = (
-        odd_job_income + sum_from_positive_fields(person, MISC_INCOME_FIELDS)
-    ) * WEEKS_IN_YEAR
+    (
+        pe_person["miscellaneous_income"],
+        pe_person["income_not_otherwise_charged"],
+    ) = frs_miscellaneous_income(person, oddjob)
 
     PRIVATE_TRANSFER_INCOME_FIELDS = [
         "apamt",

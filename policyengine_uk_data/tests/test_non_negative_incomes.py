@@ -10,6 +10,7 @@ INCOME_VARIABLES = [
     "property_income",
     "maintenance_income",
     "miscellaneous_income",
+    "income_not_otherwise_charged",
 ]
 
 
