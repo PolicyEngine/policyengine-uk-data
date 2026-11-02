@@ -48,6 +48,15 @@ from policyengine_uk_data.datasets.childcare.assumptions import (
 # loaders (e.g. LCFS/ETB in `datasets/imputations/consumption.py`) can import
 # the same value rather than re-defining `* 52` locally and drifting.
 WEEKS_IN_YEAR = 365.25 / 7
+# The State Pension alone annualises at 52 weeks. policyengine-uk reads
+# state_pension_reported back to a weekly amount at policyengine-core's 52
+# weeks a year and pays whatever exceeds the full rate as additional State
+# Pension (basic) or a protected payment (new). At 365.25 / 7 a weekly amount
+# reads 0.34% above itself there, so every full-rate pensioner carried an
+# add-on they do not get: £39.50 a year on the full new State Pension in
+# 2024-25. microcosm annualises the State Pension the same way (microcosm#1329);
+# the other weekly amounts are #531.
+STATE_PENSION_WEEKS_IN_YEAR = 52
 
 LEGACY_JOBSEEKER_MIN_AGE = 18
 HOURS_WORKED_WEEKS_PER_YEAR = 52
@@ -309,6 +318,47 @@ def derive_receives_benefits_in_own_right(pe_person: pd.DataFrame) -> pd.Series:
         pe_person[list(BENEFITS_IN_OWN_RIGHT_REPORTED_COLUMNS)].fillna(0).sum(axis=1)
         > 0
     )
+
+
+# FRS benefits-table codes stored as `<benefit>_reported`.
+BENEFIT_CODES = dict(
+    child_benefit=3,
+    income_support=19,
+    housing_benefit=94,
+    attendance_allowance=12,
+    dla_sc=1,
+    dla_m=2,
+    iidb=15,
+    carers_allowance=13,
+    sda=10,
+    afcs=8,
+    ssmg=22,
+    pension_credit=4,
+    child_tax_credit=91,
+    working_tax_credit=90,
+    state_pension=5,
+    winter_fuel_allowance=62,
+    incapacity_benefit=17,
+    universal_credit=95,
+    pip_m=97,
+    pip_dl=96,
+)
+
+
+def reported_benefit_amounts(
+    benefits: pd.DataFrame, person_id: pd.Series
+) -> dict[str, np.ndarray]:
+    """Each person's annual `<benefit>_reported` amounts: the weekly BENAMT of
+    their benefits-table rows with that code, summed and annualised."""
+    return {
+        f"{benefit}_reported": sum_to_entity(
+            benefits.benamt * (benefits.benefit == code),
+            benefits.person_id.values,
+            person_id,
+        )
+        * (STATE_PENSION_WEEKS_IN_YEAR if benefit == "state_pension" else WEEKS_IN_YEAR)
+        for benefit, code in BENEFIT_CODES.items()
+    }
 
 
 def frs_property_income(person: pd.DataFrame, household: pd.DataFrame) -> np.ndarray:
@@ -1410,37 +1460,8 @@ def create_frs(
 
     pe_person["student_loan_repayments"] = person.slrepamt * WEEKS_IN_YEAR
 
-    BENEFIT_CODES = dict(
-        child_benefit=3,
-        income_support=19,
-        housing_benefit=94,
-        attendance_allowance=12,
-        dla_sc=1,
-        dla_m=2,
-        iidb=15,
-        carers_allowance=13,
-        sda=10,
-        afcs=8,
-        ssmg=22,
-        pension_credit=4,
-        child_tax_credit=91,
-        working_tax_credit=90,
-        state_pension=5,
-        winter_fuel_allowance=62,
-        incapacity_benefit=17,
-        universal_credit=95,
-        pip_m=97,
-        pip_dl=96,
-    )
-    for benefit, code in BENEFIT_CODES.items():
-        pe_person[benefit + "_reported"] = (
-            sum_to_entity(
-                benefits.benamt * (benefits.benefit == code),
-                benefits.person_id.values,
-                person.person_id,
-            )
-            * WEEKS_IN_YEAR
-        )
+    for column, amount in reported_benefit_amounts(benefits, person.person_id).items():
+        pe_person[column] = amount
 
     pe_person = add_disability_benefit_categories_from_reported_amounts(
         pe_person,

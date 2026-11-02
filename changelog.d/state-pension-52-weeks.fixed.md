@@ -1,0 +1,1 @@
+Annualise the FRS State Pension at 52 weeks, the weeks policyengine-uk reads it back at, so full-rate pensioners no longer carry a phantom additional State Pension or protected payment (£39.50 a year on the full new State Pension in 2024-25).
