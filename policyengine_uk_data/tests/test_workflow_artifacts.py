@@ -177,9 +177,9 @@ REVIEWED = {
         "commands": (
             (
                 "existing=$(gh api --paginate "
-                '"repos/$GITHUB_REPOSITORY/issues/$PR/comments"    --jq ".[] | '
+                '"repos/$GITHUB_REPOSITORY/issues/$PR/comments"      --jq ".[] | '
                 'select(.user.login == \\"github-actions[bot]\\") | select(.body | '
-                'startswith(\\"$marker\\")) | .id"    | tail -n 1)'
+                'startswith(\\"$marker\\")) | .id"      | tail -n 1) || return 1'
             ),
             (
                 'gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$existing" '

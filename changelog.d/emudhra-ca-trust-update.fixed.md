@@ -1,0 +1,1 @@
+Stop trusting the compromised eMudhra certificate authorities in the locked build environment: certifi is upgraded from 2025.11.12 to 2026.10.19 and hf-xet from 1.2.0 to 1.7.0, so the HTTPS connections the dataset build makes to Hugging Face and Google Cloud Storage reject certificates issued under "emSign ECC Root CA - G3".
