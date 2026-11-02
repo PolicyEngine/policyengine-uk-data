@@ -1,22 +1,22 @@
 """VOA council tax band targets.
 
 Council tax band counts (A-H + total) by region from the latest VOA
-stock-of-properties summary workbook, plus Scotland from the latest
-Scottish Government chargeable-dwellings workbook.
+stock-of-properties summary workbook, plus Scotland from the Scottish
+Government's chargeable-dwellings workbook for September 2025, committed
+and verified by its SHA-256 (gov.scot's CloudFront challenge blocks
+scripted downloads, and a substitute distribution made builds of the same
+code calibrate to different targets, #596).
 
 Sources:
 - https://www.gov.uk/government/statistics/council-tax-stock-of-properties-2025
 - https://www.gov.scot/publications/council-tax-datasets/
 """
 
+import hashlib
 from functools import lru_cache
-from html import unescape
 from io import BytesIO
 import logging
 import re
-import time
-from urllib.parse import urljoin
-from zipfile import BadZipFile
 
 import openpyxl
 import requests
@@ -40,24 +40,12 @@ _SCOTLAND_WORKBOOK_URL = (
     "chargeable-dwellings---september-2025-data/govscot%3Adocument/"
     "CTAXBASE%2B2025%2B-%2BTables%2B-%2BChargeable%2BDwellings.xlsx"
 )
-_SCOTLAND_WORKBOOK_LINK = re.compile(
-    r'href="([^"]*chargeable-dwellings---september-2025-data[^"]+?\.xlsx)"',
-    re.IGNORECASE,
+# Downloaded from _SCOTLAND_WORKBOOK_URL on 2026-10-15. Its Scotland row
+# equals the targets of pull request builds whose download succeeded.
+_SCOTLAND_WORKBOOK_FILE = "scotland_council_tax/ctaxbase_2025_chargeable_dwellings.xlsx"
+_SCOTLAND_WORKBOOK_SHA256 = (
+    "8e431837aa37ee298c9a2b9b010b8ecbc7e3a817573a3a84f6251e6db00a591f"
 )
-_SCOTLAND_FALLBACK_TOTAL_2025 = 2_623_149
-_SCOTLAND_FALLBACK_BAND_SHARES_2024_25 = {
-    # Shares published by the Scottish Government in council-tax reform
-    # analysis from the CTAXBASE council tax datasets. They are used only
-    # when gov.scot's CloudFront challenge blocks the workbook download.
-    "A": 0.191,
-    "B": 0.223,
-    "C": 0.163,
-    "D": 0.140,
-    "E": 0.139,
-    "F": 0.084,
-    "G": 0.054,
-    "H": 0.006,
-}
 _VOA_NAME_TO_REGION = {
     "North East": "NORTH_EAST",
     "North West": "NORTH_WEST",
@@ -94,70 +82,21 @@ def _download_workbook() -> openpyxl.Workbook:
     return openpyxl.load_workbook(BytesIO(workbook_response.content), data_only=True)
 
 
-def _load_xlsx_response(response: requests.Response) -> openpyxl.Workbook:
-    response.raise_for_status()
-    try:
-        return openpyxl.load_workbook(BytesIO(response.content), data_only=True)
-    except BadZipFile as error:
-        content_type = response.headers.get("content-type", "")
-        preview = response.content[:160].decode("utf-8", errors="replace")
-        preview = " ".join(preview.split())
+def _scotland_workbook() -> openpyxl.Workbook:
+    """The committed Scottish workbook, if and only if its bytes are the ones named."""
+    from policyengine_uk_data.storage import STORAGE_FOLDER
+
+    path = STORAGE_FOLDER / _SCOTLAND_WORKBOOK_FILE
+    if not path.is_file():
+        raise FileNotFoundError(f"the Scottish council tax workbook {path} is missing")
+    data = path.read_bytes()
+    digest = hashlib.sha256(data).hexdigest()
+    if digest != _SCOTLAND_WORKBOOK_SHA256:
         raise ValueError(
-            "Expected an XLSX workbook from "
-            f"{response.url}; got content-type {content_type!r} "
-            f"with {len(response.content)} bytes: {preview!r}"
-        ) from error
-
-
-def _scotland_workbook_urls_from_page() -> list[str]:
-    r = requests.get(
-        _SCOTLAND_REF,
-        headers=HEADERS,
-        allow_redirects=True,
-        timeout=60,
-    )
-    r.raise_for_status()
-    urls: list[str] = []
-    for match in _SCOTLAND_WORKBOOK_LINK.finditer(r.text):
-        url = urljoin(_SCOTLAND_REF, unescape(match.group(1)))
-        if url not in urls:
-            urls.append(url)
-    return urls
-
-
-@lru_cache(maxsize=1)
-def _download_scotland_workbook() -> openpyxl.Workbook:
-    errors: list[str] = []
-
-    def try_url(url: str) -> openpyxl.Workbook | None:
-        for attempt in range(3):
-            try:
-                r = requests.get(
-                    url,
-                    headers=HEADERS,
-                    allow_redirects=True,
-                    timeout=60,
-                )
-                return _load_xlsx_response(r)
-            except Exception as error:
-                errors.append(f"{url}: {error}")
-                if attempt < 2:
-                    time.sleep(2**attempt)
-        return None
-
-    workbook = try_url(_SCOTLAND_WORKBOOK_URL)
-    if workbook is not None:
-        return workbook
-
-    for url in _scotland_workbook_urls_from_page():
-        workbook = try_url(url)
-        if workbook is not None:
-            return workbook
-
-    raise ValueError(
-        "Could not download Scotland council tax workbook. Recent errors: "
-        + " | ".join(errors[-3:])
-    )
+            f"{path} has sha256 {digest}, not {_SCOTLAND_WORKBOOK_SHA256}; update "
+            "_SCOTLAND_WORKBOOK_SHA256 together with the file"
+        )
+    return openpyxl.load_workbook(BytesIO(data), data_only=True)
 
 
 def _to_float(value) -> float:
@@ -166,25 +105,10 @@ def _to_float(value) -> float:
     return 0.0
 
 
-def _fallback_scotland_band_counts() -> dict[str, float]:
-    counts = {
-        band: _SCOTLAND_FALLBACK_TOTAL_2025 * share
-        for band, share in _SCOTLAND_FALLBACK_BAND_SHARES_2024_25.items()
-    }
-    counts["Total"] = _SCOTLAND_FALLBACK_TOTAL_2025
-    return counts
-
-
 def _get_scotland_band_counts() -> dict[str, float]:
-    try:
-        scotland_ws = _download_scotland_workbook()["Chargeable Dwellings 2025"]
-    except Exception as error:
-        logger.warning(
-            "Using fallback Scotland council tax band distribution: %s",
-            error,
-        )
-        return _fallback_scotland_band_counts()
-
+    scotland_ws = _scotland_workbook()["Chargeable Dwellings 2025"]
+    if str(scotland_ws.cell(row=8, column=1).value).strip() != "Scotland":
+        raise ValueError("the Scottish council tax workbook's row 8 is not Scotland")
     scotland_row = 8
     scotland_col_index = {
         "A": 2,

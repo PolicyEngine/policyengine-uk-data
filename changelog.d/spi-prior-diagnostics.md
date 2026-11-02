@@ -1,1 +1,0 @@
-- Give zero-weight SPI synthetic households meaningful calibration prior mass, tag SPI and capital-gains synthetic rows in the enhanced FRS, and add source-weight/loss diagnostics to calibration target logs.

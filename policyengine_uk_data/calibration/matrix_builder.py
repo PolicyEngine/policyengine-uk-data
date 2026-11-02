@@ -189,14 +189,22 @@ def _load_area_targets(
         get_uk_total_population,
     )
 
-    y = pd.DataFrame()
     time_period = dataset.time_period
 
     # ── Income targets ──────────────────────────────────────────────
     if area_type == "constituency":
         incomes = get_constituency_income_targets()
+        age_targets = get_constituency_age_targets()
     else:
         incomes = get_la_income_targets()
+        age_targets = get_la_age_targets()
+
+    # SPI income and age inputs share this source order. Keep the codes
+    # through any boundary mapping before selecting the requested rows.
+    assert incomes["code"].equals(age_targets["code"]), (
+        "Income and age code order differs"
+    )
+    y = pd.DataFrame(index=pd.Index(age_targets["code"], name="code"))
 
     national_incomes = get_national_income_projections(int(time_period))
 
@@ -215,11 +223,6 @@ def _load_area_targets(
         )
 
     # ── Age targets ─────────────────────────────────────────────────
-    if area_type == "constituency":
-        age_targets = get_constituency_age_targets()
-    else:
-        age_targets = get_la_age_targets()
-
     uk_total_population = get_uk_total_population(int(time_period))
     age_cols = [c for c in age_targets.columns if c.startswith("age/")]
 
@@ -231,31 +234,40 @@ def _load_area_targets(
     for col in age_cols:
         y[col] *= uk_total_population / targets_total_pop * 0.9
 
+    # ── Boundary mapping (constituency 2010 → 2024 only) ───────────
+    if area_type == "constituency":
+        from policyengine_uk_data.datasets.local_areas.constituencies.boundary_changes.mapping_matrix import (
+            mapping_matrix,
+            old_codes,
+            new_codes,
+        )
+
+        y = pd.DataFrame(
+            mapping_matrix @ y.loc[old_codes].to_numpy(),
+            index=pd.Index(new_codes, name="code"),
+            columns=y.columns,
+        )
+
+    # Both the OA assignment matrix and the LA extras use area_codes order.
+    y = y.loc[area_codes["code"]]
+
     # ── UC targets ──────────────────────────────────────────────────
+    # Constituency UC counts are already on 2024 boundaries and must stay
+    # outside the mapping applied to the older income and age sources.
     if area_type == "constituency":
         from policyengine_uk_data.targets.sources.local_uc import (
             get_constituency_uc_targets,
             get_constituency_uc_by_children_targets,
         )
 
-        y["uc_households"] = get_constituency_uc_targets().values
-        uc_by_children = get_constituency_uc_by_children_targets()
+        y["uc_households"] = get_constituency_uc_targets().loc[y.index]
+        uc_by_children = get_constituency_uc_by_children_targets().loc[y.index]
         for col in uc_by_children.columns:
-            y[col] = uc_by_children[col].values
+            y[col] = uc_by_children[col]
     else:
         from policyengine_uk_data.targets.sources.local_uc import get_la_uc_targets
 
-        y["uc_households"] = get_la_uc_targets().values
-
-    # ── Boundary mapping (constituency 2010 → 2024 only) ───────────
-    if area_type == "constituency":
-        from policyengine_uk_data.datasets.local_areas.constituencies.boundary_changes.mapping_matrix import (
-            mapping_matrix,
-        )
-
-        y_columns = list(y.columns)
-        y_values = mapping_matrix @ y.values
-        y = pd.DataFrame(y_values, columns=y_columns)
+        y["uc_households"] = get_la_uc_targets().loc[y.index]
 
     # ── LA extras: ONS income, tenure, rent ─────────────────────────
     if area_type == "la":
@@ -264,8 +276,7 @@ def _load_area_targets(
             load_household_counts,
             load_tenure_data,
             load_private_rents,
-            UPRATING_NET_INCOME_BHC_2020_TO_2025,
-            UPRATING_HOUSING_COSTS_2020_TO_2025,
+            get_ons_income_uprating_factors,
         )
 
         original_weights = sim.calculate("household_weight", 2025).values
@@ -288,16 +299,19 @@ def _load_area_targets(
             "equiv_hbai_household_net_income_ahc"
         ).values
         housing_costs = hbai_net_income - hbai_net_income_ahc
+        income_bhc_uprating_factor, housing_costs_uprating_factor = (
+            get_ons_income_uprating_factors(int(time_period))
+        )
 
         ons_merged["equiv_net_income_bhc_target"] = (
             ons_merged["net_income_bhc"]
             * ons_merged["households"]
-            * UPRATING_NET_INCOME_BHC_2020_TO_2025
+            * income_bhc_uprating_factor
         )
         ons_merged["equiv_housing_costs_target"] = (
             ons_merged["net_income_bhc"] * ons_merged["households"]
             - ons_merged["net_income_ahc"] * ons_merged["households"]
-        ) * UPRATING_HOUSING_COSTS_2020_TO_2025
+        ) * housing_costs_uprating_factor
         ons_merged["equiv_net_income_ahc_target"] = (
             ons_merged["equiv_net_income_bhc_target"]
             - ons_merged["equiv_housing_costs_target"]
@@ -385,7 +399,7 @@ def _load_area_targets(
             national_rent * la_household_share,
         )
 
-    return y
+    return y.reset_index(drop=True)
 
 
 def create_cloned_target_matrix(

@@ -10,6 +10,7 @@ def test_spi_overrides_allowance_deductions_not_policy_parameters(tmp_path):
         "DIVIDENDS": 0,
         "GIFTAID": 0,
         "GORCODE": 7,
+        "SCOT_TXP": 0,
         "INCBBS": 0,
         "INCPROP": 1_000,
         "PAY": 0,

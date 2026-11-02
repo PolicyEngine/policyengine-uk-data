@@ -18,6 +18,8 @@ from policyengine_uk.data import UKSingleYearDataset
 from policyengine_uk_data.storage import STORAGE_FOLDER
 from policyengine_uk_data.datasets.local_areas.constituencies.boundary_changes.mapping_matrix import (
     mapping_matrix,
+    old_codes,
+    new_codes,
 )
 from policyengine_uk_data.targets.sources.local_age import (
     get_constituency_age_targets,
@@ -49,10 +51,14 @@ def create_constituency_target_matrix(
     sim.default_calculation_period = time_period
 
     matrix = pd.DataFrame()
-    y = pd.DataFrame()
+    age_targets = get_constituency_age_targets()
+    y = pd.DataFrame(index=pd.Index(age_targets["code"], name="code"))
 
     # ── Income targets ─────────────────────────────────────────────
     incomes = get_constituency_income_targets()
+    assert incomes["code"].equals(age_targets["code"]), (
+        "Income and age code order differs"
+    )
     national_incomes = get_national_income_projections(int(time_period))
 
     for income_variable in INCOME_VARIABLES:
@@ -78,7 +84,6 @@ def create_constituency_target_matrix(
         )
 
     # ── Age targets ────────────────────────────────────────────────
-    age_targets = get_constituency_age_targets()
     uk_total_population = get_uk_total_population(int(time_period))
 
     age = sim.calculate("age").values
@@ -97,7 +102,6 @@ def create_constituency_target_matrix(
         y[col] *= uk_total_population / targets_total_pop * 0.9
 
     # ── UC targets ─────────────────────────────────────────────────
-    y["uc_households"] = get_constituency_uc_targets().values
     on_uc = (sim.calculate("universal_credit").values > 0).astype(int)
     matrix["uc_households"] = sim.map_result(on_uc, "benunit", "household")
 
@@ -113,10 +117,6 @@ def create_constituency_target_matrix(
     matrix["uc_hh_2_children"] = (on_uc_hh & (children_per_hh == 2)).astype(float)
     matrix["uc_hh_3plus_children"] = (on_uc_hh & (children_per_hh >= 3)).astype(float)
 
-    uc_by_children = get_constituency_uc_by_children_targets()
-    for col in uc_by_children.columns:
-        y[col] = uc_by_children[col].values
-
     # ── Wales/Scotland housing anchors ───────────────────────────────
     add_private_rent_targets(
         matrix,
@@ -130,15 +130,28 @@ def create_constituency_target_matrix(
     # ── Boundary mapping (2010 → 2024) ────────────────────────────
     const_2024 = pd.read_csv(STORAGE_FOLDER / "constituencies_2024.csv")
 
-    y_columns = list(y.columns)
-    y_values = mapping_matrix @ y.values
-    y = pd.DataFrame(y_values, columns=y_columns)
+    # The mapping's columns and rows are sorted by 2010 and 2024 codes,
+    # respectively; neither order should be inferred from a target CSV.
+    y = pd.DataFrame(
+        mapping_matrix @ y.loc[old_codes].to_numpy(),
+        index=pd.Index(new_codes, name="code"),
+        columns=y.columns,
+    )
+
+    # UC is already on 2024 boundaries, so attach it only after mapping
+    # the older income, age and housing targets.
+    y = y.loc[const_2024["code"]]
+    y["uc_households"] = get_constituency_uc_targets().loc[y.index]
+    uc_by_children = get_constituency_uc_by_children_targets().loc[y.index]
+    for col in uc_by_children.columns:
+        y[col] = uc_by_children[col]
+    y = y.loc[:, matrix.columns]
 
     country_mask = create_country_mask(
         household_countries=sim.calculate("country").values,
         codes=const_2024.code,
     )
-    return matrix, y, country_mask
+    return matrix, y.reset_index(drop=True), country_mask
 
 
 def create_country_mask(

@@ -26,6 +26,9 @@ def test_obr_jobseekers_allowance_maps_to_total_jsa():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "4.9"
+    ws["A1"] = "£ billion"
+    for col, year in zip("CDEFGHI", range(2024, 2031)):
+        ws[f"{col}1"] = f"{year}-{(year + 1) % 100:02d}"
     ws["B2"] = "Jobseeker's allowance"
     ws["C2"] = 0.2
     ws["D2"] = 0.3

@@ -1,16 +1,15 @@
-import pandas as pd
+import logging
+
 import numpy as np
-from policyengine_uk_data.utils.stack import stack_datasets
+import pandas as pd
+from policyengine_uk.data import UKSingleYearDataset
 
 # Fit a spline to each income band's percentiles
 from scipy.interpolate import UnivariateSpline
 
 from policyengine_uk_data.storage import STORAGE_FOLDER
-
-import torch
-from torch.optim import Adam
-from policyengine_uk.data import UKSingleYearDataset
-import logging
+from policyengine_uk_data.targets.sources.hmrc_cgt import load_size_bands
+from policyengine_uk_data.utils.stack import stack_datasets
 
 capital_gains = pd.read_csv(
     STORAGE_FOLDER / "capital_gains_distribution_advani_summers.csv.gz"
@@ -22,226 +21,264 @@ capital_gains["maximum_total_income"] = capital_gains.minimum_total_income.shift
 # Silence verbose logging
 logging.getLogger("root").setLevel(logging.WARNING)
 
+# --- Has-gains twins --------------------------------------------------------
+#
+# Advani & Summers give, for each band of total income, the share of people
+# with gains and the percentiles of those gains. Each household's first adult
+# draws a gain from their band's distribution. Where that gain is one HMRC's
+# statistics describe (above the lowest size-of-gain band limit, the annual
+# exempt amount), the household is stacked a second time as a "has-gains
+# twin" carrying the gain, and the household's mass is split between the two
+# records using the table's incidence propensity adjusted for assignment
+# to first adults. Rejecting draws at or under the limit lowers realised
+# incidence. Calibration then moves weight between a household and its twin,
+# pulled by the HMRC targets in targets/sources/hmrc_cgt.py, without
+# disturbing any other target.
+#
+# Draws at or under that limit, including the net losses in the table's
+# lower percentiles, get no twin. HMRC publishes liable taxpayers only, so
+# no target describes those people, and a record no target describes takes
+# whatever weight suits the other targets: the 1.58.0 build ended with 1.4m
+# people holding £15bn of losses, and 0.4m with gains under the exempt
+# amount.
+#
+# The original and twin carry complementary household_calibration_prior
+# values into calibration. Survey weights are also split; zero-weight
+# originals stay at zero and their twins receive prior-equivalent weights.
+# These weights must not be used to regenerate the already split priors.
+# Twins of zero-weight rows used to
+# keep a zero weight, and so received a full zero-weight prior each, the same
+# as their no-gains originals. The calibration therefore started with half
+# of the SPI rows' mass holding gains: 6.4m CGT taxpayers and £365bn of gains
+# against targets of 378,000 and £68bn.
 
-def impute_cg_to_doubled_dataset(
-    dataset: UKSingleYearDataset,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Assumes that the capital gains distribution is the same for all years."""
 
+def _first_adult_incomes(dataset: UKSingleYearDataset) -> tuple[np.ndarray, np.ndarray]:
+    """Each person's total income, and whether they are their household's
+    first adult."""
     from policyengine_uk import Microsimulation
 
     sim = Microsimulation(dataset=dataset)
-    ti = sim.calculate("total_income").values
-    household_weight = sim.calculate("household_weight").values
-    first_half = (
-        np.concatenate(
-            [
-                np.ones(len(household_weight) // 2),
-                np.zeros(len(household_weight) // 2),
-            ]
+    return (
+        sim.calculate("total_income").values,
+        sim.calculate("adult_index").values == 1,
+    )
+
+
+def _income_band(total_income: np.ndarray) -> np.ndarray:
+    """Row of the Advani & Summers table for each income (-1 below the first)."""
+    return (
+        np.searchsorted(
+            capital_gains.minimum_total_income.values, total_income, side="right"
         )
-        > 0
+        - 1
     )
-    # Give capital gains to one adult aged 15+ in each household
-    adult_index = sim.calculate("adult_index").values == 1
-    in_person_second_half = np.zeros(len(ti)) > 0
-    in_person_second_half[len(ti) // 2 :] = True
-    has_cg = np.zeros(len(ti)) > 0
-    has_cg[adult_index & in_person_second_half] = True
-    blend_factor = torch.tensor(
-        np.zeros(first_half.sum()), requires_grad=True, dtype=torch.float32
+
+
+def _households(dataset: UKSingleYearDataset, household_ids) -> UKSingleYearDataset:
+    """A copy of the households with these ids, in the dataset's order."""
+    person = dataset.person[dataset.person.person_household_id.isin(household_ids)]
+    return UKSingleYearDataset(
+        person=person.reset_index(drop=True).copy(),
+        benunit=dataset.benunit[
+            dataset.benunit.benunit_id.isin(person.person_benunit_id)
+        ]
+        .reset_index(drop=True)
+        .copy(),
+        household=dataset.household[dataset.household.household_id.isin(household_ids)]
+        .reset_index(drop=True)
+        .copy(),
+        fiscal_year=dataset.time_period,
     )
-    household_weight = torch.tensor(household_weight, dtype=torch.float32)
-    sigmoid = torch.nn.Sigmoid()
 
-    def loss(blend_factor):
-        loss = 0
 
-        blended_household_weight = household_weight.clone()
-        adjusted_blend_factor = sigmoid(blend_factor)
-        blended_household_weight[first_half] = (
-            adjusted_blend_factor * blended_household_weight[first_half]
-        )
-        blended_household_weight[~first_half] = (
-            1 - adjusted_blend_factor
-        ) * blended_household_weight[first_half]
-        for i in range(len(capital_gains)):
-            lower = capital_gains.minimum_total_income.iloc[i]
-            upper = capital_gains.maximum_total_income.iloc[i]
-            true_pct_with_gains = capital_gains.percent_with_gains.iloc[i]
+def draw_gains(income_band: np.ndarray, gainer: np.ndarray) -> np.ndarray:
+    """Draw a gain for each gainer from their income band's distribution.
 
-            ti_in_range = (ti >= lower) * (ti < upper)
-            cg_in_income_range = has_cg * ti_in_range
-            household_ti_in_range_count = torch.tensor(
-                sim.map_result(ti_in_range, "person", "household", how="sum")
-            )
-            household_cg_in_income_range_count = torch.tensor(
-                sim.map_result(cg_in_income_range, "person", "household", how="sum")
-            )
-            pred_ti_in_range = (
-                blended_household_weight * household_ti_in_range_count
-            ).sum()
-            pred_cg_in_income_range = (
-                blended_household_weight * household_cg_in_income_range_count
-            ).sum()
-            pred_pct_with_gains = pred_cg_in_income_range / torch.clip(
-                pred_ti_in_range, 1
-            )
-            loss += (pred_pct_with_gains - true_pct_with_gains) ** 2
-
-        return loss
-
-    optimiser = Adam([blend_factor], lr=1e-1)
-    progress = range(100)
-    logging.info("Splitting household weights into has-gains and no-gains")
-    for i in progress:
-        optimiser.zero_grad()
-        loss_value = loss(blend_factor)
-        loss_value.backward()
-        optimiser.step()
-        if loss_value.item() < 1e-3:
-            break
-
-    new_household_weight = household_weight.detach().numpy()
-    original_household_weight = new_household_weight.copy()
-    blend_factor = sigmoid(blend_factor).detach().numpy()
-    new_household_weight[first_half] = (
-        blend_factor * original_household_weight[first_half]
-    )
-    new_household_weight[~first_half] = (1 - blend_factor) * original_household_weight[
-        first_half
-    ]
-
-    # Impute actual capital gains amounts given gains
-    new_cg = np.zeros(len(ti))
-
-    logging.info("Imputing capital gains among those with gains")
+    Assumes that the capital gains distribution is the same for all years.
+    """
+    gains = np.zeros(len(income_band))
 
     # Draw imputation quantiles from a seeded generator so the build is
     # reproducible: an unseeded global np.random made capital gains (and hence
     # CGT revenue) differ between otherwise identical builds.
     cg_rng = np.random.default_rng(0)
 
-    for i in range(len(capital_gains)):
-        row = capital_gains.iloc[i]
+    for i, row in enumerate(capital_gains.itertuples()):
         spline = UnivariateSpline(
             [0.05, 0.1, 0.25, 0.5, 0.75, 0.90, 0.95],
             [row.p05, row.p10, row.p25, row.p50, row.p75, row.p90, row.p95],
             k=1,
         )
-        lower = row.minimum_total_income
-        upper = row.maximum_total_income
-        ti_in_range = (ti >= lower) * (ti < upper)
-        in_target_range = has_cg * ti_in_range > 0
-        quantiles = cg_rng.random(int(in_target_range.sum()))
-        pred_capital_gains = spline(quantiles)
-        new_cg[in_target_range] = pred_capital_gains
+        in_band = gainer & (income_band == i)
+        gains[in_band] = spline(cg_rng.random(int(in_band.sum())))
 
-    return new_cg, new_household_weight
+    return gains
+
+
+def has_gains_shares(
+    income_band: np.ndarray, first_adult: np.ndarray, person_weight: np.ndarray
+) -> np.ndarray:
+    """Twin propensity among first adults, before rejecting small gains.
+
+    The table gives the share of all people in a band with gains, but only
+    first adults are given gains, so the share among them is the table's
+    share times the band's people per first adult.
+    Rejecting draws at or under the HMRC band limit lowers realised incidence.
+    """
+    n_bands = len(capital_gains)
+    in_table = income_band >= 0
+    people = np.bincount(
+        income_band[in_table], weights=person_weight[in_table], minlength=n_bands
+    )
+    gainers = in_table & first_adult
+    first_adults = np.bincount(
+        income_band[gainers], weights=person_weight[gainers], minlength=n_bands
+    )
+    share = np.divide(
+        capital_gains.percent_with_gains.values * people,
+        first_adults,
+        out=np.zeros(n_bands),
+        where=first_adults > 0,
+    )
+    if (share >= 1).any():
+        raise ValueError(
+            "An income band has too few first adults to hold its share of "
+            "people with gains."
+        )
+    return share
 
 
 def impute_capital_gains(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
-    dataset = dataset.copy()
-    dataset.household["household_is_capital_gains_clone"] = False
-    zero_weight_copy = dataset.copy()
-    zero_weight_copy.household.household_weight = 1
-    zero_weight_copy.household["household_is_capital_gains_clone"] = True
-    data = stack_datasets(
-        dataset,
-        zero_weight_copy,
+    """Stack a has-gains twin for each household whose first adult draws a
+    gain above the lowest HMRC size-of-gain band limit."""
+    from policyengine_uk_data.utils.calibrate import (
+        initialize_weight_priors,
+        prior_equivalent_weights,
     )
 
-    pred_cg, household_weight = impute_cg_to_doubled_dataset(data)
+    dataset = dataset.copy()
+    total_income, first_adult = _first_adult_incomes(dataset)
+    household_of_person = pd.Index(dataset.household.household_id).get_indexer(
+        dataset.person.person_household_id
+    )
+    weight = dataset.household.household_weight.to_numpy(dtype=float)
+    priors = initialize_weight_priors(
+        weight, prior_weights=dataset.household.get("household_calibration_prior")
+    )
 
-    data.person["capital_gains"] = pred_cg
-    data.household["household_weight"] = household_weight
+    income_band = _income_band(total_income)
+    gains = draw_gains(income_band, first_adult)
+    share = has_gains_shares(income_band, first_adult, weight[household_of_person])
 
+    gainer = first_adult & (gains > load_size_bands().lower_limit.min())
+    twin_weight = np.zeros(len(weight))
+    twin_weight[household_of_person[gainer]] = share[income_band[gainer]]
+    twin_prior = priors * twin_weight
+    twin_weight *= prior_equivalent_weights(weight)
+    has_twin = twin_weight > 0
+
+    logging.info("Stacking %s has-gains twins", int(has_twin.sum()))
+    twin = _households(dataset, dataset.household.household_id[has_twin])
+    twin.person["capital_gains"] = gains[has_twin[household_of_person]]
+    twin.household["household_weight"] = twin_weight[has_twin]
+    twin.household["household_calibration_prior"] = twin_prior[has_twin]
+    twin.household["household_is_capital_gains_clone"] = True
+
+    dataset.person["capital_gains"] = 0.0
+    dataset.household["household_weight"] = np.where(
+        weight > 0, weight - twin_weight, 0.0
+    )
+    dataset.household["household_is_capital_gains_clone"] = False
+    dataset.household["household_calibration_prior"] = priors - twin_prior
+
+    data = stack_datasets(dataset, twin)
     data.validate()
     return data
 
 
 # --- HMRC size-band donor stack ------------------------------------------
 #
-# The Advani & Summers spline stops at each income band's p95, so the
-# imputation above cannot produce the large gains HMRC observes: in the
-# built data no individual gain exceeds ~£2m, while HMRC attributes ~61% of
-# all chargeable gains to gains of £1m or more (Capital Gains Tax
-# statistics, Table 2.1a). Calibration cannot fix that on its own — there
-# are no records carrying large gains for it to upweight.
+# The Advani & Summers spline stops at each income band's p95, so the twins
+# above cannot carry the large gains HMRC observes: no drawn gain exceeds
+# ~£2m, and fewer than a hundred exceed £500,000, while HMRC attributes
+# three quarters of individuals' chargeable gains in 2024-25 to gains of
+# £500,000 or more (Capital Gains Tax statistics, Table 2.1a). Calibration
+# cannot fix that on its own — there are too few records carrying large
+# gains for it to upweight.
 #
 # Following the SPI synthetic-household precedent in income.py, we stack a
-# small set of donor households, one group per HMRC size-of-gain band, each
-# carrying that band's published mean gain. Calibration then adjusts how
-# much weight each band's donors receive, pulled by the per-band HMRC
-# targets in targets/sources/hmrc_cgt.py.
+# small set of donor households for each HMRC size-of-gain band from
+# £500,000 up, each carrying that band's published mean gain. Calibration
+# then adjusts how much weight each band's donors receive, pulled by the
+# per-band HMRC targets in targets/sources/hmrc_cgt.py.
 #
-# Donors enter at the weight that already reproduces the published band —
+# The bands below £500,000 need no donors: the twins give each of them
+# hundreds or thousands of records. Donors there duplicated the twins. In
+# the 1.58.0 build, which stacked donors from £12,300 up, the donors of the
+# four bands from £12,300 to £250,000 ended with under 1% of the weight they
+# entered with.
+#
+# Donors enter at the weight that reproduces the published band —
 # band taxpayer count / DONORS_PER_BAND — NOT at zero. Zero-weight rows are
 # given an equal share of prior mass by calibrate.initialize_weight_priors
 # (the SPI mechanism), which for donors carrying multi-million-pound gains
 # injected ~£2.3trn of initial gains in a CI build and left calibration
-# 18x over the band targets. On-target initial weights make the band
-# estimates start at the published values, so calibration only fine-tunes.
+# 18x over the band targets. Whatever the donors and twins of a band weigh
+# together, calibration starts with the band's taxpayer count on its target
+# (calibrate.rake_priors_to_targets).
 #
 # Donor households are sampled with probability proportional to
 # percent_with_gains at their first adult's total income (the same Advani &
 # Summers table used above), so large gains land on the income profiles
 # most likely to realise gains rather than on uniformly random households.
 
-HMRC_SIZE_BANDS_FILE = "capital_gains_size_distribution_hmrc.csv"
-# Few, heavy donors rather than many light ones: the L0-regularised
-# calibration pays a gate penalty per active record, so a band represented
-# by 300 rows of weight ~7 is far more expensive to keep than 30 rows of
-# weight ~67 carrying the same band total. The first full build with 300
-# donors/band shrank donor weight ~8x and left the top bands 94-97% under
-# target; fewer gates make satisfying the band targets cheap for the
-# optimiser while donors still spread across income profiles.
+# Few, heavy donors rather than many light ones: the first full build with
+# 300 donors per band left the £2m+ bands 94-97% under target, and failed
+# the built-dataset tests.
 DONORS_PER_BAND = 30
 _DONOR_SEED = 1
-# HMRC's rows below £12,300 mix AEA regimes and are definitionally
-# incomplete (see the CSV header note); the spline body already covers
-# gains of that size, so donors start at the £12,300 band.
-_MIN_DONOR_BAND_LOWER = 12_300
+_MIN_DONOR_BAND_LOWER = 500_000
 
 
 def load_hmrc_size_bands() -> pd.DataFrame:
-    """HMRC Table 2.1a size-of-gain bands used for donors and targets."""
-    bands = pd.read_csv(STORAGE_FOLDER / HMRC_SIZE_BANDS_FILE, comment="#")
-    bands = bands[bands.lower_limit >= _MIN_DONOR_BAND_LOWER].reset_index(drop=True)
-    bands["upper_limit"] = bands.lower_limit.shift(-1).fillna(np.inf)
+    """HMRC Table 2.1a size-of-gain bands, with each band's mean gain."""
+    bands = load_size_bands()
     bands["taxpayers"] = bands.taxpayers_thousands * 1e3
     bands["gains"] = bands.gains_gbp_millions * 1e6
     bands["mean_gain"] = bands.gains / bands.taxpayers
     return bands
 
 
+def load_donor_bands() -> pd.DataFrame:
+    """The bands whose records are donors."""
+    bands = load_hmrc_size_bands()
+    return bands[bands.lower_limit >= _MIN_DONOR_BAND_LOWER].reset_index(drop=True)
+
+
 def stack_cgt_band_donors(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     """Stack donor households carrying HMRC band mean gains at band-exact
     initial weights."""
-    from policyengine_uk import Microsimulation
-
     dataset = dataset.copy()
     dataset.household["household_is_cgt_band_donor"] = False
     if "capital_gains" not in dataset.person.columns:
         dataset.person["capital_gains"] = 0.0
 
-    bands = load_hmrc_size_bands()
+    bands = load_donor_bands()
     rng = np.random.default_rng(_DONOR_SEED)
 
-    sim = Microsimulation(dataset=dataset)
-    ti = sim.calculate("total_income").values
-    first_adult = sim.calculate("adult_index").values == 1
+    total_income, first_adult = _first_adult_incomes(dataset)
+    # A has-gains twin is the same household as its original, so only the
+    # original is a candidate.
+    if "household_is_capital_gains_clone" in dataset.household.columns:
+        twins = dataset.household.household_id[
+            dataset.household.household_is_capital_gains_clone.astype(bool)
+        ]
+        first_adult &= ~dataset.person.person_household_id.isin(twins).values
 
     fa_household_id = dataset.person.person_household_id.values[first_adult]
-    fa_income = ti[first_adult]
-    income_band = (
-        np.searchsorted(
-            capital_gains.minimum_total_income.values, fa_income, side="right"
-        )
-        - 1
-    )
     propensity = capital_gains.percent_with_gains.values[
-        np.clip(income_band, 0, len(capital_gains) - 1)
+        np.clip(_income_band(total_income[first_adult]), 0, len(capital_gains) - 1)
     ]
 
     n_donors = DONORS_PER_BAND * len(bands)
@@ -268,42 +305,27 @@ def stack_cgt_band_donors(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
         )
     )
 
-    person_filter = dataset.person.person_household_id.isin(selected)
-    donor_person = dataset.person[person_filter].reset_index(drop=True).copy()
-    donor_benunit = (
-        dataset.benunit[dataset.benunit.benunit_id.isin(donor_person.person_benunit_id)]
-        .reset_index(drop=True)
-        .copy()
+    donor = _households(dataset, selected)
+    donor.household["household_weight"] = (
+        donor.household.household_id.map(weight_of_household).fillna(0.0).values
     )
-    donor_household = (
-        dataset.household[dataset.household.household_id.isin(selected)]
-        .reset_index(drop=True)
-        .copy()
-    )
-
-    donor_household["household_weight"] = (
-        donor_household.household_id.map(weight_of_household).fillna(0.0).values
-    )
-    donor_household["household_is_cgt_band_donor"] = True
+    donor.household["household_is_cgt_band_donor"] = True
+    if "household_calibration_prior" in dataset.household:
+        # Donors add their published band mass, not the copied source prior.
+        donor.household["household_calibration_prior"] = donor.household[
+            "household_weight"
+        ]
 
     # The band mean gain goes to each donor household's first adult;
     # everyone else in the household carries no gain, mirroring the
     # one-gainer-per-household convention of the imputation above.
-    donor_first_adult = first_adult[person_filter.values]
-    donor_person["capital_gains"] = 0.0
-    donor_gains = (
-        donor_person.person_household_id.map(band_of_household).fillna(0.0).values
-    )
-    donor_person.loc[donor_first_adult, "capital_gains"] = donor_gains[
-        donor_first_adult
+    donor_first_adult = first_adult[
+        dataset.person.person_household_id.isin(selected).values
     ]
-
-    donor = UKSingleYearDataset(
-        person=donor_person,
-        benunit=donor_benunit,
-        household=donor_household,
-        fiscal_year=dataset.time_period,
+    donor_gains = (
+        donor.person.person_household_id.map(band_of_household).fillna(0.0).values
     )
+    donor.person["capital_gains"] = np.where(donor_first_adult, donor_gains, 0.0)
 
     data = stack_datasets(dataset, donor)
     data.validate()

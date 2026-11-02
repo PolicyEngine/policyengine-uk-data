@@ -110,6 +110,8 @@ def load_weights(
 def initialize_weight_priors(
     original_weights: np.ndarray,
     zero_weight_total_share: float = DEFAULT_ZERO_WEIGHT_PRIOR_TOTAL_SHARE,
+    *,
+    prior_weights: np.ndarray | None = None,
 ) -> np.ndarray:
     """Build deterministic positive household priors for calibration.
 
@@ -119,12 +121,23 @@ def initialize_weight_priors(
     zero-weight rows are present, preserve the relative distribution of
     positive survey weights while reserving a fixed share of total prior mass
     for the zero-weight rows.
+
+    When a build step has already split these priors between household
+    copies, use its carried priors directly rather than assigning new mass
+    to zero-weight originals from the enlarged population of copies.
     """
     weights = np.asarray(original_weights, dtype=np.float64)
     if weights.ndim != 1:
         raise ValueError("original_weights must be one-dimensional")
     if np.any(weights < 0):
         raise ValueError("original_weights must be non-negative")
+    if prior_weights is not None:
+        priors = np.asarray(prior_weights, dtype=np.float64)
+        if priors.shape != weights.shape:
+            raise ValueError("prior_weights must match original_weights")
+        if not np.isfinite(priors).all() or (priors <= 0).any():
+            raise ValueError("prior_weights must be finite and positive")
+        return priors.copy()
     if weights.size == 0:
         return weights.copy()
     if not 0 < zero_weight_total_share < 1:
@@ -142,6 +155,62 @@ def initialize_weight_priors(
     priors = np.empty_like(weights, dtype=np.float64)
     priors[positive_mask] = weights[positive_mask] * (1 - zero_weight_total_share)
     priors[zero_mask] = positive_total * zero_weight_total_share / zero_mask.sum()
+    return priors
+
+
+def prior_equivalent_weights(
+    original_weights: np.ndarray,
+    zero_weight_total_share: float = DEFAULT_ZERO_WEIGHT_PRIOR_TOTAL_SHARE,
+) -> np.ndarray:
+    """Express each household's calibration prior as a household weight.
+
+    A positive row returns its own weight. A zero-weight row returns the
+    weight a positive row would need to receive the same prior. A build step
+    that splits a household's mass between two records before calibration
+    (the capital gains imputation) uses this to treat survey rows and
+    zero-weight rows alike.
+    """
+    weights = np.asarray(original_weights, dtype=np.float64)
+    priors = initialize_weight_priors(weights, zero_weight_total_share)
+    positive_mask = weights > 0
+    if positive_mask.all() or not positive_mask.any():
+        return priors
+    return priors / (1 - zero_weight_total_share)
+
+
+def rake_priors_to_targets(
+    priors: np.ndarray,
+    matrix: pd.DataFrame,
+    targets: pd.Series,
+    names,
+) -> np.ndarray:
+    """Scale household priors so they reproduce each named national target.
+
+    For each named target, the priors of the households that contribute to
+    it are multiplied by one factor, so the calibration starts with that
+    target met. The named targets must count disjoint sets of households:
+    then no factor disturbs another target, and one pass meets them all.
+    A name the matrix lacks, or a target no household contributes to, is
+    skipped, because no factor can meet it.
+
+    Calibration moves weights only gradually from their priors, so a target
+    that starts many times over or under can still be far off when the
+    epochs run out, and can drag the targets that share its records with it.
+    """
+    priors = np.asarray(priors, dtype=np.float64).copy()
+    names = [name for name in names if name in matrix.columns]
+    columns = matrix[names].to_numpy(dtype=np.float64)
+    if (np.count_nonzero(columns, axis=1) > 1).any():
+        raise ValueError(
+            "Targets raked at the prior must count disjoint sets of households"
+        )
+    for name, column in zip(names, columns.T):
+        target = float(targets[name])
+        if target <= 0:
+            raise ValueError(f"Cannot rake priors to a non-positive target: {name}")
+        estimate = float((priors * column).sum())
+        if estimate > 0:
+            priors[column != 0] *= target / estimate
     return priors
 
 
@@ -221,6 +290,7 @@ def calibrate_local_areas(
     nested_progress=None,
     time_period: int | str | None = None,
     zero_weight_prior_total_share: float = DEFAULT_ZERO_WEIGHT_PRIOR_TOTAL_SHARE,
+    prior_rake_targets=(),
 ):
     """
     Generic calibration function for local areas (constituencies, local authorities, etc.)
@@ -239,6 +309,9 @@ def calibrate_local_areas(
         area_name: Name of the area type for logging
         zero_weight_prior_total_share: Share of prior household mass to reserve for
             rows whose incoming household_weight is zero.
+        prior_rake_targets: Names of national targets, counting disjoint sets of
+            households, that the starting weights are scaled to meet (see
+            rake_priors_to_targets).
     """
     if dataset_key is None:
         dataset_key = default_weight_dataset_key()
@@ -280,7 +353,14 @@ def calibrate_local_areas(
         household_prior_weights = initialize_weight_priors(
             dataset.household.household_weight.values,
             zero_weight_total_share=zero_weight_prior_total_share,
+            prior_weights=getattr(
+                dataset.household, "household_calibration_prior", None
+            ),
         )
+        if prior_rake_targets:
+            household_prior_weights = rake_priors_to_targets(
+                household_prior_weights, m_n, y_n, prior_rake_targets
+            )
         area_prior_weights = household_prior_weights / areas_per_household
         original_weights = np.log(np.clip(area_prior_weights, 1e-12, None))
         weights = torch.tensor(
@@ -349,8 +429,11 @@ def calibrate_local_areas(
                 mask = validation_targets_national
             else:
                 mask = ~validation_targets_national
-            pred_national = pred_national[mask]
-            mse_national = torch.mean(sre(pred_national, y_national[mask]))
+            if mask.any():
+                mse_national = torch.mean(sre(pred_national[mask], y_national[mask]))
+            else:
+                # Validation targets can all be local; an empty mean is NaN.
+                mse_national = pred_national.sum() * 0
         else:
             mse_national = torch.mean(sre(pred_national, y_national))
 
@@ -420,6 +503,11 @@ def calibrate_local_areas(
         )
         performance_step["epoch"] = epoch
         performance_step["loss"] = performance_step.rel_abs_error**2
+        # training_loss, validation_loss and the two pct_close columns describe
+        # the dropout-perturbed weights before this epoch's optimiser step.
+        # saved_weights_loss and the per-target columns describe final_weights,
+        # the weights after the step, which are the ones saved. So on the last
+        # row, which describes the shipped weights, read saved_weights_loss.
         performance_step["training_loss"] = training_loss
         performance_step["saved_weights_loss"] = saved_weights_loss
         performance_step["validation_loss"] = validation_loss
@@ -473,7 +561,9 @@ def calibrate_local_areas(
                         calculating_loss=False,
                     )
 
-                if epoch % 10 == 0:
+                # Every tenth epoch, and the last: the weights saved and
+                # returned are the final optimiser state (#456).
+                if epoch % 10 == 0 or epoch == epochs - 1:
                     final_weights = (torch.exp(weights) * r).detach().numpy()
 
                     log_performance(
@@ -513,7 +603,7 @@ def calibrate_local_areas(
                         f"Loss: {loss_value.item()}, Epoch: {epoch}, {area_name}<10%: {local_close:.1%}, National<10%: {national_close:.1%}"
                     )
 
-            if epoch % 10 == 0:
+            if epoch % 10 == 0 or epoch == epochs - 1:
                 final_weights = (torch.exp(weights) * r).detach().numpy()
 
                 log_performance(

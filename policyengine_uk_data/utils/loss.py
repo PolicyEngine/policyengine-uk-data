@@ -23,7 +23,11 @@ def get_loss_results(dataset, time_period, reform=None, household_weights=None):
     Returns:
         DataFrame with estimate vs target comparisons and error metrics.
     """
-    matrix, targets = create_target_matrix(dataset, time_period, reform)
+    # A diagnostic of any dataset: report every target, fitted or not,
+    # rather than enforce the Enhanced FRS build's coverage gate.
+    matrix, targets = create_target_matrix(
+        dataset, time_period, reform, require_coverage=False
+    )
     from policyengine_uk import Microsimulation
 
     if household_weights is None:

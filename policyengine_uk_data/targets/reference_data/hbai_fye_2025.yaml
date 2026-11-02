@@ -1,0 +1,27 @@
+# Households below average income, FYE 2025 (DWP, 26 March 2026), from the
+# published data tables:
+# https://assets.publishing.service.gov.uk/media/69c2902a7e02b81c0d1c7762/hbai-data_tables-2025.zip
+# uncertainty-hbai-2024-25-tables.ods, tables 8a (medians, means, Gini) and
+# 8b (low income), read on 15 October 2026. Estimates and 95% confidence
+# intervals for the United Kingdom, FRS 2024/25, which policyengine-uk models
+# as period 2024. Incomes are equivalised, in £ a week at 2024/25 prices;
+# rates and Gini coefficients are per cent.
+schema_version: 1
+source: DWP Households below average income FYE 2025
+period: 2024
+measures:
+  median_bhc: {estimate: 719.481062, low: 703.567322, high: 735.575892, table: 8a}
+  median_ahc: {estimate: 623.144059, low: 605.209749, high: 637.071794, table: 8a}
+  mean_bhc: {estimate: 854.979494, low: 836.367495, high: 870.351587, table: 8a}
+  mean_ahc: {estimate: 749.82155, low: 732.329379, high: 764.496483, table: 8a}
+  gini_bhc: {estimate: 32.736632, low: 31.889881, high: 33.978308, table: 8a}
+  gini_ahc: {estimate: 36.780956, low: 35.897706, high: 38.293054, table: 8a}
+  # Percentage of individuals below 60% of the relative median.
+  relative_low_income_bhc_all: {estimate: 15.911572, low: 14.446526, high: 17.637657, table: 8b}
+  relative_low_income_bhc_children: {estimate: 20.519181, low: 17.356404, high: 23.955585, table: 8b}
+  relative_low_income_bhc_working_age: {estimate: 14.281508, low: 12.908347, high: 16.018814, table: 8b}
+  relative_low_income_bhc_pensioners: {estimate: 15.895071, low: 13.690455, high: 17.991754, table: 8b}
+  relative_low_income_ahc_all: {estimate: 19.640844, low: 17.9939, high: 21.271606, table: 8b}
+  relative_low_income_ahc_children: {estimate: 27.41076, low: 23.49369, high: 30.644085, table: 8b}
+  relative_low_income_ahc_working_age: {estimate: 18.579734, low: 17.012601, high: 20.343162, table: 8b}
+  relative_low_income_ahc_pensioners: {estimate: 13.866371, low: 11.618244, high: 15.898207, table: 8b}

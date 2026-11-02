@@ -38,7 +38,11 @@ def calibrate_household_weights(
     datasets such as the UK enhanced CPS.
     """
 
-    matrix, targets = create_target_matrix(dataset, time_period, reform)
+    # Only the CPS-based transfer dataset is reweighted here; the coverage
+    # gate is for the Enhanced FRS build (datasets/create_datasets.py).
+    matrix, targets = create_target_matrix(
+        dataset, time_period, reform, require_coverage=False
+    )
     household_count = len(dataset.household)
     if household_count == 0:
         raise ValueError("Dataset must contain at least one household")
