@@ -9,8 +9,9 @@ the build to the reading: the column round-trips to the weekly amounts, a
 full-rate pensioner has no add-on, and an add-on is exactly the weekly excess.
 
 policyengine-core holds amounts as float32, so £11,502.40 read back at 52
-weeks is a ten-thousandth of a penny above £221.20 a week; the comparisons
-allow a penny a year.
+weeks is about a thousandth of a penny above £221.20 a week (0.0012p, or
+0.063p a year); the comparisons allow a penny a year, with no relative
+tolerance on top.
 """
 
 import numpy as np
@@ -140,6 +141,7 @@ rows = st.lists(
 )
 
 
+@settings(deadline=None)
 @given(rows=rows)
 def test_each_column_reads_back_to_its_weekly_amounts(rows):
     """Divided by the weeks it was annualised at, each person's column is the
@@ -169,12 +171,16 @@ def test_full_rate_pensioners_have_no_additional_state_pension(year):
     assert np.all(np.abs(c["additional_state_pension"]) < PENNY_A_YEAR)
     full = sim.tax_benefit_system.parameters.gov.dwp.state_pension
     np.testing.assert_allclose(
-        c["new_state_pension"][0], 52 * full.new_state_pension.amount(year), atol=0.01
+        c["new_state_pension"][0],
+        52 * full.new_state_pension.amount(year),
+        rtol=0,
+        atol=PENNY_A_YEAR,
     )
     np.testing.assert_allclose(
         c["basic_state_pension"][1],
         52 * full.basic_state_pension.amount(year),
-        atol=0.01,
+        rtol=0,
+        atol=PENNY_A_YEAR,
     )
 
 
@@ -188,10 +194,15 @@ def assert_split_at_the_full_rate(weekly, types):
     np.testing.assert_allclose(
         c["additional_state_pension"],
         52 * np.maximum(weekly - full, 0),
+        rtol=0,
         atol=PENNY_A_YEAR,
     )
-    np.testing.assert_allclose(flat, 52 * np.minimum(weekly, full), atol=0.01)
-    np.testing.assert_allclose(c["state_pension"], 52 * weekly, atol=0.01)
+    np.testing.assert_allclose(
+        flat, 52 * np.minimum(weekly, full), rtol=0, atol=PENNY_A_YEAR
+    )
+    np.testing.assert_allclose(
+        c["state_pension"], 52 * weekly, rtol=0, atol=PENNY_A_YEAR
+    )
     at_or_below = weekly <= full
     assert np.all(c["additional_state_pension"][at_or_below] < PENNY_A_YEAR)
 
