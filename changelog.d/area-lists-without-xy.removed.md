@@ -1,0 +1,1 @@
+Remove the hex-map positions (`x` and `y`) from `storage/constituencies_2024.csv` and `storage/local_authorities_2021.csv`. Nothing in the package reads them, and the PolicyEngine app has its own hex-map layout files.
