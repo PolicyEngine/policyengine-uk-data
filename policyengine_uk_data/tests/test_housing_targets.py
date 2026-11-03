@@ -5,6 +5,8 @@ See: https://github.com/PolicyEngine/policyengine-uk-data/issues/317
 
 from policyengine_uk_data.targets.sources.housing import (
     _MORTGAGE_TOTAL,
+    _SOCIAL_RENT_HOUSEHOLDS,
+    _SOCIAL_RENT_WEEKLY_MEAN,
     _PRIVATE_RENT_TOTAL,
     _SOCIAL_RENT_TOTAL,
     get_targets,
@@ -20,8 +22,21 @@ def test_private_rent_total_in_range():
 
 
 def test_social_rent_total_in_range():
-    """Social rent total should be £20bn-£40bn (5.0m × ~£118/wk)."""
+    """Social rent total should be £20bn-£40bn (5.0m × ~£129/wk)."""
     assert 20e9 < _SOCIAL_RENT_TOTAL < 40e9
+
+
+def test_social_rent_basis_components():
+    """Pin the documented EHS basis so a silent edit is visible in review.
+
+    This does NOT detect a newer EHS release — it only fails if someone
+    changes the constant without changing this pin. A real staleness check
+    would have to fetch EHS, as ons_tenure.py and ons_households.py do for
+    their sources. Tracked as future work in the module docstring.
+    """
+    assert _SOCIAL_RENT_WEEKLY_MEAN == 129  # EHS 2024-25
+    assert _SOCIAL_RENT_HOUSEHOLDS == 5.0e6
+    assert _SOCIAL_RENT_TOTAL == 129 * 52 * 5.0e6
 
 
 def test_mortgage_total_in_range():
