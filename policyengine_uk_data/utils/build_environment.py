@@ -5,7 +5,15 @@ from typing import Iterable
 def get_local_build_issues(
     python_version: tuple[int, ...] | None = None,
     variable_names: Iterable[str] | None = None,
+    unprojected_corporate_sdlt: Iterable[str] | None = None,
 ) -> list[str]:
+    """Problems with the build environment.
+
+    ``unprojected_corporate_sdlt`` lists the corporate SDLT statistics the
+    resolved policyengine-uk does not project
+    (``obr.unprojected_corporate_sdlt``). It is checked only when given,
+    which full builds do.
+    """
     issues: list[str] = []
 
     if python_version is None:
@@ -30,11 +38,29 @@ def get_local_build_issues(
             "PYTHONPATH."
         )
 
+    unprojected = list(unprojected_corporate_sdlt or [])
+    if unprojected:
+        issues.append(
+            "The resolved policyengine-uk does not project "
+            f"{' or '.join(unprojected)}: it carries the last outturn "
+            "forward. Full builds need policyengine-uk 2.152.0 or later "
+            "(PolicyEngine/policyengine-uk#2322), which uprates corporate SDLT "
+            "with the OBR forecast: households' SDLT is calibrated to the OBR "
+            "total less this statistic, so a stale one overstates it."
+        )
+
     return issues
 
 
-def assert_local_build_environment() -> None:
-    issues = get_local_build_issues()
+def assert_local_build_environment(full_build: bool = False) -> None:
+    unprojected = None
+    if full_build:
+        from policyengine_uk_data.targets.sources.obr import (
+            unprojected_corporate_sdlt,
+        )
+
+        unprojected = unprojected_corporate_sdlt()
+    issues = get_local_build_issues(unprojected_corporate_sdlt=unprojected)
     if not issues:
         return
 

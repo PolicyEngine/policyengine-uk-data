@@ -11,13 +11,18 @@ Sources:
   https://www.ons.gov.uk/peoplepopulationandcommunity/birthsdeathsandmarriages/families/bulletins/familiesandhouseholds/2024
 - Rate: 1.1m / 28.6m = 3.85%
 
-Verification against official SDLT revenue (2024-25):
-- Official SDLT: £13.9bn (https://www.gov.uk/government/statistics/uk-stamp-tax-statistics)
-- With fix (3.85%): ~£15bn (close to official)
-- Without fix (100%): £370bn (26x too high)
+Households' SDLT is checked against the OBR's SDLT forecast less the SDLT
+policyengine-uk attributes to companies and other non-natural persons
+(`corporate_sdlt`), the figure calibration targets (#564). Before the 3.85%
+rate, every household was charged SDLT and the total was about £370bn.
 """
 
+import os
+
 import pytest
+
+from policyengine_uk_data.targets.obr_sources import load_workbook
+from policyengine_uk_data.targets.sources import obr
 
 PROPERTY_PURCHASE_RATE = 0.0385
 
@@ -62,31 +67,39 @@ def test_property_purchased_has_some_true(baseline):
     assert true_count > 0, "No households have property_purchased=True"
 
 
-def test_sdlt_total_reasonable(baseline):
-    """Test that total SDLT revenue is realistic.
+# PR CI builds with TESTING=1 (32 calibration epochs instead of 512), so its
+# bound only catches order-of-magnitude errors. Full builds get the strict one.
+_SDLT_BOUNDS = (0.25, 4.0) if os.environ.get("TESTING") == "1" else (0.5, 1.5)
 
-    Official SDLT revenue (2024-25): £13.9bn
-    Source: https://www.gov.uk/government/statistics/uk-stamp-tax-statistics
 
-    Without fix (100% property_purchased=True): £370bn (26x too high)
-    With fix (3.85% rate): ~£15bn (close to official)
+def _household_sdlt_target(year: int) -> float:
+    """The OBR SDLT calibration target: the OBR's SDLT less corporate SDLT."""
+    targets = obr._parse_receipts(load_workbook("receipts"))
+    return {t.name: t for t in targets}["obr/sdlt"].values[year]
+
+
+def test_household_sdlt_near_target(baseline):
+    """Households' SDLT is near the OBR's SDLT less corporate SDLT.
+
+    Compared with `stamp_duty_land_tax`, households' own SDLT: `expected_sdlt`
+    also included `corporate_sdlt` before PolicyEngine/policyengine-uk#2235.
     """
-    expected_sdlt = baseline.calculate("expected_sdlt", 2025).values
-    household_weight = baseline.calculate("household_weight", 2025).values
-    total_sdlt = (expected_sdlt * household_weight).sum()
+    weight = baseline.calculate("household_weight", 2025).values
+    household = (baseline.calculate("stamp_duty_land_tax", 2025).values * weight).sum()
+    target = _household_sdlt_target(2025)
+    low, high = _SDLT_BOUNDS
 
-    # Total SDLT should be within reasonable range of official figures
-    min_sdlt = 5e9  # £5bn minimum
-    max_sdlt = 50e9  # £50bn maximum (official is ~£14bn)
-
-    assert total_sdlt > min_sdlt, (
-        f"Total SDLT £{total_sdlt / 1e9:.1f}bn is too low "
-        f"(minimum expected: £{min_sdlt / 1e9:.1f}bn)"
+    assert low < household / target < high, (
+        f"Households' SDLT is £{household / 1e9:.2f}bn against a target of "
+        f"£{target / 1e9:.2f}bn (the OBR's SDLT less corporate SDLT); the "
+        f"ratio must lie between {low} and {high}."
     )
 
-    assert total_sdlt < max_sdlt, (
-        f"Total SDLT £{total_sdlt / 1e9:.1f}bn is unrealistically high "
-        f"(maximum expected: £{max_sdlt / 1e9:.1f}bn). "
-        f"Official SDLT is ~£14bn. "
-        "This suggests property_purchased may be incorrectly set to True for all households."
+
+def test_corporate_sdlt_is_the_statistic_the_target_subtracts(baseline):
+    """With households on target, total SDLT is then the OBR's figure."""
+    weight = baseline.calculate("household_weight", 2025).values
+    corporate = (baseline.calculate("corporate_sdlt", 2025).values * weight).sum()
+    assert corporate == pytest.approx(
+        obr.corporate_sdlt_receipts([2025])[2025], rel=1e-6
     )

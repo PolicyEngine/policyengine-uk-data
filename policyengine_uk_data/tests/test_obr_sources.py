@@ -153,12 +153,16 @@ def test_header_read_years_match_the_fixed_columns_on_march_2026():
     for sheet, fixed in _FIXED.items():
         ws = books["receipts" if sheet.startswith("3") else "expenditure"][sheet]
         assert year_columns(ws, 2024, 2030) == fixed, sheet
+    corporate_sdlt = obr.corporate_sdlt_receipts()
     for name, (kind, sheet, label) in _ROWS.items():
         ws = books[kind][sheet]
         row = obr._find_row(ws, label, max_row=80)
         expected = {
             year: ws[f"{c}{row}"].value * 1e9 for c, year in _FIXED[sheet].items()
         }
+        if name == "obr/sdlt":
+            # Households' SDLT is targeted at the line less corporate SDLT (#564).
+            expected = {year: v - corporate_sdlt[year] for year, v in expected.items()}
         assert targets[name].values == pytest.approx(expected), name
 
 
