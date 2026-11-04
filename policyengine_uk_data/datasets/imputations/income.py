@@ -474,6 +474,26 @@ def clear_frs_reported_capital(dataset: UKSingleYearDataset) -> UKSingleYearData
     return dataset
 
 
+def clear_income_not_otherwise_charged(
+    dataset: UKSingleYearDataset,
+) -> UKSingleYearDataset:
+    """Set ``income_not_otherwise_charged`` to zero.
+
+    The build applies it to the SPI-synthetic copy. Its trading profits are
+    SPI PROFITS, which ``datasets/spi.py`` takes to be after the trading
+    allowance, while its miscellaneous income stays its FRS donor's (neither
+    imputation stage replaces it). policyengine-uk gives a person's trades the
+    allowance first and their income not otherwise charged what is left, so
+    on these rows the donor's odd-job income would take an allowance the SPI
+    profit may already have used. At zero, policyengine-uk taxes the copy's
+    miscellaneous income in full, as it did before it applied the allowance
+    to that income.
+    """
+    if "income_not_otherwise_charged" in dataset.person.columns:
+        dataset.person["income_not_otherwise_charged"] = 0.0
+    return dataset
+
+
 def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     """
     Impute detailed income components using trained model.
@@ -503,6 +523,7 @@ def impute_income(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     zero_weight_copy.household.household_weight = 0
     zero_weight_copy.household["household_is_spi_synthetic"] = True
     zero_weight_copy = clear_frs_reported_capital(zero_weight_copy)
+    zero_weight_copy = clear_income_not_otherwise_charged(zero_weight_copy)
     zero_weight_copy = subsample_dataset(zero_weight_copy, 10_000)
 
     model = create_income_model()
