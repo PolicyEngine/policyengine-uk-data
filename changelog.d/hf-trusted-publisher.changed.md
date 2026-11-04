@@ -1,0 +1,1 @@
+- CI reaches Hugging Face only through short-lived OIDC tokens: the release job through a Trusted Publisher on the data repo, pull requests through the read-only policyengine-auto CI/CD identity. No Hugging Face token is stored as a GitHub secret.
