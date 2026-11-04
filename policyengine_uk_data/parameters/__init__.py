@@ -62,3 +62,19 @@ def load_take_up_rate(variable_name: str, year: int = 2015) -> float:
         Take-up rate as a float between 0 and 1
     """
     return load_parameter("take_up", variable_name, year)
+
+
+def load_uc_managed_migration_claim_rates() -> dict[str, float]:
+    """Load Move to Universal Credit claim rates by legacy benefit combination.
+
+    Returns:
+        Claim rate for each combination in ``take_up/uc_managed_migration.yaml``
+        (benefit names joined by "+", plus "all"): households that claimed
+        Universal Credit over those that claimed or did not claim.
+    """
+    with open(PARAMETERS_DIR / "take_up" / "uc_managed_migration.yaml") as f:
+        households = yaml.safe_load(f)["households"]
+    return {
+        combination: counts["claimed"] / (counts["claimed"] + counts["did_not_claim"])
+        for combination, counts in households.items()
+    }

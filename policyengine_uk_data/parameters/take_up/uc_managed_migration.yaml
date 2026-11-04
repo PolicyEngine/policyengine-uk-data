@@ -1,0 +1,42 @@
+description: >-
+  Households sent a Move to Universal Credit migration notice in Great Britain
+  (July 2022 to end of March 2026), by the legacy benefits they received and
+  whether they claimed Universal Credit. The claim rate for a combination is
+  claimed / (claimed + did_not_claim): the 538 households still in progress
+  are left out. Combinations DWP does not report use the all-households row.
+  "esa_income" is Stat-Xplore's "Employment Support Allowance"; notices go only
+  to claimants of an existing benefit, which is income-related ESA.
+metadata:
+  unit: /1
+  label: Move to Universal Credit claim rate by legacy benefit combination
+  reference:
+    - title: >-
+        DWP Stat-Xplore, "Households invited to Move to Universal Credit",
+        table "MtUC Households 3 - Migration notices by legacy benefit and
+        move status" (retrieved 2026-10-03)
+      href: https://stat-xplore.dwp.gov.uk
+    - title: "DWP: Move to Universal Credit, July 2022 to end March 2026 (12 May 2026)"
+      href: https://www.gov.uk/government/statistics/move-to-universal-credit-july-2022-to-end-march-2026
+# Benefit names follow the order child_tax_credit, working_tax_credit,
+# housing_benefit, esa_income, income_support, jsa_income, joined by "+".
+households:
+  child_tax_credit: {claimed: 36_723, did_not_claim: 17_733}
+  working_tax_credit: {claimed: 53_993, did_not_claim: 51_805}
+  child_tax_credit+working_tax_credit: {claimed: 363_984, did_not_claim: 126_397}
+  housing_benefit: {claimed: 30_900, did_not_claim: 10_121}
+  esa_income: {claimed: 321_075, did_not_claim: 13_944}
+  income_support: {claimed: 17_719, did_not_claim: 1_351}
+  jsa_income: {claimed: 5_867, did_not_claim: 329}
+  child_tax_credit+housing_benefit: {claimed: 15_646, did_not_claim: 1_042}
+  child_tax_credit+esa_income: {claimed: 11_171, did_not_claim: 381}
+  child_tax_credit+income_support: {claimed: 8_254, did_not_claim: 276}
+  child_tax_credit+jsa_income: {claimed: 381, did_not_claim: 8}
+  working_tax_credit+housing_benefit: {claimed: 7_820, did_not_claim: 1_042}
+  housing_benefit+esa_income: {claimed: 448_253, did_not_claim: 9_117}
+  housing_benefit+income_support: {claimed: 31_087, did_not_claim: 750}
+  housing_benefit+jsa_income: {claimed: 11_019, did_not_claim: 333}
+  child_tax_credit+working_tax_credit+housing_benefit: {claimed: 81_962, did_not_claim: 5_352}
+  child_tax_credit+housing_benefit+esa_income: {claimed: 73_859, did_not_claim: 949}
+  child_tax_credit+housing_benefit+income_support: {claimed: 58_764, did_not_claim: 691}
+  child_tax_credit+housing_benefit+jsa_income: {claimed: 2_286, did_not_claim: 30}
+  all: {claimed: 1_580_761, did_not_claim: 241_662}
