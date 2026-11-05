@@ -45,6 +45,8 @@ VAT_RATE_BY_YEAR: dict[int, tuple[float, float]] = {
 
 PREDICTORS = ["is_adult", "is_child", "is_SP_age", "household_net_income"]
 IMPUTATIONS = ["full_rate_vat_expenditure_rate"]
+# The rate is the share of a household's expenditure that is full-rated.
+RATE_BOUNDS = (0.0, 1.0)
 
 
 def get_vat_model_path(year: int = DEFAULT_ETB_YEAR):
@@ -60,6 +62,8 @@ def get_vat_model_metadata(year: int = DEFAULT_ETB_YEAR) -> dict:
         "training_year": year,
         "predictor_variables": tuple(PREDICTORS),
         "impute_variables": tuple(IMPUTATIONS),
+        # A model trained before the rate was bounded must be retrained.
+        "rate_bounds": RATE_BOUNDS,
     }
 
 
@@ -115,9 +119,20 @@ def generate_etb_table(etb: pd.DataFrame, year: int = DEFAULT_ETB_YEAR) -> pd.Da
     etb_year_df["is_child"] = etb_year.childs
     etb_year_df["is_SP_age"] = etb_year.noretd
     etb_year_df["household_net_income"] = etb_year.disinc * 52
-    etb_year_df["full_rate_vat_expenditure_rate"] = (
+    # Keep the rate a share of expenditure. A few ETB households report
+    # expenditure at or below their VAT, where the ratio is negative or
+    # undefined, and a few report more VAT than their expenditure can carry,
+    # where it exceeds one. The QRF samples conditional quantiles of its
+    # training values, so its predictions stay within their range: those rows
+    # reached the dataset as negative rates, and with them negative VAT, and
+    # as rates of up to 55.
+    expenditure_before_vat = etb_year.expdis - etb_year.totvat
+    rate = (
         etb_year.totvat * (1 - reduced_rate_share) / standard_rate
-    ) / (etb_year.expdis - etb_year.totvat)
+    ) / expenditure_before_vat
+    etb_year_df["full_rate_vat_expenditure_rate"] = rate.clip(*RATE_BOUNDS).where(
+        expenditure_before_vat > 0
+    )
     return etb_year_df[~etb_year_df.full_rate_vat_expenditure_rate.isna()]
 
 
@@ -191,6 +206,13 @@ def impute_vat(dataset: UKSingleYearDataset) -> UKSingleYearDataset:
     for column in output_df.columns:
         dataset.household[column] = output_df[column].values
 
+    rate = dataset.household["full_rate_vat_expenditure_rate"]
+    out_of_bounds = int((~rate.between(*RATE_BOUNDS)).sum())
+    if out_of_bounds:
+        raise ValueError(
+            "full_rate_vat_expenditure_rate is outside [0, 1] for "
+            f"{out_of_bounds} households after imputation."
+        )
     dataset.validate()
 
     return dataset
