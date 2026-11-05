@@ -152,7 +152,7 @@ def test_spi_copy_flag_follows_its_own_imputed_incomes(rows):
     imputed_profit = [r[3] for r in rows]
     imputed_pay = [r[4] for r in rows]
 
-    def impute_over_incomes(dataset, _model, output_variables):
+    def impute_over_incomes(dataset, _model, output_variables, _quantiles=None):
         dataset = dataset.copy()
         if "self_employment_income" in output_variables:
             dataset.person["self_employment_income"] = imputed_profit
@@ -161,6 +161,7 @@ def test_spi_copy_flag_follows_its_own_imputed_incomes(rows):
 
     with pytest.MonkeyPatch.context() as m:
         m.setattr(income_module, "create_income_model", lambda: object())
+        m.setattr(income_module, "draw_quantiles", lambda dataset: None)
         m.setattr(income_module, "subsample_dataset", lambda d, _n: d.copy())
         m.setattr(income_module, "impute_over_incomes", impute_over_incomes)
         m.setattr(
