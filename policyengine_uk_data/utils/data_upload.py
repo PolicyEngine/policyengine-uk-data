@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 from huggingface_hub import HfApi, CommitOperationAdd, hf_hub_download
 from huggingface_hub.errors import EntryNotFoundError, RevisionNotFoundError
 from google.cloud import storage
+from packaging.version import InvalidVersion, Version
 from pathlib import Path
 from importlib import metadata
 from importlib.util import find_spec
@@ -10,6 +11,7 @@ import google.auth
 import json
 import logging
 import os
+import re
 import subprocess
 import tomllib
 
@@ -22,6 +24,11 @@ from policyengine_uk_data.utils.hf_destinations import PRIVATE_REPO, PUBLIC_REPO
 
 RELEASE_MANIFEST_PATH = "release_manifest.json"
 REPO_ROOT = Path(__file__).resolve().parents[2]
+# Earlier policyengine-uk releases report the HEAD of whichever git repository
+# encloses the installed package (policyengine-uk#2191). Installed in a .venv
+# inside this checkout, that is policyengine-uk-data's own commit.
+FIRST_MODEL_VERSION_WITH_OWN_GIT_SHA = Version("2.123.8")
+GIT_COMMIT_ID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}", re.IGNORECASE)
 
 
 def _get_model_package_version(
@@ -51,8 +58,47 @@ def _get_model_package_version(
         return None
 
 
+def _reports_own_git_sha(model_package_version: Optional[str]) -> bool:
+    try:
+        return Version(model_package_version) >= FIRST_MODEL_VERSION_WITH_OWN_GIT_SHA
+    except (InvalidVersion, TypeError):
+        return False
+
+
+def _trusted_model_package_git_sha(
+    git_sha: Any,
+    *,
+    model_package_version: Optional[str],
+    data_package_git_sha: Optional[str],
+) -> Optional[str]:
+    """Return ``git_sha`` unless it could name another repository's commit."""
+    if git_sha is None:
+        return None
+    if not isinstance(git_sha, str) or not GIT_COMMIT_ID.fullmatch(git_sha):
+        reason = "it is not a full git commit id"
+    elif (
+        data_package_git_sha is not None
+        and git_sha.lower() == data_package_git_sha.lower()
+    ):
+        reason = "it is policyengine-uk-data's own commit"
+    elif not _reports_own_git_sha(model_package_version):
+        reason = (
+            f"policyengine-uk {model_package_version} predates "
+            f"{FIRST_MODEL_VERSION_WITH_OWN_GIT_SHA} and may report an enclosing "
+            "repository's commit"
+        )
+    else:
+        return git_sha
+    logging.warning(
+        "Recording no policyengine-uk git SHA in the release manifest: %s.", reason
+    )
+    return None
+
+
 def _get_model_package_build_metadata(
     package_name: str = "policyengine-uk",
+    *,
+    data_package_git_sha: Optional[str],
 ) -> Dict[str, Any]:
     metadata_payload: Dict[str, Any] = {
         "version": _get_model_package_version(package_name),
@@ -89,6 +135,11 @@ def _get_model_package_build_metadata(
             package_name,
             exc_info=True,
         )
+    metadata_payload["git_sha"] = _trusted_model_package_git_sha(
+        metadata_payload["git_sha"],
+        model_package_version=metadata_payload["version"],
+        data_package_git_sha=data_package_git_sha,
+    )
     return metadata_payload
 
 
@@ -402,7 +453,10 @@ def upload_files_to_hf(
         hf_repo_type=hf_repo_type,
         token=token,
     )
-    model_build_metadata = _get_model_package_build_metadata()
+    data_package_git_sha = _get_data_package_git_sha()
+    model_build_metadata = _get_model_package_build_metadata(
+        data_package_git_sha=data_package_git_sha
+    )
     core_package_metadata = (
         model_build_metadata.get("core") or _get_core_package_runtime_metadata()
     )
@@ -417,7 +471,7 @@ def upload_files_to_hf(
             "data_build_fingerprint"
         ],
         core_package_metadata=core_package_metadata,
-        data_package_git_sha=_get_data_package_git_sha(),
+        data_package_git_sha=data_package_git_sha,
         existing_manifest=existing_manifest,
         additional_compatible_specifiers=additional_compatible_specifiers,
     )

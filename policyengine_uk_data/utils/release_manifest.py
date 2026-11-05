@@ -103,10 +103,11 @@ def _runtime_component_metadata(
         {
             "name": name,
             "version": version,
-            "git_sha": git_sha,
             "data_build_fingerprint": data_build_fingerprint,
         }
     )
+    # Kept when None: null records that no trustworthy commit was available.
+    metadata["git_sha"] = git_sha
     if core_package_metadata is not None:
         metadata["core"] = dict(core_package_metadata)
     return metadata
