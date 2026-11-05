@@ -78,9 +78,13 @@ def create_nhs_usage_data(efrs: pd.DataFrame):
 
     nhs["Total people"] = np.ones_like(nhs["Total Cost"])
 
+    # NHS bands are whole years of age ("0 years", "01-04 years", ...); band on
+    # the whole year so that an age in months (frs.impute_infant_age_in_months)
+    # falls in its year's band.
+    whole_years = np.floor(efrs.age)
     for i in range(len(nhs)):
         row = nhs.iloc[i]
-        count = efrs[efrs.age.between(row["Lower age"], row["Upper age"] - 1)][
+        count = efrs[whole_years.between(row["Lower age"], row["Upper age"] - 1)][
             efrs.gender == row.Gender.upper()
         ].household_weight.values.sum()
         nhs.loc[i, "Total people"] = count
@@ -127,8 +131,9 @@ def impute_nhs_usage(efrs: pd.DataFrame):
 
     variables = visit_variables + spending_variables
 
+    whole_years = np.floor(efrs.age)
     for i, row in nhs_usage.iterrows():
-        selection = efrs.age.between(row.values[0], row.values[1]) & (
+        selection = whole_years.between(row.values[0], row.values[1]) & (
             efrs.gender == row.values[2].upper()
         )
         for j, service in enumerate(row.values[3:]):
