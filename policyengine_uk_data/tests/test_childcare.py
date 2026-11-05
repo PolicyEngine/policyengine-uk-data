@@ -34,7 +34,7 @@ PROGRAMMES = {
 
 # Iterate over the targets that exist, not every programme: extended has no
 # spending target, because the only figure derivable from DfE is a full-usage
-# ceiling the model pays 75% of. See targets.py.
+# ceiling. See targets.py.
 CASES = [
     (metric, programme)
     for metric in ("spending", "caseload")

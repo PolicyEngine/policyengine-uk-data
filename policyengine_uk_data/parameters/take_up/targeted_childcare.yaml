@@ -11,11 +11,11 @@ metadata:
 # on different populations.
 #
 # policyengine-uk gives 2-year-olds extended (working parent) entitlement from
-# 2024-01-01, and targeted_childcare_entitlement_eligible excludes benefit
-# units that qualify for it. The real working-parent entitlement for
-# 2-year-olds began in April 2024, after DfE's January 2024 census, so DfE's
-# eligible count contains no corresponding exclusion. Applying DfE's rate to
-# the model's smaller base would fit one difference against another.
+# 2024-01-01, three months before the real entitlement began in April 2024,
+# after DfE's January 2024 census. (Before policyengine-uk#2177 it also
+# excluded benefit units eligible for the extended entitlement from the
+# targeted one; that exclusion is gone, so the model's base now includes
+# them, as DfE's does.)
 #
 # DfE also notes its eligible count omits multiple two-year-olds and several
 # non-economic eligibility routes, so the published percentage overstates true
