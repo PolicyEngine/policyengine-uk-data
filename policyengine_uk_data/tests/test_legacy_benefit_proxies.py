@@ -442,6 +442,7 @@ def create_single_adult_frs(
     with_child=False,
     child_overrides=None,
     adult_overrides=None,
+    household_overrides=None,
 ):
     monkeypatch.setattr(policyengine_uk, "Microsimulation", FakeMicrosimulation)
     monkeypatch.setattr(frs_module, "load_take_up_rate", lambda *args, **kwargs: 0.0)
@@ -553,15 +554,18 @@ def create_single_adult_frs(
                 "gvtregno": 1,
                 "hhrent": 0,
                 "mortint": 0,
-                "ptentyp2": 0,
+                # Data-dictionary codes: rented privately unfurnished, and a
+                # detached house. 0 is not a PTENTYP2 or TYPEACC code.
+                "ptentyp2": 3,
                 "rt2rebam": 0,
                 "struins": 0,
                 "subrent": 0,
                 "tentyp2": 0,
-                "typeacc": 0,
+                "typeacc": 1,
                 "watsewrt": 0,
                 "niratlia": 0,
                 **{f"chrgamt{i}": 0 for i in range(1, 10)},
+                **(household_overrides or {}),
             }
         ]
     )
@@ -658,6 +662,31 @@ def test_create_frs_child_rows_are_child(tmp_path, monkeypatch):
         100_001: "OTHER_INACTIVE",
         100_002: "CHILD",
     }
+
+
+# CTBAND 10 is "Information not found" in the FRS 2024-25 data dictionary and
+# "Household not valued separately" before it; a blank is Northern Ireland.
+@pytest.mark.parametrize(
+    "ctband, band", [(1, "A"), (8, "H"), (9, "I"), (10, "D"), (np.nan, "D")]
+)
+def test_create_frs_maps_ctband(tmp_path, monkeypatch, ctband, band):
+    household = create_single_adult_frs(
+        tmp_path, monkeypatch, household_overrides={"ctband": ctband}
+    ).household
+
+    assert household["council_tax_band"].tolist() == [band]
+
+
+@pytest.mark.parametrize(
+    "column, code", [("ctband", 11), ("gvtregno", 3), ("ptentyp2", 7), ("typeacc", 8)]
+)
+def test_create_frs_names_an_unknown_household_code(
+    tmp_path, monkeypatch, column, code
+):
+    with pytest.raises(ValueError, match=f"FRS {column.upper()} has codes"):
+        create_single_adult_frs(
+            tmp_path, monkeypatch, household_overrides={column: code}
+        )
 
 
 def test_create_frs_rejects_unknown_adult_empstati(tmp_path, monkeypatch):

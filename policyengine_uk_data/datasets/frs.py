@@ -68,6 +68,26 @@ FRS_EMPSTATI_EMPLOYMENT_STATUS = {
     10: EmploymentStatus.SHORT_TERM_DISABLED.name,  # Temporarily sick/injured
     11: EmploymentStatus.OTHER_INACTIVE.name,  # Other inactive
 }
+# Household-table CTBAND ("Council Tax band") value labels in the UKDS FRS
+# 2022-23, 2023-24 and 2024-25 data dictionaries. From 2024-25 DWP takes the
+# band from Valuation Office Agency and Scottish Assessors Association data
+# rather than asking the respondent, and labels band I "Wales only".
+FRS_CTBAND_COUNCIL_TAX_BAND = {
+    1: "A",
+    2: "B",
+    3: "C",
+    4: "D",
+    5: "E",
+    6: "F",
+    7: "G",
+    8: "H",
+    9: "I",
+}
+# CTBAND 10 gives no band: "Household not valued separately" to 2023-24 and
+# "Information not found" from 2024-25. Northern Ireland pays domestic rates
+# and leaves CTBAND blank. Both take policyengine-uk's default band.
+FRS_CTBAND_NO_BAND = 10
+COUNCIL_TAX_PLACEHOLDER_BAND = "D"
 ESA_HEALTH_EMPLOYMENT_STATUSES = (
     EmploymentStatus.LONG_TERM_DISABLED.name,
     EmploymentStatus.SHORT_TERM_DISABLED.name,
@@ -173,6 +193,55 @@ def derive_employment_status_from_frs(empstati, is_adult_record) -> np.ndarray:
             "from the release's data dictionary."
         )
     return np.where(is_adult_record, adult_status, EmploymentStatus.CHILD.name)
+
+
+def _list_codes(codes: pd.Series) -> str:
+    listed = [f"{code:g}" for code in sorted(codes.dropna().unique())]
+    listed += ["blank"] if codes.isna().any() else []
+    return ", ".join(listed)
+
+
+def map_frs_codes(values, mapping, variable: str, blank) -> np.ndarray:
+    """Map an FRS categorical variable's value codes through ``mapping``.
+
+    Blank values take ``mapping[blank]``. Any other code missing from
+    ``mapping`` fails the build naming the FRS variable, rather than becoming a
+    missing value that policyengine-uk later rejects as an unknown enum value
+    without saying which survey variable it came from.
+    """
+
+    codes = pd.Series(np.asarray(values, dtype=float))
+    mapped = codes.fillna(blank).map(mapping)
+    unknown = mapped.isna()
+    if unknown.any():
+        # Build logs are public: name the codes, never a count.
+        raise ValueError(
+            f"FRS {variable} has codes with no mapping: "
+            f"{_list_codes(codes[unknown])}. Map them from the release's data "
+            "dictionary."
+        )
+    return mapped.to_numpy()
+
+
+def derive_council_tax_band_from_frs(ctband) -> np.ndarray:
+    """Map FRS CTBAND codes to ``council_tax_band``.
+
+    Codes 1 to 9 are bands A to I. Code 10 (no band), blanks and the FRS
+    missing-value codes (zero or below) take ``COUNCIL_TAX_PLACEHOLDER_BAND``.
+    Any other code is a new data-dictionary value and fails the build.
+    """
+
+    codes = pd.Series(np.asarray(ctband, dtype=float))
+    band = codes.map(FRS_CTBAND_COUNCIL_TAX_BAND)
+    no_band = codes.isna() | (codes <= 0) | (codes == FRS_CTBAND_NO_BAND)
+    unknown = band.isna() & ~no_band
+    if unknown.any():
+        raise ValueError(
+            "FRS CTBAND has codes missing from FRS_CTBAND_COUNCIL_TAX_BAND: "
+            f"{_list_codes(codes[unknown])}. Map them from the release's data "
+            "dictionary."
+        )
+    return band.where(~no_band, COUNCIL_TAX_PLACEHOLDER_BAND).to_numpy()
 
 
 def derive_legacy_jobseeker_proxy(
@@ -1174,9 +1243,12 @@ def create_frs(
         "NORTHERN_IRELAND",
         "UNKNOWN",
     ]
-    pe_household["region"] = categorical(
-        household.gvtregno, 14, [1, 2] + list(range(4, 15)), REGIONS
-    ).values
+    pe_household["region"] = map_frs_codes(
+        household.gvtregno,
+        dict(zip([1, 2] + list(range(4, 15)), REGIONS)),
+        "GVTREGNO",
+        blank=14,
+    )
     TENURES = [
         "RENT_FROM_COUNCIL",
         "RENT_FROM_HA",
@@ -1185,9 +1257,9 @@ def create_frs(
         "OWNED_OUTRIGHT",
         "OWNED_WITH_MORTGAGE",
     ]
-    pe_household["tenure_type"] = categorical(
-        household.ptentyp2, 3, range(1, 7), TENURES
-    ).values
+    pe_household["tenure_type"] = map_frs_codes(
+        household.ptentyp2, dict(zip(range(1, 7), TENURES)), "PTENTYP2", blank=3
+    )
     frs["num_bedrooms"] = household.bedroom6
     ACCOMMODATIONS = [
         "HOUSE_DETACHED",
@@ -1198,9 +1270,9 @@ def create_frs(
         "MOBILE",
         "OTHER",
     ]
-    pe_household["accommodation_type"] = categorical(
-        household.typeacc, 1, range(1, 8), ACCOMMODATIONS
-    ).values
+    pe_household["accommodation_type"] = map_frs_codes(
+        household.typeacc, dict(zip(range(1, 8), ACCOMMODATIONS)), "TYPEACC", blank=1
+    )
 
     # Impute Council Tax
 
@@ -1264,10 +1336,8 @@ def create_frs(
         )
     )
     pe_household["council_tax"] = council_tax.fillna(0)
-    BANDS = ["A", "B", "C", "D", "E", "F", "G", "H", "I"]
-    # Band 1 is the most common
-    pe_household["council_tax_band"] = (
-        categorical(household.ctband, 1, range(1, 10), BANDS).fillna("D").values
+    pe_household["council_tax_band"] = derive_council_tax_band_from_frs(
+        household.ctband
     )
     # Domestic rates variables are all weeklyised, unlike Council Tax variables (despite the variable name suggesting otherwise)
     if year < 2021:
